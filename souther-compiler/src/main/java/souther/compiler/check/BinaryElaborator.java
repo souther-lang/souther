@@ -44,8 +44,8 @@ public final class BinaryElaborator {
         if (read.type() instanceof Type.Erroneous) {
             throw new Unanswerable(bin.pos());
         }
-        if (bin.op() == BinOp.AND || bin.op() == BinOp.OR) {
-            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
+        if (bin.op().joinsTwoConditions()) {
+            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.published(),
                     "operand of logical operator");
         }
         return read;
@@ -59,7 +59,7 @@ public final class BinaryElaborator {
         Core right = operand(bin.right(), bin, env, ctx);
         return switch (bin.op()) {
             // both operands were asked for a Bool where they were read
-            case AND, OR -> new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+            case AND, OR -> new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
                 // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
@@ -69,11 +69,12 @@ public final class BinaryElaborator {
                 // except that a bare literal takes the other side's newtype from context.
                 Type lt = left.type();
                 Type rt = right.type();
-                if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
+                if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.inners(), ctx.symbols(),
+                        ctx.kinds(), ctx.published())) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
                 // `+ - * /` work on two Int or two Decimal operands (spec
@@ -93,8 +94,9 @@ public final class BinaryElaborator {
                     case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
-                        Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
-                        yield new Core.Binary(bin.op(), left, right, bin.origin(), lt, bin.pos());
+                        Elaborator.requireType(bin.right(), rt, lt, ctx.published(),
+                                "operand of arithmetic");
+                        yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), lt, bin.pos());
                     }
                     case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
                 };
@@ -106,7 +108,7 @@ public final class BinaryElaborator {
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
-                    yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.STRING, bin.pos());
+                    yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.STRING, bin.pos());
                 }
                 // A bottom operand ({@code Nothing}) is a list read from an accumulator an empty
                 // collection seed grows — the value at a key of a `Map.empty`-seeded fold, whose element
@@ -134,7 +136,7 @@ public final class BinaryElaborator {
                                     .hint(new TypeMessage.MakeEveryElementTheSameType())
                                     .say(new TypeMessage.TheTwoListsHoldDifferentElements()).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.list(element), bin.pos());
+                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.list(element), bin.pos());
             }
             case EQ, NE -> {
                 Type lt = left.type();
@@ -161,11 +163,11 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
-                List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.symbols());
-                List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.symbols());
+                List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
+                List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
-                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
+                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.inners(), ctx.symbols())
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
@@ -174,7 +176,7 @@ public final class BinaryElaborator {
                                     
                                     .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
         };
     }
@@ -199,30 +201,32 @@ public final class BinaryElaborator {
      * first — is the backend's and says so.
      */
     static boolean orderedComparable(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
-                                             Symbols symbols) {
+                                             NewtypeInners inners,
+                                             Symbols symbols, DeclarationKinds kinds,
+                                             PublishedDeclarations published) {
         // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
         // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
-            return TypeOps.supportsOrdering(lt, symbols);
+            return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published);
         }
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
-        if (TypeOps.comparisonEnumeration(lt, rt, symbols) != null) {
+        if (TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published) != null) {
             return true;
         }
         // A newtype and a source literal of what it wraps: 金額 <= 100, but not 金額 <= n for an
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
         // ordered, which the equality rule this shares does not.
-        return TypeOps.supportsOrdering(lt, symbols)
-                && TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
+        return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
+                && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols);
     }
 
     /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the
      * same-type and bottom cases are handled by the caller). */
     static boolean eqCoercible(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
-                                       Symbols symbols) {
-        return TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
+                                       NewtypeInners inners, Symbols symbols) {
+        return TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols);
     }
 
@@ -255,7 +259,7 @@ public final class BinaryElaborator {
      * answer is null.
      */
     static Type operandBeside(BinOp op, Type other, boolean onTheRight, Symbols symbols) {
-        if (op == BinOp.AND || op == BinOp.OR) {
+        if (op.joinsTwoConditions()) {
             return Type.BOOL;
         }
         if (other == null) {
@@ -295,9 +299,10 @@ public final class BinaryElaborator {
         // A newtype is a declaration a module wrote, which is what having a base says of it; the
         // pattern is what used to be an unchecked cast below.
         if (base == null || !(result instanceof Type.Ref(TypeSymbol.AtModule wrapper))) {
-            return new Core.Binary(bin.op(), left, right, bin.origin(), result, bin.pos());
+            return new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), result, bin.pos());
         }
-        Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx), bin.origin(),
+        Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx),
+                ctx.occurrenceOf(bin.origin()),
                 base, bin.pos());
         return new Core.Construct(wrapper,
                 List.of(new Core.FieldValue(WRAPPED, computed, bin.pos())), result, bin.pos());

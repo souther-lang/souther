@@ -62,22 +62,24 @@ public sealed interface WhyUnsettled
     /** What this reason comes to, in {@code words}. */
     <T> T said(Words<T> words);
 
-    /** @see Words#noWitness */
+    /** Nothing was found that would show it; see {@link Words#noWitness}. */
     static WhyUnsettled noWitness() {
         return new NoWitness();
     }
 
-    /** @see Words#aConditionWasNotRead */
+    /** A condition on the way was of a shape no rule here reads; see
+     *  {@link Words#aConditionWasNotRead}. */
     static WhyUnsettled aConditionWasNotRead(SourcePos at) {
         return new AConditionWasNotRead(at);
     }
 
-    /** @see Words#thePositionDidNotSettleIt */
+    /** What is known of the position leaves it open; see
+     *  {@link Words#thePositionDidNotSettleIt}. */
     static WhyUnsettled thePositionDidNotSettleIt(Unsettlement why) {
         return new ThePositionDidNotSettleIt(why);
     }
 
-    /** @see Words#theWalkDidNotReachIt */
+    /** The walk stopped before it got there; see {@link Words#theWalkDidNotReachIt}. */
     static WhyUnsettled theWalkDidNotReachIt() {
         return new TheWalkDidNotReachIt();
     }

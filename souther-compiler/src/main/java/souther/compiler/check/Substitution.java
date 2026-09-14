@@ -4,7 +4,6 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -60,66 +59,23 @@ final class Substitution {
      * the application settles them at, so what its body answers under them is not what this
      * application decided.
      */
-    Fit hold(Type declared, Type actual, Symbols symbols) {
-        return fits(actual, declared, symbols)
+    Fit hold(Type declared, Type actual, PublishedDeclarations published) {
+        return fits(actual, declared, published)
                 ? Fit.FITS : new Fit.Disagrees(settle(declared), actual);
     }
 
     /**
-     * Whether a value of {@code actual} may stand where {@code declared} was written, reading a
-     * position this application has not decided as one that states nothing. Everything around it
-     * still states what it states.
+     * Whether a value of {@code actual} may stand where {@code declared} was written, in this
+     * application's reading of both.
      *
-     * <p>Every position is asked on its own. There is no test for whether the type holds a hole
-     * somewhere before descending into it, because that is the question this is: a hole is one
-     * position, and asking about the type as a whole is what would let one silence the rest.
+     * <p>What a position admits is {@link TypeOps#admits}'s and is not asked again here. What this
+     * adds is whose decisions the two are read under: a variable this application decided stands at
+     * what it decided, and one it has not is a position stating nothing. Written here as well, the
+     * reader that has no application to decide under would have been given a second rule about
+     * open positions, and the two would part at exactly the positions a declaration leaves open.
      */
-    private boolean fits(Type is, Type declared, Symbols symbols) {
-        Type want = zonk(declared);
-        Type actual = zonk(is);
-        // A position states nothing where a variable stands at it — one this application has not
-        // decided, or one a declaration wrote, which stands for whatever each use of it makes — and
-        // where it stands at what an empty collection carries, which is a reading so far and is
-        // widened by a later one (ADR-0028). Nothing is refused at any of them, and everything
-        // around them is read.
-        if (want instanceof Type.Open || want instanceof Type.Nothing
-                || actual instanceof Type.Open) {
-            return true;
-        }
-        if (actual instanceof Type.Nothing || actual instanceof Type.Never
-                || actual instanceof Type.Erroneous) {
-            return true;   // nothing arrives from there, so nothing of the wrong shape can
-        }
-        return switch (want) {
-            case Type.ListOf l -> actual instanceof Type.ListOf a
-                    && fits(a.element(), l.element(), symbols);
-            case Type.SetOf s -> actual instanceof Type.SetOf a
-                    && fits(a.element(), s.element(), symbols);
-            case Type.OptionOf o -> actual instanceof Type.OptionOf a
-                    && fits(a.element(), o.element(), symbols);
-            case Type.MapOf m -> actual instanceof Type.MapOf a
-                    && fits(a.key(), m.key(), symbols) && fits(a.value(), m.value(), symbols);
-            case Type.TupleOf t -> actual instanceof Type.TupleOf a
-                    && t.elements().size() == a.elements().size()
-                    && allFit(a.elements(), t.elements(), symbols);
-            case Type.FnOf f -> actual instanceof Type.FnOf a
-                    && f.params().size() == a.params().size()
-                    && allFit(a.params(), f.params(), symbols)
-                    && fits(a.result(), f.result(), symbols);
-            // Nothing inside it to weigh position by position, so what is left is the ordinary
-            // question. It answers a variable the declaration wrote too, which is not this
-            // application's to decide and stands for whatever each use of it makes it.
-            case Type.Leaf _ -> TypeOps.assignable(actual, want, symbols);
-        };
-    }
-
-    private boolean allFit(List<Type> actual, List<Type> declared, Symbols symbols) {
-        for (int i = 0; i < declared.size(); i++) {
-            if (!fits(actual.get(i), declared.get(i), symbols)) {
-                return false;
-            }
-        }
-        return true;
+    private boolean fits(Type is, Type declared, PublishedDeclarations published) {
+        return TypeOps.admits(zonk(declared), zonk(is), published);
     }
 
     /**
@@ -141,7 +97,7 @@ final class Substitution {
      * type from. Every caller today either refuses at once or drops the whole {@code Substitution},
      * and a caller that wants to do neither is asking for something this does not offer.
      */
-    Fit decide(Type declared, Type actual, Symbols symbols) {
+    Fit decide(Type declared, Type actual, PublishedDeclarations published) {
         // Neither side is written through first. A variable already decided is still the variable
         // this reading is about, and writing what it stands for in its place would leave nothing for
         // a later, more definite reading to rebind — which is what a first reading carrying the
@@ -149,42 +105,42 @@ final class Substitution {
         Type left = declared;
         Type right = actual;
         if (left instanceof Type.MetaVar m) {
-            return bind(m, right, symbols);
+            return bind(m, right, published);
         }
         // The other side carries what this one left open: a declared `List<Int>` read against a
         // result still standing at a variable says what that variable is.
         if (right instanceof Type.MetaVar m) {
-            return bind(m, left, symbols);
+            return bind(m, left, published);
         }
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
         switch (left) {
             case Type.ListOf l -> {
                 if (right instanceof Type.ListOf a) {
-                    return decide(l.element(), a.element(), symbols);
+                    return decide(l.element(), a.element(), published);
                 }
             }
             case Type.SetOf s -> {
                 if (right instanceof Type.SetOf a) {
-                    return decide(s.element(), a.element(), symbols);
+                    return decide(s.element(), a.element(), published);
                 }
             }
             case Type.OptionOf o -> {
                 if (right instanceof Type.OptionOf a) {
-                    return decide(o.element(), a.element(), symbols);
+                    return decide(o.element(), a.element(), published);
                 }
             }
             case Type.MapOf m -> {
                 if (right instanceof Type.MapOf a) {
-                    Fit key = decide(m.key(), a.key(), symbols);
-                    return key instanceof Fit.Disagrees ? key : decide(m.value(), a.value(), symbols);
+                    Fit key = decide(m.key(), a.key(), published);
+                    return key instanceof Fit.Disagrees ? key : decide(m.value(), a.value(), published);
                 }
             }
             case Type.TupleOf t -> {
                 if (right instanceof Type.TupleOf a
                         && t.elements().size() == a.elements().size()) {
                     for (int i = 0; i < t.elements().size(); i++) {
-                        Fit at = decide(t.elements().get(i), a.elements().get(i), symbols);
+                        Fit at = decide(t.elements().get(i), a.elements().get(i), published);
                         if (at instanceof Fit.Disagrees) {
                             return at;
                         }
@@ -194,12 +150,12 @@ final class Substitution {
             case Type.FnOf f -> {
                 if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
                     for (int i = 0; i < f.params().size(); i++) {
-                        Fit at = decide(f.params().get(i), a.params().get(i), symbols);
+                        Fit at = decide(f.params().get(i), a.params().get(i), published);
                         if (at instanceof Fit.Disagrees) {
                             return at;
                         }
                     }
-                    return decide(f.result(), a.result(), symbols);
+                    return decide(f.result(), a.result(), published);
                 }
             }
             // Nothing inside it to descend into, so nothing here decides a variable.
@@ -240,12 +196,12 @@ final class Substitution {
         return Type.mentions(zonk(t), x -> x instanceof Type.MetaVar);
     }
 
-    private Fit bind(Type.MetaVar m, Type reading, Symbols symbols) {
+    private Fit bind(Type.MetaVar m, Type reading, PublishedDeclarations published) {
         // What the reading stands for, not how it was written. A variable another application
         // decided is that decision here, and comparing the variable itself would find every reading
         // through one to disagree with every other.
         Type at = zonk(reading);
-        if (at == m || Type.mentions(at, m::equals)) {
+        if (Type.mentions(at, m::equals)) {
             // A variable cannot stand for something it stands inside: a list of itself is a value
             // that would have to hold itself. It stays open, and the reading that said so settles
             // nothing rather than being taken as a disagreement — the same answer {@link Readings}
@@ -268,12 +224,12 @@ final class Substitution {
         // reading that says what it holds is what stands. The same rule as widening a bare bottom
         // (ADR-0028), asked at whatever depth the bottom turned up.
         if (Type.mentions(held, x -> x instanceof Type.Nothing)
-                && TypeOps.assignable(held, at, symbols)) {
+                && TypeOps.assignable(held, at, published)) {
             owner.decided.put(m, at);
             return Fit.FITS;
         }
         Type stands = zonk(held);
-        if (TypeOps.assignable(at, stands, symbols) || TypeOps.assignable(stands, at, symbols)) {
+        if (TypeOps.assignable(at, stands, published) || TypeOps.assignable(stands, at, published)) {
             return Fit.FITS;
         }
         return new Fit.Disagrees(held, at);

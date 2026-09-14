@@ -30,10 +30,8 @@ $ souther init com.example:hello
     created  hello/.gitignore
     created  hello/src/main/souther/hello.sou
              module com.example.hello
-    created  hello/src/main/souther/hello.examples.sou
-    created  hello/src/test/java/com/example/hello/ReturnBookTest.java
 
-    cd hello && mvn test
+    cd hello && mvn compile
 ```
 
 `--build gradle` writes `settings.gradle.kts` and `build.gradle.kts` instead, and no wrapper: a
@@ -55,7 +53,10 @@ souther {
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is
 added is a source directory and the plugin declaration. The previous contents of the build file are
-left in a `.orig` beside it, unless git is already holding them.
+left in a `.orig` beside it, unless git is already holding them. What it says to run there is `mvn
+test` — the build has whatever tests its author wrote, and a run of them is what says the model now
+beside them compiles and breaks nothing. A project this command laid out has none of its own, so that
+one is sent to `mvn compile`, which is where its `example` rows are checked.
 
 The module header follows from the coordinate: the group and the artifact, with a hyphen written as
 an underscore, so `com.acme:billing-service` writes `module com.acme.billing_service`. That name is
@@ -65,8 +66,10 @@ also the Java package the model generates into, and the source is named after it
 `--model` says how much of a model to start with, and defaults to `full` where a project is created
 and `none` where one is added to. `none` is the module header; `minimal` adds one `data` with an
 `invariant`; `full` is a model that uses `data`, `invariant`, `behavior`, `constructs` and `guard`,
-with an `.examples.sou` covering it and a Java test that reaches the generated types — so that both
-`mvn test` and `souther examples` answer on the first run.
+with the `example` rows covering it below the behavior in the same file — so that the compile checks
+them and `souther examples` answers on the first run. One file either way: `examples for` puts the
+rows in a file of their own, and that is a move to make once there are more rows than the model reads
+beside.
 
 <!-- souther-section: compile -->
 ## compile
@@ -567,6 +570,24 @@ asking for the reason it is wrong. What does not ask is a line where the token s
 value: `souther run m.sou --input --help` hands `run` the input `--help`, and that is read as the
 value it is, not as a request.
 
+<!-- souther-section: version -->
+## version
+
+```
+souther version
+```
+
+Which Souther this is, on stdout under a zero exit code. `souther --version` asks the same thing and
+is answered the same way, and so does `--version` written after any command.
+
+The version is read from the jar's manifest, which the build fills from the one place the project's
+version is written. Run from class files rather than from a distribution there is no manifest, and
+the answer is `unreleased` — a true statement about a build tree, and not a version anything
+resolves.
+
+The same reading is what `lsp` tells an editor and what `mcp` tells an agent harness as their
+`serverInfo`, so which Souther this is has one answer whoever asks it.
+
 <!-- souther-section: shared-options -->
 ## Options every command shares
 
@@ -576,11 +597,13 @@ value it is, not as a request.
 | `--lang <tag>` | message locale, e.g. `ja` or `en`. Overrides `SOUTHER_LANG`; with neither, `en`, which is what the shipped documents are written in |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 | `--help`, `-h` | what this command takes, and what its options mean |
+| `--version` | which Souther this is |
 
-`--help` and `-h` are taken by every command, including `help` itself. `--format` and `--color`
-apply to `compile`, `run` and `examples`; `--lang` to those and to `init`, which writes what it did
-in the language the line asks for. Passing one of them to a command that does not take it is an
-error.
+`--help` and `-h` are taken by every command, including `help` itself. So is `--version`, which
+answers and runs nothing else, and answers ahead of whatever is wrong with the line: which compiler
+read it is not a question about it. `--format` and `--color` apply to `compile`, `run` and
+`examples`; `--lang` to those and to `init`, which writes what it did in the language the line asks
+for. Passing one of them to a command that does not take it is an error.
 
 Because every command takes `-h`, no command reads that token as a file name. A single dash is
 otherwise read as a path by any command that has no such option — a file may be named `-d` — and

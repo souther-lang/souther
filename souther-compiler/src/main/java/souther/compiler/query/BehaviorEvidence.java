@@ -1,5 +1,13 @@
 package souther.compiler.query;
 
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleCitations;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * Everything measured about one behavior, and the one place what it went without is worked out.
  *
@@ -31,40 +39,57 @@ package souther.compiler.query;
  *
  * @param reading          how far the reading of this behavior's rows got, and what it read
  * @param signature        what the rows establish about the cases of its inputs and its output
- * @param partition        what they establish about the classes, and what this behavior is owed a
- *                         row for at the lines its rules draw
+ * @param partition        what they establish about the classes
  * @param boundaryReadings every line its positions met, in every role, whosever the row at each
  *                         point is
+ * @param account          what this behavior is owed a row for at the lines its own rules drew,
+ *                         each once however many of its positions read it
+ *                         ({@link Adequacy.BodyBorders})
  * @param branch           what they establish about the arms of its body
+ * @param decision         the rules of the decision its body states and which of them the rows
+ *                         took, or null where the compile did not get far enough to be asked.
+ *                         Beside {@code branch} and not among it: two rules can go through one
+ *                         arm, and a body whose arms answer alike states two rules that one row
+ *                         through each arm covers
  */
 public record BehaviorEvidence(Adequacy.RowReading reading,
                                Adequacy.SignatureEvidence signature,
                                PartitionEvidence partition,
                                Measure<java.util.List<BorderAssessment>> boundaryReadings,
-                               Adequacy.BranchEvidence branch) {
+                               Measure<java.util.List<BorderObligationPointAssessment>> account,
+                               Adequacy.BranchEvidence branch,
+                               DecisionEvidence decision) implements RuleCitations {
 
     public BehaviorEvidence {
         java.util.Objects.requireNonNull(reading,
                 "there is always an answer to how far a behavior's rows were read");
-        // The account and the lines it was read from arrive together or not at all. They are two
-        // readings of one measurement, so a behavior holding one of them is this compiler having
-        // answered half a question — and whoever met it next would have to decide what the half it
-        // was holding meant.
-        if ((partition == null) != (boundaryReadings == null)) {
+        // The lines, the classes and the account arrive together or not at all. They are readings
+        // of one measurement, so a behavior holding some of them is this compiler having answered
+        // part of a question — and whoever met it next would have to decide what the part it was
+        // holding meant.
+        if ((partition == null) != (boundaryReadings == null)
+                || (account == null) != (boundaryReadings == null)) {
             throw new IllegalArgumentException("a behavior measured at the lines its positions met"
                     + " and not at what it is owed a row for, or the other way about: "
-                    + partition + " / " + boundaryReadings);
+                    + partition + " / " + boundaryReadings + " / " + account);
         }
-        // And two readings of one measurement rather than two measurements. What this behavior is
-        // owed is read off the lines it met, so the account beside them is the one they come to —
-        // and the two are read by different readers: a block and a document show the lines, and a
+        // And the account is of these lines. What this behavior is owed is a projection of the
+        // module's one relation, and every point of it is read at some line of this behavior — and
+        // the two are read by different readers: a block and a document show the lines, and a
         // finding, a verdict and an editor read the account. Held apart without being held together,
-        // one behavior could show one reading's borders under another reading's findings, and
+        // one behavior could show one reading's borders under another behavior's findings, and
         // nothing downstream is in a position to notice.
-        if (partition != null
-                && !partition.owes().equals(OwedBoundaryPoint.accountOf(boundaryReadings))) {
-            throw new IllegalArgumentException("a behavior whose account is not what the lines it"
-                    + " was read at come to: " + partition.owes() + " from " + boundaryReadings);
+        if (account != null) {
+            java.util.Set<souther.compiler.partition.Border> read = new java.util.HashSet<>();
+            boundaryReadings.made().orElseGet(java.util.List::of)
+                    .forEach(line -> read.add(line.border()));
+            for (BorderObligationPointAssessment point
+                    : account.made().orElseGet(java.util.List::of)) {
+                if (point.readings().stream().noneMatch(at -> read.contains(at.border()))) {
+                    throw new IllegalArgumentException("a behavior owed a row at a line none of its"
+                            + " positions read: " + point.point() + " against " + boundaryReadings);
+                }
+            }
         }
     }
 
@@ -89,6 +114,12 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
         parts.put("partition", partition == null ? null : partition.partitioned());
         parts.put("border", boundaryReadings);
         parts.put("branch", branch == null ? null : branch.measured());
+        // Which rules of the body's decision the rows took, which is a measure of this behavior
+        // like the rest of them. A reading that placed only some of the rows leaves every rule
+        // nothing was seen taking as one a row may already take, and this is the one way that
+        // reaches a status, a verdict and a document without each of them asking the decision
+        // itself.
+        parts.put("decision", decision == null ? null : decision.took());
         return java.util.Collections.unmodifiableMap(parts);
     }
 
@@ -111,6 +142,47 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
             }
         }
         // The partition answers for the measures under it, which `parts` names two of.
-        return partition == null ? out : out.union(partition.weakening());
+        if (partition != null) {
+            out = out.union(partition.weakening());
+        }
+        // And each point of the account answers for its own measurement: a point read from rows
+        // some of which could not be read is undecided, and that is the point's answer rather than
+        // the lines'.
+        for (BorderObligationPointAssessment point
+                : account == null ? java.util.List.<BorderObligationPointAssessment>of()
+                        : account.made().orElseGet(java.util.List::of)) {
+            out = out.union(point.item().weakening());
+        }
+        return out;
+    }
+
+    /**
+     * Every handle this behavior's measures hold for a rule they read, all of them.
+     *
+     * <p>Asked of the parts, and each of those answers for its own, which is what
+     * {@link #weakening()} does one question over. A page that names a rule is sent somewhere by
+     * this, and what it may name is what was read rather than what some list of arrays happened to
+     * hold — the gathering it replaces was kept in step by whoever remembered, and the readings
+     * that compose a position's classes were the ones nobody did.
+     *
+     * <p><b>The parts that hold a handle, named as fields.</b> A measure is a measurement of some
+     * value and a handle is the value's, so this cannot be asked of {@link #parts()}: what comes
+     * back from there says how far a measurement ran and nothing about what it measured. Which
+     * fields those are is held to what this record is made of, where the union over the parts is.
+     */
+    @Override
+    public Set<RuleCitation> ruleCitations() {
+        Set<RuleCitation> out = new LinkedHashSet<>();
+        if (partition != null) {
+            out.addAll(partition.ruleCitations());
+        }
+        readings(boundaryReadings).forEach(each -> out.addAll(each.ruleCitations()));
+        readings(account).forEach(each -> out.addAll(each.ruleCitations()));
+        return Collections.unmodifiableSet(out);
+    }
+
+    /** What one of these measures made, or nothing where it was not made or not asked for. */
+    private static <T> List<T> readings(Measure<List<T>> measure) {
+        return measure == null ? List.of() : measure.made().orElseGet(List::of);
     }
 }

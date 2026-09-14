@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.RunRecord;
 
 /**
  * What this compile's own counting read of one row's evaluation.
@@ -27,18 +27,22 @@ public sealed interface Counting {
      * of the budget its rows use before one of them reaches it — the only way to set the budget from
      * evidence rather than by guessing. Zero says no counted point was passed, and says only that.
      *
-     * <p>{@link #observation} is what the row was seen to do — the sites it went through and the ways
-     * its comparisons came out. Empty until branches are measured, which is a property of the compile
-     * rather than of the row.
+     * <p>{@link #recorded} is what the row was seen to do, where anything was watching — the sites it
+     * went through and the ways its comparisons came out. Whether anything was is a property of the
+     * compile rather than of the row, and it is one of that value's two answers rather than an empty
+     * account: a row nobody watched did not pass nowhere.
      *
-     * <p>One value rather than a field per shape of thing recorded. What a run leaves behind is taken
-     * of one thread between one start and one stop, and a record with a field each would let the
-     * halves of one run be filled from different ones.
+     * <p>The steps and the recording are both read here and are different questions. A compile that
+     * counts steps records nothing unless it also emitted the calls that write a run down, so a
+     * count that came back is not evidence that a run did.
      */
-    record Read(long steps, Observation observation) implements Counting {
+    record Read(long steps, RunRecord recorded) implements Counting {
 
         public Read {
-            observation = observation == null ? Observation.NONE : observation;
+            if (recorded == null) {
+                throw new IllegalArgumentException(
+                        "a row says what was recorded of it, or that nothing was");
+            }
         }
     }
 

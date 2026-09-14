@@ -1,16 +1,29 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.RuleReasons;
+import souther.compiler.inputs.RuleSite;
+import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
 /**
- * One rule of the model, every question it raises, and what answered each.
+ * One rule where it applies to one value, every question it raises there, and what answered each.
+ *
+ * <p>Of a rule at a value and not of a rule. What a rule raises is written in the vocabulary of the
+ * value being read and differs in number between values ({@link Required}), so a rule the model
+ * holds several values to has one of these at each of them. Which value this is of is the reading
+ * these come from: a reading is of one declaration, and everything holding one of these holds it
+ * beside that.
  *
  * <p>Closed over the questions rather than a list of answers somebody assembled. What can go wrong
  * with a list is that a question is missing from it, and a completeness read off a list with a
@@ -26,14 +39,12 @@ import java.util.function.Function;
  */
 public final class RuleAccounting {
 
-    private final RuleRef rule;
-    private final RuleCitation cited;
+    private final RuleCitation.Named cited;
     private final Required required;
     private final Map<Owed, Outcome> answers;
 
-    private RuleAccounting(RuleRef rule, RuleCitation cited, Required required,
+    private RuleAccounting(RuleCitation.Named cited, Required required,
                            Map<Owed, Outcome> answers) {
-        this.rule = rule;
         this.cited = cited;
         this.required = required;
         this.answers = Collections.unmodifiableMap(answers);
@@ -49,14 +60,19 @@ public final class RuleAccounting {
      * caller hold a genuine {@link Required} beside answers it wrote itself. A reader outside wants
      * a finished accounting, never a way to make one.
      */
-    static RuleAccounting of(RuleRef rule, Required required,
+    static RuleAccounting of(RuleRef.Named rule, Required required,
                              Function<Owed, Outcome> answered) {
-        return new RuleAccounting(rule, citedAsAClause(rule), required,
+        return new RuleAccounting(new RuleCitation.Named(rule), required,
                 answers(rule, required, answered));
     }
 
-    /** {@code answered} asked once for each question the rule raises, and nothing else. Apart from
-     *  the citation, which the two ways in do not find the same way. */
+    /**
+     * {@code answered} asked once for each question the rule raises, and nothing else.
+     *
+     * <p>A place nothing classified is asked nothing. There is no question there for a reading to
+     * have answered, so asking would be handing a reader a subject this compiler never worked out
+     * and taking whatever came back as an answer about it.
+     */
     private static Map<Owed, Outcome> answers(RuleRef rule, Required required,
                                               Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
@@ -72,30 +88,19 @@ public final class RuleAccounting {
     }
 
     /**
-     * How a reader finds a rule this way in can be about.
+     * Which rule of the model, as everything that names a rule names it.
      *
-     * <p>A clause, either kind, and never a comparison. What comes this way is a rule an author
-     * wrote a name beside, and a comparison raises nothing this is made of.
+     * <p>Asked of the handle, which is what holds it. A clause, either kind, and never a rule
+     * written rather than named: what those raise is answered by the reading that raised it, so
+     * there is no accounting of one for anybody to build, and {@link #of} is where the language
+     * refuses it.
      */
-    private static RuleCitation citedAsAClause(RuleRef rule) {
-        return switch (rule) {
-            case RuleRef.Invariant it -> RuleCitation.named(it);
-            case RuleRef.Ensures it -> RuleCitation.named(it);
-            // A comparison is written rather than named, and it does not come this way at all: what
-            // it raises is answered by the reading that raised it, so there is no accounting of one
-            // for anybody to build. What such a rule leaves is a finding about the position.
-            case RuleRef.Comparison _ -> throw new IllegalArgumentException(
-                    "a comparison raises nothing an accounting is made of: " + rule);
-        };
-    }
-
-    /** Which rule of the model, as everything that names a rule names it. */
-    public RuleRef rule() {
-        return rule;
+    public RuleRef.Named rule() {
+        return cited.rule();
     }
 
     /** How a reader finds it, which is not what tells it from another rule. */
-    public RuleCitation cited() {
+    public RuleCitation.Named cited() {
         return cited;
     }
 
@@ -107,6 +112,18 @@ public final class RuleAccounting {
     /** What answered each question, keyed by the question. */
     public Map<Owed, Outcome> answers() {
         return answers;
+    }
+
+    /**
+     * The places nothing worked out what this rule raises at, which is not a question nobody
+     * answered.
+     *
+     * <p>Read off what the rule leaves rather than kept beside it. Nothing was asked about these —
+     * there is no question to ask — so they are not among the answers, and a reader that counted
+     * the answers would be counting what this compiler managed to classify.
+     */
+    public Set<Requirement.BoundaryUndetermined> undetermined() {
+        return required.undetermined();
     }
 
     /** The questions nothing answered, which is what a report is about. */
@@ -127,7 +144,7 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(rule, cited, e.getKey(),
+                .map(e -> new Unanswered(cited, e.getKey(),
                         ((Outcome.Unaccounted) e.getValue()).why()))
                 .toList();
     }
@@ -145,18 +162,19 @@ public final class RuleAccounting {
      * last moment — right while only invariants raise a question, and a decision about what a rule
      * is taken by whoever consumed one.
      */
-    public record Unanswered(RuleRef rule, RuleCitation cited, Owed owed, Why why) {
+    public record Unanswered(RuleCitation.Named cited, Owed owed, Why why) {
 
         public Unanswered {
-            if (why == null) {
-                throw new IllegalArgumentException("a question nothing answered stands for a reason");
+            if (cited == null || why == null) {
+                throw new IllegalArgumentException("a question nothing answered is of some rule and"
+                        + " stands for a reason");
             }
         }
     }
 
     @Override
     public String toString() {
-        return rule + " " + answers;
+        return rule() + " " + answers;
     }
 
     /** What became of one question. */
@@ -208,12 +226,15 @@ public final class RuleAccounting {
      * be a line. Held as one word, a line about an end was written in the words of a set of values —
      * which is the sentence #842 is about, one level down.
      *
-     * <p><b>And one arm that names no reading.</b> A question stands where no reading adopted the
-     * rule, which is not the same as a reading having been asked and fallen short: the readings a
-     * clause reaches are the ones that recognise the positions it names, and a clause about a
-     * position none of them knows is claimed by none of them. Answered with a reading's arm, such a
-     * question is attributed to a reader that never held the rule — and the account then says which
-     * capability of that reader would lift it, which is a sentence about the wrong reader.
+     * <p><b>Split by reading and never by what a reason is a fact about.</b> One reading is short of
+     * a rule in the rule's own words and short of an answer in nobody's, and both of those may hold
+     * of one question at once: a rule with a conjunct nothing reads beside a choice whose meet ran
+     * past the allowance is short in two ways that different work lifts. An arm per kind of fact
+     * would be this type answering a question {@link UnreadReason#about()} already answers, and
+     * would make a pair the model reaches unsayable.
+     *
+     * <p>A question with no account at all is the accounting disagreeing with itself and is refused
+     * where it is made ({@link FieldDomains.AStandingQuestionWithNoAccount}).
      */
     public sealed interface Why {
 
@@ -230,42 +251,109 @@ public final class RuleAccounting {
          * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
          * published word from reaching back into what a reading is allowed to record.
          *
-         * <p>In the order the parts of the clause were met, and each said once: two parts one limit
-         * stopped are one thing for a reader to lift.
+         * <p>Each said once, and the places they stand on go with them as far as the one thing that
+         * reads places ({@link RuleReasons}): two parts one limit stopped are one thing for a
+         * reader to lift, and which of two an author is sent to first is settled by where they wrote
+         * them and not by where a walk met them. This is the last call that holds the places, so it
+         * is the last that could hand them over.
+         *
+         * <p>Each half through the carrier it belongs in. What a rule is answerable for stands
+         * somewhere and what its position's answer was short of stands nowhere, so a list holding
+         * both would give a limit the rules ran into a place among the things somebody wrote.
          */
-        default List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
-            List<souther.compiler.inputs.BlockReason.AboutARule> out = new java.util.ArrayList<>();
-            for (souther.compiler.inputs.BlockReason.AboutARule each : switch (this) {
-                case TheValueReadingSays it -> it.why().stream()
-                        .map(souther.compiler.inputs.BlockReason::ofARuleTheValueReadingLeft)
-                        .toList();
-                case TheEndReadingSays it -> it.why();
-                case NothingTookItIn _ ->
-                        List.of(new souther.compiler.inputs.BlockReason.NoReadingTookItIn());
-            }) {
-                if (!out.contains(each)) {
-                    out.add(each);
-                }
-            }
-            return List.copyOf(out);
+        default WhatAQuestionStandsOn stopped() {
+            return switch (this) {
+                case TheValueReadingSays it -> new WhatAQuestionStandsOn(
+                        RuleReasons.from(it.shortfalls().stream()
+                                .map(each -> new RuleReasons.Said(each.site(), sentTo(each),
+                                        BlockReason.ofARuleTheValueReadingLeft(each.why())))
+                                .toList()),
+                        WhatAQuestionStandsOn.oneOf(it.aboutTheAnswer().reasons().stream()
+                                .map(BlockReason::ofTheAnswerTheReadingCouldNotBuild).toList()));
+                case TheEndReadingSays it -> new WhatAQuestionStandsOn(
+                        RuleReasons.one(it.why()), Optional.empty());
+            };
+        }
+
+        /**
+         * Where inside the rule a reader goes about {@code shortfall}.
+         *
+         * <p>The two kinds of decision a reading makes are two answers here. A part it has no word
+         * for is the thing an author rewrites, so the rule is the whole of it. A choice offering an
+         * alternative nothing could read is not: the part at the position was read, and what they
+         * act on is inside it — sent to the rule, they rewrite a bound that is not the difficulty.
+         *
+         * <p>The same value the reading of ends hands on for the same choice, so the two accounts
+         * of one operator carry one address and a reader holding both knows they are one thing to
+         * fix.
+         */
+        private static RuleSite sentTo(RuleShortfall shortfall) {
+            return switch (shortfall.kind()) {
+                case LEAF -> RuleSite.theRuleItself();
+                case CHOICE -> shortfall.site();
+            };
         }
 
         /**
          * The reading that turns a clause into a set of values.
          *
-         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
-         * position is named by as many parts as the author wrote about it, and two of them stop
-         * this reading in two ways that are lifted by different work — so a single reason here is a
-         * choice among an author's rules, made where the only thing to choose by is which part came
-         * first.
+         * <p>Everything it was stopped by, as facts and not as an order. One position is named by
+         * as many parts as the author wrote about it, and two of them stop this reading in two ways
+         * that are lifted by different work — so a single reason here would be a choice among an
+         * author's rules, and each of these says the written place it was decided at instead.
+         *
+         * <p><b>What a rule is answerable for and what the answer was short of, together.</b> The
+         * two are kept in different places — a reason about a rule is filed under that rule, and a
+         * reason about what the rules come to is filed at the position, since no rule is answerable
+         * for it — and one question stands on as many of them as hold of it. Held apart here as
+         * well, a rule whose form nothing reads and whose position's answer ran past the allowance
+         * was reported as the first alone: an author rewrites the form and the position is as wide
+         * as it was, for a reason nothing said.
+         *
+         * <p>Two carriers and one question. Only what a rule is answerable for stands at a place an
+         * author wrote, so only that half can be put in the author's order or told from a second of
+         * the same shape; what the answer was short of has no place to be asked about and is a set
+         * of facts and nothing more ({@link AnswerShortfalls}). A single carrier holding both would
+         * be offering a reader a source to look at for the half that has none.
+         *
+         * <p>The set of shortfalls is held in the order the facts were met, and that order is
+         * asserted of nothing: it is what keeps one compiler over one source publishing one
+         * document. What {@link #why()} answers with is a projection that loses the places, and
+         * where a reader is owed the author's order it is the source that is asked.
          */
-        record TheValueReadingSays(List<UnreadReason> why) implements Why {
+        record TheValueReadingSays(Set<RuleShortfall> shortfalls,
+                                   AnswerShortfalls aboutTheAnswer) implements Why {
 
             public TheValueReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (shortfalls == null || aboutTheAnswer == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+                if (shortfalls.isEmpty() && aboutTheAnswer.isEmpty()) {
+                    throw new IllegalArgumentException("a reading that stopped says why");
+                }
+                shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
+            }
+
+            /**
+             * What a rule of this is answerable for, as reasons alone.
+             *
+             * <p>The projection out of the shortfalls and never what is held. Two choices of one
+             * rule each offering an alternative nothing could read leave the position open twice
+             * and are two things an author can look at; asked as reasons they are one, and which of
+             * the two a reader is sent to would be whichever the walk met first.
+             *
+             * <p>This half and not the other. What the answer was short of is no rule's, so a list
+             * holding both would answer a reader asking what a rule is answerable for with a fact
+             * about none of them.
+             */
+            public List<UnreadReason> why() {
+                List<UnreadReason> out = new ArrayList<>();
+                shortfalls.forEach(each -> {
+                    if (!out.contains(each.why())) {
+                        out.add(each.why());
+                    }
+                });
+                return List.copyOf(out);
             }
         }
 
@@ -283,27 +371,19 @@ public final class RuleAccounting {
          * every one of them has been read — so a part still standing behind another is a second
          * thing to lift and not a repeat of the first.
          */
-        record TheEndReadingSays(
-                List<souther.compiler.inputs.BlockReason.RuleReadingStopped> why)
-                implements Why {
+        record TheEndReadingSays(FieldDomains.BoundaryStanding standing) implements Why {
 
             public TheEndReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (standing == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+            }
+
+            /** Which limit stopped it, which is one word however many parts are behind it. */
+            public BlockReason.RuleReadingStopped why() {
+                return standing.why();
             }
         }
-
-        /**
-         * No reading took the rule in, and none of them recorded why.
-         *
-         * <p>Nothing to carry, and that is what it says. The readings that record a reason are the
-         * ones that recognised the position and gave up on the rule about it; where the position is
-         * one none of them knows, the rule is claimed by nobody and there is no reader whose
-         * account this could be.
-         */
-        record NothingTookItIn() implements Why {}
     }
 
     /** Which reading answered a question. */

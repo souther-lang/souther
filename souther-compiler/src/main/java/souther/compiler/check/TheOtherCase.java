@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Core;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -31,23 +31,23 @@ final class TheOtherCase {
      * @param called the call as the naming resolved it ({@link Terms#originating})
      */
     static Core conditionAt(Core called) {
-        NumericResult result = called == null ? null
+        NumericResult<DeclaredArgument> result = called == null ? null
                 : DischargeRules.numericResult(Terms.operationOf(called));
         if (result == null || result.unless() == null
                 || !(result.at() instanceof NumericResult.Answered.InTheCaseCarrying)) {
             return null;
         }
-        Core argument = Terms.argsOf(called)
-                .get(CallArguments.positionIn(result.unless().argument(), Terms.operationOf(called)));
+        Core argument = Terms.argsOf(called).get(CallArguments.positionOf(
+                result.unless().argument(), Terms.operationOf(called)));
         return new Core.Binary(result.unless().op(), argument,
                 numberOf(result.unless().than(), argument.type(), argument.pos()),
-                CoverageOrigin.unwritten(), Type.BOOL, argument.pos());
+                ConstructOccurrence.unwritten(), Type.BOOL, argument.pos());
     }
 
     /** The type the number's case carries, or null where {@code called} answers no number as a
      * case. Asked beside the condition because an arm is told apart by what it names. */
     static Type theCaseItAnswersIn(Core called) {
-        NumericResult result = called == null ? null
+        NumericResult<DeclaredArgument> result = called == null ? null
                 : DischargeRules.numericResult(Terms.operationOf(called));
         return result != null
                 && result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type answersIn)

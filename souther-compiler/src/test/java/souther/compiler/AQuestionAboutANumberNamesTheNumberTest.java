@@ -1,15 +1,15 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.check.RuleKey;
 import souther.compiler.inputs.InputQuestion;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -62,7 +62,7 @@ class AQuestionAboutANumberNamesTheNumberTest {
                 | "one" : (Tags { names = [] }) -> 1
             """;
 
-    /** The same rules, with a body drawing a line on the length, which re-points the axis at it. */
+    /** The same rules, with a body drawing a line on the length, which is a measure of its own. */
     private static final String THE_SAME_UNDER_A_GUARD = """
             module m
 
@@ -80,7 +80,7 @@ class AQuestionAboutANumberNamesTheNumberTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
+        return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0).get("partition");
     }
 
@@ -116,10 +116,10 @@ class AQuestionAboutANumberNamesTheNumberTest {
     /**
      * And it does not move when a body draws on the same position.
      *
-     * <p>{@code Axis.measuredAt} re-points one axis at another number rather than adding a second,
-     * and it carried the questions across while doing it. A question is the model's and is about the
-     * number its own rule names, so what a body compares changes neither which questions stand nor
-     * which number each is about.
+     * <p>A body comparing another number of the position adds a measure of that number beside the
+     * ones the declarations made; it does not take a question with it. A question is the model's
+     * and is about the number its own rule names, so what a body compares changes neither which
+     * questions stand nor which number each is about.
      *
      * <p>These two documents disagreed. One rule, one question, and
      * {@code boundary at t.names on t.names} with no guard against
@@ -168,14 +168,14 @@ class AQuestionAboutANumberNamesTheNumberTest {
         ValueName length = ValueName.Stdlib.operation("List", "length");
         ValueName size = ValueName.Stdlib.operation("Set", "size");
 
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", size)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+                new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), size)),
                 "a line on one operation's number is not a line on another's");
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.Boundary(FieldDomains.Coordinate.value("names")),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+                new Owed.Boundary(NumberAt.valueOf(RuleKey.of("names"))),
                 "nor a line on what the position itself holds");
-        assertNotEquals(new Owed.Boundary(FieldDomains.Coordinate.takenBy("names", length)),
-                new Owed.AdmittedValues("names"),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+                new Owed.AdmittedValues(RuleKey.of("names")),
                 "and a question about a number is not the question about the position");
     }
 
@@ -190,7 +190,7 @@ class AQuestionAboutANumberNamesTheNumberTest {
     @Test
     void thePositionsTwoQuestionsAreTwoAtOnePath() {
         TermPath at = TermPath.of("t").then("names");
-        InputQuestion aLine = new InputQuestion.AboutANumber(new NumericTerm.ValueOf(at));
+        InputQuestion aLine = new InputQuestion.AboutANumber(NumberAt.valueOf(at));
         InputQuestion itsValues = new InputQuestion.AboutAPosition(at);
 
         assertNotEquals(aLine, itsValues,

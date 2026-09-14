@@ -14,7 +14,7 @@ package souther.compiler.partition;
  * an axis's business and stays there: this is the threshold alone, on the order of whatever the rule
  * happened to cut.
  *
- * <p>Which way the rule is satisfied is not here either. That is the rule's, and {@link OriginRef}
+ * <p>Which way the rule is satisfied is not here either. That is the rule's, and {@link LineOrigin}
  * already carries it — written here as well, the two would be free to disagree about one rule.
  */
 public record QuantityCut(Level at) {

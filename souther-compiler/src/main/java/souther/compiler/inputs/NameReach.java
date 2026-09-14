@@ -169,8 +169,18 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
     static final class Observed {
 
         private final List<Crossing> crossings = new ArrayList<>();
-        private final List<BranchNotEntered> notEntered = new ArrayList<>();
         private final List<NotStanding> notStanding = new ArrayList<>();
+        /**
+         * What became of every case of every sum the walk met, by the sum it belongs to.
+         *
+         * <p>One recording and two readings of it. Why a name did not cross a case and whether that
+         * case has a value are different questions with one answer behind them — the walk decides
+         * both at the step it turns back at a branch — so what is written down is what became of the
+         * case, and {@link #reach()} is a view of it rather than a second account.
+         */
+        private final java.util.SequencedMap<TermPath,
+                java.util.SequencedMap<Refinement, CaseOutcome>> cases =
+                new java.util.LinkedHashMap<>();
 
         /** Say that {@code field}, written at the sum standing at {@code at}, stands at {@code to}
          *  once the value there is the case {@code branch} names. */
@@ -178,10 +188,16 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
             crossings.add(new Crossing(at, field, branch, to));
         }
 
-        /** Say that the reading did not go down this case of the sum standing at {@code at}, and
-         *  which of the two reasons it was. */
-        void didNotEnter(TermPath at, Refinement branch, NotEntered why) {
-            notEntered.add(new BranchNotEntered(at, branch, why));
+        /** Say what became of this case of the sum standing at {@code at}. */
+        void became(TermPath at, Refinement branch, CaseOutcome outcome) {
+            cases.computeIfAbsent(at, of -> new java.util.LinkedHashMap<>()).put(branch, outcome);
+        }
+
+        /** Every sum the walk met, with what became of each of its cases. */
+        List<CasesRead> cases() {
+            List<CasesRead> out = new ArrayList<>();
+            cases.forEach((at, outcomes) -> out.add(new CasesRead(at, outcomes)));
+            return List.copyOf(out);
         }
 
         /** Say that {@code field} stands nowhere under this case, and what the reading of the case
@@ -192,6 +208,20 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
         }
 
         NameReach reach() {
+            List<BranchNotEntered> notEntered = new ArrayList<>();
+            // The two the model answers for, read off the one recording. A case the walk opened has
+            // its answer under it, and a case the walk never went down is this reading's shortfall
+            // and not a case a name failed to reach — read as one, a name would be reported as
+            // standing nowhere because the walk stopped before it got there.
+            cases.forEach((at, outcomes) -> outcomes.forEach((branch, outcome) -> {
+                switch (outcome) {
+                    case CaseOutcome.StandsAlone _ -> notEntered.add(new BranchNotEntered(at,
+                            branch, new NotEntered.NothingStandsUnderIt()));
+                    case CaseOutcome.RefusedByTheRules _ -> notEntered.add(new BranchNotEntered(at,
+                            branch, new NotEntered.TheRulesLeaveNothingAtIt()));
+                    case CaseOutcome.Opened _, CaseOutcome.NotWalked _ -> { }
+                }
+            }));
             return crossings.isEmpty() && notEntered.isEmpty() && notStanding.isEmpty() ? NONE
                     : new NameReach(crossings, notEntered, notStanding);
         }

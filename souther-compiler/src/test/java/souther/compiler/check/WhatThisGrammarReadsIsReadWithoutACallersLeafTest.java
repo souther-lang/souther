@@ -3,12 +3,13 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -60,7 +61,7 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
     private static Core computed() {
         return new Core.Binary(souther.compiler.types.BinOp.ADD,
                 new Core.Int(99, Type.INT, SOMEWHERE), new Core.Int(1, Type.INT, SOMEWHERE),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.INT, SOMEWHERE);
+                ConstructOccurrence.unwritten(), Type.INT, SOMEWHERE);
     }
 
     /** A newtype's construction is the value it wraps, and the grammar says so. */
@@ -107,6 +108,21 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
             @Override
             public Symbols symbols() {
                 return SYMBOLS;
+            }
+
+            @Override
+            public PublishedDeclarations published() {
+                return PublishedDeclarations.NONE;
+            }
+
+            @Override
+            public DeclarationKinds kinds() {
+                return DeclarationKinds.NONE;
+            }
+
+            @Override
+            public NewtypeInners inners() {
+                return NewtypeInners.NONE;
             }
 
             @Override

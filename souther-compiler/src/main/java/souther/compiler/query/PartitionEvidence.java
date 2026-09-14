@@ -1,8 +1,27 @@
 package souther.compiler.query;
 
+import souther.compiler.check.CoverageObligation;
+import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleCitations;
+import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.ReportedReason;
+import souther.compiler.partition.RuleEvidenceOrigin;
+import souther.compiler.partition.UndividedPosition;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -13,17 +32,15 @@ import java.util.Set;
  * everything downstream would recompute on every ask. What a report needs is the names and the
  * numbers; the functions are used on the way here and left behind.
  *
- * <p><b>This behavior's account and not the lines it was read from.</b> Two of a border's four
- * points can be owed to the declarations that drew the line rather than to any body carrying the
- * type, and a row for one of those is written once for the module. So what is here is what this
- * behavior is owed a row for, and the lines themselves — every point of them, whosever they are —
- * are what a reader that describes them asks for ({@link BehaviorEvidence#boundaryReadings}).
- * Handed the lines, every reader that measures a behavior, counts what it covers or raises a finding
- * about it had to remember to leave the declarations' points out.
+ * <p><b>The classes, and nothing about the lines.</b> What a behavior is owed a row for at the
+ * lines its rules drew is the module's one relation projected to it
+ * ({@link Adequacy.BodyBorders}), and the lines themselves — every point of them, whosever they
+ * are — are what a reader that describes them asks for ({@link BehaviorEvidence#boundaryReadings}).
+ * Neither is here. An account kept beside the classes was read off the lines a second time, and a
+ * reader holding one of its entries could walk back to the border and the roles beside it; asked
+ * for by name, each is one answer with one owner.
  *
- * @param axes         one entry per position the model divides
- * @param owes         one entry per thing this behavior is owed a row for at the lines its
- *                     positions meet
+ * @param partitioned  one entry per position the model divides
  * @param notDerivable positions no class came back for, each saying whether the model divides them
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
@@ -41,21 +58,20 @@ import java.util.Set;
  * not a measurement of it, and the rule this normalization follows is to drop only what something
  * shows is covered.
  *
- * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
+ * @param whyUnclassified why the rows counted in {@link AxisCoverage.Reached#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
-                                Measure<List<OwedBoundaryPoint>> owes,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
-                                List<Incompleteness> whyUnclassified) {
+                                List<Incompleteness> whyUnclassified) implements RuleCitations {
 
 
     /**
@@ -68,7 +84,6 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(),
-            OwedBoundaryPoint.accountOf(BoundaryDerivation.noSubject()),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of());
 
@@ -91,15 +106,16 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * positions. Nothing reads the number — the measurement beside it says none could be finished,
      * and a document leaves the whole section out rather than writing a size nobody worked out.
      */
-    public static PartitionEvidence boundaryNotDerived(String behavior) {
+    public static PartitionEvidence notMeasurable(BoundaryForMeasurement.NotDerived why,
+                                                  String behavior) {
         return new PartitionEvidence(
-                BoundaryForMeasurement.failed(behavior), BoundaryForMeasurement.failed(behavior),
-                PairSpace.boundaryNotDerived(behavior), List.of(), List.of(), List.of(), List.of(),
+                why.failed(behavior),
+                PairSpace.notMeasurable(why, behavior), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of());
     }
 
-    /** Whether this is what a behavior whose boundary could not be worked out comes to. */
-    public boolean boundaryNotDerived() {
+    /** Whether this is what a behavior missing something its boundary is made of comes to. */
+    public boolean notMeasurable() {
         return BoundaryForMeasurement.wasNotDerived(partitioned);
     }
 
@@ -139,32 +155,36 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * producer kept them agreeing — which is the arrangement this whole change exists to remove,
      * left standing one layer from the document.
      */
-    public record Unanswered(souther.compiler.inputs.StandingQuestion asked) {
+    public record Unanswered(StandingQuestion asked) {
 
         /** Which rule of the model raised it, which is what tells one question from another. */
-        public souther.compiler.check.RuleRef rule() {
+        public RuleRef rule() {
             return asked.rule();
         }
 
-        /** How a reader finds that rule, which is not what tells it from another. */
-        public souther.compiler.check.RuleCitation cited() {
+        /** How a reader finds that rule, which is not what tells it from another. Every handle the
+         *  readers offered, because one question found twice is one question a reader can be sent
+         *  to either way; which of them a document writes is that document's to decide. */
+        public java.util.Set<RuleCitation> cited() {
             return asked.cited();
         }
 
-        /** What it asks. Which measure's section a reader meets it in follows from this. */
-        public souther.compiler.check.CoverageObligation question() {
-            return asked.obligation();
+        /**
+         * The question itself, as the reading that raised it produced it.
+         *
+         * <p>Handed on whole rather than taken apart here. What it asks, what it asks it about and
+         * whether anything worked either of those out are the question's own answers, and a reader
+         * that needs one of them asks the question rather than a projection of it made here.
+         */
+        @Override
+        public StandingQuestion asked() {
+            return asked;
         }
 
-        /**
-         * The question itself, which is what it asks and what it asks it about, together.
-         *
-         * <p>As the reading that raised it named it, and not as words for it: a position, a number
-         * of one, and the comparison that drew a border between two moving terms are three things,
-         * and two of them cannot be told apart once they are one string.
-         */
-        public souther.compiler.inputs.InputQuestion asks() {
-            return asked.asks();
+        /** Whether {@code measure} stays open while this stands, which is the question's own
+         *  answer and the same one the closure reads. */
+        public boolean holdsOpen(CoverageObligation.Measure measure) {
+            return asked.holdsOpen(measure);
         }
 
         /**
@@ -172,10 +192,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          *
          * <p>Every one of them, in the order the parts of the clause were met. Handed on as this
          * compiler's own account and projected onto a published word where a document is written
-         * ({@link souther.compiler.partition.ReportedReason}) — projected here instead, a surface
+         * ({@link ReportedReason}) — projected here instead, a surface
          * that says more than the document does would have nothing left to say it from.
          */
-        public java.util.List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
+        public WhatAQuestionStandsOn stopped() {
             return asked.stopped();
         }
 
@@ -187,7 +207,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * has crossed into this vocabulary.
          */
         public String at() {
-            return asked.asks().path().toString();
+            return switch (asked) {
+                case StandingQuestion.Exact it ->
+                        it.asks().path().toString();
+                // Where the reader is sent to look, which is what such a question has instead of a
+                // subject. What the rule is about is the part that was not read, and a document
+                // printing this as the subject would name whichever position the walk was passing.
+                case StandingQuestion.Unclassified it ->
+                        it.at().path().toString();
+            };
         }
 
         /**
@@ -198,24 +226,56 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * number is said by the arm that has none rather than by a test that any shape added later
          * would also fail — which is how a question about a number nobody had classified would
          * reach a document as one about no number at all.
+         *
+         * <p><b>Written from the question and never from an answer to it.</b> What the document
+         * says a line falls on is the place the rules name and the operation as it resolved, both
+         * of which the question carries. Read off the term a reading made, this
+         * had a word only for the numbers something had already read — and the document's own
+         * vocabulary was then a projection of what this compiler can do.
          */
         public String measure() {
-            return switch (asked.asks()) {
-                case souther.compiler.inputs.InputQuestion.AboutAPosition _ -> null;
-                case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                        switch (it.term()) {
-                            // The position's own values, which the `path` beside this already says.
-                            case souther.compiler.inputs.NumericTerm.ValueOf _ -> null;
-                            case souther.compiler.inputs.NumericTerm.TakenOf taken ->
-                                    taken.toString();
-                            // The number itself, as it is written: what the `path` beside this says
-                            // is where its values are read from, which for a run is not what the
-                            // number is of. A consumer reading the path as the measure would take
-                            // a total for the values it was added up from.
-                            case souther.compiler.inputs.NumericTerm.TakenOver over ->
-                                    over.toString();
+            return switch (asked) {
+                case StandingQuestion.Exact one -> switch (one.asks()) {
+                    case InputQuestion.AboutAPosition _ -> null;
+                    case InputQuestion.AboutANumber it ->
+                            switch (it.about().of()) {
+                                // The position's own values, which the `path` beside this already
+                                // says.
+                                case NumberAt.OfWhatNumber
+                                        .OfItsOwnValue _ -> null;
+                                case NumberAt.OfWhatNumber
+                                        .OfWhatAnOperationAnswers taken ->
+                                        named(taken.operation()) + "(" + at() + ")";
+                            };
+                };
+                // The number the walk had named when it stopped, where it named one. Not what the
+                // rule is about — nothing worked that out — but which of a position's numbers a
+                // reader is being sent to look at, which is what tells two of these apart at one
+                // path.
+                case StandingQuestion.Unclassified one ->
+                        switch (one.at()) {
+                            case FilingCoordinate.AtPosition _ -> null;
+                            case FilingCoordinate.OfTerm it ->
+                                    it.term().toString();
                         };
             };
+        }
+
+        /**
+         * What a document calls the operation a number is taken by.
+         *
+         * <p>The qualified spelling, which is the only one a document has. Every claim made today
+         * takes its operation from what the library declares of the shape
+         * ({@code NumericMeasures.takenOf}), so an operation of another kind arriving here is a
+         * producer added without the document being told what to call what it names — and a word
+         * invented here for it would be that decision taken by whoever wrote the renderer.
+         */
+        private static String named(souther.compiler.types.ValueName operation) {
+            if (!(operation instanceof souther.compiler.types.ValueName.Stdlib it)) {
+                throw new IllegalStateException("a question stands about the number `" + operation
+                        + "` answers, which no document has a word for");
+            }
+            return it.qualified();
         }
     }
 
@@ -252,7 +312,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         String at();
 
         /** What stopped it, in the words a document promises. */
-        souther.compiler.partition.UndividedPosition.Reason reason();
+        UndividedPosition.Reason reason();
 
         /**
          * Whether this is a reading that stopped, rather than one that ran to the end and left the
@@ -267,6 +327,16 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          */
         boolean readingStopped();
 
+        /**
+         * Every handle a reader was offered for what this is about, which is nothing for an entry
+         * about no rule.
+         *
+         * <p>On the seal so that whoever asks where the rules of this array are shown asks one
+         * question of every kind of entry. A position nothing divides is about the position and
+         * names no rule, and says so by answering with none.
+         */
+        Set<RuleCitation> cited();
+
         /** A rule of the model this read and could not turn into a line. */
         record ARule(souther.compiler.inputs.RuleWithoutALine finding) implements NotRead {
 
@@ -276,22 +346,64 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
 
             @Override
-            public souther.compiler.partition.UndividedPosition.Reason reason() {
-                return souther.compiler.partition.ReportedReason.of(finding.why());
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
             }
 
             @Override
             public boolean readingStopped() {
-                return finding.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped;
+                return finding.why() instanceof BlockReason.RuleReadingStopped;
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
-            public souther.compiler.check.RuleRef rule() {
+            public RuleRef rule() {
+                return finding.rule();
+            }
+
+            /** And how a reader finds that rule, which is not what tells it from another. Every
+             *  handle offered, for the reason a standing question gives. */
+            @Override
+            public java.util.Set<RuleCitation> cited() {
+                return finding.cited();
+            }
+        }
+
+        /**
+         * A rule of the model this reading did not get far enough through to classify.
+         *
+         * <p>Beside {@link ARule} because a reader out here is asking what went unread, and this is
+         * what that is: the reading of the rule stopped, and what it raises is the part that was
+         * not read. It holds a measure open as well, and is among the questions for that — which is
+         * the other question and has the other reader.
+         */
+        record AnUnclassifiedRule(
+                StandingQuestion.NothingClassifiesIt finding)
+                implements NotRead {
+
+            @Override
+            public String at() {
+                return finding.at().toString();
+            }
+
+            @Override
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
+            }
+
+            /** Always: nothing reaches this having been read to the end. */
+            @Override
+            public boolean readingStopped() {
+                return true;
+            }
+
+            /** Which rule, which is what tells this finding from the one beside it. */
+            public RuleRef rule() {
                 return finding.rule();
             }
 
             /** And how a reader finds that rule, which is not what tells it from another. */
-            public souther.compiler.check.RuleCitation cited() {
+            @Override
+            public java.util.Set<RuleCitation> cited() {
                 return finding.cited();
             }
         }
@@ -306,8 +418,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
 
             @Override
-            public souther.compiler.partition.UndividedPosition.Reason reason() {
-                return souther.compiler.partition.ReportedReason.of(finding.why());
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
             }
 
             /** A walk that never arrived at the rules of a position is a reading that stopped,
@@ -315,6 +427,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public boolean readingStopped() {
                 return true;
+            }
+
+            /** None: this entry is about the position and names no rule of the model. */
+            @Override
+            public Set<RuleCitation> cited() {
+                return Set.of();
             }
         }
     }
@@ -338,11 +456,22 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * nothing. What is joined here are the two findings themselves, each from the
      * reader that made it.
      *
-     * <p>The rules come first and the positions after, in the order each was read.
+     * <p>What the model states first, what nothing classified after it, and the positions last,
+     * each in the order it was read.
      */
     public List<NotRead> notRead() {
         List<NotRead> out = new java.util.ArrayList<>();
         rulesWithoutALine.forEach(each -> out.add(new NotRead.ARule(each)));
+        // And the comparisons nothing worked out what they do, which nothing else says. A rule of a
+        // declaration that came to no line is already above, said by the reader that gave up on it;
+        // a comparison has no such finding, so the question is what a reader asking what went
+        // unread is told about it.
+        unanswered.forEach(each -> {
+            if (each.asked() instanceof StandingQuestion
+                    .NothingClassifiesIt it) {
+                out.add(new NotRead.AnUnclassifiedRule(it));
+            }
+        });
         blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
     }
@@ -365,15 +494,35 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public WeakeningSet weakening() {
         WeakeningSet out = partitioned.weakening()
-                .union(owes.weakening())
                 .union(pairs.counted().weakening());
         for (AxisCoverage axis : axes()) {
             out = out.union(axis.reached().weakening());
         }
-        for (OwedBoundaryPoint owed : owedPoints()) {
-            out = out.union(owed.item().weakening());
-        }
         return out;
+    }
+
+    /**
+     * Every handle this measure holds for a rule it read.
+     *
+     * <p>Three ways a rule of the model reaches this measure and all three are here. A question
+     * nothing answered names the rule it stands on; a rule this reading could not turn into a line
+     * names itself; and a rule that did divide a position is what the classes were composed out of,
+     * which is the axis's to say ({@link AxisCoverage#divides()}). The third used to be nobody's:
+     * the page that names a class no row is in had no handle for the rule that made that class.
+     *
+     * <p>Asked here and not of the axes. Which arrays a rule can reach this measure through is what
+     * this record is made of, and a reader gathering them from outside is a reader who has to be
+     * told when a fourth arrives.
+     */
+    @Override
+    public Set<RuleCitation> ruleCitations() {
+        Set<RuleCitation> out = new LinkedHashSet<>();
+        unanswered().forEach(each -> out.addAll(each.cited()));
+        notRead().forEach(each -> out.addAll(each.cited()));
+        for (AxisCoverage axis : axes()) {
+            axis.divides().forEach(each -> out.add(each.cited()));
+        }
+        return Collections.unmodifiableSet(out);
     }
 
     /** The positions, for a reader that wants them and not what the measure made of itself. Empty
@@ -382,92 +531,228 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         return PartitionDerivation.at(partitioned);
     }
 
-    /** What this behavior is owed a row for, likewise. */
-    public List<OwedBoundaryPoint> owedPoints() {
-        return owes.made().orElseGet(List::of);
-    }
-
     /**
-     * How many two-class combinations the rows reach, and how much is known about the rest.
+     * How many two-class combinations the rows reach, taken between the two positions each is
+     * between.
      *
-     * <p>Three numbers rather than a percentage, because the denominator is not known. A combination
-     * a row reaches is proven reachable — the row is the proof. A combination no row reaches has not
-     * been shown impossible; nothing has tried to build one. Calling those unreachable would flatter
-     * the coverage, and calling them missing would send the author after rows that may not exist.
+     * <p>Counts rather than a ratio, because the denominator is not known. A combination a row
+     * reaches is proven reachable — the row is the proof. A combination no row reaches has not been
+     * shown impossible; nothing has tried to build one. Calling those unreachable would flatter the
+     * coverage, and calling them missing would send the author after rows that may not exist.
      *
-     * <p>{@code total} is outside the measurement because it is a fact about the model: the product
-     * of what a row can be written at is that whether or not anybody counted. What was counted is
-     * inside, and a space nobody counted has no counts at all — it used to have four zeroes, which
-     * read exactly like a space where nothing was reached.
+     * <p><b>The pairs, and not their sum.</b> A sum says how many combinations there are and
+     * nothing about which two positions each is between, so a reader told twenty-one are unknown
+     * cannot tell one relation from six. The space is therefore the pairs, and {@link #total()} is
+     * read off them rather than kept beside them — kept, the two would be a second thing to hold
+     * true.
+     *
+     * <p>{@code space} is outside the measurement because it is a fact about the model: what a row
+     * can be written at is that whether or not anybody counted. What was counted is inside, and a
+     * space nobody counted has no counts at all.
      *
      * <p>The other thing that used to sit out here was {@code truncated}, a boolean that had to be
      * kept in step with a status beside it (#951 added the check that did it). A space too large to
      * walk is now said once, as what weakened the measurement.
      */
-    public record PairSpace(int total, Measurement<PairCounts> counted) {
+    public record PairSpace(List<AxisPair> space, Measurement<CoveredBetween> counted) {
+
+        /**
+         * Both sides are over one set of pairs, in one order, and this is what says so.
+         *
+         * <p>Sequence equality and not two containments. What is written of a pair is written
+         * against the pair beside it in the other list, so an order that differs is two readers
+         * disagreeing about which pair a number is of — which a check on the members alone lets
+         * through.
+         */
+        public PairSpace {
+            space = List.copyOf(space);
+            List<Between> asked = space.stream().map(AxisPair::between).toList();
+            for (CoveredBetween made : counted.made().stream().toList()) {
+                if (!List.copyOf(made.byPair().sequencedKeySet()).equals(asked)) {
+                    throw new IllegalArgumentException(
+                            "a count of the pairs is a count of these pairs, in this order: "
+                                    + asked + " counted as " + made.byPair().sequencedKeySet());
+                }
+            }
+        }
+
+        /**
+         * The two positions a combination is between, which is the whole of what names one.
+         *
+         * <p>How many combinations they make between them is not part of it. That is what the
+         * model says of the pair and is read from the pair; taken into the name, two readings of
+         * one relation that came to different sizes would be two relations.
+         */
+        public record Between(AxisId one, AxisId other) {
+
+            public Between {
+                if (one == null || other == null) {
+                    throw new IllegalArgumentException("a combination is between two positions");
+                }
+            }
+        }
+
+        /** One relation of the model, and how many combinations it holds. */
+        public record AxisPair(Between between, long total) {
+
+            public AxisPair {
+                if (between == null) {
+                    throw new IllegalArgumentException("a size is a size of some two positions");
+                }
+                if (total < 0) {
+                    throw new IllegalArgumentException("a relation holds no negative number of"
+                            + " combinations: " + total);
+                }
+            }
+        }
 
         /**
          * What the rows reached of the space, where anybody counted.
          *
-         * <p>{@code provenInfeasible} is what a search settled: a combination whose values were
-         * tried and refused for a reason that is about the combination, or one ruled out by a
-         * constraint. Nothing fills it until something builds candidates, and a candidate that
-         * failed to build is not it — another value of the same two classes may well have built.
+         * <p>Named for what it holds and not for what the position measure beside it calls its
+         * own count: one file with two {@code Reached} in it is two things a reader has to keep
+         * apart by where they are written.
+         *
+         * <p>Per pair, because that is what was counted: a row sits in the combinations of each
+         * relation it reaches, and a sum of them is an answer about no relation in particular.
+         *
+         * <p><b>It answers no further than what it holds.</b> How many of a relation are left is a
+         * question about the size as well as the count, and the size is the model's and sits
+         * outside — so {@link PairSpace#unknown()} answers that, and nothing here keeps a second
+         * copy of the sizes to answer it from.
          */
-        public record PairCounts(int covered, int witnessedFeasible, int provenInfeasible,
-                                 int unknown) {}
+        public record CoveredBetween(SequencedMap<Between, Integer> byPair) {
+
+            public CoveredBetween {
+                byPair = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byPair));
+            }
+
+            /** How many combinations the rows reach of one relation. */
+            public int covered(Between between) {
+                Integer said = byPair.get(between);
+                if (said == null) {
+                    throw new IllegalArgumentException(
+                            "a relation this count is not over was read for its count: " + between);
+                }
+                return said;
+            }
+
+            /** And of all of them, which is the one number the whole space is spoken of by. */
+            public int covered() {
+                return byPair.values().stream().mapToInt(Integer::intValue).sum();
+            }
+        }
 
         /** Why the combinations have no numbers. */
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing sits anywhere. */
-            NO_ROWS
+            NO_ROWS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
-        public static final PairSpace NONE =
-                new PairSpace(0, new Measurement.Complete<>(new PairCounts(0, 0, 0, 0)));
+        public static final PairSpace NONE = new PairSpace(List.of(),
+                new Measurement.Complete<>(new CoveredBetween(new LinkedHashMap<>())));
 
-        /** A space nobody counted. It keeps its size, which the model settles, and has no counts. */
-        public static PairSpace noRows(int total) {
-            return new PairSpace(total, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+        /** A space nobody counted. It keeps its pairs, which the model settles, and has no counts. */
+        public static PairSpace noRows(List<AxisPair> space) {
+            return new PairSpace(space, new Measurement.NotMeasured<>(PairSpace.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
-        public static PairSpace notAsked(int total) {
-            return new PairSpace(total, new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+        public static PairSpace notAsked(List<AxisPair> space) {
+            return new PairSpace(space, new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
-        /** A space whose size was never worked out, because the positions it is a product over
-         *  were not. What it is short of is what every measure of that behavior is short of. */
-        public static PairSpace boundaryNotDerived(String behavior) {
-            return new PairSpace(0, BoundaryForMeasurement.failed(behavior));
+        /** A space whose pairs were never worked out, because the positions they are between were
+         *  not. What it is short of is what every measure of that behavior is short of. */
+        public static PairSpace notMeasurable(BoundaryForMeasurement.NotDerived why,
+                                              String behavior) {
+            return new PairSpace(List.of(), why.failed(behavior));
         }
 
-        /** A space too large to walk to the end of. What it is measured in part by is the fact that
-         *  stopped it, said once. */
-        public static PairSpace truncated(String behavior, long size, int limit) {
-            int total = (int) Math.min(size, Integer.MAX_VALUE);
-            return new PairSpace(total, new Measurement.Partial<>(
-                    new PairCounts(0, 0, 0, total),
+        /**
+         * A space too large to walk to the end of.
+         *
+         * <p>The pairs are known and none of them was walked, so what is written of each is what
+         * was reached of it: none. What it is measured in part by is the fact that stopped it, said
+         * once.
+         */
+        public static PairSpace truncated(String behavior, List<AxisPair> space, long size,
+                                          int limit) {
+            SequencedMap<Between, Integer> none = new LinkedHashMap<>();
+            space.forEach(pair -> none.put(pair.between(), 0));
+            return new PairSpace(space, new Measurement.Partial<>(new CoveredBetween(none),
                     WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));
         }
 
         /**
-         * The numbers, where a measurement was made.
+         * How many combinations the model has across every relation.
+         *
+         * <p>Clamped, because a document writes it as one number a consumer reads. A space this
+         * large is one the walk was never going to finish, and what it is short of is said as what
+         * weakened the measurement rather than by a number that wrapped.
+         */
+        public int total() {
+            long sum = space.stream().mapToLong(AxisPair::total).sum();
+            return (int) Math.min(sum, Integer.MAX_VALUE);
+        }
+
+        /**
+         * The counts, where a measurement was made.
          *
          * <p>Throws where none was. A measure with no number has none, and an accessor that answered
          * zero would be the thing this type was introduced to remove — a reader would get an answer
          * and no sign that nobody measured it.
          */
-        public PairCounts counts() {
+        public CoveredBetween counts() {
             return counted.made().orElseThrow(() -> new IllegalStateException(
                     "a pair space nobody counted was read for its counts"));
+        }
+
+        /**
+         * How many combinations no row reaches, over the whole space and over one relation.
+         *
+         * <p>Here and nowhere else. It is the one answer that needs both halves — the sizes the
+         * model settles and the counts a measurement made — and a reader that subtracted them for
+         * itself would be a second mechanism for one fact, which is what the pair of numbers this
+         * type used to publish already was.
+         */
+        public int unknown() {
+            return total() - counts().covered();
+        }
+
+        /**
+         * The same of one relation, where the caller is holding it.
+         *
+         * <p>Takes the pair rather than what names it. A reader walking the space has the size in
+         * hand, and looking it up again by name is a walk of the space per relation — which is the
+         * space walked once for every pair it holds.
+         */
+        public long unknown(AxisPair pair) {
+            return pair.total() - counts().covered(pair.between());
+        }
+
+        /** The same for a caller that has only the name, which costs a look through the space. */
+        public long unknown(Between between) {
+            return sizeOf(between) - counts().covered(between);
+        }
+
+        /** What the model says one relation holds, which is the model's answer and not a count. */
+        public long sizeOf(Between between) {
+            return space.stream().filter(pair -> pair.between().equals(between))
+                    .mapToLong(AxisPair::total).findFirst().orElseThrow(
+                            () -> new IllegalArgumentException(
+                                    "a relation this space is not over: " + between));
         }
 
         /** Whether a single ratio would say anything. With unknowns in the denominator it would not,
          *  and a measurement that is not complete has them whether or not they were counted. */
         public boolean decided() {
-            return counted instanceof Measurement.Complete<PairCounts> whole
-                    && whole.value().unknown() == 0;
+            return counted instanceof Measurement.Complete<CoveredBetween> && unknown() == 0;
         }
     }
 
@@ -484,9 +769,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *                status saying so, which reads exactly like a position every class of which
      *                went unreached
      */
-    public record AxisCoverage(souther.compiler.partition.AxisId at, String path,
-                               List<String> classes, Reading read,
-                               Measurement<Reached> reached) {
+    public record AxisCoverage(AxisId at, String path,
+                               List<String> classes, List<RuleEvidenceOrigin> divides,
+                               boolean cutOrParted,
+                               Reading read, Measurement<Reached> reached) {
 
         /**
          * What a document calls this measure, which is the number it is of.
@@ -572,42 +858,38 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior. An absence of evidence is not a set of gaps, so the
              *  classes nothing sits in are not classes nothing reaches. */
-            NO_ROWS
+            NO_ROWS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /** Which classes there are is a fact about the model, and no row has to exist for it to be
          *  so — which is why a position nothing was measured at still names them. */
-        public static AxisCoverage noRows(souther.compiler.partition.AxisId at, String path,
-                                          List<String> classes, Reading read) {
-            return new AxisCoverage(at, path, classes, read,
-                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+        public static AxisCoverage noRows(AxisId at, String path, List<String> classes,
+                                          List<RuleEvidenceOrigin> divides, boolean cutOrParted,
+                                          Reading read) {
+            return new AxisCoverage(at, path, classes, divides, cutOrParted, read,
+                    new Measurement.NotMeasured<>(AxisCoverage.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
-        public static AxisCoverage notAsked(souther.compiler.partition.AxisId at, String path,
-                                            List<String> classes, Reading read) {
-            return new AxisCoverage(at, path, classes, read,
+        public static AxisCoverage notAsked(AxisId at, String path, List<String> classes,
+                                            List<RuleEvidenceOrigin> divides, boolean cutOrParted,
+                                            Reading read) {
+            return new AxisCoverage(at, path, classes, divides, cutOrParted, read,
                     new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
+            divides = List.copyOf(divides);
             if (read == null) {
                 throw new IllegalArgumentException(
                         "a position with no account of what was read about its values: " + path);
             }
-        }
-
-        /**
-         * The numbers, where a measurement was made.
-         *
-         * <p>Throws where none was. A measure with no number has none, and an accessor that answered
-         * zero would be the thing this type was introduced to remove — a reader would get an answer
-         * and no sign that nobody measured it.
-         */
-        public Reached rows() {
-            return reached.made().orElseThrow(() -> new IllegalStateException(
-                    "a position nobody measured was read for what the rows reached: " + path));
         }
 
         /**
@@ -619,7 +901,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * name and nothing else cannot say which position to write the row at, and neither can a
          * document trying to join the two back together.
          *
-         * <p>Which of {@link #axis} and {@link #path} names the position to a reader is not settled
+         * <p>Which of {@link #at} and {@link #path} names the position to a reader is not settled
          * here. The two are for different readers and a value that chose one of them would be this
          * measure writing a report's sentence.
          */

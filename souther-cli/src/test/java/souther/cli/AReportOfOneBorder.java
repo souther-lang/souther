@@ -1,23 +1,34 @@
 package souther.cli;
 
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.CorePath;
+import souther.compiler.coverage.NodeAddress;
+import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.SiteAddress;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.Demand;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -26,11 +37,21 @@ import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.numeric.Towards;
+import souther.compiler.partition.LineFacts;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -47,6 +68,23 @@ import java.util.function.Function;
  */
 final class AReportOfOneBorder {
 
+    /**
+     * Where the comparison the lines below come off is recorded.
+     *
+     * <p>Stated rather than compiled, like the rest of this fixture. A place is a place of a
+     * numbering and of nothing else, so what is written here is the numbering — one comparison, in
+     * the body this fixture stands for — and the place is read out of it.
+     */
+    private static final ComparisonEmissionSite WHERE =
+            SiteNumbering.of(new NumberingIdentity("example.rate", Map.of(),
+                            List.of(new SiteAddress.Comparison(
+                                    new NodeAddress("example.rate", Set.of(CorePath.ROOT))))))
+                    .comparison(0);
+
+    /** The number the lines below are on, which their orders are the orders of. */
+    private static final NumericTerm.ValueOf AT_W_A =
+            new NumericTerm.ValueOf(TermPath.of("w").then("a"));
+
     private AReportOfOneBorder() {}
 
     /**
@@ -60,15 +98,19 @@ final class AReportOfOneBorder {
      * refuses.
      */
     static Border aBoundedBorder() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), 0,
+        LineOrigin origin = new LineOrigin.InvariantOrigin(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.rate", "Amount")), 0),
+                                java.util.Optional.of(new ClauseName("cap")))), 0),
+                        0)),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -84,20 +126,20 @@ final class AReportOfOneBorder {
      * module; a run beside a comparison exists in the body that wrote it and is that behavior's.
      */
     static Border aBorderABodyDrew() {
-        OriginRef origin = new OriginRef.ComparisonOrigin(
-                new RuleRef.Comparison("weigh", new souther.compiler.types.CoverageOrigin(
-                        "example.rate", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence(0),
-                        new souther.compiler.check.RuleCitation.WrittenAt(
-                                souther.compiler.diag.Citation.of(
-                                        new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.rate", "weigh"), 2, 0, SourceConstruct.BINARY);
+        LineOrigin origin = new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("weigh", wrote),
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
+                        new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(WHERE)),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -107,15 +149,19 @@ final class AReportOfOneBorder {
 
     /** The same border a rule leaves at 100 and up, where the ON point is the whole of what it owes. */
     static Border aBorderAtTheEdgeOfItsDomain() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName("cap")))), 0,
+        LineOrigin origin = new LineOrigin.InvariantOrigin(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.rate", "Amount")), 0),
+                                java.util.Optional.of(new ClauseName("cap")))), 0),
+                        0)),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(new AxisId("weigh", "w.a"),
-                                new NumericTerm.ValueOf(TermPath.of("w").then("a")),
-                                souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                        new BorderQuantity.OfACoordinate("weigh", AT_W_A,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_W_A, Carrier.WHOLE)),
                         new souther.compiler.partition.Level.OnACarrier(Carrier.WHOLE,
                                 Count.of(100))),
                 origin,
@@ -131,7 +177,7 @@ final class AReportOfOneBorder {
      *  absent. What weakened it is a row that never finished. */
     static Measurement<ItemAssessment.Coverage> undecided() {
         return new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
-                WeakeningSet.of(new Weakening.ObservationIncomplete(
+                WeakeningSet.of(Weakening.ObservationIncomplete.of(
                         new souther.compiler.observe.Incompleteness(
                                 souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                                 new souther.compiler.observe.Target.OfRow(
@@ -151,18 +197,19 @@ final class AReportOfOneBorder {
     static BorderAssessment assessed(Border border,
                                      Function<PointRole, Measurement<ItemAssessment.Coverage>>
                                              coverage) {
-        EnumMap<PointRole, ItemAssessment> items = new EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            if (border.demand(role) instanceof Demand.NotOwed not) {
-                items.put(role, new ItemAssessment.NotOwed(not.reason()));
+        Map<DomainPoint, ItemAssessment> items = new LinkedHashMap<>();
+        for (DomainPoint point : border.answers().keySet()) {
+            if (border.demand(point) instanceof Demand.NotOwed not) {
+                items.put(point, new ItemAssessment.NotOwed(not.reason()));
                 continue;
             }
             // Proven by the rules, which is the one way of being writable that does not depend on
             // what the coverage beside it says. Written as a verdict, this fixture could claim a row
             // was at the point while handing in a coverage that says none is.
-            items.put(role, new ItemAssessment.Owed(border.demand(role).criterion(),
-                    coverage.apply(role), ItemAssessment.WritabilityProjection.PROVEN,
-                    null));
+            items.put(point, new ItemAssessment.Owed(border.demand(point).criterion(),
+                    coverage.apply(border.roleOf(point)),
+                    ItemAssessment.WritabilityProjection.PROVEN,
+                    souther.compiler.query.SearchOutcomes.none()));
         }
         return new BorderAssessment(border, items);
     }
@@ -183,13 +230,26 @@ final class AReportOfOneBorder {
      */
     static PartitionEvidence partition(Measurement<List<BorderAssessment>> border) {
         return new PartitionEvidence(
+                new Measurement.Complete<>(List.of()),
+                PartitionEvidence.PairSpace.NONE,
+                List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of());
+    }
+
+    /**
+     * And the same, from a reading that did not run out and derived no classes.
+     *
+     * <p>Which is not a behavior with no classes to cover: the positions were never divided, so
+     * what the rows reach of them is a measure nobody made rather than one that came back empty.
+     */
+    static PartitionEvidence partitionThatDidNotRunOut() {
+        return new PartitionEvidence(
                 new Measurement.FailedToMeasure<>(
                         PartitionDerivation.TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT,
                         WeakeningSet.of(new Weakening.ModelReadingIncomplete(
                                 new souther.compiler.partition.ClosureGap.RulesNotReached("b",
                                         new souther.compiler.inputs.PositionId(
                                                 souther.compiler.inputs.TermPath.of("t")))))),
-                souther.compiler.query.OwedBoundaryPoint.accountOf(border),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of());
@@ -211,27 +271,61 @@ final class AReportOfOneBorder {
     }
 
     /**
-     * What one behavior's lines make of the whole report, held to {@code held}.
+     * What one behavior's lines make of the whole report.
      *
-     * <p>The lines and nothing else, because the account is read off them: handed both, a fixture
-     * could put a verdict in front of an account made from other lines than the ones beside it, and
-     * what came back would be about neither.
+     * <p>The lines and nothing else, because the account is read off them: handed a verdict as
+     * well, a fixture could put one in front of an account made from other lines than the ones
+     * beside it, and what came back would be about neither.
      */
+    static AdequacyReport.AdequacyStatus verdictOf(Measurement<List<BorderAssessment>> lines) {
+        return verdictOf(lines, partition(lines));
+    }
+
+    /** The same, over a reading of the classes the caller states. */
     static AdequacyReport.AdequacyStatus verdictOf(Measurement<List<BorderAssessment>> lines,
-                                                   Adequacy.AdequacyBar held) {
-        PartitionEvidence partition = partition(lines);
+                                                   PartitionEvidence partition) {
+        // The account is the module's one relation projected to this behavior, which over one
+        // behavior's lines is the points its own rules settled, gathered across their readings.
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", souther.compiler.check.BehaviorImplementation.IMPLEMENTED,
                 new souther.compiler.query.BehaviorEvidence(
-                        Adequacy.RowReading.NONE, null, partition, lines, null),
-                souther.compiler.query.ClaimAnnotations.NONE, List.of());
-        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test",
-                held, WeakeningSet.none(),
+                        Adequacy.RowReading.NONE, null, partition, lines,
+                        lines.readAs(read -> souther.compiler.query
+                                .BorderObligationPointAssessment.across(read).stream()
+                                .filter(point -> point.belongsToBehaviorAccount("weigh"))
+                                .toList()),
+                        null, null),
+                souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
+                java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),
+                java.util.Map.of());
+        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
                         // Nothing this module's declarations are owed, and nothing that finding
                         // them went without: the fixture is about one behavior's own lines.
-                        new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()))))
+                        new AdequacyReport.DeclarationsShown(
+                                new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()),
+                                java.util.Map.of(), java.util.Map.of()))))
                 .adequacy();
+    }
+
+    /**
+     * Where this fixture's page shows each rule its lines name.
+     *
+     * <p>Stood up here because there is no compile to ask. The rules are written in the source this
+     * fixture is about, so the module that wrote them places them, and the place is the one the
+     * line was built at.
+     */
+    private static java.util.Map<souther.compiler.check.RuleCitation.Written,
+            Citation> rulePlaces(Measurement<List<BorderAssessment>> lines) {
+        java.util.Map<souther.compiler.check.RuleCitation.Written, Citation> places =
+                new java.util.LinkedHashMap<>();
+        for (BorderAssessment line : lines.made().orElse(List.of())) {
+            if (line.origin().cited()
+                    instanceof souther.compiler.check.RuleCitation.Written written) {
+                places.put(written, Citation.of(new SourcePos(3, 5)));
+            }
+        }
+        return places;
     }
 }

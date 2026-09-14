@@ -2,16 +2,13 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -65,16 +62,14 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        assertNotNull(prepared);
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Position k = InputDomain.of(spec, sigs.get("take"), symbols, policy).positions().stream()
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        assertNotNull(sigs);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Position k = InputDomain.of(sigs.get("take"), rules, policy).positions().stream()
                 .filter(p -> p.path().toString().equals("r.k"))
                 .findFirst().orElseThrow();
-        return k.admissionOf(TypeSymbols.declared(new TypeKey(symbols.module(), case_)));
+        return k.admissionOf(TypeSymbols.declared(new TypeKey(rules.symbols().module(), case_)));
     }
 
     @Test
@@ -85,12 +80,21 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
                 "and the case they do leave is one a row may be written at");
     }
 
-    /** And a reading that cannot hold what the two clauses leave settles neither, which is the
-     *  answer that is not about the model. */
+    /**
+     * And a reading that cannot hold what the two clauses leave settles neither, which is the
+     * answer that is not about the model.
+     *
+     * <p>Neither: what such a reading reports a position as holding is an upper bound, a case it had
+     * no reason to remove, and that is not an admission. It answers the same for the case the rules
+     * refuse and for the one they leave, because it cannot tell them apart.
+     */
     @Test
     void andAReadingThatCannotHoldThemSettlesNeither() {
         assertEquals(new Admits.Unsettled(new Unsettlement.AlternativesNotSeparated()),
                 admissionOf("B", ReadAs.MERGING_WHAT_A_CHOICE_LEAVES));
+        assertEquals(new Admits.Unsettled(new Unsettlement.AlternativesNotSeparated()),
+                admissionOf("A", ReadAs.MERGING_WHAT_A_CHOICE_LEAVES),
+                "one reading answers for the position, and it answers the same for both cases");
     }
 
     /**

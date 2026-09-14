@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sugar is how each gets this far: it has no declaration of its own, so what is said about the arity
  * of {@code List.fold} is said against the call it becomes, and by then the walk has read it.
  *
- * <p>So {@link Combinators#handedTo(souther.compiler.ast.Ast.Apply)} says nothing about such a call,
+ * <p>So {@link Combinators#handedTo(souther.compiler.ast.Hir.Apply)} says nothing about such a call,
  * and the arity is reported by the check whose question it is. Held here because the difference
  * between the two trees is the whole reason one of them is asked and the other is not: were it to
  * stop holding, this fails rather than the walk crediting an element off something that is absent.

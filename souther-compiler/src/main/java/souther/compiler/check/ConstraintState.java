@@ -3,15 +3,20 @@ package souther.compiler.check;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Allowance;
 import souther.compiler.values.ConjoinedAdmissibleValues;
+import souther.compiler.values.StringMachineAnswers;
 
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * What the rules say, in each of the languages this reading has for saying it.
@@ -56,21 +61,42 @@ import java.util.Set;
  * happened to ask had nothing to say.
  */
 public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
-                                 ConjoinedAdmissibleValues<A> values, OrderedIntervals<A> ordered,
-                                 boolean shown) {
+                                 Confinement.Conjoined<A> confinement, boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
     public static <A> ConstraintState<A> top() {
         return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
-                ConjoinedAdmissibleValues.top(), OrderedIntervals.top(), false);
+                Confinement.Conjoined.top(), false);
+    }
+
+    /**
+     * Which values the positions may take, for a reader that needs the sets themselves.
+     *
+     * <p>Not a way to the answer this record gives. What a position admits is a question the values
+     * answer; whether anything satisfies the rules is {@link #isBottom}, and a reader assembling
+     * that out of the parts is the reading this question came apart along.
+     */
+    public ConjoinedAdmissibleValues<A> values() {
+        return confinement.values();
     }
 
     /**
      * Whether nothing satisfies what has been taken in.
      *
-     * <p>Every domain, because each of them can hold the whole state's contradiction on its own: what
-     * one of them cannot express it leaves alone, so a contradiction found anywhere is a
-     * contradiction, and one found nowhere is only what these readings were able to show.
+     * <p>A contradiction found anywhere is a contradiction, and one found nowhere is only what these
+     * readings were able to show. What a domain cannot express it leaves alone, so each of them may
+     * hold one on its own — but two of them holding halves of one is not something either can find,
+     * and where that is what happens the two are one component ({@link Confinement}) rather than two
+     * arms of this. A set of values and a range on an order are such a pair, and reading them as two
+     * arms is what left a declaration whose strings and whose ends share no value accepted.
+     *
+     * <p><b>And a half one domain holds against a half another one holds is the last arm.</b> Two
+     * components put in one is what to do where one language can say the whole of what the other
+     * does; where they cannot — the numbers relate positions and hold no choice, the alternatives
+     * hold a choice and relate nothing — what is shared is a position, and what each of them
+     * requires of it is met in one place ({@link #positionEnvelope}) and asked of the reading that
+     * holds the alternatives. So the arms below are every component's own answer, and the reduction
+     * between them is one more, asked last.
      *
      * <p>And {@code shown}, which is a caller having shown it by an argument none of the domains
      * makes: a condition no case of what it is written over satisfies is one nothing enters, and
@@ -80,9 +106,135 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * first domain added without touching the second would put them out of agreement.
      */
     public boolean isBottom() {
-        return shown || numbers.isBottom() || facts.isBottom() || values.isBottom()
-                || ordered.isBottom();
+        return isBottom(StringMachineAnswers.NONE);
     }
+
+    /** The same, borrowing what {@code machines} has already made where the pair's answer needs
+     *  a machine. */
+    public boolean isBottom(StringMachineAnswers machines) {
+        return shownByAnother() || admitted(machines).holdsNothing();
+    }
+
+    /**
+     * Whether a component other than the pair of readings shows that nothing satisfies this.
+     *
+     * <p>Asked before the pair's answer wherever both are wanted, because the pair's takes a walk
+     * over every alternative and these take none. What that ordering is for is written at
+     * {@link #admitted}: it decides which proof a reader is told as well as what is worked out.
+     */
+    private boolean shownByAnother() {
+        return shown || numbers.isBottom() || facts.isBottom();
+    }
+
+    /**
+     * What the values and the ends of this state leave, asked with what the components beside them
+     * require of the positions where they leave something.
+     *
+     * <p>The order is the whole of it. Every component's own answer comes first, and the reduction
+     * is asked only where each of them left something: an emptiness one of them can show alone is
+     * shown alone, and what is left for the reduction is the contradiction no component holds. That
+     * is what makes a proof out of it — read the other way round, a state the numbers refuse would
+     * be reported against a restriction derived from those very numbers.
+     *
+     * <p>So the envelope here is never {@link PositionEnvelope.NothingIsLeft}: the one component
+     * that says so is the numbers, and their own answer was asked above.
+     */
+    private Confinement.Admission<A> admitted(StringMachineAnswers machines) {
+        if (shownByAnother()) {
+            return confinement.admission(machines);
+        }
+        return switch (positionEnvelope()) {
+            // Nowhere for any position to be is a component of this state holding nothing, which is
+            // that component's answer and is read where it is asked. What the pair leaves is what
+            // the pair leaves, and this says nothing to it.
+            case PositionEnvelope.NothingIsLeft<A> _ -> confinement.admission(machines);
+            case PositionEnvelope.Restrictions<A> it -> confinement.admission(it, machines);
+        };
+    }
+
+    /**
+     * Where each position must sit, according to every component of this state but the one that
+     * holds the alternatives.
+     *
+     * <p>A walk over the components rather than a list somebody wrote. Each of them is a language
+     * for saying something about a value, and whether what it says reaches one position at a time is
+     * a question about that language — so a component added here answers it or stops this, and the
+     * three answers are the three roles a component can have. Left to a list, the component added
+     * would be the one nobody remembered, and a reduction that quietly leaves a language out is the
+     * defect this whole mechanism is about.
+     *
+     * <p>Over the positions this state's own reading holds, which is what makes it a projection of
+     * this state and not an answer about somebody else's table. What each of them is ordered on is
+     * what a count crosses into a range through, and that is the reading's answer rather than one
+     * worked out again here.
+     */
+    PositionEnvelope<A> positionEnvelope() {
+        Map<A, Carrier> carriers = confinement.carriers();
+        Map<A, PositionRestriction> out = new LinkedHashMap<>();
+        for (String component : COMPONENTS) {
+            switch (component) {
+                // The numbers relate positions to each other, so where one of them is left is read
+                // off all the rules at once and never off what was written about it.
+                case "numbers" -> {
+                    // What the component says about itself before what it says about a place. A
+                    // domain admitting no assignment leaves nowhere for any position to be, which
+                    // is about the state and about no place in it — asked position by position, a
+                    // state with no position to ask about would answer that nothing was said.
+                    if (numbers.isBottom()) {
+                        return new PositionEnvelope.NothingIsLeft<>();
+                    }
+                    for (Map.Entry<A, Carrier> each : carriers.entrySet()) {
+                        narrowing(out, each.getKey(),
+                                switch (numbers.projectionOf(each.getKey())) {
+                                    case NumericDomain.Projection.NotSpokenOf _ ->
+                                            new PositionRestriction.NotSpokenOf();
+                                    case NumericDomain.Projection.Within it ->
+                                            each.getValue().within(it.bounds());
+                                    // Answered above, where it is about the state rather than
+                                    // about the position this loop is at.
+                                    case NumericDomain.Projection.NothingIsLeft _ ->
+                                            throw new IllegalStateException(
+                                                    "a domain that holds nothing was asked where a"
+                                                            + " position is");
+                                });
+                    }
+                }
+                // A predicate settled one way or the other, and an argument made outside the
+                // domains. Neither says where a position lies on its order.
+                case "facts", "shown" -> { }
+                // What this envelope is asked of. A reading projected into the envelope it is then
+                // met against would refuse whatever it already said, which is every alternative it
+                // holds.
+                case "confinement" -> { }
+                default -> throw new IllegalStateException(
+                        "a state holds " + component + " and nothing says whether it places a"
+                                + " position, leaves that to another component, or is what the"
+                                + " placing is asked of");
+            }
+        }
+        return new PositionEnvelope.Restrictions<>(out);
+    }
+
+    /** {@code out} with {@code position} also held to {@code said}, which is what two components
+     *  requiring it to be somewhere leave between them. */
+    private static <A> void narrowing(Map<A, PositionRestriction> out, A position,
+                                      PositionRestriction said) {
+        PositionRestriction had = out.get(position);
+        if (had == null) {
+            out.put(position, said);
+            return;
+        }
+        // Two of them speaking is one of them speaking, and a position neither of them named stays
+        // one nothing spoke of.
+        out.put(position, had instanceof PositionRestriction.NotSpokenOf
+                && said instanceof PositionRestriction.NotSpokenOf
+                ? had : new PositionRestriction.Within(had.interval().meet(said.interval())));
+    }
+
+    /** The components of this state, so that one added is one somebody answers for. */
+    private static final List<String> COMPONENTS =
+            Arrays.stream(ConstraintState.class.getRecordComponents())
+                    .map(RecordComponent::getName).toList();
 
     /**
      * This, with nothing satisfying it, shown by an argument outside the domains.
@@ -94,7 +246,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * reading this question came apart along.
      */
     ConstraintState<A> shownToHoldNothing() {
-        return shown ? this : new ConstraintState<>(numbers, facts, values, ordered, true);
+        return shown ? this : new ConstraintState<>(numbers, facts, confinement, true);
     }
 
     /**
@@ -112,25 +264,22 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *                  off the state's own map, the place named would be the one whose clause was
      *                  read first, and moving a clause would move the refusal
      */
-    public Optional<Emptiness> holdsNothing(SequencedMap<A, String> positions) {
-        Emptiness why = isBottom() ? new Emptiness.ConflictingRules() : null;
-        // A position whose ends cross, which is nearer than the general form: it says not only that
-        // the rules contradict but where they leave nothing.
-        //
-        // Only where there is a position to name. A state can hold nothing without any one position
-        // being what holds nothing — a choice every alternative of which is impossible is one, and
-        // the alternatives may fail at different positions — and the particular proof is particular
-        // by naming a place. Written without one, the sentence read off it would name whatever place
-        // the reader happened to be at, which is the declaration's own value.
-        Set<A> empty = ordered.holdingNothing();
-        for (Map.Entry<A, String> each : positions.entrySet()) {
-            if (empty.contains(each.getKey())) {
-                why = Emptiness.preferred(why, new Emptiness.AtAField(each.getValue(),
-                        new Emptiness.EmptyOrderedInterval()));
-                break;
-            }
-        }
-        return Optional.ofNullable(why);
+    public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions) {
+        return holdsNothing(positions, StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made where the pair's answer needs
+     *  a machine. */
+    public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions,
+                                            StringMachineAnswers machines) {
+        Confinement.Admission<A> shown = admitted(machines);
+        // What can be said whatever the readings show, which the nearer sentences are preferred to.
+        Emptiness why = shownByAnother() || shown.holdsNothing()
+                ? new Emptiness.ConflictingRules() : null;
+        // Which proof holds is what this state answers; what it is called in a value declaring
+        // these positions is {@link ProofOfEmptiness}'s, and is about what a proof can say rather
+        // than about the walk that reached this one.
+        return ProofOfEmptiness.named(shown, positions, why);
     }
 
     /**
@@ -160,10 +309,17 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * <p>Both sides have to be said in one vocabulary already. Two readings of two values name their
      * positions the way each value declares them, and met without being renamed first they would
      * hold each other's rules — which is {@link #renamed} and not this.
+     *
+     * @param sets what the answer being built out of these two may spend on the sets it comes to.
+     *             The caller's, because that answer is the caller's: each of these was read under
+     *             the allowance of its own declaration and is bounded by it, and what they come to
+     *             where their vocabularies meet is a third set neither of them paid for. Taken from
+     *             one of the two instead, which of them paid would follow which side {@code .meet}
+     *             was written on, and with it how exactly the composition came out
      */
-    public ConstraintState<A> meet(ConstraintState<A> other) {
+    public ConstraintState<A> meet(ConstraintState<A> other, Allowance<A> sets) {
         return new ConstraintState<>(numbers.meet(other.numbers), facts.meet(other.facts),
-                values.meet(other.values), ordered.meet(other.ordered), shown || other.shown);
+                confinement.meet(other.confinement, sets), shown || other.shown);
     }
 
     /**
@@ -193,17 +349,17 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // The fold in `over` cannot fire: `naming` refuses a second subject at a name some other
         // subject already has, so no two atoms of this state reach one name to be added together.
         return new ConstraintState<>(numbers.over(naming::apply), facts.renamed(naming::apply),
-                values.renamed(naming::apply), ordered.renamed(naming::apply), shown);
+                confinement.renamed(naming::apply), shown);
     }
 
     /** This, with {@code f rel 0} taken as holding. */
     public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
+        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
     ConstraintState<A> taking(A key, boolean positive) {
-        return new ConstraintState<>(numbers, facts.assume(key, positive), values, ordered, shown);
+        return new ConstraintState<>(numbers, facts.assume(key, positive), confinement, shown);
     }
 
     /**
@@ -223,43 +379,28 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read,
-                                        souther.compiler.values.Allowance<A> sets) {
-        // The allowance the reading was worked out under, and not a fresh one. What this state
-        // holds is that reading, and what a later reader builds out of it is more of the same
-        // answer at the same positions — given an allowance of its own, a position would be allowed
-        // its machine again for every phase that touched it, and the bound would be on a phase
-        // rather than on what the model is finally told.
-        // Said once, and what stands here until it is said is what nothing read leaves. Saying it
-        // twice would keep the second reading and drop the first without a word, which is the one
-        // way this can be got wrong now that it cannot combine two of them. An assertion because a
-        // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert !values.hasReadings()
-                : "the values of a state are read once, and these were read over " + values;
-        // The reading met with what nothing read leaves, and then held as a conjunction of one.
-        // Met and not assigned, which is not the same answer, and the difference is a reading of one
-        // declaration's clauses — so it is worked out here and the conjunction takes what it comes
-        // to. Written the other way round, a factor would be a reading nobody had met with top.
-        return new ConstraintState<>(numbers, facts,
-                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read, sets), sets),
-                ordered, shown);
+    ConstraintState<A> takingRead(Confinement.Worked<A> read, Allowance<A> sets) {
+        return takingRead(read, sets, StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made where taking the reading in
+     *  asks what either side was shown empty by. */
+    ConstraintState<A> takingRead(Confinement.Worked<A> read, Allowance<A> sets,
+                                  StringMachineAnswers machines) {
+        return new ConstraintState<>(numbers, facts, confinement.taking(read, sets, machines),
+                shown);
     }
 
     /**
-     * The same state, its values spending what {@code sets} allows.
+     * This, with {@code bounded} taken as holding of the positions it bounds.
      *
-     * <p>For a caller building one answer out of several. Two states read from two declarations
-     * were each put together under their own allowance, and what they come to met is a third
-     * admitted set that neither of them paid for — so the caller that is building it says where
-     * that is charged, and the states are taken under it before they are met.
+     * @param on what each of those positions is ordered by, which is what a range and a set of
+     *           values are put together over. Handed in rather than worked out here: the carrier
+     *           was settled where the clauses were read, and a table built again would be a second
+     *           answer to a question already asked
      */
-    public ConstraintState<A> under(souther.compiler.values.Allowance<A> sets) {
-        return new ConstraintState<>(numbers, facts, values.under(sets), ordered, shown);
-    }
-
-    /** This, with {@code bounded} taken as holding of the positions it bounds. */
-    ConstraintState<A> taking(OrderedIntervals<A> bounded) {
-        return new ConstraintState<>(numbers, facts, values, ordered.meet(bounded), shown);
+    ConstraintState<A> taking(OrderedIntervals<A> bounded, Map<A, Carrier> on) {
+        return new ConstraintState<>(numbers, facts, confinement.taking(bounded, on), shown);
     }
 
     /**
@@ -273,8 +414,8 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                                            souther.compiler.numeric.Count at,
                                            souther.compiler.numeric.Granularity spacing) {
         return state.taking(
-                NumericDomain.LinearForm.<A>atom(atom)
-                        .minus(NumericDomain.LinearForm.<A>constant(at.at())),
-                NumericDomain.Rel.EQ, java.util.Map.of(atom, spacing));
+                LinearForm.<A>atom(atom)
+                        .minus(LinearForm.<A>constant(at.at())),
+                Rel.EQ, java.util.Map.of(atom, spacing));
     }
 }

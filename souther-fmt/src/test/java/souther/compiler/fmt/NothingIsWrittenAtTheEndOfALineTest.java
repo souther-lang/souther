@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Every line of the source, and not only the ones the canonical form has. What the rule expects
  * is nothing, which is true of a line wherever it stands, so this needs no correspondence to ask.
  */
+@Tag("population")
 class NothingIsWrittenAtTheEndOfALineTest {
 
     @Test

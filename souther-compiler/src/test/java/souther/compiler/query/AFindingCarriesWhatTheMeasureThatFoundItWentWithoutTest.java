@@ -96,7 +96,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
             WeakeningSet owed = switch (each.about()) {
                 case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _ ->
                         signature.output().cases().weakening();
-                case About.ACaseNoRowAppliesItTo(var at, var _) ->
+                case About.ACaseNoRowAppliesItTo(var at, var _, var _) ->
                         signature.positions().get(at.at()).cases().weakening();
                 default -> null;
             };
@@ -142,8 +142,9 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
                 new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small), 0),
                 true, WeakeningSet.none());
 
-        Adequacy.SignatureEvidence signature =
-                Adequacy.SignatureEvidence.of(output, List.of(unreadable, read));
+        // What the declaration calls the two inputs, which is what a case of one is a class of.
+        Adequacy.SignatureEvidence signature = Adequacy.SignatureEvidence.of(output,
+                List.of(unreadable, read), new InputPositions.Declared(List.of("a", "b")));
 
         assertTrue(output.cases().weakening().isEmpty(), "the output was measured in full");
         assertFalse(unreadable.cases().weakening().isEmpty(), "and one input was not");
@@ -154,31 +155,29 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         // finding means and nothing about the one line that decides which measurement each finding
         // is given — which is the line that was wrong.
         List<Adequacy.Finding> found = new ArrayList<>();
-        Adequacy.Findings.signatureFindings("sort", somewhere(), signature, found);
+        Adequacy.Findings.signatureFindings("sort", signature, found);
         assertFalse(found.isEmpty(), "the producer says something about these cases");
 
-        Adequacy.AdequacyBar held = Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN;
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                disposition(found, held, About.ACaseNoRowExpects.class, dropped),
+                disposition(found, About.ACaseNoRowExpects.class, dropped),
                 () -> "a gap the output's own measure established, read through the signature's: "
                         + found);
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
-                inputGap(found, held, 1, large),
+                inputGap(found, 1, large),
                 () -> "one position's unreadable row deciding another position's gap: " + found);
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                inputGap(found, held, 0, large),
+                inputGap(found, 0, large),
                 () -> "a gap from a measure that went without something: " + found);
     }
 
     /** What a build does about the one finding of {@code kind} about {@code missing}. */
     private static Adequacy.Finding.Disposition disposition(
-            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, Class<?> kind,
-            TypeSymbol missing) {
+            List<Adequacy.Finding> found, Class<?> kind, TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (kind.isInstance(each.about())
                     && each.about() instanceof About.ACaseNoRowExpects(var what)
                     && what.equals(missing)) {
-                return each.disposition(held);
+                return each.disposition();
             }
         }
         throw new AssertionError("no finding of " + kind.getSimpleName() + " about " + missing
@@ -187,12 +186,11 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
     /** And of the one about the case {@code missing} at input {@code at}. */
     private static Adequacy.Finding.Disposition inputGap(
-            List<Adequacy.Finding> found, Adequacy.AdequacyBar held, int at,
-            TypeSymbol missing) {
+            List<Adequacy.Finding> found, int at, TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
-            if (each.about() instanceof About.ACaseNoRowAppliesItTo(var input, var what)
+            if (each.about() instanceof About.ACaseNoRowAppliesItTo(var input, var what, var _)
                     && input.at() == at && what.equals(missing)) {
-                return each.disposition(held);
+                return each.disposition();
             }
         }
         throw new AssertionError("no finding about " + missing + " at input " + at
@@ -204,8 +202,4 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         return TypeSymbols.declared(new TypeKey("souther.decimal", name));
     }
 
-    /** Somewhere for a finding to be about, which every finding needs and this one does not read. */
-    private static souther.compiler.diag.Citation somewhere() {
-        return findings("weigh").get(0).at();
-    }
 }

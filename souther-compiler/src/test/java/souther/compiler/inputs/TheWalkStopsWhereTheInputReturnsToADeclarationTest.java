@@ -2,15 +2,13 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 
 import java.util.List;
 import java.util.Map;
@@ -133,7 +131,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     @Test
     void anExpressionStopsAtTheOperandsOfItsOperator() {
         InputDomain read = reading(THROUGH_A_CASE, "read");
-        TermPath left = TermPath.of("x").refine(Refinement.sumCase(named(read, "Add"))).then("l");
+        TermPath left = TermPath.of("x").refine(toLeaf(named("Add"))).then("l");
 
         assertNotNull(read.at(left), () -> spelled(read));
         assertEquals("x", returnedAt(read, left).openedAt().toString(),
@@ -168,7 +166,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     void theReturningOccurrenceIsStillRead() {
         InputDomain read = reading(THROUGH_A_CASE, "read");
         Position left = read.at(
-                TermPath.of("x").refine(Refinement.sumCase(named(read, "Add"))).then("l"));
+                TermPath.of("x").refine(toLeaf(named("Add"))).then("l"));
 
         assertEquals(2, left.obligationCases().size(),
                 "the sum there divides into its cases whichever time round it is");
@@ -181,8 +179,15 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
         return assertInstanceOf(BlockReason.RecursiveExpansion.class, stopped.why());
     }
 
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), List.of(leaf)));
+    }
+
     /** The declaration {@code name} stands for in the model under test. */
-    private static souther.compiler.types.TypeSymbol named(InputDomain read, String name) {
+    private static souther.compiler.types.TypeSymbol named(String name) {
         return souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("g", name));
     }
@@ -205,11 +210,9 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 }

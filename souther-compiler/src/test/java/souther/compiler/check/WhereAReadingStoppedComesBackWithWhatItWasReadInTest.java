@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -81,6 +81,21 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
             @Override
             public Symbols symbols() {
                 return Symbols.none(DefaultStdlib.get());
+            }
+
+            @Override
+            public PublishedDeclarations published() {
+                return PublishedDeclarations.NONE;
+            }
+
+            @Override
+            public DeclarationKinds kinds() {
+                return DeclarationKinds.NONE;
+            }
+
+            @Override
+            public NewtypeInners inners() {
+                return NewtypeInners.NONE;
             }
 
             @Override

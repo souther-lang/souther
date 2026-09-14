@@ -1,13 +1,18 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collections;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Objects;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -37,14 +42,19 @@ public sealed interface ItemAssessment {
      *                   about a value being there. What the rules say on their own, so it is settled
      *                   without building anything and stays true whatever a search afterwards makes
      *                   of the point
-     * @param attempt    what building a value here came to, or null where nobody asked for one to be
-     *                   built. Null is the absence of the evidence and never a state of the point:
-     *                   whether a value was composed is a fact about who asked, and it used to be
-     *                   carried here as an attempt saying nobody had — a measurement answering a
-     *                   question it was not put (issue #1001)
+     * @param searches   what building a value here came to, over every search that was made for it,
+     *                   and empty where nobody asked for one to be built. Empty is the absence of
+     *                   the evidence and never a state of the point: whether a value was composed is
+     *                   a fact about who asked, and it used to be carried here as an attempt saying
+     *                   nobody had — a measurement answering a question it was not put.
+     *
+     *                   <p>Several, because one reading of a line can be searched more than once: a
+     *                   helper called from two arms is the same line at the same target, and a row
+     *                   for it is composed under each caller's own conditions
      */
     record Owed(Criterion criterion, Measurement<Coverage> coverage,
-                WritabilityProjection projection, Attempt attempt) implements ItemAssessment {
+                WritabilityProjection projection, SearchOutcomes searches)
+            implements ItemAssessment {
 
         /**
          * Whether building a value here would tell anybody anything.
@@ -57,15 +67,29 @@ public sealed interface ItemAssessment {
          * <p>Which is why the two used to be attempts and are not. "A row is already there" and
          * "this was never measured" are things the measurement says, and a search that reported them
          * was repeating what its own input already held.
+         *
+         * <p><b>Read over the states rather than off a list of the ones that qualify.</b> Every
+         * state says here what it means, so a state added to {@link Measurement} arrives as a
+         * compile error rather than as a silent {@code false} — which is the difference between a
+         * point nobody searched because nothing would come of it and one nobody searched because
+         * the list was written before the state existed.
          */
         public boolean worthSearching() {
             if (hasRowWitness()) {
                 return false;
             }
-            return coverage instanceof Measurement.Complete<Coverage> whole
-                            && whole.value() instanceof Coverage.NoHit
-                    || coverage instanceof Measurement.NotMeasured<Coverage> none
-                            && none.why() == Coverage.NotAsked.NO_ROWS;
+            return switch (coverage) {
+                // Read to the end and no row at it, or read as far as it got and no row at it: both
+                // are points where a candidate tells somebody something.
+                case Measurement.Complete<Coverage> it -> it.value() instanceof Coverage.NoHit;
+                case Measurement.Partial<Coverage> it -> it.value() instanceof Coverage.NoHit;
+                // No rows to look at is a point worth building one for. The other reasons nobody
+                // measured are not: a question this compilation was not put is not work to hand to
+                // an author.
+                case Measurement.NotMeasured<Coverage> it -> it.why() == Coverage.NotAsked.NO_ROWS;
+                // Nothing to build against, which the search would find out again.
+                case Measurement.FailedToMeasure<Coverage> _ -> false;
+            };
         }
 
         /**
@@ -92,13 +116,17 @@ public sealed interface ItemAssessment {
             };
         }
 
-        /** The same point, with what a search of it came to. */
-        public Owed settledBy(Attempt searched) {
-            if (attempt != null) {
-                throw new IllegalStateException(
-                        "a point searched twice: " + criterion + " already has " + attempt);
-            }
-            return new Owed(criterion, coverage, projection, searched);
+        /**
+         * The same point, with what searching it came to.
+         *
+         * <p>Everything one search of it came to, which is one outcome per way there was of
+         * standing the dependencies in. A search that had several and handed one of them over
+         * would be handing over whichever was tried first, and what the others found — a figure
+         * that held one back, a row that composed and stood somewhere else — would be gone before
+         * anybody asked.
+         */
+        public Owed settledBy(SearchOutcomes searched) {
+            return new Owed(criterion, coverage, projection, searches.plus(searched));
         }
 
         /**
@@ -109,15 +137,20 @@ public sealed interface ItemAssessment {
          * a value with a row at it and no {@code A_ROW_IS_AT_IT} would be a state somebody could
          * build. Read through, that state cannot be spelled.
          *
-         * <p>Which is also what makes composing a search safe. A search changes the {@link #attempt}
-         * and nothing else, and every ground is monotone in what it reads, so the set this answers
-         * can only grow. It used to be a verdict picked from the evidence by a fixed order, where
-         * building a value at a point the rules already proved replaced the proof with the witness —
-         * true of whether anything was known, and false of what was doing the knowing.
+         * <p>Which is also what makes composing a search safe. A search adds to the
+         * {@link #searches} and changes nothing else, and every ground is monotone in what it reads,
+         * so the set this answers can only grow. It used to be a verdict picked from the evidence by
+         * a fixed order, where building a value at a point the rules already proved replaced the
+         * proof with the witness — true of whether anything was known, and false of what was doing
+         * the knowing.
          */
         public WritabilityEvidence writabilityEvidence() {
-            return WritabilityEvidence.of(projection, hasRowWitness(),
-                    attempt instanceof Attempt.Built);
+            // The certified arm and not `Built`. What grounds this is a value shown to be at the
+            // point, and a row whose read-back never came back has not been shown to be anywhere —
+            // counted here, an observation this compiler cut short would be reported as the model
+            // admitting a row, which is the same trade as the one it is here to stop, made the
+            // other way round. What that row does license is said by `WritabilityKnowledge`.
+            return WritabilityEvidence.of(projection, hasRowWitness(), searches.certified());
         }
     }
 
@@ -166,17 +199,22 @@ public sealed interface ItemAssessment {
     /**
      * What has shown that a row can be written at a point: the grounds, and never a verdict.
      *
-     * <p>A set and not a choice, because the three are not alternatives — a point the rules prove can
+     * <p>All of them and not a choice, because the three are not alternatives — a point the rules prove can
      * have a row at it as well, and a value built at it besides. Held as a sum with one case each,
      * the answer was whichever case an order put first, so the strongest claim there was could be the
      * one left out.
      *
      * <p>Empty is the whole of what {@code Unknown} was. Nothing here can say a point is unwritable:
      * a decoder refusing every candidate that was tried says nothing about the ones that were not, so
-     * an empty set is the absence of evidence and never evidence of absence. What says a point cannot
+     * holding none is the absence of evidence and never evidence of absence. What says a point cannot
      * be written at is the border refusing to owe it at all.
+     *
+     * <p>Held in the order they are published in ({@link PublicationOrders#WRITABILITY_GROUNDS}),
+     * which is a decision about what a reader is shown and no ranking of the three. A document
+     * writes a row per ground, and reading that order off the declaration would put it in the hands
+     * of whoever next tidies the constants.
      */
-    record WritabilityEvidence(Set<Ground> grounds) {
+    record WritabilityEvidence(CanonicalSelection<Ground> grounds) {
 
         /**
          * One thing that shows a row can be written at a point.
@@ -202,9 +240,13 @@ public sealed interface ItemAssessment {
         }
 
         public WritabilityEvidence {
-            EnumSet<Ground> held = EnumSet.noneOf(Ground.class);
-            held.addAll(grounds);
-            grounds = Collections.unmodifiableSet(held);
+            Objects.requireNonNull(grounds, "a point says what has shown a row can be written at it");
+        }
+
+        /** Grounds already known to hold, in the order a document says them. Which of them hold is
+         *  the question below, and this one does not ask it. */
+        public static WritabilityEvidence of(Collection<Ground> grounds) {
+            return new WritabilityEvidence(PublicationOrders.WRITABILITY_GROUNDS.keep(grounds));
         }
 
         /** The grounds that hold, over the three facts that establish them. Where every one of these
@@ -222,7 +264,7 @@ public sealed interface ItemAssessment {
             if (valueWasBuilt) {
                 grounds.add(Ground.A_VALUE_WAS_BUILT);
             }
-            return new WritabilityEvidence(grounds);
+            return of(grounds);
         }
 
         /** Whether anything at all has shown a row can be written here. False leaves it open, never
@@ -233,7 +275,7 @@ public sealed interface ItemAssessment {
 
         /** Whether this ground is among them. */
         public boolean has(Ground ground) {
-            return grounds.contains(ground);
+            return grounds.written().contains(ground);
         }
     }
 
@@ -279,6 +321,27 @@ public sealed interface ItemAssessment {
             NO_ROWS;
 
             /**
+             * What each of these is a fact about.
+             *
+             * <p>Which of them a line says is settled by the level the build asked for and by
+             * whether a fork or an invariant drew the line, and the first of those is one value for
+             * the whole run. So the two settings say the same thing at every reading of every line
+             * they reach, and only the third is something one behavior can say and the next one
+             * not.
+             *
+             * <p><b>Not what {@link #mayHideARow()} answers, and the two are not read off each
+             * other.</b> They agree over these three constants and part over {@link CouldNotAsk},
+             * which is a fact about the behavior that may well be hiding a row.
+             */
+            @Override
+            public MeasureReason.About about() {
+                return switch (this) {
+                    case NOT_ASKED, ARMS_NOT_ASKED -> MeasureReason.About.THE_RUN;
+                    case NO_ROWS -> MeasureReason.About.THE_BEHAVIOR;
+                };
+            }
+
+            /**
              * Whether a row at the point could be sitting behind this and not have been seen.
              *
              * <p>Asked of the reason and not of the state around it. Three of these are one
@@ -299,11 +362,17 @@ public sealed interface ItemAssessment {
              *  comparison. Never a reason for an invariant's line. */
             ARMS_UNREADABLE;
 
-            /** Whether a row at the point could be sitting behind this, as {@link NotAsked} answers
-             *  it. The rows ran, so one of them may have reached the comparison unrecorded. */
-            public boolean mayHideARow() {
-                return true;
+            /** This behavior's rows, which ran and were not recorded. Another behavior of the same
+             *  run can have been read to the end, so this is nothing the run says. */
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
             }
+
+            // Whether a row could be sitting behind one of these is not asked, the way it is of
+            // NotAsked. A measurement that failed says what it went without and cannot say nothing,
+            // so every one of these leaves the point undecided whatever the reason — which is the
+            // state's answer and not a reason's.
         }
 
         /**
@@ -321,75 +390,9 @@ public sealed interface ItemAssessment {
             return coverage instanceof Hit;
         }
 
-        /**
-         * What the readings of one authored line come to together.
-         *
-         * <p>One debt is read at every position of every behavior carrying the type, and each of
-         * those readings measures it on its own. What the debt came to is not any one of them: a row
-         * standing at the line through {@code draft.owner} is evidence about {@code UserId}, and the
-         * reading at {@code activities[*]@CallTask.owner} cannot disagree with it (issue #1062).
-         *
-         * <p><b>Here and nowhere else.</b> A report, a build's refusal, an editor and the generator
-         * all ask what became of a debt, and four foldings of the same readings would be four
-         * answers about one line — which is the shape this whole change is undoing.
-         *
-         * <p>The order is the whole of it. A row found settles the line whatever else went unread,
-         * so a hit outranks everything. Below that, a reading that could be hiding a row outranks
-         * one that ran out and found none, because the second is an answer and the first is the
-         * absence of one. And a reading with no rows to look at is neither: it hides nothing, so it
-         * cannot take back a miss another reading established, and where every reading is one there
-         * was nothing anywhere to look at.
-         */
-        static Measurement<Coverage> acrossTheReadings(
-                java.util.List<Measurement<Coverage>> readings) {
-            if (readings.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a debt is what its readings came to, and this is none of them");
-            }
-            WeakeningSet unread = WeakeningSet.none();
-            NotMeasuredReason unasked = null;
-            boolean missed = false;
-            for (Measurement<Coverage> reading : readings) {
-                // Found is found. Said before anything else is looked at, so that no accounting of
-                // what went unread can weaken a row somebody wrote.
-                if (reading.made().map(Coverage::hit).orElse(false)) {
-                    return new Measurement.Complete<>(new Hit());
-                }
-                switch (reading) {
-                    // A reading of this line that did not run out. Whatever it could not read may
-                    // be holding the row.
-                    case Measurement.Partial<Coverage> in -> unread = unread.union(in.by());
-                    case Measurement.FailedToMeasure<Coverage> stopped -> {
-                        if (((CouldNotAsk) stopped.why()).mayHideARow()) {
-                            unread = unread.union(stopped.by());
-                        }
-                    }
-                    // The three reasons a question was not put are not one answer here. One that
-                    // may be hiding a row is kept as itself rather than turned into a weakening:
-                    // nothing was read, so there is no reading for a weakening to be about.
-                    case Measurement.NotMeasured<Coverage> none -> {
-                        if (((NotAsked) none.why()).mayHideARow()) {
-                            unasked = none.why();
-                        }
-                    }
-                    // Read to the end and no row is at the point, which is what a miss is.
-                    case Measurement.Complete<Coverage> _ -> missed = true;
-                }
-            }
-            if (!unread.isEmpty()) {
-                return new Measurement.Partial<>(new NoHit(), unread);
-            }
-            // Above a miss another reading established, because a reading that looked at nothing
-            // leaves the rows it would have looked at unaccounted for. Both of the reasons that
-            // reach here are settings of the build rather than facts about one behavior, so this is
-            // reached where every reading says it and not where one of them does.
-            if (unasked != null) {
-                return new Measurement.NotMeasured<>(unasked);
-            }
-            return missed ? new Measurement.Complete<>(new NoHit())
-                    // Every reading had nothing to look at, so neither has the debt.
-                    : new Measurement.NotMeasured<>(NotAsked.NO_ROWS);
-        }
+        // What the readings of one authored line come to together is
+        // ObligationCoverage.acrossTheReadings. It is a different type and not a state of this
+        // measure: a reading may be made in part and have found a row, and a debt cannot be.
     }
 
     /**
@@ -403,8 +406,20 @@ public sealed interface ItemAssessment {
      *
      * <p>Made once. The row a person is offered and the value that witnessed the point are the same
      * value, built one time and read twice.
+     *
+     * <p><b>The outcomes, and the things that may be true of one.</b> The outcomes are what
+     * happened and are exclusive, so a reader asking which of them this is asks an exhaustive
+     * switch. What may be true of one — that a row came of it, that a search ran, that something of
+     * this compiler's left the point unestablished — cuts across them: a row that was built and not
+     * read back is both a row somebody may have and a point this compiler left open, and neither of
+     * those is the other's special case. Written as one hierarchy, one of the three had to be the
+     * spine and the others became fields or were read off the spelling of whichever arm a reader
+     * had in hand.
      */
-    sealed interface Attempt {
+    sealed interface Attempt
+            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped,
+                    Attempt.Unexhausted, Attempt.Limited, Attempt.Unplanned, Attempt.Unresolved,
+                    Attempt.Unavailable {
 
         /**
          * What a search of the region came to, whichever way it came out.
@@ -415,8 +430,13 @@ public sealed interface ItemAssessment {
          * reached — is an outcome of a search that ran and carries what it ran over. What was
          * written instead was a comment saying so, and the one outcome that arrived by a different
          * route was filed as a search nobody made and dropped its region on the way.
+         *
+         * <p>Beside {@link Attempt} rather than under it. Every outcome but one is a search that
+         * ran, and making this the spine of the outcomes would put the one that is not — a search
+         * nobody could run — outside a hierarchy it belongs in.
          */
-        sealed interface Searched extends Attempt {
+        sealed interface Searched
+                permits Certified, Unverified, Stopped, Unexhausted, Limited, Unresolved {
 
             /** What the way to the point took in and what it could not, which is what says how much
              *  the outcome beside it is worth. */
@@ -434,20 +454,285 @@ public sealed interface ItemAssessment {
             List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
         }
 
-        /** A value at the point, built and accepted by the module's own decoders. */
-        record Built(Generator.GeneratedRow row,
-                     souther.compiler.partition.WayToTheBorder way,
-                     List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
-                implements Searched {
+        /**
+         * A value composed for the point and accepted by the module's own decoders.
+         *
+         * <p>Composed <em>for</em> it and not established to be at it, which is the whole of what
+         * this word promises: {@link Unverified} is the case where nothing placed the value, so a
+         * contract saying a value at the point would be false of one of its own arms.
+         *
+         * <p><b>What was built, and whether it was read back where it was built for, are two
+         * things.</b> Composing a value that the decoders take does not say the value lands at the
+         * point — a rule the composer could not act on refuses a candidate the composer thought it
+         * had placed — so the row is read again after it is built. Which leaves three outcomes and
+         * not two: the reading agreed, the reading disagreed, and the reading did not happen.
+         *
+         * <p>Held as one case, the third can only be said as the second: a value whose read-back a
+         * limit cuts short is filed as a search that composed nothing, and the point it stands at
+         * is then reported as one nothing can write a row at. Held as a boolean beside the row,
+         * every reader decides again what the boolean licenses.
+         *
+         * <p>So this is what the two share — a row was built, and whoever wants it can have it —
+         * and the arms below are what only one of them may say. A reader asking for the row asks
+         * for {@link Built}; a reader asking whether anything showed the point writable asks for
+         * {@link Certified}, and gets a compile error rather than a silent yes if a third way of
+         * being built arrives.
+         */
+        sealed interface Built permits Certified, Unverified {
 
-            public Built {
-                uncomposed = List.copyOf(uncomposed);
-            }
+            /** The value this search composed, whichever of the two this is. */
+            Generator.GeneratedRow row();
 
             /** A row composed where the whole way was stated and used. */
-            public Built(Generator.GeneratedRow row,
-                         souther.compiler.partition.WayToTheBorder way) {
-                this(row, way, List.of());
+            static Certified certified(Generator.GeneratedRow row,
+                                       souther.compiler.partition.WayToTheBorder way) {
+                return new Certified(row, way, List.of());
+            }
+        }
+
+        /**
+         * An attempt whose showing cannot establish the point, because of something of this
+         * compiler's.
+         *
+         * <p>Across the outcomes rather than one of them, because what it costs depends on how far
+         * the attempt had got. Before anything was composed, there is no row and the point is left
+         * with nothing; after, there is a row and what is missing is the reading that would have
+         * placed it; a walk that went to the end of what this compiler writes leaves an offer that
+         * was never the whole of what there is; and a plan short of the value's positions leaves an
+         * answer that is about less than the point had. All of them are this compiler's own and
+         * none of them is anything the model said, which is the one question an account puts to
+         * them.
+         *
+         * <p><b>The one thing they share, and the reason it is said here and not further down.</b>
+         * These outcomes have different histories — one search stopped, one ran to the end of what
+         * this compiler writes, one ran to the end of a short plan, one never ran at all — and
+         * holding them as one outcome would make the history something a reader recovers from a
+         * field. What is common is what an account needs and no more: the question is open, and open
+         * because of something of this compiler's rather than anything the model settles.
+         *
+         * <p>What would close it is not common, which is why {@link #by()} hands over a vocabulary
+         * rather than a number. Most of these are open on a figure somebody could raise; one is open
+         * on work nobody has done, and an author sent to raise something for it would raise it and
+         * get the same answer.
+         *
+         * <p><b>Nothing here says a row cannot be written.</b> What each of these licenses is that
+         * the question is open — which is what tells it from a point nothing ever promised.
+         */
+        sealed interface Prevented permits Unverified, Stopped, Unexhausted, Limited,
+                Unplanned {
+
+            /** What of this compiler's the point is open on — a figure it holds its work to, a
+             *  population it writes some of, or both — in the words the account reads. */
+            EstablishmentGap by();
+        }
+
+        /** Built, and read back standing where it was built for. */
+        record Certified(Generator.GeneratedRow row,
+                         souther.compiler.partition.WayToTheBorder way,
+                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                implements Attempt, Searched, Built {
+
+            public Certified {
+                uncomposed = List.copyOf(uncomposed);
+            }
+        }
+
+        /**
+         * Built, and the reading that would have said where it stands did not come back.
+         *
+         * <p>Nothing here is about the model. The row is as much a row as {@link Certified}'s and is
+         * offered as one; what is missing is this compiler's own confirmation, and {@code why} is
+         * what stopped it.
+         *
+         * <p>An observation and never anything else. What was stopped here is a reading of a value
+         * that exists, so the only budget that can be named is one an observation ran out of — a
+         * budget that stopped the composing stopped it before there was anything to read, which is
+         * {@link Stopped}. Written as any gap at all, the two states a search comes back in could be
+         * built holding each other's reasons.
+         */
+        record Unverified(Generator.GeneratedRow row,
+                          souther.compiler.partition.WayToTheBorder way,
+                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                          EstablishmentGap.Observation why)
+                implements Attempt, Searched, Built, Prevented {
+
+            public Unverified {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a row nothing certified says what stopped it");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return why;
+            }
+        }
+
+        /**
+         * A budget of this compiler's stopped the search before any value was composed.
+         *
+         * <p>Told apart from {@link Unresolved} by what it licenses and not by how it feels. A
+         * search that ran through what it had and came back with nothing leaves a point nothing has
+         * promised anything about; a search this compiler ended leaves a point whose question is
+         * open, and open for a reason with a figure attached to it. Held as one, the second was read
+         * as the first, and an obligation this compiler declined to work on left the count as one
+         * the model admits no row at.
+         *
+         * <p>Carries the way and what the composer could not act on, like every other outcome of a
+         * search: the walk happened, and where it happened is what says how much the rest is worth.
+         *
+         * <p>{@code why} says what such a search comes back with, which is the word it has always
+         * come back with; {@code by} is which budget it was. The first cannot be read back from the
+         * second's absence and the second is not recoverable from the first, so both are carried.
+         *
+         * <p><b>What each vocabulary is, rather than the gap they make together.</b> Which arm this
+         * is turns on {@code by} alone; {@code notAllOf} is what was separately known about the same
+         * offer, and a stop that also walked some of a population loses neither by carrying both
+         * under their own names. Held as the gap an account reads, this would be a history saying
+         * one thing and a value able to say another, and the two would have nothing keeping them in
+         * step — which is the arrangement a figure and a population were taken out of.
+         */
+        record Stopped(Generator.UnresolvedCombination why,
+                       souther.compiler.partition.WayToTheBorder way,
+                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       CanonicalSelection<CompositionBudget> stoppedBy,
+                       CanonicalSelection<CompositionRepertoire> notAllOf)
+                implements Attempt, Searched, Prevented {
+
+            public Stopped {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(notAllOf, "a search says what it walked some of, or none");
+                if (stoppedBy == null || stoppedBy.isEmpty()) {
+                    throw new IllegalArgumentException("a search this compiler stopped says which"
+                            + " budget stopped it");
+                }
+                // Carried across the boundary and checked again here, because a copy that travels
+                // is a copy that can be made to travel wrong. What the word is remains the budgets'
+                // to say at both ends, so neither end holds a pair that disagrees.
+                if (why.reason()
+                        != Generator.UnresolvedCombination.Reason.wordFor(stoppedBy.written())) {
+                    throw new IllegalArgumentException("a search stopped by " + stoppedBy
+                            + " does not come back with " + why.reason());
+                }
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return new EstablishmentGap.Composition(stoppedBy, notAllOf);
+            }
+        }
+
+        /**
+         * The search ran to the end of what this compiler writes, which is not the end of what
+         * there is.
+         *
+         * <p><b>Beside {@link Stopped} and not a shape of it.</b> That one was holding a candidate
+         * a figure had no room for: its word is the figures' to say, it is checked against them at
+         * both ends, and what a reader does about it is raise one. Nothing was refused here and
+         * there is no number in it — what reaches the rest of what this walks is somebody writing
+         * the rest, which is not work an author of a model can do. Held as one, a reader is sent to
+         * raise something that would change nothing.
+         *
+         * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
+         * open, and open because this compiler did not look at everything. Which is why the word is
+         * the same word and the gap is not.
+         */
+        record Unexhausted(Generator.UnresolvedCombination why,
+                           souther.compiler.partition.WayToTheBorder way,
+                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                           CanonicalSelection<CompositionRepertoire> notAllOf)
+                implements Attempt, Searched, Prevented {
+
+            public Unexhausted {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                if (notAllOf == null || notAllOf.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a search that saw some of them says some of what");
+                }
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return EstablishmentGap.Composition.of(List.of(), notAllOf.written());
+            }
+        }
+
+        /**
+         * The search came to an answer of its own, over less than the point had.
+         *
+         * <p><b>Beside {@link Stopped} and not a shape of it.</b> A stopped search has no outcome
+         * but the stopping, so the word it comes back with follows from the budgets and is checked
+         * against them at both ends. Here the search ran to the end of what it was handed and said
+         * what it found; the figure says the thing it was handed was short of the point. Neither
+         * half follows from the other, so no rule relates them and none may be written — a figure
+         * that stops no search has no word for a reader to check against.
+         *
+         * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
+         * open, and open for a figure somebody could raise. What it refuses is the reading that the
+         * word is the whole story — which is how a point this compiler declined to plan for came to
+         * be counted as one the model admits no row at.
+         */
+        record Limited(Generator.UnresolvedCombination why,
+                       souther.compiler.partition.WayToTheBorder way,
+                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       CanonicalSelection<CompositionBudget> limitedBy)
+                implements Attempt, Searched, Prevented {
+
+            public Limited {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                if (limitedBy == null || limitedBy.isEmpty()) {
+                    throw new IllegalArgumentException("an answer short of what the point had says"
+                            + " which figure made it short");
+                }
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return EstablishmentGap.Composition.of(limitedBy.written());
+            }
+        }
+
+        /**
+         * No search ran: what the point asks for is under a position this compiler declined to
+         * plan.
+         *
+         * <p><b>Not {@link Searched}, which is the whole of why it is its own arm.</b> The value
+         * was never planned, so nothing walked the region and nothing came back from it — and an
+         * outcome that said a search ran would put a reading nobody looked at among the ones that
+         * were looked at. {@link Limited} is the other side of that: there the search did run, over
+         * a plan short of the point, and its own word is worth carrying.
+         *
+         * <p>Its word says no search happened rather than what one found. Given a search's word,
+         * the two arms would be told apart only by which one a reader happened to be holding, and
+         * the history would be something recovered from a field.
+         *
+         * <p>{@link Prevented} all the same, because the account's question is the same for both:
+         * the point is open, and open on a figure somebody could raise.
+         *
+         * <p>Carries the way to the point, which was walked before any of this: how the point was
+         * reached is what says what the rest is worth, and a condition the walk had no words for is
+         * still owed to a reader.
+         */
+        record Unplanned(Generator.UnresolvedCombination why,
+                         souther.compiler.partition.WayToTheBorder way,
+                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                         CanonicalSelection<CompositionBudget> limitedBy)
+                implements Attempt, Prevented {
+
+            public Unplanned {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "an attempt says what it came to in its own word");
+                if (limitedBy == null || limitedBy.isEmpty()) {
+                    throw new IllegalArgumentException("a point nothing could be planned for says"
+                            + " which figure left it unplanned");
+                }
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return EstablishmentGap.Composition.of(limitedBy.written());
             }
         }
 
@@ -466,7 +751,7 @@ public sealed interface ItemAssessment {
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
-                implements Searched {
+                implements Attempt, Searched {
 
             public Unresolved {
                 uncomposed = List.copyOf(uncomposed);
@@ -522,17 +807,57 @@ public sealed interface ItemAssessment {
          * point answered rather than a search to account for, and for a search nobody made.
          */
         default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
-            if (!(this instanceof Unresolved left) || left.why().reason().provesInfeasible()) {
-                return List.of();
+            souther.compiler.partition.WayToTheBorder way;
+            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed;
+            switch (this) {
+                case Unresolved it -> {
+                    if (it.why().reason().provesInfeasible()) {
+                        return List.of();
+                    }
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // A search a budget ended walked as far as it walked, and what it could not compose
+                // against on the way is the first thing that would explain what it came back with.
+                case Stopped it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // And one that ran to the end of what this compiler writes. It walked the way like
+                // any other and settled nothing, so what it could not compose against is owed to a
+                // reader for the reason it is owed above.
+                case Unexhausted it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // And one whose answer was about less than the point had. Its word may be a word
+                // that proves nothing is there, and here it does not: what the word is about is
+                // what the search was handed, which was short of the point — so the conditions it
+                // could not compose against are still owed to a reader.
+                case Limited it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // And one no search was run for. The way to the point was walked all the same, and
+                // what it had no words for is the first thing that would explain the point being
+                // where it is.
+                case Unplanned it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                case Certified _, Unverified _, Unavailable _ -> {
+                    return List.of();
+                }
             }
             List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();
             // The walk's, said as the stage it happened at. A condition it had no words for is one
             // nothing downstream ever saw.
-            left.way().declined().forEach(each ->
+            way.declined().forEach(each ->
                     out.add(new souther.compiler.partition.ReachabilityGap.Unstated(each)));
-            out.addAll(left.uncomposed());
+            out.addAll(uncomposed);
             return List.copyOf(out);
         }
+
     }
 
     /** This point's own measurement of whether a row is at it, or a settled nothing where no row is

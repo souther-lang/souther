@@ -14,7 +14,10 @@ things settled that. Revised again for #907: whether a range is the whole of wha
 position is settled by a certificate, and having none of them is not the range being wider. Revised
 again for #1029: whether a comparison divides one position, relates several, or says nothing is read
 from one canonical comparison, and the operands as written do not establish its subject on their
-own.
+own. Revised again for #1161: a border's four coverage items are where a row can be written, and
+what a behavior is owed is one obligation per point of each line its rules drew, however many
+coordinates read the line — the report counts, marks and refuses over the obligations, and says the
+coordinates under each.
 
 ## Context
 

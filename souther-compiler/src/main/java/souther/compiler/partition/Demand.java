@@ -31,7 +31,7 @@ public sealed interface Demand {
     /**
      * Whether two readings ask a row for the same thing here.
      *
-     * <p>Asked rather than left to {@link #equals}, because a criterion holds levels and a level
+     * <p>Asked rather than left to {@link Object#equals}, because a criterion holds levels and a level
      * keeps the spelling the rule was written in ({@link Criterion#sameAs}). Two readings of one
      * line that differ only in how a number was written have not disagreed, and a check that read
      * them as disagreeing would name the identity as wrong over a spelling.

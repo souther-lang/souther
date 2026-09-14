@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
-import souther.compiler.coverage.ControlPointId;
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.PathDecision;
@@ -102,7 +102,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         assertTrue(byBehavior != null && byBehavior.containsKey(behavior),
                 "the module answers nothing about `" + behavior + "`");
         return byBehavior.get(behavior).found().entrySet().stream()
-                .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
+                .filter(each -> each.getKey() instanceof ControlPlace.Arm)
                 .map(Map.Entry::getValue)
                 .toList();
     }
@@ -191,8 +191,8 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         Compilation compilation = Compilation.ofSource(source, "d");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge", true,
-                SourceNameResolver.identity()).text();
+        return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge",
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     /**
@@ -237,11 +237,11 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         Compilation c = Compilation.ofSource(A_LIBRARY_FORK, "d");
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
-        List<ControlPointId.ArmOccurrence> proven = byBehavior.get("mk").found().entrySet().stream()
+        List<ControlPlace.Arm> proven = byBehavior.get("mk").found().entrySet().stream()
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
                 .map(each -> each.getKey())
-                .filter(ControlPointId.ArmOccurrence.class::isInstance)
-                .map(ControlPointId.ArmOccurrence.class::cast)
+                .filter(ControlPlace.Arm.class::isInstance)
+                .map(ControlPlace.Arm.class::cast)
                 .toList();
         assertTrue(!proven.isEmpty(),
                 "the argument makes one side of the library's fork unreachable, and that is proven");

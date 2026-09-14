@@ -148,6 +148,9 @@ final class AGraphNobodyChose {
      * the pair says so — which is a different thing this is also about, and it happens where the
      * keys are what {@link Recipe.UnderKeys} makes.
      */
+    // The point of the list and map arms is that one contract is met by several classes, so the
+    // ones nobody would choose for their speed are exactly the ones wanted here.
+    @SuppressWarnings("JdkObsolete")
     static Object built(Recipe recipe, Random random) {
         return switch (recipe) {
             case Recipe.Says(String what) -> what;

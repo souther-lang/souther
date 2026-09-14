@@ -61,9 +61,11 @@ class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
 
     @Test
     void bothAnswerTheSameQuotientWhereTheOperatorAnswersOne() throws Exception {
+        assertEquals(-3L, answered("byTheFunction", -7, 2).get("q"),
+                "truncating toward zero");
         assertEquals(answered("byTheOperator", -7, 2).get("q"),
                 answered("byTheFunction", -7, 2).get("q"),
-                "truncating toward zero, so -7 / 2 is -3 by either spelling");
+                "and -7 / 2 is -3 by either spelling");
     }
 
     @Test

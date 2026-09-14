@@ -1,6 +1,18 @@
 package souther.compiler.query;
 
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleCitations;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
+
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * What one {@link Adequacy.Finding} is about.
@@ -46,87 +58,167 @@ public sealed interface About {
         }
     }
 
-    /** A case of an input no row applies the behavior to. The evidence names which input, so that a
-     *  case and the position it is a case of arrive together. */
-    record ACaseNoRowAppliesItTo(InputCaseEvidence input, TypeSymbol missing) implements About {
+    /**
+     * A case of an input no row applies the behavior to.
+     *
+     * <p>The evidence names which input, so that a case and the position it is a case of arrive
+     * together.
+     *
+     * <p><b>One obligation with the class of that position, where that class is this behavior's
+     * own.</b> A case of a sum an input ranges over and the class that sum makes of the position
+     * are one thing a row is owed for, reached by two derivations: the signature counts the cases a
+     * row applies the behavior to, and the partition counts the classes a row sits in. That holds
+     * while both are about one behavior's own position, and a behavior whose input is read at its
+     * stages has the first without the second — so which identity this carries is settled where the
+     * finding is made, from the boundary both measures were read from, rather than worked out again
+     * by whoever needs one.
+     *
+     * @param owed what the account keys this case on: the class of the position where the behavior
+     *             has one, and the case of the input where nothing divides it
+     */
+    record ACaseNoRowAppliesItTo(InputCaseEvidence input, TypeSymbol missing,
+                                 WhereACaseOfAnInputIsOwed owed) implements OfAnObligation {
         public ACaseNoRowAppliesItTo {
             java.util.Objects.requireNonNull(input, "a finding is about something");
             java.util.Objects.requireNonNull(missing, "a finding is about something");
+            java.util.Objects.requireNonNull(owed, "a case of an input is owed at something");
         }
-    }
 
-    /** A class of a derived position no row is in, which knows the position it is a class of. */
-    record AClassNoRowIsIn(PartitionEvidence.AxisClass axisClass) implements About {
-        public AClassNoRowIsIn {
-            java.util.Objects.requireNonNull(axisClass, "a finding is about something");
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return owed;
         }
     }
 
     /**
-     * A point of a border no row is at.
+     * A class of a derived position no row is in, which knows the position it is a class of.
      *
-     * <p>One entry of this behavior's account, which is what the count, the document and this are
-     * three readings of. Held as the point rather than as the axis, the value, the rule and the
-     * role, which is what those four fields were: a copy that did not identify a point, since
-     * several rules can draw a line at one value.
+     * <p>One entry of the domain account, and it says so by being an {@link OfAnObligation}. What
+     * tells it from every other is the axis and which class of it — the words a report writes for
+     * the class do not, since two positions of one behavior can divide into classes that read
+     * alike.
+     */
+    record AClassNoRowIsIn(PartitionEvidence.AxisClass axisClass) implements OfAnObligation {
+        public AClassNoRowIsIn {
+            java.util.Objects.requireNonNull(axisClass, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAClass(
+                    new ClassOfAPosition(axisClass.axis().at(), axisClass.name()));
+        }
+    }
+
+    /**
+     * A finding about one thing a row is owed for, which is what carries its identity.
      *
-     * <p>What is here is what was measured, and a reader wanting more than that says so. A
-     * generation composes values at these lines whatever the build was measuring, so what it can do
-     * about a finding is read out of the search it asked for — the same point of the same line,
-     * found with the line itself ({@link BorderAssessment#owedAt}). This carries the measurement
-     * because that is what a finding is about: a search settles what can be written at the point and
-     * changes nothing about the point being missed.
+     * <p>Which findings these are is answered here and nowhere else, for the reason {@link OfARule}
+     * is answered here: read off a list of kinds, a writer has to be told again every time one is
+     * added, and a kind added and not told writes no identity — which is two findings about two
+     * things coming out identical in every field with nothing to join them by. A shape that is
+     * about something a row is owed for says so by being one of these.
+     *
+     * <p>Two questions and not one. Whether a subject names an obligation is this one, and it is
+     * the subject's own; which account's shape that identity has is {@link ObligationIdentity}'s,
+     * and it is closed. A writer that asked both at once — matching the kinds that carry an
+     * identity and rendering each — would own the classification twice over, which is how an arm
+     * came to be named in a document by its label and its place after the account had been given an
+     * identity of its own.
+     */
+    sealed interface OfAnObligation extends About {
+
+        /** What tells this obligation from every other, in the shape its account keeps. */
+        ObligationIdentity obligationIdentity();
+    }
+
+    /**
+     * A point of a line no row stands at, wherever the line is read.
+     *
+     * <p>The two arms below are one grain. A point is owed once — a line a body's rule drew is read
+     * under each case of a sum the position ranges over, and a line a declaration drew is read at
+     * every position carrying the type — and what a finding is about, what a verdict counts and what
+     * a generation answers is that one thing. Held at the reading instead, one arm marked as many
+     * gaps as the line had readings while the offering composed one row for the point and refused
+     * the rest as already answered: a build a person could not make pass.
+     *
+     * <p>What tells the arms apart is whose account the point is in, and what words there are for
+     * what it is on. The rest — the role, what the readings came to, which rule — is asked here of
+     * both, so that a reader sorting findings or writing a code asks once.
+     */
+    sealed interface ABorderObligation extends OfAnObligation {
+
+        /** What every reading of the point came to, which is what the finding stands on. */
+        BorderObligationPointAssessment obligation();
+
+        @Override
+        default ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfALine(obligation().point());
+        }
+
+        /** Which of a border's four points this is about, which the point itself says. */
+        default souther.compiler.partition.PointRole role() {
+            return obligation().role();
+        }
+
+        /** What became of it, which is what the finding is about. */
+        default ObligationAssessment item() {
+            return obligation().item();
+        }
+    }
+
+    /**
+     * A point of a line a body's own rule drew, that no row stands at.
+     *
+     * <p>One entry of this behavior's account
+     * ({@link BorderObligationPointAssessment#belongsToBehaviorAccount}), which is what the count,
+     * the document and this are three readings of. The obligation and not one reading of it: a
+     * guard on a name every case of a sum spreads is read once under each case, and the readings are
+     * where a row can be written, not how many rows are owed.
+     *
+     * <p>So this holds no word for what the line is on. A body's comparison has no authored
+     * spelling of its quantity — each reading names the position it met the line at, and none of
+     * them can stand for the rest — and a finding that took one would be choosing a representative
+     * by the order the walk took. A report says the readings under the point, each in its own words.
      *
      * <p>That this behavior is owed a row here at all is settled where the account is made, so
      * nothing is checked again: a point owed to the declarations that drew the line is answered once
      * for the module and never reaches this.
-     *
-     * @param point what this behavior is owed a row for, and what became of it
      */
-    record APointOfABorder(OwedBoundaryPoint point) implements About {
+    record APointOfABorder(BorderObligationPointAssessment obligation)
+            implements ABorderObligation {
         public APointOfABorder {
-            java.util.Objects.requireNonNull(point, "a finding is about something");
+            java.util.Objects.requireNonNull(obligation, "a finding is about something");
         }
     }
 
     /**
      * A point of a line a declaration drew, that no row anywhere in the module stands at.
      *
-     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is which
-     * question was answered. That one is about a line as one position of one behavior met it, and a
-     * row written for that behavior answers it. This one is about the line itself: {@code UserId}
-     * says a user id is a string of one character or more, whether the compiler believes a row
-     * standing at length 1 is a question about {@code UserId}, and the answer cannot differ between
-     * the behaviors carrying it. One row anywhere settles it.
-     *
-     * <p>Which is why it carries the debt and not one of the readings. Over {@code crm} one clause
-     * of {@code UserId} is read at 126 positions; a finding naming one of them would name whichever
-     * the walk reached first, and an author sent there would be sent to a body that says nothing
-     * about the length of a user id.
+     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is whose
+     * it is. That one is a body's to write and is in that behavior's account. This one is about the
+     * line itself: {@code UserId} says a user id is a string of one character or more, whether the
+     * compiler believes a row standing at length 1 is a question about {@code UserId}, and the
+     * answer cannot differ between the behaviors carrying it. One row anywhere settles it, and it is
+     * kept under the declaration.
      *
      * <p>The declaration's debt and not the point alone, so that what a report writes it on is the
-     * quantity the author wrote. A point holds no such word — its readings each name a position
-     * they met the line at — and a finding that reached for one got the rule's own name standing in
-     * for it.
+     * quantity the author wrote — {@code String.length(value)} — which is not a representative but
+     * the author's own word, and is what the body's arm has none of.
      */
-    record APointOfADeclaredBorder(Adequacy.DeclaredDebt owed) implements About {
+    record APointOfADeclaredBorder(Adequacy.DeclaredDebt owed) implements ABorderObligation {
         public APointOfADeclaredBorder {
             java.util.Objects.requireNonNull(owed, "a finding is about something");
         }
 
-        /** What the readings of the line came to, which is what the finding stands on. */
-        public BorderObligationPointAssessment debt() {
+        @Override
+        public BorderObligationPointAssessment obligation() {
             return owed.debt();
         }
 
-        /** Which of a border's four points this is about, which the point itself says. */
-        public souther.compiler.partition.PointRole role() {
-            return debt().role();
-        }
-
-        /** What became of this point, which is what the finding is about. */
-        public ItemAssessment item() {
-            return debt().item();
+        /** The same, under the name the declarations' readers know it by. */
+        public BorderObligationPointAssessment debt() {
+            return owed.debt();
         }
     }
 
@@ -138,10 +230,28 @@ public sealed interface About {
      * identity, which is one rule's findings coming out identical in every field with nothing to
      * join them by. A shape that is about a rule says so by being one of these.
      */
-    sealed interface OfARule extends About {
+    sealed interface OfARule extends About, RuleCitations {
 
         /** Which rule, as everything that names a rule names it. */
         souther.compiler.check.RuleRef rule();
+
+        /** The handles this finding offers, which are the ones it was made with. Written here
+         *  because what a finding holds is one answer under two names — the seal's own question,
+         *  and the one every value holding a handle is asked. */
+        @Override
+        default Set<RuleCitation> ruleCitations() {
+            return cited();
+        }
+
+        /**
+         * Every handle a reader was offered for that rule.
+         *
+         * <p>On the seal so that whoever has to ask where these rules are shown is asking one
+         * question of every kind of them. Read off the arms that happen to have one, a kind added
+         * later is a kind whose rules a report names with nowhere to point — which is the same
+         * fault {@link #rule()} is here to keep out, one question over.
+         */
+        Set<RuleCitation> cited();
     }
 
     /**
@@ -188,6 +298,36 @@ public sealed interface About {
         @Override
         public souther.compiler.check.RuleRef rule() {
             return finding.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return finding.cited();
+        }
+    }
+
+    /**
+     * A rule of the model this did not read far enough to say what it raises, and what stopped it.
+     *
+     * <p>Beside {@link ARuleWithoutALine} and not among it. That one is the model stating that a
+     * rule draws no line here, which is a fact an author can read; this is this compiler saying it
+     * does not know what the rule states, which is a different sentence and sends a reader
+     * somewhere else.
+     */
+    record ARuleNothingClassified(PartitionEvidence.NotRead.AnUnclassifiedRule finding)
+            implements OfARule, OfSomethingNotRead {
+        public ARuleNothingClassified {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return finding.cited();
         }
     }
 
@@ -254,16 +394,115 @@ public sealed interface About {
             return asked.rule();
         }
 
+        @Override
+        public Set<RuleCitation> cited() {
+            return asked.cited();
+        }
+
         public AQuestionNothingAnswered {
             java.util.Objects.requireNonNull(asked, "a finding is about something");
         }
     }
 
-    /** An arm of the body no row goes through. */
+    /**
+     * An arm of the body no row goes through.
+     *
+     * <p>The occurrence a reader is sent to, and the arm it is one of. Those are two things: a
+     * behavior with two {@code guard}s writes two arms called {@code else}, and a fork whose caller
+     * supplies the rule is one arm per rule handed in — so two of them can be the same word at the
+     * same place and be two things to cover. What a reader is shown comes off the site; what tells
+     * one from another is the obligation, and this says so by being an {@link OfAnObligation}.
+     */
     record AnArmNoRowGoesThrough(
-            souther.compiler.coverage.CoverageSites.Site arm) implements About {
+            CoverageSites.ArmSite arm) implements OfAnObligation {
+
         public AnArmNoRowGoesThrough {
             java.util.Objects.requireNonNull(arm, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAnArm(arm.obligation());
+        }
+    }
+
+    /**
+     * A rule of the decision a body states that no row takes.
+     *
+     * <p>One entry of the decision account. The rule is the whole of what tells it from every other
+     * — the distinctions the path consulted and what each came out as — and where those are written
+     * is not part of it, so a body stating one rule at two places states one rule.
+     *
+     * <p>Said only of the rules something was seen standing in. Whether a rule is owed a row at all
+     * is settled before this and is not about the rows: a rule the model's own rules leave no value
+     * for is owed nothing however the rows are written, and one this compiler looked for and did
+     * not find is neither covered nor a gap.
+     *
+     * @param behavior whose decision it is a rule of, which the rule itself does not say
+     * @param ruled    the rule and what a run down its path would be seen doing, which is what a
+     *                 report sends a reader to
+     */
+    record ARuleNoRowTakes(String behavior, DecisionReading.Ruled ruled)
+            implements OfAnObligation {
+
+        public ARuleNoRowTakes {
+            Objects.requireNonNull(behavior, "a rule of a decision is some body's");
+            Objects.requireNonNull(ruled, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfADecisionRule(behavior, ruled.rule());
+        }
+    }
+
+    /**
+     * A row whose answer is owed: it is written {@code <?>} and nobody has written what the system
+     * answers.
+     *
+     * <p>About the row and about nothing else. What is owed here is owed whether or not the
+     * behavior has arms, whether or not another row covers the arm this one goes through, and
+     * whether or not anything could be measured about the rows at all — so it is read off the
+     * source, where the fact is settled, rather than off an arm that happens to carry it. Held on
+     * an arm, this went missing for a behavior with no branches, for an arm a second row covered,
+     * and for an arm whose measurement some unrelated unread row had weakened.
+     *
+     * <p>Beside {@link ARowAtAnArmAwaitsItsAnswer} and not instead of it. That one is about an arm
+     * — what to tell an author about it, and that nothing should compose a second row for it —
+     * and this one is the work itself.
+     */
+    record AnUnansweredRow(String behavior, RowIdentity identity, SourcePos at) implements About {
+
+        public AnUnansweredRow {
+            Objects.requireNonNull(behavior, "a row is a row of a behavior");
+            Objects.requireNonNull(identity, "a row says what it calls itself");
+            Objects.requireNonNull(at, "a row is written somewhere");
+        }
+    }
+
+    /**
+     * An arm a row goes through with its answer owed, and nothing covers.
+     *
+     * <p>Different news from {@link AnArmNoRowGoesThrough}, and different work. There is a row at
+     * this arm; what it is short of is the answer, which is written where the row is and by whoever
+     * knows what the system does. Told as an arm no row goes through, an author would be sent to
+     * write a row that is already in front of them — and whatever they wrote would be a second row
+     * for the same arm.
+     *
+     * <p>Still a gap. Nothing here asserts what the behavior answers, so a build is entitled to
+     * refuse over it exactly as it is over an arm with no row; what differs is the sentence and not
+     * the standing.
+     */
+    record ARowAtAnArmAwaitsItsAnswer(
+            CoverageSites.ArmSite arm) implements OfAnObligation {
+
+        public ARowAtAnArmAwaitsItsAnswer {
+            java.util.Objects.requireNonNull(arm, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAnArm(arm.obligation());
         }
     }
 }

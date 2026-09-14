@@ -1,6 +1,16 @@
 package souther.compiler.query;
 
+import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.LentReadings;
+import souther.compiler.check.ResolvedSymbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.StoreWork;
+import souther.compiler.check.Symbols;
+import souther.compiler.check.TheCompilationsSources;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.TypeKey;
+import souther.compiler.values.StringFacts;
+import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayDeque;
 import souther.compiler.diag.Diagnostic;
@@ -17,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The store a compilation's questions are asked of: it answers a {@link Key} by running it once,
@@ -92,10 +103,16 @@ import java.util.Set;
  * one report that reads every name in sight depends on every name in sight. That is issue #835,
  * and {@code IncrementalCompilationTest} holds both halves.
  *
+ * <p>Not everything a store holds is an answer. What runs its programs is one such thing, and so is
+ * what a reading of a declaration borrows from ({@link #readings()}): the reading of a declaration
+ * that one question made is handed to the next question that would have made it, for as long as the
+ * revision it was made under is the current one. Neither is compared and neither decides what is
+ * recomputed — that is settled by the memos, before either is asked anything.
+ *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.
  */
-public final class Db {
+public final class Db implements StoreWork {
 
     /**
      * What is known about one key.
@@ -115,7 +132,91 @@ public final class Db {
     /** Bumped by every input that is given a value it did not already have. */
     private long revision;
 
+    /**
+     * Which world the answers in hand are of. What it counts is not how much has been asked but
+     * how often the outside changed, so two questions answered at one revision were answered of
+     * one world — which is what {@link #readings()} lends work across and nothing else here needs.
+     */
+    long revision() {
+        return revision;
+    }
+
+    /**
+     * What a reading of a declaration borrows from, for this store.
+     *
+     * <p>Beside the memos, as what runs the programs is, and for the same reason: it is not a value
+     * and this store never compares it. What it holds is work that has been done — the reading of a
+     * declaration that a question of this store already made — and handing that to the next reader
+     * is not an answer being kept. Which questions are recomputed is settled by the memos and by
+     * them alone, before this is asked anything.
+     *
+     * <p>One per store, made when it is first asked for, because sharing among readers is the whole
+     * of what it does and two of them would share nothing.
+     */
+    public DeclarationReadings readings() {
+        if (readings == null) {
+            readings = new LentReadings(this::machinesOf, this::revision, this);
+        }
+        return readings;
+    }
+
+    private DeclarationReadings readings;
+
+    /**
+     * Where this store's modules' rules are read from.
+     *
+     * <p>Kept here because it is this compilation's, and made from what this compilation answers:
+     * a module's scope is read off the store when it is asked for, and the clauses are read from
+     * the one place a declaration's are answered. Nothing about a source is taken from whoever asks
+     * for one, so no reader can bring parts of its own and have them read as the compilation's.
+     */
+    RuleReadingSource ruleReadingFor(String module) {
+        if (sources == null) {
+            sources = new TheCompilationsSources(this::scopeOf,
+                    named -> ask(new Shapes.ClausesExpandedFor(named)).value(),
+                    Shapes.publishedDeclarations(this),
+                    Shapes.declarationKinds(this),
+                    Shapes.declarationNewtypes(this),
+                    Shapes.newtypeInners(this),
+                    Shapes.fieldBindings(this),
+                    Shapes.effectiveFieldTypes(this),
+                    Shapes.clauseLocations(this));
+        }
+        return sources.of(module);
+    }
+
+    private TheCompilationsSources sources;
+
+    /** The scope {@code module}'s names resolve in, or null where this compilation resolves no such
+     *  module. Asked once: what it answers is assembled where it is asked for. */
+    private Symbols scopeOf(String module) {
+        Answer<ResolvedSymbols> scope = Names.resolvedSymbols(this, module);
+        return scope.present() ? scope.value() : null;
+    }
+
+
+    /** What this store answers about {@code declaration}'s string machines, for a reading to
+     *  borrow — nothing to borrow, where it has no answer for the declaration at all. Either way
+     *  the reading keeps what it builds: that is what its own counterfactual is handed. */
+    private StringMachineAnswers machinesOf(TypeKey declaration) {
+        Answer<StringFacts> facts = ask(new Machines.OfDeclaration(declaration));
+        return facts.present()
+                ? StringMachineAnswers.borrowing(facts.value(), readings().extents())
+                : StringMachineAnswers.unborrowed(readings().extents());
+    }
+
     private final Map<Key<?>, Memo> memos = new HashMap<>();
+    /**
+     * Whether whoever set this walk going has since stopped wanting the answer. Asked where a
+     * question is about to be answered and nowhere else, so a walk stops between two questions and
+     * never inside one.
+     *
+     * <p>Being asked to stop is not an input changing. The answers already reached are answers of
+     * this revision and stay: nothing can move an input while a walk is running, because the walk is
+     * what the one thread holding this store is doing. Only the key that never returned a value is
+     * left without a memo, which is what {@link #ask} does with a throw either way.
+     */
+    private Abandonment abandonment = Abandonment.NEVER;
     /** The keys being answered right now, outermost first — the chain a cycle is found on. */
     private final Set<Key<?>> inProgress = new LinkedHashSet<>();
     /** The reads of each in-progress key, innermost frame last. */
@@ -224,6 +325,19 @@ public final class Db {
         spoke.removeIf(key -> !memos.containsKey(key));
     }
 
+    /**
+     * Says what makes a walk of this store stop short: while {@code asked} answers true, the next
+     * question that has to be answered raises {@link Abandoned} instead.
+     *
+     * <p>What is left behind is what was answered. A key whose computation was cut through leaves no
+     * memo — it never returned a value — while every key that answered inside it keeps one, because
+     * an answer of this revision is an answer of this revision however the walk that wanted it
+     * ended. The next walk pays for what this one did not finish and for nothing else.
+     */
+    public void abandonWhen(Abandonment abandonment) {
+        this.abandonment = abandonment;
+    }
+
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {
@@ -237,6 +351,12 @@ public final class Db {
             throughCycle.addAll(inProgress);
             return key.onCycle(List.copyOf(inProgress));
         }
+        // Before either of the two things that cost anything, and after the one that does not. An
+        // answer already verified at this revision is a lookup and a return; checking what is left
+        // is a walk of everything the answer read, and working one out is a walk of whatever it
+        // reaches. A store told to stop while it is re-verifying a graph nothing moved is a store
+        // being asked its cheapest question over and over, and that is the question an edit asks.
+        abandonment.stopIfAsked();
         if (memo != null && stillHolds(memo)) {
             memos.put(key, memo.verifiedAt(revision));
             return (Answer<T>) memo.answer();
@@ -278,6 +398,11 @@ public final class Db {
      * Whether {@code memo}'s answer can be kept: everything it read still answers what it did when
      * this answer was made. Asking each of them is what settles that, and each of those may settle
      * the same way without running anything.
+     *
+     * <p>Told to stop, it stops where it has got to. What it walks is a graph and what it does at
+     * each step may be nothing at all — a dependency another question has already verified is a
+     * lookup — so the step is this loop's, and asking is left to this loop rather than to what it
+     * calls.
      */
     private boolean stillHolds(Memo memo) {
         // Verification is not a read: a key being checked is not a dependency of whoever happened to
@@ -285,6 +410,11 @@ public final class Db {
         frames.push(new LinkedHashSet<>());
         try {
             for (Key<?> read : memo.reads()) {
+                // Here, and not left to the ask below. A dependency already verified at this
+                // revision is answered before that one gets as far as asking, so a walk over a graph
+                // that another question has already been through would go the whole way without
+                // being asked once — which is the walk this is, most of the time.
+                abandonment.stopIfAsked();
                 ask(read);
                 Memo dependency = memos.get(read);
                 if (dependency == null || dependency.changedAt() > memo.verifiedAt()) {
@@ -320,6 +450,7 @@ public final class Db {
     public List<Found> allReports() {
         Map<Told, Found> found = new LinkedHashMap<>();
         for (Key<?> key : spoke) {
+            abandonment.stopIfAsked();
             Memo memo = memos.get(key);
             if (memo == null || memo.verifiedAt() != revision) {
                 continue;
@@ -373,7 +504,7 @@ public final class Db {
      * <p>Which source the report is anchored in is read off this rather than stored beside it, so
      * there is one answer and not two that can come apart. A module named but no source is the last
      * fallback, and only a caller holding the module layout can apply it —
-     * {@link Compilation#sourceIdOf(Found)} is where that answer is finished.
+     * {@link Compilation#sourceIdOf} is where that answer is finished.
      *
      * <p>Where the report is said is a further question and not this one. A problem written in more
      * than one file is said in each, which the check that found it states about the regions it
@@ -415,6 +546,29 @@ public final class Db {
                 case Primary.InAnUnnamedText _, Primary.Unavailable _, Primary.Nowhere _ -> sourceId;
             };
         }
+    }
+
+    /**
+     * Does work whose result another question may be handed, and answers with what this store was
+     * asked while it was done.
+     *
+     * <p>The reads are recorded for the question being answered, as they would be had it done the
+     * work itself — it did, this once — and they are handed back so that the next question to be
+     * given the result can be recorded as having read them too. Without that, work shared between
+     * two questions would leave the second kept over an edit to what doing it read.
+     */
+    @Override
+    public <T> Made<T> watching(Supplier<T> work) {
+        frames.push(new LinkedHashSet<>());
+        Set<Key<?>> read;
+        T made;
+        try {
+            made = work.get();
+        } finally {
+            read = Set.copyOf(frames.pop());
+        }
+        read.forEach(this::recordRead);
+        return new Made<>(made, () -> read.forEach(this::recordRead));
     }
 
     private void recordRead(Key<?> key) {

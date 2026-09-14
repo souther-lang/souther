@@ -35,15 +35,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryPairOfShapesIsOneSetTest {
 
-    private static final String POSITION = "value";
+    private static final Sameness.Block<String> POSITION = Sameness.Block.of("value");
 
     /** What puts the sets together, and what it is allowed to build doing it. */
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);
         Language made = PatternPlan.of(assertInstanceOf(PatternRead.Read.class, read, regex)
-                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(made, regex);
         return made;
     }
@@ -83,9 +83,10 @@ class EveryPairOfShapesIsOneSetTest {
         return made.set();
     }
 
-    /** And what either holds, on the same terms. */
+    /** And what either holds, on the same terms — said as one plan over the alternatives, which is
+     *  how a block holds what its alternatives leave it. */
     private ValueSet joined(ValueSet one, ValueSet two) {
-        Allowance.Composed made = sets.join(POSITION, one, two);
+        Allowance.Composed made = sets.joining(POSITION, List.of(one, two));
         assertFalse(made.gaveUp(), () -> one + " join " + two + " is within what one answer holds");
         return made.set();
     }

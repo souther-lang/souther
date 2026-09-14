@@ -63,7 +63,7 @@ public final class JvmProgramExecution implements ProgramExecution {
      * which is what stops the boundary saying one wait while the run is given up on at another.
      */
     private souther.compiler.examples.Deadline keeping(ExampleExecution asked) {
-        return deadlines.forThisCompile(asked.policy().outerTimeout());
+        return deadlines.forThisCompile(asked.policy().compilerTimeout());
     }
 
     @Override
@@ -72,7 +72,11 @@ public final class JvmProgramExecution implements ProgramExecution {
         if (image == null) {
             return new RowRun.NotRunHere();
         }
-        Observations observed = ExampleVerifier.check(asked.rowsWrittenIn(source), asked.symbols(),
+        Observations observed = ExampleVerifier.check(asked.forExamplesWrittenIn(source),
+                asked.symbols(),
+                asked.published(),
+                asked.kinds(),
+                asked.fieldTypes(),
                 asked.signatures(), image.program(), image.published(), asked.requirements(),
                 image.around(), asked.definitions(), keeping(asked), asked.policy(),
                 // What applies a behavior here is what this compile emitted. A compile has nothing
@@ -84,7 +88,7 @@ public final class JvmProgramExecution implements ProgramExecution {
 
     @Override
     public TableBuild fakeTables(ExampleExecution asked, SourceId source) {
-        if (ExampleStatements.tablesBuiltIn(asked.rows(), asked.signatures(), source).isEmpty()) {
+        if (ExampleStatements.tablesBuiltIn(asked.forExamples(), asked.signatures(), source).isEmpty()) {
             // Nothing this source states is a table this source builds, so there is nothing here
             // that went unbuilt. Asked the other way round — is there a program to build against —
             // a file that wrote no fake at all would answer that its tables could not be built,
@@ -98,7 +102,10 @@ public final class JvmProgramExecution implements ProgramExecution {
         }
         // The classes alone. Nothing here applies a behavior, so what the compile implemented is not
         // a question this asks.
-        return new TableBuild.Built(ExampleStatements.fakeTables(asked.rows(), asked.symbols(),
+        return new TableBuild.Built(ExampleStatements.fakeTables(asked.forExamples(), asked.symbols(),
+                asked.published(),
+                asked.kinds(),
+                asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
                 source, keeping(asked), asked.policy(), asked.contracts()));
     }
@@ -115,10 +122,12 @@ public final class JvmProgramExecution implements ProgramExecution {
         // execution and the equality that decides it is the language's own.
         Map<String, ExampleStatements.Declaring> declaring = new LinkedHashMap<>();
         asked.declaring().forEach((name, reading) -> declaring.put(name,
-                new ExampleStatements.Declaring(reading.rows(), reading.symbols(),
+                new ExampleStatements.Declaring(reading.forExamples(), reading.symbols(),
+                        reading.published(), reading.kinds(), reading.fieldTypes(),
                         reading.definitions())));
-        return new StatementReading.Read(ExampleStatements.disagreements(asked.rows(),
-                asked.symbols(), asked.signatures(), image.program().classes(), image.around(),
+        return new StatementReading.Read(ExampleStatements.disagreements(asked.forExamples(),
+                asked.symbols(), asked.published(), asked.kinds(), asked.fieldTypes(),
+                asked.signatures(), image.program().classes(), image.around(),
                 asked.definitions(), keeping(asked), asked.policy(), asked.contracts(),
                 declaring));
     }
@@ -135,7 +144,8 @@ public final class JvmProgramExecution implements ProgramExecution {
         // line up, which is a fault in a measurement nothing here is making.
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         return image == null ? null
-                : FixtureReader.constructing(asked.rows(), asked.symbols(),
+                : FixtureReader.constructing(asked.forExamples(), asked.symbols(),
+                        asked.published(), asked.kinds(), asked.fieldTypes(),
                         image.program().classes(), image.around(), asked.definitions());
     }
 
@@ -145,9 +155,12 @@ public final class JvmProgramExecution implements ProgramExecution {
         if (image == null || image.program().implementations() == null) {
             return null;
         }
-        return RowTrial.over(asked.rows(), asked.symbols(), image.program().classes(),
+        return RowTrial.over(asked.forExamples(), asked.symbols(), asked.published(), asked.kinds(),
+                asked.fieldTypes(),
+                image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),
-                asked.policy());
+                asked.signatures(), asked.contracts(),
+                image.program().probes(), asked.policy());
     }
 
     @Override

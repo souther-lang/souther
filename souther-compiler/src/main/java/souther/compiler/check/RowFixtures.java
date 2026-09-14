@@ -7,6 +7,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,8 +73,9 @@ public final class RowFixtures {
      * so nothing downstream counts the rows a second time. Two counts would be two orders, and a row
      * would run the value beside the one it wrote.
      */
-    public static List<Placed> placed(Hir.Module module,
+    public static List<Placed> placed(CheckSurface surface,
                                       Map<ValueName.Behavior, Sig> signatures) {
+        Hir.Module module = surface.module();
         List<Placed> out = new java.util.ArrayList<>();
         for (Hir.Example ex : module.examples()) {
             // A row names a behavior of the module it is written in, and a stand-in names the
@@ -89,16 +91,32 @@ public final class RowFixtures {
                             new RowPosition.Supplies(answersWith(sigOf(signatures,
                                     w.standsInFor())))));
                 }
-                out.add(new Placed(row.expected(), new RowPosition.Asserts(answersWith(sig))));
+                switch (row.expected()) {
+                    case Hir.Expected.Asserted(Hir.Expr answer) ->
+                            out.add(new Placed(answer, new RowPosition.Asserts(answersWith(sig))));
+                    // A row whose answer is owed writes no operand at the position, and neither
+                    // does one whose answer did not parse. An operand made up here would be a value
+                    // nobody wrote, emitted under a name and run.
+                    case Hir.Expected.Unanswered _, Hir.Expected.Unwritten _ -> { }
+                }
             }
         }
-        for (Hir.Fake fake : module.fakes()) {
-            Sig sig = sigOf(signatures, fake.standsInFor());
-            for (Hir.FakeRow row : fake.rows()) {
-                if (row.inputs() != null) {
-                    for (int i = 0; i < row.inputs().size(); i++) {
-                        out.add(new Placed(row.inputs().get(i), supplies(sig, i)));
+        // Every block written, whether or not its target reached a behavior: an operand stands
+        // where it is written, and a block nothing resolved still writes values. What it stands in
+        // for is what the classification answered, never read off the block again.
+        for (FakeTables.Occurrence occurrence : surface.fakes().written()) {
+            Sig sig = occurrence instanceof FakeTables.Occurrence.Resolved resolved
+                    ? sigOf(signatures, resolved.behavior()) : null;
+            for (Hir.FakeRow row : occurrence.read().rows()) {
+                switch (row.matched()) {
+                    case Hir.Matched.Arguments(List<Hir.Expr> inputs) -> {
+                        for (int i = 0; i < inputs.size(); i++) {
+                            out.add(new Placed(inputs.get(i), supplies(sig, i)));
+                        }
                     }
+                    // A row that answers for anything names no argument, so there is no position
+                    // for one to be supplied at.
+                    case Hir.Matched.Anything _ -> { }
                 }
                 out.add(new Placed(row.output(), new RowPosition.Supplies(answersWith(sig))));
             }
@@ -143,11 +161,11 @@ public final class RowFixtures {
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
      */
-    public static Emitted emitted(Hir.Module module, Symbols symbols,
+    public static Emitted emitted(CheckSurface surface, Symbols symbols,
                                   Map<ValueName.Behavior, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        Map<Hir.Expr, String> methods = new java.util.IdentityHashMap<>();
-        List<Placed> placed = placed(module, signatures);
+        Map<Hir.Expr, String> methods = new IdentityHashMap<>();
+        List<Placed> placed = placed(surface, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
             RowPosition position = placed.get(i).position();
@@ -181,7 +199,7 @@ public final class RowFixtures {
             Type given = position.contextual();
             Hir.RetType answers = given == null ? null : retTypeOf(given, operand.pos());
             Hir.FnDef wrapped = new Hir.FnDef(WrittenName.synthetic(name, operand.pos()),
-                    module.name(), List.of(), answers, new Hir.FnBody.Written(operand),
+                    surface.name(), List.of(), answers, new Hir.FnBody.Written(operand),
                     new Hir.Modifiers(true, true), new DefinitionRole.RowValue(position),
                     operand.pos());
             out.put(name, Desugared.Fn.desugar(wrapped, symbols).read());
@@ -196,7 +214,7 @@ public final class RowFixtures {
     /** Whether an expression is a bare name standing for a declared type — the form an expectation
      *  takes when it asserts the arm and nothing under it. */
     static boolean assertsAnArm(Hir.Expr e) {
-        return e instanceof Hir.Var v && v.answered() instanceof Hir.Var.Denoting d
+        return e instanceof Hir.Var.Denoting d
                 && d.denotes() instanceof souther.compiler.types.ValueName.OfType;
     }
 }

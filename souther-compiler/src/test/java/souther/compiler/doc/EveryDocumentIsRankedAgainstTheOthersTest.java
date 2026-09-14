@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,7 +47,7 @@ class EveryDocumentIsRankedAgainstTheOthersTest {
     }
 
     private static boolean bodyOnly(String line) {
-        String title = line.substring(line.indexOf('\t') + 1).toLowerCase();
+        String title = line.substring(line.indexOf('\t') + 1).toLowerCase(Locale.ROOT);
         return !title.contains("start");
     }
 

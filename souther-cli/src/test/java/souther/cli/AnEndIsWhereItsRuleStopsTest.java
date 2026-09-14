@@ -86,8 +86,14 @@ class AnEndIsWhereItsRuleStopsTest {
         // Two of the eight items these lines owe are asked for and nobody measured them, which
         // are the two rows inside the bounds. Read off `adequacy` instead, the sentence would be
         // true of this model for having no rows at all and would say nothing about the lines.
-        assertTrue(report.contains("(2 not measured: no row names this behavior)"),
+        //
+        // Under the declarations, because that is whose the lines are: a `data` clause's line is
+        // owed once for the module, and the body carrying the type is short of nothing on it.
+        assertTrue(report.contains("declarations   obligations 0/2"),
                 () -> "and the row inside each line is one somebody is owed:\n" + report);
+        assertTrue(report.contains("undecided whether a row is at the IN point value in 0 < value"
+                        + " (invariant Positive (positive)) — no row names this behavior"),
+                () -> "and why nobody could say whether it is written:\n" + report);
     }
 
     /**

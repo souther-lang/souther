@@ -151,7 +151,7 @@ final class PartialReachability {
      * not be written where a value goes. A value takes none and is read rather than handed over.
      */
     boolean isPartialFunctionNamed(Hir.Var v) {
-        if (!(v.answered() instanceof Hir.Var.Denoting named)) {
+        if (!(v instanceof Hir.Var.Denoting named)) {
             return false;   // it names no helper, partial or otherwise
         }
         Hir.FnDef declared = declarationOf(named, inliner);

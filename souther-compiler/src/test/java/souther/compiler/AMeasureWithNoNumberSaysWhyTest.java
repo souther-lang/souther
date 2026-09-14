@@ -1,8 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.DecidedBy;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
@@ -133,7 +136,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String judge = behaviorBlock(
-                AdequacyReport.of(compilation).human(SourceNameResolver.identity()), "judge");
+                AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())), "judge");
 
         assertTrue(judge.contains("signature   not measured (no row names this behavior)"), judge);
     }
@@ -161,7 +164,8 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static String human() {
         if (rendered == null) {
-            rendered = AdequacyReport.of(compiled()).human(SourceNameResolver.identity());
+            rendered = AdequacyReport.of(compiled())
+                    .human(SourceRendering.namedByIdentity(compiled().texts()));
         }
         return rendered;
     }
@@ -199,15 +203,19 @@ class AMeasureWithNoNumberSaysWhyTest {
                   widen                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: w.v
+                      · divided no way: w.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
+                    decision    rules 1   taken 0
+                      ! no row takes a decision rule
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: m.v
+                      · divided no way: m.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
+                    decision    rules 1   taken 0
+                      ! no row takes a decision rule
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (this behavior is measured at its stages)
@@ -216,7 +224,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
+                    border      borders 2   obligations 0/0
                       · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
@@ -225,26 +233,48 @@ class AMeasureWithNoNumberSaysWhyTest {
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   coverage items 0/0   excluded 4   (4 not measured: no row names this behavior)
+                    border      borders 2   obligations 0/0
                       · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
                       · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
                       · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
                     branch      not applicable (this body owes no arm)
+                    decision    rules 1   taken 0
+                      ! no row takes a decision rule
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   equivalence partitions 1/2
-                      · no row is in `No` at q.flag
+                      ! no row is in `No` at q.flag
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
+                    decision    rules 1   taken 1
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not measured (no row names this behavior)
+                    decision    rules 2   taken 0
+                      ! no row takes a decision rule
+                          · it goes through `case Yes` (46:16)
+                      ! no row takes a decision rule
+                          · it goes through `case No` (46:16)
+                  declarations   obligations 0/4
+                      ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: = 0
+                          · read as rated/r.cost: = 0
+                      ? undecided whether a row is at the IN point value in 0 < value <= 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: in 0 < r.cost <= 1000
+                          · read as rated/r.cost: in 0 < r.cost <= 1000
+                      ? undecided whether a row is at the ON point value = 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: = 1000
+                          · read as rated/r.cost: = 1000
+                      ? undecided whether a row is at the IN point value in 0 <= value < 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: in 0 <= r.cost < 1000
+                          · read as rated/r.cost: in 0 <= r.cost < 1000
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
-                adequacy: undetermined
+                adequacy: not satisfied
+                6 gaps marked `!`: what a strict build refuses over.
                 """, human());
     }
 
@@ -375,11 +405,40 @@ class AMeasureWithNoNumberSaysWhyTest {
                 notAsked.get("sift").measured().why());
     }
 
+    /**
+     * And which of the two reasons it is decides whether the line is printed at all.
+     *
+     * <p>The two states of one reason, held apart on one behavior. What a build asked for is an
+     * input to the whole run, so a line repeating it under every behavior says one fact as many
+     * times as the module has behaviors; a behavior no row names is short of something of its own
+     * and says so. Read for one of the two — the line is printed unless the reason is the other —
+     * the second reason added to that enum is printed as neither.
+     */
+    @Test
+    void theArmsNobodyAskedForSayNothingUnderTheBehaviorAndTheArmsNoRowNamesSayWhy() {
+        String notAsked = behaviorBlock(humanAt(Adequacy.Level.WITNESS), "sift");
+        assertFalse(notAsked.contains("branch"),
+                () -> "what a build asked for is not said behavior by behavior:\n" + notAsked);
+
+        String noRows = behaviorBlock(human(), "sift");
+        assertTrue(noRows.contains("branch      not measured (no row names this behavior)"),
+                () -> "and what this behavior is short of is:\n" + noRows);
+    }
+
+    private static String humanAt(Adequacy.Level level) {
+        Compilation at = compiledAt(level);
+        return AdequacyReport.of(at).human(SourceRendering.namedByIdentity(at.texts()));
+    }
+
     private static Map<String, Adequacy.BranchEvidence> branchesAt(Adequacy.Level level) {
+        return compiledAt(level).db().ask(new Adequacy.BranchCoverage("example.repro")).value();
+    }
+
+    private static Compilation compiledAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
-        return compilation.db().ask(new Adequacy.BranchCoverage("example.repro")).value();
+        return compilation;
     }
 
     /** A line an invariant drew is met by writing the value, so it is never waiting on the arms.
@@ -392,7 +451,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BorderAssessment.Point line : lines) {
             assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
-                    line.border().origin().named() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
         }
     }
 
@@ -468,9 +527,10 @@ class AMeasureWithNoNumberSaysWhyTest {
         // And the count says so rather than saying zero. `0` is a behavior whose rows were read and
         // numbered none of them, which is the other half of the pair this test is about: written
         // as a number, "nothing was read" and "nothing was written" were the same byte.
-        assertEquals(java.util.OptionalInt.empty(), reported.rows(), "nothing was read");
-        assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
-                        .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
+        assertEquals(java.util.OptionalInt.empty(), reported.rowCount(), "nothing was read");
+        assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().written().stream()
+                        .anyMatch(gap -> gap.fact().code()
+                                == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");
 
         Adequacy.BranchEvidence branch = compilation.db()
@@ -488,9 +548,9 @@ class AMeasureWithNoNumberSaysWhyTest {
                 continue;   // nothing was measured there and nothing was waiting on a row
             }
             assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
-                    line.border().origin().named() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
             assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(line.item().weakeningSource()),
-                    line.border().origin().named() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
         }
     }
 
@@ -551,21 +611,19 @@ class AMeasureWithNoNumberSaysWhyTest {
     }
 
     /**
-     * What the verdict does with each kind.
+     * A measure nobody made and a measure nothing was ever going to be made at are told apart.
      *
-     * <p>The two are the whole reason for telling them apart. A measure nothing was ever going to be
+     * <p>The two are the whole reason for the distinction. A measure nothing was ever going to be
      * measured at is not a doubt anybody can act on; a measure that could have found a gap and was
      * not made is exactly one. Asked of one model holding both, so that neither answer is the
-     * accident of a fixture with only one kind in it.
+     * accident of a fixture with only one kind in it. What a verdict does with each is held where
+     * a model with nothing established is ({@code WhatKeepsAnUndeterminedVerdictOpenIsSaidTest});
+     * here the gaps this model has settle it.
      */
     @Test
-    void aMeasureThatWasNotMadeHoldsTheVerdictOpenAndAnInapplicableOneDoesNot() {
-        AdequacyReport report = AdequacyReport.of(compiled());
-        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                report.human(SourceNameResolver.identity()));
-
+    void aMeasureThatWasNotMadeAndAnInapplicableOneAreToldApart() {
         List<Object[]> measures = allMeasures();
-        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotApplicable<?>),
+        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measure.NotApplicable<?>),
                 "the model holds an inapplicable measure");
         assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotMeasured<?>),
                 "and one nobody made");
@@ -655,7 +713,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
         // A measure with no number holds no number, rather than holding zeroes that read as one.
         assertThrows(NullPointerException.class, () -> new Measurement.NotMeasured<>(null));
-        assertThrows(NullPointerException.class, () -> new Measurement.NotApplicable<>(null));
+        assertThrows(NullPointerException.class, () -> new Measure.NotApplicable<>(null));
         assertThrows(NullPointerException.class, () -> new Measurement.Complete<>(null));
     }
 
@@ -669,10 +727,14 @@ class AMeasureWithNoNumberSaysWhyTest {
      */
     @Test
     void whatAMeasurementWentWithoutIsASetAndUnionsLikeOne() {
-        Weakening a = new Weakening.ProofContradicted("take", 1);
+        Weakening a = new Weakening.ProofContradicted(new CoverageSites.Obligation("take",
+                new souther.compiler.types.SourceConstructOrigin(
+                        new WrittenOwner.Body("m", "take"), 0, 0,
+                        souther.compiler.types.SourceConstruct.IF),
+                1, new DecidedBy.NotSaid()));
         Weakening b = new Weakening.ArmsUnsettled(
-                new souther.compiler.types.CoverageOrigin("m", 0, 0,
-                        souther.compiler.types.CoverageConstruct.IF));
+                new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
+                        souther.compiler.types.SourceConstruct.IF));
         Weakening c = new Weakening.OutputCasesUnreadable("take");
 
         assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.none()));
@@ -706,7 +768,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Map<String, Adequacy.RowReading> readings() {
         Compilation compilation = compiled();
         return compilation.db()
-                .ask(new Adequacy.Rows(compilation.modules().get(0))).value();
+                .ask(new Adequacy.RowReadings(compilation.modules().get(0))).value();
     }
 
     private static Map<String, Adequacy.BranchEvidence> branches() {

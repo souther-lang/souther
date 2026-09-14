@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.WhereItSits;
 import souther.compiler.Compiler;
 
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code ++} reaches the same join from two written operands, one level in from what it compares.
  * Both of them have their element type labelled, because both of them have one.
+ *
+ * <p><b>An accumulator naming several cases names them in the order the join met them</b>, which for
+ * an {@code else} is the {@code then} branch and then the arms as they are written, and for a
+ * {@code match} is the arms as they are written. What is quoted back to an author is then a function
+ * of what the author wrote; a set handing its members over in the order their numbers fall would
+ * quote an order nothing about the program decides, and moving any one of those numbers would move
+ * the report.
  */
 class AJoinFailureNamesTheOperandItRefusedTest {
 
@@ -109,7 +117,10 @@ class AJoinFailureNamesTheOperandItRefusedTest {
         // <<a-region-is-an-extent>>'s question and is one column here.
         String written = "let xs = [1] ++ [\"a\"]";
         assertEquals(List.of(written.indexOf("[1]") + 1, written.indexOf("[\"a\"]") + 1),
-                report.secondary().stream().map(s -> ((souther.compiler.diag.DiagnosticPlace.InSource) s.place()).region().start().column()).toList());
+                report.secondary().stream()
+                        .map(s -> WhereItSits.in(source,
+                                ((souther.compiler.diag.DiagnosticPlace.InSource) s.place())
+                                        .region()).start().column()).toList());
         assertTrue(values(report).isEmpty(), "the message names neither type: " + values(report));
     }
 
@@ -132,6 +143,8 @@ class AJoinFailureNamesTheOperandItRefusedTest {
         Diagnostic report = only(source);
 
         assertEquals("1", underlined(source, report));
+        // The join is a type, and a union is a set of names: the arms it was gathered over are not
+        // on it, so what is named is the members in the order names are shown in.
         assertTrue(values(report).contains("Blue | Red"), values(report).toString());
     }
 
@@ -177,6 +190,8 @@ class AJoinFailureNamesTheOperandItRefusedTest {
 
         assertEquals("| Guest -> 1", line(source, report).trim());
         assertEquals(List.of(), report.secondary());
+        // The join is a type, and a union is a set of names: the arms it was gathered over are not
+        // on it, so what is named is the members in the order names are shown in.
         assertTrue(values(report).contains("Blue | Red"), values(report).toString());
     }
 
@@ -208,15 +223,13 @@ class AJoinFailureNamesTheOperandItRefusedTest {
 
     /** The whole source line a report's primary region begins on. */
     private static String line(String source, Diagnostic report) {
-        return source.lines().toList().get(((Primary.InSource) report.primary()).place().region().start().line() - 1);
+        return source.lines().toList().get(WhereItSits.in(source, ((Primary.InSource) report.primary()).place().region()).start().line() - 1);
     }
 
     /** The characters of {@code source} {@code region} covers. */
     private static String at(String source, Region region) {
-        assertEquals(region.start().line(), region.end().line(), "one line's worth");
-        String line = source.lines().toList().get(region.start().line() - 1);
-        int from = region.start().column() - 1;
-        return line.substring(from, from + region.sourceSpan());
+        assertEquals(WhereItSits.in(source, region).start().line(), WhereItSits.in(source, region).end().line(), "one line's worth");
+        return WhereItSits.underlined(source, region);
     }
 
     /** The types a report carries, as it renders them. */

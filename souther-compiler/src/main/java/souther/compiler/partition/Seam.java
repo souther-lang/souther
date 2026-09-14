@@ -132,6 +132,23 @@ public record Seam(CutPosition at, Level below, Level above) {
     public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
 
     /**
+     * The same division of the quantity read the other way round.
+     *
+     * <p>The two sides change places. What was the last value below the line is the first value
+     * above it once the quantity is measured backwards, and the line itself is at the negated
+     * place — so a division that names a value on one side only still names it on one side only,
+     * and on the other one.
+     *
+     * <p>Which is the whole of what makes a rule between two positions readable from either of
+     * them. Negated without the swap, the seam would say the values part with the greater of them
+     * below, and the run built from it would be an interval whose ends have crossed.
+     */
+    Seam reflected() {
+        return new Seam(at.reflected(), above == null ? null : above.negated(),
+                below == null ? null : below.negated());
+    }
+
+    /**
      * The same seam, said in units {@code k} times smaller.
      *
      * <p>What one quantity's lines come to for a rule that wrote a multiple of it: the arrangement
@@ -244,8 +261,8 @@ public record Seam(CutPosition at, Level below, Level above) {
         if (line == null) {
             return null;
         }
-        return below != null && below.key().equals(line.key())
-                || above != null && above.key().equals(line.key()) ? line : null;
+        return (below != null && below.key().equals(line.key()))
+                || (above != null && above.key().equals(line.key())) ? line : null;
     }
 
     /**

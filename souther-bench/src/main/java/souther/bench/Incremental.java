@@ -3,10 +3,12 @@ package souther.bench;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * What an edit costs a store that already holds the answers — the latency an author feels between a
@@ -25,12 +27,89 @@ import java.util.Set;
  * first source, which the others import, and to the last, which nothing imports. The two numbers
  * bound what an author pays while typing — the first is the cost of editing the type everything is
  * built on, the second the cost of editing a leaf, and a workspace is mostly leaves.
+ *
+ * <p>Restating a relation is a fifth, and it is the one the other four cannot stand in for. Adding a
+ * definition gives the module something it did not declare, so what is re-asked is everything that
+ * reads the declaration list. Rewriting a rule of an {@code ensures} leaves the declaration where it
+ * was and changes what a caller of that behavior may assume, while what the compiler says about the
+ * corpus and how well its rows cover it come back as they were. So the bodies that call it are what
+ * has anything to learn, and this is where an answer held per behavior rather than per module would
+ * show, and where losing one would show as well. The two edits are the same keystroke to an author,
+ * and what separates them is only visible if both are timed.
  */
 final class Incremental {
 
+    /**
+     * The rule a relation edit rewrites, written out as the corpus writes it.
+     *
+     * <p>Matched as text rather than found by walking the parse, because what is being edited here is
+     * text: an author types into a file, and the measurement is of what the store does with the file
+     * that comes out. A rule located any other way would still have to be turned back into the line
+     * it replaces.
+     *
+     * <p>That the corpus still writes this line is held by
+     * {@code TheRelationAnEditRestatesIsOneACallerReadsTest} rather than found here at run time. A
+     * corpus that stopped writing it would leave this measurement silently unreported, and a line
+     * that is sometimes absent is one nobody notices the absence of.
+     */
+    static final String STATED_RULE =
+            "    ensures onTheDomainAsked = Account -> accountHasDomain(domain, value)";
+
+    /** What the rule already says, said again — see {@link #restated}. */
+    private static final String RESTATED_CONJUNCT = " && accountHasDomain(domain, value)";
+
     private Incremental() {}
 
+    /**
+     * One edit that is timed, as the round that makes it.
+     *
+     * <p>What is timed and nothing standing for it. A reader asking what an edit figure covers runs
+     * this, and a reader taking the figure runs this, so the two cannot come to be about different
+     * edits — which is the whole of what {@code CorpusTest} needs to be able to say anything about
+     * what these numbers reach.
+     */
+    record Edit(String name, Consumer<Integer> round) {}
+
+    /**
+     * The store an edit figure is taken against, and the edits taken on it.
+     *
+     * <p>One store for all of them, as a language server has one: an edit is timed against answers
+     * that are already there, and a store per edit would be timing the first compile each time.
+     */
+    record Edits(Compilation compilation, List<Edit> edits) {}
+
+    /** Rounds an edit figure is warmed for, and rounds it is the median of. An edit reaches less
+     *  code than a compile, so it is slower to reach steady state. */
+    private static final int WARMUP = 40;
+    private static final int MEASURED = 40;
+
     static void measure(Report report, Corpus corpus) {
+        for (Edit edit : edits(corpus).edits()) {
+            Timing timing = time(edit, WARMUP, MEASURED).figure();
+            report.line("EDIT  %-14s %-38s %6.2f ms", corpus.name(), edit.name(),
+                    timing.medianMillis());
+        }
+    }
+
+    /**
+     * One edit's figure, and what the rounds it was taken over read.
+     *
+     * <p>The one way an edit is run, warm-up and all, so that what is held to arriving is the
+     * rounds the figure came from and not the first application of the edit. The store an edit is
+     * applied to has been running for as many rounds either way, which is what makes the two halves
+     * of a round schedule different things to time and the same thing to read.
+     *
+     * <p>How many rounds is the caller's. A figure wants enough of them for the JIT to settle; a
+     * reading is the same reading after two rounds as after eighty, since how long a store has been
+     * answering does not change which declarations an edit invalidates.
+     */
+    static Taken<Timing> time(Edit edit, int warmup, int measured) {
+        return Taken.from(measuring ->
+                Timing.ofRounds(warmup, measured, edit.round(), measuring));
+    }
+
+    /** The store warmed to the point an edit is timed from, and every edit that is timed on it. */
+    static Edits edits(Corpus corpus) {
         Map<String, String> byId = new LinkedHashMap<>();
         for (int i = 0; i < corpus.sources().size(); i++) {
             byId.put("f" + i, corpus.sources().get(i));
@@ -42,21 +121,54 @@ final class Incremental {
         String imported = ids.getFirst();
         String leaf = ids.getLast();
 
-        Timing reask = Timing.ofRounds(40, 40, _ -> {
+        List<Edit> edits = new ArrayList<>();
+        edits.add(new Edit("re-ask", _ -> {
             compilation.update(byId, Set.of());
             compilation.diagnostics();
-        });
-        Timing comment = Timing.ofRounds(40, 40, round ->
-                apply(compilation, byId, imported, byId.get(imported) + "\n-- round " + round + "\n"));
-        Timing atImported = Timing.ofRounds(40, 40, round ->
-                apply(compilation, byId, imported, added(byId.get(imported), round)));
-        Timing atLeaf = Timing.ofRounds(40, 40, round ->
-                apply(compilation, byId, leaf, added(byId.get(leaf), round)));
+        }));
+        edits.add(new Edit("comment", round ->
+                apply(compilation, byId, imported,
+                        byId.get(imported) + "\n// round " + round + "\n")));
+        edits.add(new Edit("definition in an imported module", round ->
+                apply(compilation, byId, imported, added(byId.get(imported), round))));
+        edits.add(new Edit("definition in a leaf", round ->
+                apply(compilation, byId, leaf, added(byId.get(leaf), round))));
 
-        report.line("EDIT  %-14s re-ask %6.2f ms   comment %6.2f ms   "
-                        + "definition in an imported module %6.2f ms   in a leaf %6.2f ms",
-                corpus.name(), reask.medianMillis(), comment.medianMillis(),
-                atImported.medianMillis(), atLeaf.medianMillis());
+        String stating = statingSource(byId);
+        if (stating != null) {
+            edits.add(new Edit("a rule of a relation its callers read", round ->
+                    apply(compilation, byId, stating, restated(byId.get(stating), round))));
+        }
+        return new Edits(compilation, edits);
+    }
+
+    /** Which source states the rule, or null where this corpus states none. */
+    private static String statingSource(Map<String, String> byId) {
+        for (Map.Entry<String, String> source : byId.entrySet()) {
+            if (source.getValue().contains(STATED_RULE)) {
+                return source.getKey();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@code source} with the rule restated, alternating between rounds so that no round writes what
+     * the round before it wrote — two rounds writing one text is no edit, and the second would find
+     * every answer holding and time the floor.
+     *
+     * <p>The conjunct the rule already states is written a second time and taken away again. It says
+     * what the rule said, which is the point: what a caller may assume is a different value and every
+     * other reading of the corpus is the one it was. An edit that added a relation instead — a
+     * comparison of the parameter against a bound, which is what an author tightening a rule writes —
+     * draws a line on what it compares (spec §a-clause-draws-a-line-on-what-it-compares-an-input-against)
+     * and moves the adequacy reading with it, so the round would be timing two things and the number
+     * would be attributable to neither. Both halves of that are held by
+     * {@code TheRelationAnEditRestatesIsOneACallerReadsTest}.
+     */
+    static String restated(String source, int round) {
+        return round % 2 != 0 ? source
+                : source.replace(STATED_RULE, STATED_RULE + RESTATED_CONJUNCT);
     }
 
     private static String added(String source, int round) {

@@ -1,15 +1,22 @@
 package souther.compiler.inputs;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.SpecImplementation;
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DeclaredCoordinates;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.BindingId;
@@ -22,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What can arrive at each position of one behavior's input, read once.
@@ -38,10 +46,10 @@ import java.util.Map;
  * do with it — including the ones a reader gives up in favour of what is under them, and the ones
  * dropped past a budget.
  *
- * <p>Which is a claim about the reading and not about the step it is made of. What stands directly
- * under a type is one fact and is {@link StructuralDescent}'s; how far to follow it, and what is
- * read where it lands, are this reading's. A reader wanting the step alone
- * takes it from there, and takes none of the meaning here with it.
+ * <p>Which is a claim about the reading and not about the steps it is made of. What is readable off
+ * a value is one fact and is {@link ReadableFields}'s; how far to follow what a position has under
+ * it, and what is read where it lands, are this reading's. A reader wanting a step alone takes it
+ * from the owner of the question it is a step of, and takes none of the meaning here with it.
  *
  * <p><b>A position may exist only under a narrowing of another.</b> What a case of a sum declares is
  * declared whether or not anything constructs one, so those fields are positions of the input and are
@@ -99,13 +107,15 @@ public final class InputDomain {
      * <p>Kept as the declarations rather than as a reading of them, for the reason the parameters
      * are: what is answered with is compared as a value by whatever decides that a compile changed
      * nothing.
+     *
+     * <p><b>And with the condition it was opened under.</b> A reading of one of these holds of the
+     * rows the opening admits and not of every row, so a reader that met them all together would
+     * have every case of every sum holding at once ({@link RootOpening}). Recorded here because it
+     * is known here and nowhere else: the descent that opens the reading is what says whether it
+     * crossed a narrowing or a container, and a reader working it back out of the path would be
+     * answering from the steps rather than from the descent that took them.
      */
-    public record RuleRoot(TermPath at, Type type) {}
-
-    /** Nothing to read: a behavior whose signature is not in hand. */
-    public static final InputDomain NONE =
-            new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
-                    List.of(), List.of());
+    public record RuleRoot(TermPath at, Type type, RootOpening opening) {}
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
@@ -138,19 +148,51 @@ public final class InputDomain {
      * agreed about the parameters and disagreed here would be disagreeing with itself.
      */
     private final List<ClauseWithoutAnEnd> clauses;
+    /**
+     * Every sum this reading met and what became of each of its cases.
+     *
+     * <p>What says whether a sum has a value at all, which is a question about the whole list of
+     * them rather than about any one case.
+     *
+     * <p>No part of what makes two readings one, for the reason {@link #clauses} is not: the same
+     * parameters walked under the same policy meet the same cases, so a reading that agreed about
+     * the positions and disagreed here would be disagreeing with itself.
+     */
+    private final List<CasesRead> cases;
+
+    /**
+     * Where the declarations this walk read get what somebody has already made of them.
+     *
+     * <p>Kept because a later reader of the same declarations is a later reader of the same
+     * declarations. What a position is offered and why it was offered no more are asked of the
+     * rules of the record a parameter is, long after the walk that read them — asked with nothing
+     * to borrow, that reader reads every one of them again.
+     *
+     * <p>No part of what makes two readings one. It is a capability rather than a value: two of
+     * them built from one store answer alike and compare unlike, so a reading that took this into
+     * the comparison would say a walk taken again came to something else.
+     */
+    private final DeclarationReadings machines;
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
                         NameReach reach, List<PlacementSeed> placed,
-                        List<ClauseWithoutAnEnd> clauses) {
+                        List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
+                        DeclarationReadings machines) {
+        this.machines = Objects.requireNonNull(machines, "a reading says where it borrows from");
+        this.cases = List.copyOf(cases);
         this.placed = List.copyOf(placed);
         this.clauses = List.copyOf(clauses);
         this.positions = List.copyOf(positions);
         this.read = Map.copyOf(read);
         this.parameters = List.copyOf(parameters);
         this.roots = List.copyOf(roots);
-        this.policy = policy;
-        this.reach = reach;
+        // Every one of these is what a walk that ran came back with. A reading is made by walking
+        // an input and no other way, so there is no state of this in which one of them is missing —
+        // and a reader asking how the names in it are read gets the policy it was read under
+        // whatever the walk found.
+        this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
+        this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -205,9 +247,21 @@ public final class InputDomain {
     public record Parameter(String name, BindingId binding, Type type) {}
 
     /** Every position of an input, in the order the parameters are declared and descended into. */
-    public static InputDomain of(List<Parameter> parameters, Symbols symbols,
+    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
+                                 ReadingPolicy policy, DeclarationReadings machines) {
+        return of(parameters, source, policy, InputDemand.NONE, machines);
+    }
+
+    /** The same, reading for itself. */
+    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
                                  ReadingPolicy policy) {
-        return of(parameters, symbols, policy, InputDemand.NONE);
+        return of(parameters, source, policy, InputDemand.NONE, DeclarationReadings.NONE);
+    }
+
+    /** The same, closed over the finite paths a behavior's measurement names, reading for itself. */
+    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
+                                 ReadingPolicy policy, InputDemand demand) {
+        return of(parameters, source, policy, demand, DeclarationReadings.NONE);
     }
 
     /**
@@ -224,9 +278,15 @@ public final class InputDomain {
      * everything derived from it — what a report counts, what a quantity is left, what a row is
      * asked for — is taken from it once. So a path nobody demanded is a path this has no position
      * for, whoever asks and whenever.
+     *
+     * <p>{@code machines} is where each declaration this opens borrows what somebody has already
+     * made of it. A capability and not a part of the reading: handed to every reading this walk
+     * opens, kept by nothing the walk answers with, and kept here for the readers of those same
+     * declarations that come after the walk ({@link #machines}).
      */
-    public static InputDomain of(List<Parameter> parameters, Symbols symbols,
-                                 ReadingPolicy policy, InputDemand demand) {
+    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
+                                 ReadingPolicy policy, InputDemand demand,
+                                 DeclarationReadings machines) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
@@ -246,15 +306,15 @@ public final class InputDomain {
                 read.putIfAbsent(parameter.binding(), parameter.name());
             }
             TermPath at = TermPath.of(parameter.name());
-            roots.add(new RuleRoot(at, parameter.type()));
-            PlacedRules rules = PlacedRules.of(at, parameter.type(), symbols, policy);
+            roots.add(new RuleRoot(at, parameter.type(), new RootOpening.Taken()));
+            PlacedRules rules = PlacedRules.of(at, parameter.type(), source, policy, machines);
             account.from(rules);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
             // twice, place its rules twice, and record a second answer where the ledger of what was
             // handed on keeps one — so a reading assembled from replays would depend on how many
             // demands ran through it.
-            walk(at, parameter.type(), ExpansionTrace.NONE, symbols, policy, rules, found, roots,
+            walk(at, parameter.type(), ExpansionTrace.NONE, source, policy, rules, found, roots,
                     java.util.Set.of(), handoffs, observed, account,
                     Reach.enumerating(demand.under(at)));
         }
@@ -265,9 +325,13 @@ public final class InputDomain {
         List<Position> settled = found.stream()
                 .map(each -> shortOfHandedOnRules(each, handoffs.unresolvedAt(each.path())))
                 .toList();
-        return settled.isEmpty() ? NONE
-                : new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
-                        account.placed(), account.clauses());
+        // Whatever the walk found, including nothing. A behavior declaring no parameters has an
+        // input with no positions in it, and that is a reading that was made rather than one that
+        // was not: it holds the parameters it was given, the policy it was read under and the names
+        // it reached. Answered with a value standing for no reading at all, an input nobody could
+        // read would be the same value as an input there was nothing to read.
+        return new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
+                account.placed(), account.clauses(), observed.cases(), machines);
     }
 
     /**
@@ -298,31 +362,51 @@ public final class InputDomain {
     }
 
     /**
-     * The same, of a behavior and the implementation that binds its parameters.
+     * The same, of a declaration and the implementation that binds its parameters.
      *
-     * <p>The one place the three are put side by side: the declaration says what the parameters are
-     * called, the signature says what they hold, and the implementation says which binding a body's
-     * reads of one carry. Paired here rather than by every caller that has some of them.
+     * <p>What each parameter is called and what it holds arrive as one thing, from the walk that
+     * admitted them. What is put beside them here is the implementation: which binding a body's
+     * reads of a parameter carry.
      *
-     * @param fn the implementation, or null where nothing implements this behavior — an injected
-     *           behavior has positions and no body to read them in
+     * @param arriving which binder each declared input arrives in, or empty where nothing
+     *                 implements this behavior — an injected behavior has positions and no body to
+     *                 read them in
      */
-    public static InputDomain of(Hir.SpecBehavior behavior, Hir.FnDef fn, Sig sig,
-                                 Symbols symbols, ReadingPolicy policy) {
-        return of(behavior, fn, sig, symbols, policy, InputDemand.NONE);
+    public static InputDomain of(DeclaredSig declared,
+                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
+                                 RuleReadingSource source, ReadingPolicy policy,
+                                 DeclarationReadings machines) {
+        return of(declared, arriving, source, policy, InputDemand.NONE, machines);
     }
 
-    /** The same, closed over the finite paths this behavior's measurement names as well. */
-    public static InputDomain of(Hir.SpecBehavior behavior, Hir.FnDef fn, Sig sig,
-                                 Symbols symbols, ReadingPolicy policy, InputDemand demand) {
-        List<Parameter> parameters = new ArrayList<>();
-        for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            BindingId binding = fn != null && i < fn.params().size()
-                    ? fn.params().get(i).binder().binding() : null;
-            parameters.add(new Parameter(behavior.params().get(i).name(), binding,
-                    sig.inputTypes().get(i)));
+    /**
+     * The same, asking {@code machines} first.
+     *
+     * <p>{@code arriving} says which binder each declared input arrives in, where something
+     * implements the behavior. It is asked of {@link SpecImplementation} and not measured off the
+     * front of the implementation's parameter list: a behavior takes the behaviors it depends on
+     * beside its inputs, so the two lists are not the same length and where one stops is that
+     * reading's to say. Empty where nothing implements the behavior, which has the positions all the
+     * same and nothing to read them through.
+     *
+     * <p>That reading is a comparison and this one is not. A binder may be missing, or stand where
+     * the declaration asks for nothing, which is why {@code arriving} says at which position each
+     * one landed; the declaration's own parameters and their types were never two things to line up.
+     */
+    public static InputDomain of(DeclaredSig declared,
+                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
+                                 RuleReadingSource source, ReadingPolicy policy, InputDemand demand,
+                                 DeclarationReadings machines) {
+        Map<Integer, BindingId> bindings = new LinkedHashMap<>();
+        for (SpecImplementation.ParameterBinding.AnInput input : arriving) {
+            bindings.put(input.at(), input.written().binder().binding());
         }
-        return of(parameters, symbols, policy, demand);
+        List<Parameter> parameters = new ArrayList<>();
+        int at = 0;
+        for (DeclaredSig.Input input : declared.inputs()) {
+            parameters.add(new Parameter(input.name(), bindings.get(at++), input.type()));
+        }
+        return of(parameters, source, policy, demand, machines);
     }
 
     /**
@@ -333,14 +417,59 @@ public final class InputDomain {
      * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
      * that used it would find every claim and every comparison naming nothing.
      */
-    public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
+    public static InputDomain of(DeclaredSig declared, RuleReadingSource source,
+                                 ReadingPolicy policy, DeclarationReadings machines) {
+        return of(declared, List.of(), source, policy, machines);
+    }
+
+    /** The same, reading for itself. */
+    public static InputDomain of(DeclaredSig declared, RuleReadingSource source,
                                  ReadingPolicy policy) {
-        return of(behavior, null, sig, symbols, policy);
+        return of(declared, List.of(), source, policy, DeclarationReadings.NONE);
+    }
+
+    /** The same, of an input nothing reads a body against, reading for itself. */
+    public static InputDomain of(DeclaredSig declared,
+                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
+                                 RuleReadingSource source, ReadingPolicy policy) {
+        return of(declared, arriving, source, policy, InputDemand.NONE,
+                DeclarationReadings.NONE);
+    }
+
+    /** The same, closed over the finite paths this behavior's measurement names, reading for
+     *  itself. */
+    public static InputDomain of(DeclaredSig declared,
+                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
+                                 RuleReadingSource source, ReadingPolicy policy,
+                                 InputDemand demand) {
+        return of(declared, arriving, source, policy, demand, DeclarationReadings.NONE);
     }
 
     /** The positions, in the order they were read. */
     public List<Position> positions() {
         return positions;
+    }
+
+    /**
+     * What the behavior takes, in the order it declares them.
+     *
+     * <p>What this reading was made from, so that a reader needing the parameters takes the ones it
+     * was read at rather than assembling its own from a signature — two lists of what one behavior
+     * takes are two chances to disagree about which position a row's value goes to.
+     */
+    public List<Parameter> parameters() {
+        return parameters;
+    }
+
+    /** How the names in it are read, which is the policy this reading was made under. */
+    public ReadingPolicy policy() {
+        return policy;
+    }
+
+    /** Where this reading borrowed what had already been made of the declarations it read, for a
+     *  reader of those same declarations that comes after it. */
+    public DeclarationReadings machines() {
+        return machines;
     }
 
     /**
@@ -361,7 +490,8 @@ public final class InputDomain {
     }
 
     /**
-     * The value a rule naming {@code path} would be read of, or null where this reading has none.
+     * The address a rule naming {@code path} would write it at, or null where this reading has no
+     * value whose rules can name it.
      *
      * <p>Asked here and not worked out from how the path is spelled. Which value's rules reach which
      * positions is what {@link RuleRoot} settles, and a caller building one from the head of a path
@@ -371,11 +501,20 @@ public final class InputDomain {
      * <p>The value the path is under and not the innermost one it passes through. A rule written in
      * a behavior names a position from the parameter, so the parameter is what it is read of; a rule
      * of a case is written in the case and reaches this by naming nothing above it.
+     *
+     * <p><b>The name comes back with the value, because it is why that value was chosen.</b> A root
+     * is one of these only where its rules can name the place, so the name is already worked out
+     * when the answer is made. Handed back as the root alone, a caller writes the address itself
+     * and asks the same question again — and gets a "no name" answer for a root chosen because it
+     * had one.
      */
-    public RuleRoot rootNaming(TermPath path) {
+    public RuleAddress rootNaming(TermPath path) {
         for (RuleRoot root : roots) {
-            if (root.at().equals(TermPath.of(path.head())) && path.fieldKeyUnder(root.at()) != null) {
-                return root;
+            if (root.at().equals(TermPath.of(path.head()))) {
+                RuleAddress address = RuleAddress.of(root.at(), path);
+                if (address != null) {
+                    return address;
+                }
             }
         }
         return null;
@@ -428,7 +567,7 @@ public final class InputDomain {
      * not told apart here, and a caller that has to tell them apart asks {@link #reach} what became
      * of each case.
      */
-    public List<TermPath> positionsNamed(TermPath root, String named) {
+    public List<TermPath> positionsNamed(TermPath root, RuleKey named) {
         return follow(root, named).reached();
     }
 
@@ -496,13 +635,12 @@ public final class InputDomain {
      * every pairing of their cases. Composed from the whole name at once, the pairing would be
      * something this had to work out rather than something it walks into.
      */
-    private Followed follow(TermPath root, String named) {
+    private Followed follow(TermPath root, RuleKey named) {
         List<PlacementOutcome> otherwise = new ArrayList<>();
         List<String> unnamed = new ArrayList<>();
         List<TermPath> frontier = List.of(root);
-        // The value's own name is at no step of its own, and a name of no steps is not a step
-        // called nothing.
-        for (String step : named.isEmpty() ? new String[0] : named.split("\\.")) {
+        // A name of no steps is the value itself, which is where the walk already is.
+        for (String step : named.steps()) {
             List<TermPath> next = new ArrayList<>();
             for (TermPath at : frontier) {
                 List<TermPath> across = reach.across(at, step);
@@ -530,7 +668,7 @@ public final class InputDomain {
                     next.add(under);
                     continue;
                 }
-                PlacementOutcome.Reason why = whyNothingAt(at, step);
+                PlacementOutcome.Reason why = whyNothingAt(at);
                 if (why != null) {
                     otherwise.add(new PlacementOutcome.Unresolved(why));
                 } else {
@@ -561,7 +699,7 @@ public final class InputDomain {
      * with the language about what may be written — which is not a limitation an author can be told
      * about, and not something to hand on as one.
      */
-    private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
+    private PlacementOutcome.Reason whyNothingAt(TermPath at) {
         Position position = byPath.get(at);
         if (position != null
                 && position.structure() instanceof StructuralInspection.Retained retained
@@ -574,56 +712,6 @@ public final class InputDomain {
     }
 
     /**
-     * The order one term is read off a row and written back on, or null where it has none.
-     *
-     * <p><b>The one answer, so that nothing derives it from an expression.</b> A rule is written
-     * beside operands, and the type of an operand is not the type of the position the rule is about:
-     * an operation the arithmetic rewrote into a form of two positions is compared as what it
-     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
-     * at both positions. Read off the comparison, every position of that rule was written back as a
-     * whole number and read off a row as one, and both directions agreed with each other and with
-     * nothing else (#1018).
-     *
-     * <p>Two questions, answered where each is known. What a term measures is the term's — a size is
-     * a whole number whatever it is taken of — and what the location holds is this reading's, which
-     * is why the two meet here rather than at whichever caller had both to hand.
-     *
-     * <p><b>A term under no position of this reading still has an order.</b> This reading stops
-     * where a path returns to a declaration already open on it ({@link ExpansionTrace}), and nothing
-     * stops a rule from naming what is under that. What a report is about and what a declaration
-     * says are two questions, and only the first of them stops there — so the type is followed down
-     * to wherever the rule named ({@link #declaredAt}) and the line is drawn.
-     *
-     * <p>The position first and the descent only where there is none. A position may stand under a
-     * narrowing, and what it holds there is what a row writes; walking the declaration again would
-     * answer with what the field was declared as before anything narrowed it.
-     */
-    public Carrier answeredOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).answered();
-    }
-
-    /**
-     * The order a value at {@code term}'s path is read off a row on, or null where nothing orders
-     * it.
-     *
-     * <p>The other end of the same term, and never the one above. What a term answers and what it is
-     * read off are two orders for every term that is what an operation answered and one order for
-     * every term that is not — so a caller handed a single carrier had whichever of the two the
-     * caller before it meant, and the day the two part is the day a row is decoded on a count the
-     * value is not written in (#1027).
-     */
-    public Carrier observedOn(NumericTerm term, Symbols symbols) {
-        return ordersOf(term, symbols).observed();
-    }
-
-    /** Both ends of one term, taken together from the one reading of where it sits. Read from the
-     *  subject and not from a position the term divides: what a term's orders follow from is what
-     *  stands where the number comes from. */
-    public TermOrders ordersOf(NumericTerm term, Symbols symbols) {
-        return term.ordersAt(typeAt(term.subjectPath(), symbols), symbols);
-    }
-
-    /**
      * What stands at {@code path} as this reading has it, or null where it reaches nothing there.
      *
      * <p>The position first and the declarations only where there is none, which is the one
@@ -633,9 +721,9 @@ public final class InputDomain {
      * what a term is measured on, and whether an operation may be taken of it — get the same answer
      * because there is one.
      */
-    public Type typeAt(TermPath path, Symbols symbols) {
+    public Type typeAt(TermPath path, RuleReadingSource source) {
         Position position = at(path);
-        return position != null ? position.type() : declaredAt(path, symbols);
+        return position != null ? position.type() : declaredAt(path, source);
     }
 
     /**
@@ -652,7 +740,7 @@ public final class InputDomain {
      * this and that walk disagreeing about what a path reaches — which is the shape of defect this
      * whole change is about, one level down.
      */
-    private Type declaredAt(TermPath path, Symbols symbols) {
+    private Type declaredAt(TermPath path, RuleReadingSource source) {
         Type here = null;
         for (Parameter parameter : parameters) {
             if (parameter.name().equals(path.head())) {
@@ -661,7 +749,7 @@ public final class InputDomain {
             }
         }
         for (TermPath.Step step : path.steps()) {
-            here = here == null ? null : under(here, step, symbols);
+            here = here == null ? null : under(here, step, source);
         }
         return here;
     }
@@ -677,8 +765,8 @@ public final class InputDomain {
      * naming nothing, and the border it draws went away. A fourth kind is a compile error here
      * rather than a fourth quiet absence.
      */
-    private static Type under(Type type, TermPath.Step step, Symbols symbols) {
-        TypeView view = TypeView.of(type, symbols);
+    private static Type under(Type type, TermPath.Step step, RuleReadingSource source) {
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.published());
         // Asked of the shape rather than through the proof a position is made with. What is under a
         // type is a question about the type, and a type nothing can be read at answers nothing here
         // rather than being refused as a position this compiler disagrees with itself about.
@@ -686,7 +774,8 @@ public final class InputDomain {
             return null;
         }
         StructuralInspection under =
-                StructuralInspection.of(shape, Distinctions.ofType(view, symbols));
+                StructuralInspection.of(shape,
+                        Distinctions.ofType(view, source.symbols(), source.published()));
         return switch (step) {
             // A field of a record, or a name a sum's cases all spread. The second is readable on a
             // value of the sum without opening a case, so the model does put something at it, and a
@@ -694,7 +783,7 @@ public final class InputDomain {
             // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
-                    : sharedFieldsOf(shape).get(field.name());
+                    : ReadableFields.of(shape).declaredFields().get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -718,6 +807,19 @@ public final class InputDomain {
     }
 
     /**
+     * This reading and what it says about its numbers, as one value.
+     *
+     * <p>The way a reader that uses both gets them. Which position a name stands at and what a
+     * number there is measured on are two questions such a reader asks together, and asked of two
+     * values it was handed separately they can be of two behaviors — a parameter spelled the same
+     * way in both is all it takes. So the pairing is made here, where the second is made from the
+     * first, and there is nowhere else to make one.
+     */
+    public InputReading reading(RuleReadingSource source) {
+        return new InputReading(this, quantities(source), source);
+    }
+
+    /**
      * The same input, asked about a quantity over several of its positions.
      *
      * <p>The relational half of what a reading of an input can say. A {@link Position} answers about
@@ -735,16 +837,31 @@ public final class InputDomain {
      * that built one per comparison would read every parameter of every behavior once per
      * comparison written about it. Built at the top of whatever is walking, and handed down.
      */
-    public Quantities quantities(Symbols symbols) {
-        Map<TermPath, PlacedRules> byRoot = new LinkedHashMap<>();
+    public Quantities quantities(RuleReadingSource source) {
+        Map<TermPath, OpenedRules> byRoot = new LinkedHashMap<>();
         for (RuleRoot root : roots) {
             // The first reading under a path stands, for the same reason the first reading of a
             // position does: two roots at one path would be one place answering differently
             // depending on which reader looked it up.
+            //
+            // And with the condition it was opened under, which is what says whose rows its rules
+            // are about. Read without it, the cases of a sum are rules about every row and refuse
+            // an input between them.
             byRoot.computeIfAbsent(root.at(),
-                    at -> PlacedRules.of(at, root.type(), symbols, policy));
+                    at -> new OpenedRules(
+                            PlacedRules.of(at, root.type(), source, policy, machines),
+                            root.opening()));
         }
-        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, symbols);
+        // Where a term's subject stands, handed over already answered. What comes back asks a
+        // position first and the declarations under one the reading stopped above, which is the one
+        // resolution of it — worked out again from the positions this hands over, a rule about a
+        // name every case of a sum spreads would be read as naming nothing.
+        // The world this reading was made in, handed on whole. What a quantity reaches below is a
+        // declaration this reading already reached, so it is read from the same rules under the
+        // same budget and borrows what this reading's own made of it.
+        return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
+                path -> typeAt(path, source),
+                source == null ? null : RuleReadingContext.of(source, policy, machines));
     }
 
     /**
@@ -823,11 +940,11 @@ public final class InputDomain {
         java.util.Set<RulesLeftUnread> left =
                 new java.util.LinkedHashSet<>(read.rulesLeftUnread());
         left.add(new RulesLeftUnread.Handoff(why));
-        return new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
-                read.ownEnds(), read.narrowedEnds(), read.rangeLeft(),
+        return new ReadPosition(read.path(), read.view(), read.bounds(),
                 read.nothingExists(), read.projection(),
-                read.declared(), read.reading(), read.obligations(), read.completeness(),
-                read.valuesUnread(), read.rulesWithoutALine(), read.unansweredQuestions(),
+                read.declared(), read.reading(), read.obligations(), read.admitted(),
+                read.rulesWithoutALine(), read.endsLeftOpen(),
+                read.unansweredQuestions(),
                 left, read.structure());
     }
 
@@ -889,7 +1006,7 @@ public final class InputDomain {
      * it — and a reader that gives a position up in favour of its fields finds them read either
      * way.
      */
-    private static void walk(TermPath path, Type type, ExpansionTrace ancestry, Symbols symbols,
+    private static void walk(TermPath path, Type type, ExpansionTrace ancestry, RuleReadingSource source,
                              ReadingPolicy policy, PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
                              RuleHandoffs handoffs, NameReach.Observed observed,
@@ -897,11 +1014,13 @@ public final class InputDomain {
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
-        ReadablePosition input = ReadablePosition.of(TypeView.of(type, symbols));
+        ReadablePosition input = ReadablePosition.of(
+                TypeView.of(type, source.inners(), source.symbols(), source.published()));
         // What the position's type states, read once and handed to both readings of it. What a sum's
         // cases are decides which classes the position has and which branches stand under it, and a
         // second reading of that here would be the two disagreeing about which cases there are.
-        List<Case> declared = Distinctions.ofType(input.view(), symbols);
+        List<Case> declared =
+                Distinctions.ofType(input.view(), source.symbols(), source.published());
         // Asked of the occurrence and answered before anything under it is opened, never before the
         // occurrence itself is read. What stands here is read whichever time round it is — the
         // classes of a sum, the ends its rules put on it — and what is refused is unfolding the
@@ -916,7 +1035,7 @@ public final class InputDomain {
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
                 : StructuralInspection.of(input.shape(), declared);
-        Position here = read(input, path, symbols, placed, structure, declared);
+        Position here = read(input, path, source, policy, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
         // and whose rules reach the end of it — and what it reports is the end. Published all the
@@ -947,7 +1066,7 @@ public final class InputDomain {
                     if (!on.enters()) {
                         continue;
                     }
-                    walk(path.then(field.getKey()), field.getValue(), deeper, symbols, policy,
+                    walk(path.then(field.getKey()), field.getValue(), deeper, source, policy,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
                             placed, found, roots, java.util.Set.of(), handoffs, observed, account,
@@ -955,7 +1074,7 @@ public final class InputDomain {
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, sharedAt(input), deeper, symbols,
+                    under(retained.continuation(), here, path, input, deeper, source,
                             policy, placed, found, roots, visited, handoffs, observed, account,
                             reach, already != null);
         }
@@ -965,28 +1084,17 @@ public final class InputDomain {
      * The names readable at this position that a value of one of its cases carries, which is empty
      * for every position but a sum whose cases all spread one declaration.
      *
-     * <p>Read off {@link Shape.Sum#common}, which is the same answer that makes those names readable
-     * on a value of the sum at all. Taken from what a case declares instead, a field one case has
-     * and another has not would be a name this said could be written at the sum, and the reading
-     * would reach positions the language refuses to name.
+     * <p>Asked of {@link ReadableFields}, which is what makes those names readable on a value of the
+     * sum at all. Taken from what a case declares instead, a field one case has and another has not
+     * would be a name this said could be written at the sum, and the reading would reach positions
+     * the language refuses to name.
+     *
+     * <p>Asked where the branches are and nowhere else, so a shape whose readable names are its own
+     * positions is not a case this has to hold an answer for: a name crosses a narrowing or it is
+     * reached without one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return List.copyOf(sharedFieldsOf(input.shape()).keySet());
-    }
-
-    /**
-     * The names a value of this shape carries that are readable on it without opening a case, and
-     * what stands at each.
-     *
-     * <p>The one reading of a sum's shared part in this walk. What makes a name readable on a value
-     * of the sum is the declarations its cases all spread, and every question here that turns on
-     * that name — which names cross a narrowing, and what the model puts at one — is asked of this.
-     * Empty for every other shape, whose names are the positions under it.
-     */
-    private static Map<String, Type> sharedFieldsOf(Shape shape) {
-        return shape instanceof Shape.Sum sum
-                && sum.common() instanceof Shape.CommonProduct.Shared shared
-                ? shared.fields() : Map.of();
+        return List.copyOf(ReadableFields.of(input.shape()).declaredFields().keySet());
     }
 
     /**
@@ -1009,8 +1117,8 @@ public final class InputDomain {
      * some other reason is not one anybody handed anything to.
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
-                              TermPath path, List<String> shared, ExpansionTrace ancestry,
-                              Symbols symbols, ReadingPolicy policy,
+                              TermPath path, ReadablePosition input, ExpansionTrace ancestry,
+                              RuleReadingSource source, ReadingPolicy policy,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
                               NameReach.Observed observed, Gathered account,
@@ -1036,31 +1144,46 @@ public final class InputDomain {
                 // Nothing crosses into what a sequence holds: what a clause of the value out here
                 // says is written about the sequence, and an element is a value with a declaration
                 // of its own.
-                takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, symbols,
+                takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, source,
                         policy, found, roots, java.util.Set.of(), handoffs, observed, null,
-                        account, on);
+                        new RootOpening.Inside(placed.root(), path), account, on,
+                        placed.machines());
             }
             case StructuralInspection.Continuation.Branches branches -> {
+                // Asked where the branches are, which is the only place a name can cross one.
+                List<String> shared = sharedAt(input);
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {
+                    // Said of every case, including the ones this walk turns back at, because what
+                    // a reader of a sum asks is answered over the whole list of them: a sum has a
+                    // value wherever any case does.
                     if (!reach.into(path.refine(branch.refinement()), stopped).enters()) {
+                        // How far the walk goes, and not anything the model says about this case.
+                        observed.became(path, branch.refinement(), new CaseOutcome.NotWalked());
                         continue;
                     }
                     // A branch that is the whole of a value puts no position anywhere, and one the
                     // rules leave nothing at has no row to be written at it. Neither is a place the
                     // rules were passed to, so neither is owed a reading.
+                    //
+                    // Whether the rules leave the case is asked first, because it is the question
+                    // the other one presupposes: that naming a case builds it says there is nothing
+                    // under it to read, and says nothing about whether a value may stand there at
+                    // all. Asked the other way round, a case the rules refuse comes back standing
+                    // on its own wherever it holds nothing — which is a case with no value being
+                    // recorded as the plainest kind of value there is, and read as one by everything
+                    // that asks whether a sum has a value.
+                    if (!owed(here, branch.refinement())) {
+                        observed.became(path, branch.refinement(),
+                                new CaseOutcome.RefusedByTheRules());
+                        continue;
+                    }
                     if (branch.under() == null) {
                         // A name has nowhere to stand under a case that holds nothing, which is not
                         // a shortfall and is not the answer below. Said apart from it so that a
                         // reader of what became of this case reads which it was.
-                        observed.didNotEnter(path, branch.refinement(),
-                                new NameReach.NotEntered.NothingStandsUnderIt());
-                        continue;
-                    }
-                    if (!owed(here, branch.refinement())) {
-                        observed.didNotEnter(path, branch.refinement(),
-                                new NameReach.NotEntered.TheRulesLeaveNothingAtIt());
+                        observed.became(path, branch.refinement(), new CaseOutcome.StandsAlone());
                         continue;
                     }
                     standing.add(branch);
@@ -1072,16 +1195,21 @@ public final class InputDomain {
                 for (StructuralInspection.Branch branch : standing) {
                     int before = found.size();
                     // What the value above calls the positions under this case, where it calls them
-                    // anything: the names its cases share and nothing else. Handed down as the
-                    // reading of the case is opened, so a clause written above is read at the
-                    // position it is about by the one reading of that position.
-                    PlacedRules.Reaching crossing = shared.isEmpty() ? null
-                            : new PlacedRules.Reaching(placed, path, branch.refinement(),
-                                    new java.util.LinkedHashSet<>(shared));
-                    walkBranch(branch, placed.root(), path, ancestry, symbols, policy, found, roots,
-                            visited, handoffs, observed, crossing, account,
-                            reach.into(path.refine(branch.refinement()), stopped), stopped);
-                    crossed(observed, path, shared, branch.refinement(), found, before, crossing);
+                    // anything: the names its cases share and nothing else.
+                    SharedNames crossing = new SharedNames(path, branch.refinement(),
+                            new java.util.LinkedHashSet<>(shared));
+                    // Handed down as the reading of the case is opened, so a clause written above
+                    // is read at the position it is about by the one reading of that position.
+                    // Nothing to hand down where nothing crosses, which is not the same as the case
+                    // standing under no narrowing — that is what the opening beside this says.
+                    PlacedRules.Reaching reaching =
+                            shared.isEmpty() ? null : new PlacedRules.Reaching(placed, crossing);
+                    walkBranch(branch, placed.root(), path, ancestry, source, policy, found, roots,
+                            visited, handoffs, observed, reaching,
+                            new RootOpening.Refined(placed.root(), crossing), account,
+                            reach.into(path.refine(branch.refinement()), stopped),
+                            placed.machines());
+                    crossed(observed, crossing, found, before);
                 }
             }
         }
@@ -1098,15 +1226,15 @@ public final class InputDomain {
      * @param from  where the walk's positions began before this branch was walked, so that what is
      *              looked through is what this branch put there
      */
-    private static void crossed(NameReach.Observed observed, TermPath at, List<String> shared,
-                                Refinement branch, List<Position> found, int from,
-                                PlacedRules.Reaching crossing) {
-        if (shared.isEmpty()) {
+    private static void crossed(NameReach.Observed observed, SharedNames crossing,
+                                List<Position> found, int from) {
+        if (crossing.names().isEmpty()) {
             return;
         }
-        TermPath narrowed = at.refine(branch);
+        TermPath at = crossing.sum();
+        TermPath narrowed = at.refine(crossing.branch());
         List<Position> made = found.subList(from, found.size());
-        for (String field : shared) {
+        for (String field : crossing.names()) {
             // What the value above calls this position, asked of the one thing that answers it —
             // which is what the reading of the position asks when a clause of that value is read
             // here. Worked out again, this would be a second statement of one relation, and a break
@@ -1117,7 +1245,7 @@ public final class InputDomain {
                     .filter(each -> at.then(field).equals(crossing.outerPathOf(each)))
                     .findFirst().orElse(null);
             if (stands != null) {
-                observed.crosses(at, field, branch, stands);
+                observed.crosses(at, field, crossing.branch(), stands);
                 continue;
             }
             // Nowhere under this case, and the reading of the case is what says why. Asked of the
@@ -1125,7 +1253,7 @@ public final class InputDomain {
             // silence would be read as the model putting no such field here.
             BlockReason.AboutThePosition why = whereItStopped(made, narrowed);
             if (why != null) {
-                observed.doesNotStand(at, field, branch, why);
+                observed.doesNotStand(at, field, crossing.branch(), why);
             }
         }
     }
@@ -1161,22 +1289,30 @@ public final class InputDomain {
      * evidence that something was read (#1072).
      */
     private static void takeTheRulesOver(TermPath by, TermPath at, TermPath opened, Type type,
-                                         ExpansionTrace ancestry, Symbols symbols,
+                                         ExpansionTrace ancestry, RuleReadingSource source,
                                          ReadingPolicy policy,
                                          List<Position> found, List<RuleRoot> roots,
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
-                                         PlacedRules.Reaching crossing,
-                                         Gathered account, Reach reach) {
-        roots.add(new RuleRoot(opened, type));
+                                         PlacedRules.Reaching crossing, RootOpening opening,
+                                         Gathered account, Reach reach,
+                                         DeclarationReadings machines) {
+        roots.add(new RuleRoot(opened, type, opening));
+        // Said where a reading is actually opened, so that a case recorded as opened is one there
+        // is somewhere to ask about. Said where the branch was chosen instead, a descent that turns
+        // back at a value it has already been at would leave a case pointing at a reading nobody
+        // made.
+        if (opening instanceof RootOpening.Refined it) {
+            observed.became(it.crossing().sum(), it.crossing().branch(), new CaseOutcome.Opened());
+        }
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
         }
-        PlacedRules rules = PlacedRules.of(opened, type, symbols, policy, crossing);
+        PlacedRules rules = PlacedRules.of(opened, type, source, policy, crossing, machines);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.from(rules);
-        walk(opened, type, ancestry, symbols, policy, rules, found, roots, visited,
+        walk(opened, type, ancestry, source, policy, rules, found, roots, visited,
                 handoffs, observed, account, reach);
     }
 
@@ -1193,11 +1329,12 @@ public final class InputDomain {
      * root begins here and the reading of the sum's own value has nothing to say below it.
      */
     private static void walkBranch(StructuralInspection.Branch branch, TermPath by, TermPath path,
-                                   ExpansionTrace ancestry, Symbols symbols, ReadingPolicy policy,
+                                   ExpansionTrace ancestry, RuleReadingSource source, ReadingPolicy policy,
                                    List<Position> found, List<RuleRoot> roots,
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
-                                   Gathered account, Reach reach, boolean stopped) {
+                                   RootOpening opening,
+                                   Gathered account, Reach reach, DeclarationReadings machines) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -1214,13 +1351,16 @@ public final class InputDomain {
         // this walk already reported; saying they were read here as well would be one reading
         // discharging an obligation raised somewhere it never went.
         if (visited.contains(branch.under())) {
+            // Where the descent stops, and nothing under this case was read. What is known about it
+            // is nothing, which is not what the rules leaving nothing at it would be.
+            observed.became(path, branch.refinement(), new CaseOutcome.NotWalked());
             return;
         }
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
-                symbols, policy, found, roots, deeper, handoffs, observed, crossing, account,
-                reach);
+                source, policy, found, roots, deeper, handoffs, observed, crossing, opening,
+                account, reach, machines);
     }
 
     /**
@@ -1239,115 +1379,101 @@ public final class InputDomain {
         return false;
     }
 
-    /** The position's own value, as the reading of one coordinate names it. */
-    private static final souther.compiler.check.FieldDomains.CoordinateKind ITS_OWN_VALUE =
-            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue();
-
-    /** The number {@code operation} answers of what stands at a position. */
-    private static souther.compiler.check.FieldDomains.CoordinateKind answeredBy(
-            ValueName operation) {
-        return new souther.compiler.check.FieldDomains.CoordinateKind
-                .OfWhatAnOperationAnswers(operation);
-    }
-
     /**
      * The reading of one position.
      *
-     * <p>Which number it is measured at and what its rules leave that number are asked together
-     * because they are one reading: whether a rule bounds the length of a string is how it is known
-     * that the length is the number being measured.
+     * <p>Which numbers it has and what its rules leave each of them are asked together because they
+     * are one reading: the numbers come off the type, and every end an author placed is placed on
+     * one of them.
      */
-    private static Position read(ReadablePosition input, TermPath path, Symbols symbols,
+    private static Position read(ReadablePosition input, TermPath path, RuleReadingSource source,
+                                 ReadingPolicy policy,
                                  PlacedRules placed, StructuralInspection structure,
                                  List<Case> declared) {
         TypeView view = input.view();
         Type type = view.declared();
-        Carrier carried = Carrier.ofValue(type, symbols);
-        ValueName.Stdlib taken = NumericMeasures.takenOf(type, symbols);
+        Carrier carried =
+                Carrier.ofValue(type, source.inners(), source.symbols(), source.kinds(),
+                        source.published());
+        ValueName.Stdlib taken = NumericMeasures.takenOf(type, source.inners());
         // The ends the value this sits in places on this position, which its own type says nothing
         // about. Read beside the type's own rules and not after them: a clause naming one coordinate
         // and a constant places an end wherever it is written, so where the rule was written is not
         // what decides whether there is a line here (ADR-0090).
         List<FieldDomains.Placed> stated = placed.placedAt(path);
-        // What the rules are about, and only then what the type could carry. A position has one
-        // axis, and a `String` is the one type that can be measured two ways — its own order, and
-        // the length of it — so which of them the model wrote about is what decides. Read off the
-        // carrier first, every rule anybody ever wrote about the length of a string would have
-        // become a rule about the string.
-        DeclaredBounds.Bounds ofType = taken == null ? null
-                : DeclaredBounds.of(type, symbols, Carrier.WHOLE, taken);
-        DeclaredBounds.Bounds valueOfType = carried == null ? null
-                : DeclaredBounds.of(type, symbols, carried, null);
-        // Rules about both coordinates and nothing here to choose between. Said before they are
-        // dropped and from the list that still holds them, because this is the one place that knows
-        // which rules they were — recovered afterwards from a position with no axis, the finding
-        // could name the position and nothing else, which is what it is for.
-        List<RuleWithoutALine> competing = List.of();
-        if (undecidable(ofType, valueOfType, stated, taken, carried)) {
-            competing = competingCoordinates(stated, path, type, symbols);
-            stated = List.of();
-        }
-        boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
-        NumericTerm.FromOnePosition term = bySize
-                ? NumericTerm.TakenOf.of(taken, path, type, symbols)
-                : new NumericTerm.ValueOf(path);
-        if (term == null) {
-            throw new IllegalStateException(
-                    "this reading decided " + path + " is measured by " + taken
-                            + ", which is not what its type is measured by: " + Type.show(type));
-        }
-        DeclaredBounds.Bounds own = bySize
-                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
-                : carried == null ? null
-                        : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
+        // Where the reading that turns this type's clauses into constraints put an end on the
+        // value. Read for the check below and for nothing else: what bounds the position is the
+        // reading of the clauses as they are written ({@code boundsOn}), and a second answer about
+        // the same clauses is one this would have to choose between rather than intersect.
+        List<FieldDomains.Placed> constrained =
+                DeclaredCoordinates.placedOnItsOwnValue(type, source, policy, placed.machines());
+        // And the ends the value's own conjuncts state that no comparison says: a rule about the
+        // strings places no comparison, and a conjunct that placed no end can still move one.
+        List<FieldDomains.Placed> movedHere = placed.ownEndsAt(path);
+        RulesWithNoLine.Gathered found = new RulesWithNoLine.Gathered();
+        // The numbers this position has, which its type settles and no rule votes on.
+        List<NumberAt.OfWhatNumber> kinds = numbersOf(taken);
+        // And every end placed here is on one of them, whichever reading found it. Nothing is filed
+        // out: an end names the number it was placed on, and each of the bounds below takes the
+        // ends that name its own.
+        everyEndIsOnANumberOfThisPosition(kinds, constrained, path);
+        everyEndIsOnANumberOfThisPosition(kinds, movedHere, path);
+        everyEndIsOnANumberOfThisPosition(kinds, stated, path);
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
-        boolean nothingExists = placed.bounds().infeasible();
+        boolean nothingExists = placed.bounds().infeasible(placed.answers());
         // Which values the position may hold, and how much of what its rules say was read. The same
         // reading the numbers come from and a separate question of it: a rule can name the values a
         // position holds without stating where they stop, and one that states where they stop
         // without naming any of them.
-        AdmissibleSet admitted = placed.admits(path);
-        // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
-        // them and no other: a cap on a field says nothing about how long the string beside it is.
-        //
-        // Exhaustive, with no `default`. Whether a clause of the record reaches a number is asked
-        // per kind of number, so one added is a question put here rather than an arm that takes
-        // whichever answer it was not named in.
-        NarrowedBounds projected = switch (term) {
-            case NumericTerm.ValueOf _ -> placed.at(path);
-            case NumericTerm.TakenOf _ -> NarrowedBounds.NOTHING;
-        };
-        // Two questions of one pair of readings, and they do not have one answer. What the term's
-        // values can be is every rule about it intersected; where it is divided is only where its
-        // own type draws a line, because a clause relating two fields is not a partition of one.
-        NumericDomain.Bounds admissible = nothingExists ? null
-                : TypeBounds.admissible(own, projected.bounds(), term);
-        List<RuleWithoutALine> withoutALine =
-                rulesWithoutALineAt(placed, path, type, symbols, competing);
+        AdmissibleSet admitted =
+                placed.admits(path, souther.compiler.check.TypeOps.base(type, source.inners()));
+        List<PositionBounds> bounds = new ArrayList<>();
+        for (NumberAt.OfWhatNumber kind : kinds) {
+            bounds.add(boundsOn(kind, path, type, taken, source, carried, placed,
+                    movedHere, stated, nothingExists));
+        }
+        rulesWithoutALineAt(placed, path, type, source, found);
+        // Everything left open about the rules of this position: what the accounting of the
+        // declaration's clauses could not classify, and what this walk itself could not. The ones
+        // nothing classified go into the gathering beside the findings, so that what the position's
+        // rules came to is one value and a caller asking whether a reading stopped here has one
+        // place to ask.
+        List<StandingQuestion> exact = standingAt(placed, path, found);
+        RulesWithNoLine noLine = found.found();
+        List<RuleWithoutALine> withoutALine = noLine.reported();
+        List<StandingQuestion> open = new ArrayList<>(noLine.unclassified());
+        open.addAll(exact);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, symbols,
-                withoutALine,
-                nothingExists, type);
-        return new ReadPosition(path, view, term, admissible, own, projected,
-                // Where the position actually stops, which the ends as written do not say: a clause
-                // placing one at 0 beside a clause that takes the 0 away leaves a position whose
-                // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE), nothingExists,
+        // What the position's own distinctions are crossed with is what stands there, which is the
+        // number those distinctions divide. A count taken of the position runs on another order,
+        // and a case crossed with a range of it would be kept or refused by where a length falls.
+        ReadingResult reading = crossed(declared, view,
+                whatIsLeft(bounds, new NumericTerm.ValueOf(path)),
+                admitted, source, noLine, nothingExists, type);
+        return new ReadPosition(path, view, bounds, nothingExists,
                 placed.projection(path), declared, reading,
-                ObligationDomain.of(reading, declared), admitted.completeness(),
-                // What stopped the reading of which values stand here. A rule that went unread is
-                // said before the cost of the set they leave between them: both are true where both
-                // happened, and the first names something an author can rewrite while the second
-                // names no rule at all. Neither may be dropped in silence, which is why the second
-                // is asked here rather than left to `whyPartial`, whose answer is about rules.
-                valuesUnreadAt(admitted),
+                ObligationDomain.of(reading, declared), admitted,
                 withoutALine,
-                // What the rules of this position raise that nothing answered. Asked of the
-                // accounting rather than read off the completeness beside it: one reading being
-                // short of a position's rules is that reading's business, and a rule another
-                // reading took in is not a rule left unread.
-                standingAt(placed, path, type, symbols),
+                // And which of those rules the reading of ends is still owed an end of. The
+                // finding above says what became of the rule here; this says the reading did not
+                // run out, which nothing else at this position says once the walk that classifies
+                // has stopped at the choice.
+                //
+                // Every one of them, whether or not a choice is answerable for it: which of the
+                // two the finding above was written for is a question about what an author can do,
+                // and the measure is asking whether the line was derived.
+                placed.endsLeftOpenAt(path).stream()
+                        .map(each -> new EndLeftOpen(each.rule(), each.byChoice() != null))
+                        .toList(),
+                // What the rules of this position leave open. Asked of the accounting rather than
+                // read off the completeness beside it: one reading being short of a position's
+                // rules is that reading's business, and a rule another reading took in is not a
+                // rule left unread.
+                //
+                // And beside those, the rules nothing worked out the questions of, from both
+                // readings that can leave one.
+                open,
                 // And whether the rules were reached at all, asked of the gathering that knows.
                 // No question is raised where nothing was seen, so an empty list beside it would
                 // say every rule was accounted for. Read off the reading's own reason instead, a
@@ -1363,28 +1489,6 @@ public final class InputDomain {
     }
 
     /**
-     * What stopped the reading of which values a position holds, or null where nothing did.
-     *
-     * <p>Two ways of being short and one answer, because a position carries one. A rule this
-     * reading could not use is said first: it names something written, and what a reader does about
-     * it is look at that rule. The cost of the set the rules leave between them is said where no
-     * rule went unread, and it names none — two rules cheap on their own can have an answer that is
-     * not, so there is nothing here to send anybody to.
-     *
-     * <p>Asked here rather than left to {@link AdmissibleSet#whyPartial}, which answers about
-     * rules. A widening that reached this by no arm of that question would be one a position was
-     * given in silence, and every reader downstream would read the set as what the rules leave.
-     */
-    private static BlockReason.ReadingStopReason valuesUnreadAt(AdmissibleSet admitted) {
-        if (admitted.whyPartial() != null) {
-            return Crossing.stopped(admitted.whyPartial());
-        }
-        // And the same answer where it arrived as a qualification of the set rather than as a rule
-        // left standing, which is how a reading of two declarations records it.
-        return admitted.exactValuesTooCostly() ? new BlockReason.ExactValuesTooCostly() : null;
-    }
-
-    /**
      * What the position's declarations leave standing.
      *
      * <p>The type's own distinctions crossed with the rules, and where the type states none, the
@@ -1397,23 +1501,25 @@ public final class InputDomain {
      */
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
-                                         Symbols symbols,
-                                         List<RuleWithoutALine> withoutALine,
+                                         RuleReadingSource source,
+                                         RulesWithNoLine found,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason.RuleReadingStopped here = stoppedOn(withoutALine);
+        BlockReason.RuleReadingStopped here = found.aReadingThatStopped();
         if (!declared.isEmpty()) {
-            return Crossing.of(declared, view, admissible, admitted, symbols, here);
+            return Crossing.of(declared, view, admissible, admitted, source.inners(),
+                    source.symbols(),
+                    source.kinds(), source.published(), here);
         }
         // The values a rule named, where the type states no division. Not crossed with anything:
         // the reading that named them is the reading of the rules, and a value the rules single out
         // is one they admit. Nothing is read for a value whose own rules contradict — there is no
         // value of it for a rule to have named.
         List<Case> named = nothingExists ? List.of()
-                : Distinctions.ofValues(admitted.approximation(), type, symbols);
+                : Distinctions.ofValues(admitted.approximation(), type, source.inners());
         BlockReason.ReadingStopReason why = admitted.whyPartial() != null
                 ? Crossing.stopped(admitted.whyPartial()) : here;
         if (why != null) {
@@ -1425,80 +1531,140 @@ public final class InputDomain {
     }
 
     /**
-     * A rule at this position that this compiler got partway through, or null where there is none.
+     * The numbers a position of a type counted by {@code taken} has.
      *
-     * <p>What such a rule costs the reading is everything it would have said, so a position holding
-     * one has values this cannot claim are what the rules leave. That is what a caller does with
-     * this, and it is why the rules read from end to end are not here: a rule that placed no line
-     * because it relates two positions, or because its quantity is empty, was taken in whole and
-     * takes nothing back. Handed one of those, the reading called itself partial over a position
-     * nothing had been short of, and every claim about its cases came back unsettled because a rule
-     * went unread.
+     * <p><b>The type's answer, and not the rules'.</b> What stands at the position is one of them
+     * wherever the position is; the second is there where the type declares an operation that
+     * counts its values. A rule is free to write about some further number of the place — what an
+     * absolute value comes to, what two of its fields add up to — and none of those is a number the
+     * position has: a measure of one would divide values this place does not hold.
      *
-     * <p>The first, and the rest say the same thing. Any one of them costs the reading the same —
-     * the values are an upper bound and there is no more or less of that — and which rule to go and
-     * look at is the finding's to say, one per rule, where they are all named.
+     * <p>Which is a qualification and never a choice. Both numbers are the position's whatever the
+     * rules say about either, and a rule that placed an end on one of them has said which number it
+     * is about — so there is nothing here to pick between, and a reader picking would be taking a
+     * line the author can read away in favour of another.
+     *
+     * <p>What stands at the position comes first, so that a reader walking these meets the number
+     * every position has before the one only some do.
      */
-    private static BlockReason.RuleReadingStopped stoppedOn(List<RuleWithoutALine> rules) {
-        for (RuleWithoutALine each : rules) {
-            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                return stopped;
+    private static List<NumberAt.OfWhatNumber> numbersOf(ValueName.Stdlib taken) {
+        NumberAt.OfWhatNumber own = new NumberAt.OfWhatNumber.OfItsOwnValue();
+        return taken == null ? List.of(own)
+                : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken));
+    }
+
+    /** What the rules leave one of a position's numbers, or null where the position has no such
+     *  number. */
+    private static NumericDomain.Bounds whatIsLeft(List<PositionBounds> bounds,
+                                                   NumericTerm.FromOnePosition term) {
+        for (PositionBounds each : bounds) {
+            if (each.term().equals(term)) {
+                return each.admissible();
             }
         }
         return null;
     }
 
     /**
-     * Whether this position's one coordinate is the count taken of it rather than its value.
+     * What the rules leave one number of one position.
      *
-     * <p>The position's own type answers first and its answer stands. A rule reaching the position
-     * from the value it sits in states an end on a coordinate; it does not say which coordinate the
-     * position is measured at, and letting it say so takes an axis away — {@code data Name = String
-     * invariant value >= "m"} held in a record that bounds the length of it would stop being
-     * measured on its own order, and the line at `m` would go without anything saying it had.
+     * <p>Every answer here is about {@code kind} and about no other number of the place. What its
+     * conjuncts state, and what they moved that no comparison says — a rule about the strings at a
+     * position leaves them running between two places and orders nothing. Each list holds ends of
+     * every number, and each is asked for this one's; they are intersected, and every rule that put
+     * an end where it is kept.
      *
-     * <p>Where the type chose nothing, one of these rules may — and only one, which is what
-     * {@link #undecidable} has already refused.
+     * <p><b>One reading of the type's own clauses, and it is the one that reaches the statements
+     * inside them.</b> Reading each authored conjunct as one comparison answers about fewer of them
+     * — it makes nothing of a conjunction written under a denial, and nothing of
+     * {@code String.length(value) * 2 >= 4}, of a disequality that moves a floor or of an equality
+     * stating both ends — and it names its ends by the conjunct, because the statements are where
+     * it never went. Intersected with this one, its ends met these at the same value under a name
+     * of a different grain, and the model owed two rows for one line.
      */
-    private static boolean measuredHere(DeclaredBounds.Bounds ofType,
-                                        DeclaredBounds.Bounds valueOfType,
-                                        List<FieldDomains.Placed> stated, ValueName.Stdlib taken) {
-        if (stated(ofType)) {
-            return true;
+    private static PositionBounds boundsOn(NumberAt.OfWhatNumber kind, TermPath path, Type type,
+                                           ValueName.Stdlib taken,
+                                           RuleReadingSource source, Carrier carried,
+                                           PlacedRules placed,
+                                           List<FieldDomains.Placed> movedHere,
+                                           List<FieldDomains.Placed> stated,
+                                           boolean nothingExists) {
+        NumericTerm.FromOnePosition term = switch (kind) {
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _ ->
+                    NumericTerm.TakenOf.of(taken, path, type, source.inners(), source.symbols());
+        };
+        if (term == null) {
+            throw new IllegalStateException(
+                    "this reading has " + path + " counted by " + taken
+                            + ", which is not what its type is counted by: " + Type.show(type));
         }
-        if (stated(valueOfType)) {
-            return false;
-        }
-        return taken != null && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE));
+        Carrier on = carrierOn(kind, carried);
+        DeclaredBounds.Bounds own = on == null ? null
+                : DeclaredBounds.and(
+                        DeclaredBounds.placed(movedHere, kind, on),
+                        DeclaredBounds.placed(stated, kind, on));
+        // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
+        // them and no other: a cap on a field says nothing about how long the string beside it is.
+        //
+        // Exhaustive, with no `default`. Whether a clause of the record reaches a number is asked
+        // per kind of number, so one added is a question put here rather than an arm that takes
+        // whichever answer it was not named in.
+        NarrowedBounds projected = switch (term) {
+            case NumericTerm.ValueOf _ -> placed.at(path);
+            case NumericTerm.TakenOf _ -> NarrowedBounds.NOTHING;
+        };
+        return new PositionBounds(term,
+                // Two questions of one pair of readings, and they do not have one answer. What the
+                // term's values can be is every rule about it intersected; where it is divided is
+                // only where its own type draws a line, because a clause relating two fields is not
+                // a partition of one.
+                nothingExists ? null
+                        : TypeBounds.admissible(own == null ? null : own.range(),
+                                projected.bounds(), term),
+                own, projected,
+                // Where the number actually stops, which the ends as written do not say: a clause
+                // placing one at 0 beside a clause that takes the 0 away leaves a number whose
+                // first value is 1, and a line drawn at the 0 is drawn at no value of it.
+                placed.leftAt(path, kind));
     }
 
     /**
-     * One finding per rule dropped because the position's two coordinates are both spoken for.
+     * What the ends on that number are read on.
      *
-     * <p>Per rule and not per position. Both of them were read, both place an end, and neither can
-     * be the one the position is measured at — so each is a rule an author would have to rewrite,
-     * and telling them the position was short of something leaves them to work out which two of
-     * their clauses are in the way. A rule placing two ends is one rule and one finding, which is
-     * what the key settles.
+     * <p>A count is a whole number whatever it counts, so nothing about the type decides how its
+     * sizes are spaced; what stands at the position is read on whatever its own values are compared
+     * on, which is nothing where nothing here compares them.
      */
-    private static List<RuleWithoutALine> competingCoordinates(List<FieldDomains.Placed> stated,
-                                                         TermPath path, Type type,
-                                                         Symbols symbols) {
-        List<RuleWithoutALine> out = new ArrayList<>();
-        for (FieldDomains.Placed each : stated) {
-            RuleWithoutALine said = new RuleWithoutALine(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()),
-                    // Each rule at the coordinate that rule is about, which is what makes the two
-                    // two. What is undecided is which of them the position is measured at, and that
-                    // is a fact about the position rather than about either rule — this reading has
-                    // chosen no term for the position, and each rule chose one for itself.
-                    filedAt(path, each.at(), type, symbols),
-                    new BlockReason.CompetingCoordinates());
-            if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                out.add(said);
+    private static Carrier carrierOn(NumberAt.OfWhatNumber kind, Carrier carried) {
+        return switch (kind) {
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> carried;
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _ -> Carrier.WHOLE;
+        };
+    }
+
+    /**
+     * That every end placed here is on a number this position has.
+     *
+     * <p>Not a fact about the model and nothing an author can act on: the two sides are one
+     * question asked twice of the same type. Which numbers a position has is
+     * {@link NumericMeasures#takenOf} of the type at the path, and the operation an end names is
+     * that same answer, recorded where the clause was read. So an end on some other number is the
+     * two readings having parted, and there is nothing to report about it because no model reaches
+     * it — checked here, where both are in hand, rather than left as an end that quietly bounds
+     * nothing.
+     */
+    private static void everyEndIsOnANumberOfThisPosition(List<NumberAt.OfWhatNumber> numbers,
+                                                          List<FieldDomains.Placed> ends,
+                                                          TermPath path) {
+        for (FieldDomains.Placed each : ends) {
+            if (!numbers.contains(each.at().of())) {
+                throw new IllegalStateException(path + " has the numbers " + numbers
+                        + ", and a rule placed an end on " + each.at().of()
+                        + "; the reading of what a position is counted by and the reading of what a"
+                        + " clause counted disagree");
             }
         }
-        return List.copyOf(out);
     }
 
     /**
@@ -1519,10 +1685,9 @@ public final class InputDomain {
      * and the reading of the position disagreeing about what stands here — which is this compiler
      * contradicting itself rather than something the model left out.
      */
-    private static FilingCoordinate filedAt(TermPath path,
-                                            souther.compiler.check.FieldDomains.Coordinate at,
-                                            Type type, Symbols symbols) {
-        return FilingCoordinate.of(termAt(path, at, type, symbols));
+    private static FilingCoordinate filedAt(TermPath path, NumberAt<RuleKey> at,
+                                            Type type, RuleReadingSource source) {
+        return FilingCoordinate.of(termAt(path, at, type, source));
     }
 
     /**
@@ -1544,15 +1709,12 @@ public final class InputDomain {
      * term about something the model never wrote, and the reading of it would be applied to
      * whatever stood at the path.
      */
-    private static NumericTerm termAt(TermPath path,
-                                      souther.compiler.check.FieldDomains.Coordinate at,
-                                      Type type, Symbols symbols) {
-        return switch (at.kind()) {
-            case souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue _ ->
-                    new NumericTerm.ValueOf(path);
-            case souther.compiler.check.FieldDomains.CoordinateKind
-                    .OfWhatAnOperationAnswers answered -> takenBy(answered.operation(), path, type,
-                            symbols);
+    private static NumericTerm termAt(TermPath path, NumberAt<RuleKey> at,
+                                      Type type, RuleReadingSource source) {
+        return switch (at.of()) {
+            case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
+                    takenBy(answered.operation(), path, type, source);
         };
     }
 
@@ -1562,7 +1724,7 @@ public final class InputDomain {
      * <p>Both refusals are this compiler contradicting itself rather than something the model left
      * out, which is why neither is an answer a caller can act on.
      */
-    private static NumericTerm takenBy(ValueName by, TermPath path, Type type, Symbols symbols) {
+    private static NumericTerm takenBy(ValueName by, TermPath path, Type type, RuleReadingSource source) {
         // The operation a count is taken by is one the library declares, which is what the reading
         // that recorded the count went to. Anything else here is that reading and this one holding
         // different ideas of what an operation is.
@@ -1570,7 +1732,8 @@ public final class InputDomain {
             throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
                     + by + "`, which is not an operation a number is taken by");
         }
-        NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(operation, path, type, symbols);
+        NumericTerm.TakenOf taken =
+                NumericTerm.TakenOf.of(operation, path, type, source.inners(), source.symbols());
         if (taken == null) {
             throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
                     + by + "`, and that takes no number of what stands there");
@@ -1579,25 +1742,52 @@ public final class InputDomain {
     }
 
     /**
-     * The questions the rules of this position raise that nothing answered, crossed into this
-     * input's vocabulary.
+     * What the rules of this position leave open, in this input's vocabulary.
      *
-     * <p>Here, where the root the walk started at and the type standing at the position both are.
-     * The reading that raised them knows its positions by a key relative to the value its clauses
-     * are written on and knows a number of one by the operation beside that key; what everything
-     * past here compares is a term path and a term.
+     * <p>The questions crossed here, where the root the walk started at and the type standing at
+     * the position both are. The reading that raised them knows its positions by a key relative to
+     * the value its clauses are written on; what everything past here compares is a term path.
+     * Which number of a position a question is about crosses unchanged — it is a resolved name, and
+     * no capability of either side is asked about it.
+     *
+     * <p><b>And the rules nothing classified, which cross without any of that.</b> What such a rule
+     * raises is the part that was not read, so there is no subject to translate and none is made:
+     * the place crosses as where a reader is sent to look, which is not what the rule is about.
+     *
+     * <p>From both readings that can leave one. The accounting says what the declaration's clauses
+     * left undecided; this walk says what it could not decide itself, which no accounting has —
+     * which of a position's numbers it is measured at is settled here. Taken from the accounting
+     * alone, a position both of whose coordinates are spoken for came back with nothing standing at
+     * it and its measures closed over a rule this compiler could not use.
+     *
+     * <p>The questions nothing classified are put into the gathering and the rest are returned, so
+     * that everything saying a reading stopped here is in one value. Kept in a list of its own
+     * beside it, a caller asking what stopped had two places to ask and answered from whichever it
+     * had in hand.
      */
-    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path, Type type,
-                                                     Symbols symbols) {
+    private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path,
+                                                     RulesWithNoLine.Gathered found) {
         List<StandingQuestion> out = new ArrayList<>();
+        for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
+            // One question per thing that stopped it. A published question carries one reason, and
+            // a classification can have been stopped by more than one — a clause read a branch at a
+            // time is stopped by whatever stopped each branch — so they are asked as the several
+            // questions they are rather than one of them standing for the rest.
+            each.at().why().forEach(why ->
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
+                            FilingCoordinate.at(path), why)));
+        }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
-            out.add(new StandingQuestion(each.rule(), each.cited(),
+            out.add(StandingQuestion.Exact.of(each.cited(),
                     switch (each.owed()) {
                         case souther.compiler.check.Owed.AdmittedValues _ ->
                                 new InputQuestion.AboutAPosition(path);
+                        // The place and nothing else. Which number of it the rule is about is the
+                        // same value on both sides, so the crossing cannot lose it and cannot fail
+                        // to make it: a question about a number this compiler could not read is
+                        // asked here exactly as one it could.
                         case souther.compiler.check.Owed.Boundary it ->
-                                new InputQuestion.AboutANumber(
-                                        termAt(path, it.on(), type, symbols));
+                                new InputQuestion.AboutANumber(it.on().at(path));
                     },
                     // What the reading that would have answered was short of, in this compiler's
                     // own terms. The crossing is where the two readings' vocabularies become one:
@@ -1606,30 +1796,6 @@ public final class InputDomain {
                     each.why().stopped()));
         }
         return List.copyOf(out);
-    }
-
-    /**
-     * Whether the rules reaching this position say where both of its coordinates stop, with its own
-     * type having said nothing about either.
-     *
-     * <p>A position has one coordinate and this is the one case with no answer. Which of a
-     * {@code String}'s two a rule is about is settled by which one the model wrote about, and here
-     * the model wrote about both from outside. Choosing either would put a line the author can read
-     * beside one they cannot see, so the position is left as one nothing divides and both rules go
-     * unread — the coarser of the two things that could be said, and the one that claims nothing.
-     */
-    private static boolean undecidable(DeclaredBounds.Bounds ofType,
-                                       DeclaredBounds.Bounds valueOfType,
-                                       List<FieldDomains.Placed> stated, ValueName.Stdlib taken,
-                                       Carrier carried) {
-        return !stated(ofType) && !stated(valueOfType)
-                && taken != null && carried != null
-                && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
-                && stated(DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
-    }
-
-    private static boolean stated(DeclaredBounds.Bounds bounds) {
-        return bounds != null && !bounds.isEmpty();
     }
 
     /**
@@ -1651,9 +1817,9 @@ public final class InputDomain {
      * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
      * of them was dropped as a repeat of the first.
      */
-    private static List<RuleWithoutALine> rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
-                                                  Symbols symbols, List<RuleWithoutALine> competing) {
-        List<RuleWithoutALine> out = new ArrayList<>(competing);
+    private static void rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
+                                            RuleReadingSource source,
+                                            RulesWithNoLine.Gathered out) {
         for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
@@ -1661,14 +1827,32 @@ public final class InputDomain {
             // At the number that rule is about, which the rule itself says. Nothing is missing here
             // for the position to stand in for: a clause was read far enough to be about one number
             // or the other, and it is only the line that nothing came of.
-            RuleWithoutALine said = new RuleWithoutALine(each.from(),
-                    souther.compiler.check.RuleCitation.named(each.from()),
-                    filedAt(path, each.at(), type, symbols),
+            out.add(new RuleCitation.Named(each.part().rule()),
+                    filedAt(path, each.at(), type, source),
                     each.why());
-            if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                out.add(said);
-            }
         }
-        return List.copyOf(out);
+        // And the rules whose end here a choice in them left open. Beside the walk's own findings
+        // and not among them: that walk stops at a choice, so a comparison written under one is a
+        // rule it never had in hand, and what became of it is what the reading of ends said once
+        // the branches were settled.
+        //
+        // Only where a choice is answerable, because that is what this sentence says. An end left
+        // open with no choice behind it is left open all the same, and what it leaves the measure
+        // short of is said where the measure is; said here, an author would be sent to a branch
+        // their own rule does not have.
+        for (FieldDomains.EndLeftOpen each : placed.endsLeftOpenAt(path)) {
+            if (each.byChoice() == null) {
+                continue;
+            }
+            // With the part the choice is written in, which is where a reader goes: the parts
+            // beside it read perfectly well and what they act on is inside this one. Two parts of
+            // one clause agree about everything else, so this is the whole of what keeps them two
+            // entries.
+            out.add(new RuleCitation.Named(each.rule()),
+                    filedAt(path, each.at(), type, source),
+                    each.byChoice().sentTo(),
+                    new BlockReason.EndLeftOpenByAChoice());
+        }
     }
+
 }

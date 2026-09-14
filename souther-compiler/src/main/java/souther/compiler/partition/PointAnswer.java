@@ -61,26 +61,16 @@ public sealed interface PointAnswer {
                 throw new IllegalArgumentException(
                         "a region a row is owed in is owed for something: " + criterion);
             }
-            List<RegionBasis> bases = claims.stream().map(RegionClaim::basis).toList();
+            List<FarEnd> bases = claims.stream().map(RegionClaim::basis).toList();
             if (bases.size() != java.util.Set.copyOf(bases).size()) {
                 throw new IllegalArgumentException("a region owed twice for one thing, which is"
                         + " once: " + bases);
             }
-            // The whole of the quantity but one value is not a run and stops nowhere, so nothing
-            // stands beside it. Held together with a run's ends, a reader would be told the region
-            // both is and is not bounded.
-            boolean theRest = bases.contains(RegionBasis.TheRest.INSTANCE);
-            if (theRest && bases.size() != 1) {
-                throw new IllegalArgumentException(
-                        "what a rule leaves outside the value it names is not beside anything: "
-                                + bases);
-            }
-            // And what is asked of a row says the same thing the basis does. The two are made
-            // together and a reader that had to tell one from the other would be reading the basis
-            // back out of the shape of the demand — which is what the value-naming branch exists to
-            // stop it doing.
-            if (theRest != criterion instanceof Criterion.AnythingBut
-                    || !theRest && !(criterion instanceof Criterion.Within)) {
+            // And what is asked of a row is a run of the quantity's values. Every region beside a
+            // line is one — the values under it and the values over it, however the rule that drew
+            // it divides them — so a region asked for as anything else is a demand and a basis that
+            // were not made together.
+            if (!(criterion instanceof Criterion.Within)) {
                 throw new IllegalArgumentException("a region owed for " + bases
                         + " and asked for as " + criterion);
             }
@@ -116,7 +106,7 @@ public sealed interface PointAnswer {
 
     /** The same, as what a row is owed for alone — which is what a point is identified by and what
      *  two readings of one border are compared on. */
-    default List<RegionBasis> bases() {
+    default List<FarEnd> bases() {
         return claims().stream().map(RegionClaim::basis).toList();
     }
 }

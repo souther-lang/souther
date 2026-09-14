@@ -3,13 +3,18 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
@@ -131,9 +136,9 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     /** The same border with what stops each of its runs listed the other way round. */
     private static Border reversed(Border border) {
-        java.util.Map<PointRole, PointAnswer> answers =
-                new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
+        java.util.Map<DomainPoint, PointAnswer> answers =
+                new java.util.LinkedHashMap<>();
+        for (DomainPoint role : border.answers().keySet()) {
             PointAnswer answer = border.answer(role);
             answers.put(role, answer instanceof PointAnswer.InRegion in && in.claims().size() > 1
                     ? new PointAnswer.InRegion(in.criterion(), reversed(in.claims()))
@@ -174,10 +179,10 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** The same bound, with its line written as {@code at}. */
     private static Border boundAt(Count at) {
         AxisId axis = new AxisId("weigh", "w.a");
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return Border.at(BoundaryTarget.at(
-                        new BorderQuantity.OfACoordinate(axis,
-                                new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                                TermOrders.itself(WHOLE)),
+                        new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                                TermOrdersFixtures.itself(term, WHOLE)),
                         new Level.OnACarrier(WHOLE, at)),
                 aBound(),
                 new NumericDomain.Bounds(Endpoint.inclusive(at),
@@ -199,25 +204,31 @@ class OneBorderReadTwiceIsOneReadingTest {
 
     private static BoundaryTarget aLineAt(String path, int value) {
         AxisId axis = new AxisId("weigh", path);
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 at(value));
     }
 
     /** The clause the bound is written in, which is only an identity here. */
-    private static OriginRef aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
-                Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
+    private static LineOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.weigh", "Amount")), 0),
+                                Optional.of(new ClauseName("cap")))), 0),
+                        0)),
+                EndSide.LOWER, true);
     }
 
     /** A line of a body, for a place to be parted by something other than the bound. */
     private static AuthoredLine aComparison() {
-        return new AuthoredLine(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
-                        souther.compiler.types.CoverageConstruct.BINARY)),
-                0, new LineFacts(true, true, false), List.of());
+        return new AuthoredLine(new WhichLine.OfAComparison(new RuleRef.Comparison("weigh",
+                new souther.compiler.types.SourceConstructOrigin(
+                        new WrittenOwner.Body("example.weigh", "weigh"), 2, 0,
+                        souther.compiler.types.SourceConstruct.BINARY))),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }
 }

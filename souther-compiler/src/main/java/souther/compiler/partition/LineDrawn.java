@@ -12,4 +12,4 @@ package souther.compiler.partition;
  * <p>For the quantities that are not one position's own values. A line on a position is collected
  * the same way and arrives already collected, since the cuts of a position are what an axis carries.
  */
-public record LineDrawn(Cutting cuts, OriginRef by) {}
+public record LineDrawn(Cutting cuts, LineOrigin by) {}

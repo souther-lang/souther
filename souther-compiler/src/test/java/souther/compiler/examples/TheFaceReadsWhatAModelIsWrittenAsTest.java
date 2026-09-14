@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
@@ -105,17 +106,18 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
     /** A source that does not compile is refused with what the compiler says about it. */
     @Test
     void aModelThatDoesNotCompileIsRefusedWithItsDiagnostics() {
-        CompileException refused = assertThrows(CompileException.class,
-                () -> SoutherExamples.ofSource("""
-                        module example.broken
+        String source = """
+                module example.broken
 
-                        data Todo = { id: NoSuchType }
-                        """));
+                data Todo = { id: NoSuchType }
+                """;
+        CompileException refused = assertThrows(CompileException.class,
+                () -> SoutherExamples.ofSource(source));
 
         assertFalse(refused.diagnostics().isEmpty(), "the diagnostics are kept, not their codes");
         assertEquals(refused.diagnostics().size(), refused.locatedDiagnostics().size(),
                 "and each is still located in the source it is about");
-        assertTrue(refused.pos().line() > 0, "with the position the compiler found it at");
+        assertTrue(WhereItSits.in(source, refused.pos()).line() > 0, "with the position the compiler found it at");
     }
 
     /**
@@ -130,11 +132,11 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         BoundExamples examples = bound();
 
         assertThrows(IllegalArgumentException.class,
-                () -> examples.row("findTodo", "a todo that was never written"));
+                () -> examples.rowKey("findTodo", "a todo that was never written"));
         assertEquals(0, RowKey.class.getConstructors().length,
                 "nothing outside the package makes one");
 
-        RowKey stored = examples.row("findTodo", "a todo that is stored");
+        RowKey stored = examples.rowKey("findTodo", "a todo that is stored");
         assertTrue(stored.is(examples.rows().get(0)));
         assertFalse(stored.is(examples.rows().get(1)));
     }
@@ -142,7 +144,7 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
     /** A key of one enumeration is refused by another rather than quietly matching nothing. */
     @Test
     void aKeyOfOneBindingIsRefusedByAnothersRows() throws Exception {
-        RowKey stored = bound().row("findTodo", "a todo that is stored");
+        RowKey stored = bound().rowKey("findTodo", "a todo that is stored");
         RecordedRow elsewhere = bound().rows().get(0);
 
         assertThrows(IllegalArgumentException.class, () -> stored.is(elsewhere));

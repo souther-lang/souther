@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.cst.SourceLayout;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -27,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -42,6 +45,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * — of {@code List.filter}, in the model this was found on. A line a guard drew is the other, and it
  * was found by looking for the first one's shape somewhere else: the same compile said
  * {@code comparison@7:22} two lines above an arm of the same body saying where it was written.
+ *
+ * <p>The two are no longer both out of sight. A caller answers for the lines a caller wrote, so a
+ * comparison inside a library operation draws none here; the arms of that operation are still in the
+ * tree that runs, so a place standing in for code out of sight is still a thing a report writes. The
+ * second subject is held to where the reader can see it — this file, and another source of the same
+ * compile — and out of sight is held to drawing nothing.
  *
  * <p>Of one compile, and every rendering held to the same declaration. Renderings read from separate
  * runs are compared by way of the compiler answering the same thing twice, which is a different
@@ -170,44 +179,27 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     // --- and the line the guard drew, which is the same question one measure over -------------------
 
     /**
-     * A guard inlined from out of sight draws its line where it is written, not where it was reached.
+     * And a guard written out of sight draws no line in a model that calls it.
      *
-     * <p>Found by asking the first subject's question of the next report-facing value along. The
-     * origin of a boundary is a string a report prints and a document carries, and it was built from
-     * the place — so one compile said {@code comparison@7:22} two lines above an arm of that same body
-     * saying it properly.
+     * <p>{@code Int.abs} forks at nought, and a reading made over a tree with that body spliced in
+     * drew a line there and owed the caller a row either side of it. The number is that operation's
+     * implementation: this model says nothing about nought, and a row at it is a row owed for how
+     * the library happens to be written. So the reading keeps the operation standing and the lines
+     * a caller is answerable for are the ones a caller wrote.
+     *
+     * <p>Which leaves the arm above as this model's whole subject. The tree that runs still holds
+     * the arms of the spliced body — a run either goes through them or does not — so a place that
+     * stands in for code out of sight is a thing a report still writes, and the four renderings
+     * above are what hold it to saying so.
      */
     @Test
-    void theLineAGuardDrewNamesWhereTheGuardIs() {
-        Said said = saidAbout(OUT_OF_SIGHT);
-        assertFalse(said.boundaryOrigins().isEmpty(), "the comparison drew lines");
-        for (String origin : said.boundaryOrigins()) {
-            assertTrue(origin.contains("`" + DECLARATION + "`"),
-                    () -> "the origin says where the guard is written: " + origin);
-        }
-        for (String line : said.boundaryLines()) {
-            assertTrue(line.contains("`" + DECLARATION + "`"),
-                    () -> "and so does the line a person reads: " + line);
-        }
-    }
-
-    /**
-     * A second region is a sentence about a place as much as the caret is.
-     *
-     * <p>The warning about an edge points at the guard that drew it, and where that guard is a copy
-     * of a body written out of sight the region is a call in the caller's file. A label saying "the
-     * guard that draws that line" against it says the guard is there, which is the caret's own defect
-     * one region over — and it appeared the moment a rule started pointing at a guard, because
-     * qualifying a place was something the body did rather than something a renderer does.
-     */
-    @Test
-    void aSecondRegionSaysWhatItStandsInForToo() {
+    void aGuardWrittenOutOfSightDrawsNoLineInAModelThatCallsIt() {
         Said said = saidAbout(OUT_OF_SIGHT);
 
-        assertTrue(said.edgeSaid().contains("`" + DECLARATION + "`"),
-                () -> "the label says where the guard is written: " + said.edgeSaid());
-        assertTrue(said.edgeJson().contains("`" + DECLARATION + "`"),
-                () -> "and so does the document: " + said.edgeJson());
+        assertEquals(List.of(), said.boundaryOrigins(),
+                "the lines a caller answers for are the ones a caller wrote");
+        assertEquals(List.of(), said.boundaryLines(), said::armLine);
+        assertNull(said.edge(), "and no edge warning points at a guard out of sight");
     }
 
     // --- the third state, which is neither of the two a provenance has ------------------------------
@@ -262,12 +254,13 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      */
     @Test
     void theDocumentSaysAGuardsPlaceWithAnIdentityItExplains() {
-        for (String model : List.of(OUT_OF_SIGHT, IN_SIGHT)) {
-            Said said = saidAbout(model);
-            assertFalse(said.boundaryOrigins().isEmpty(), () -> "lines were drawn: " + model);
-            for (String origin : said.boundaryOrigins()) {
-                explained(origin, said.document().get("sources"));
-            }
+        // The model written in this file, and the one written in another source of this compile.
+        // Not the one that calls out of sight: the lines a caller answers for are the ones a caller
+        // wrote, so that model draws none.
+        Said said = saidAbout(IN_SIGHT);
+        assertFalse(said.boundaryOrigins().isEmpty(), "lines were drawn");
+        for (String origin : said.boundaryOrigins()) {
+            explained(origin, said.document().get("sources"));
         }
         Elsewhere elsewhere = fromAnotherSource();
         assertFalse(elsewhere.jsonOrigins().isEmpty(), "the comparison drew lines");
@@ -301,7 +294,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     @Test
     void aLineAForkDrewIsSaidInEveryLanguageItIsAskedIn() {
         Diagnostic edge = saidAbout(IN_SIGHT).edge();
-        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheBorderAConstructDrew.class, edge.said(),
+        assertInstanceOf(ExampleMessage.NoRowIsAtThePointOfTheLineAConstructDrew.class, edge.said(),
                 "a rule with no name reports its own message");
         assertFalse(DiagnosticRenderer.body(edge, Locale.JAPANESE).contains("a guard"),
                 () -> "no English is assembled into a Japanese sentence: "
@@ -400,6 +393,18 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      */
     private static final Map<String, Said> SAID = new ConcurrentHashMap<>();
 
+    /** The entries of one behavior's arm account that no row goes through, which is what the
+     *  disposition of each says. */
+    private static List<JsonNode> armsNoRowGoesThrough(JsonNode behavior) {
+        List<JsonNode> out = new ArrayList<>();
+        for (JsonNode arm : behavior.get("branch").get("obligations")) {
+            if ("unmet".equals(arm.get("disposition").asString())) {
+                out.add(arm);
+            }
+        }
+        return out;
+    }
+
     private static Said saidAbout(String model) {
         return SAID.computeIfAbsent(model,
                 EveryPlaceAReportNamesSaysWhereTheCodeIsTest::readEveryRenderingOnce);
@@ -422,11 +427,10 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 edges.add(d);
             }
         }
-        assertFalse(edges.isEmpty(), "an edge no row is at points at the guard that drew it");
         assertEquals(1, arms.size(), () -> "one arm is unreached: " + arms.size());
         Diagnostic arm = arms.get(0);
 
-        List<String> human = report.human(SourceNameResolver.identity()).lines()
+        List<String> human = report.human(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         List<String> armLines = human.stream()
                 // The sentence and not the mark it is printed under. What a build does about a
@@ -437,23 +441,28 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         List<String> boundaryLines = human.stream()
                 .filter(line -> line.contains("no row is at")).toList();
 
-        JsonNode document = JSON.readTree(report.json(SourceNameResolver.identity()));
+        JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
-        JsonNode unreached = behavior.get("branch").get("unreached");
+        List<JsonNode> unreached = armsNoRowGoesThrough(behavior);
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         List<String> origins = new ArrayList<>();
         behavior.get("partition").get("boundaries")
                 .forEach(each -> origins.add(each.get("origin").asString()));
 
-        SourceContext source = new SourceContext("m.sou", model);
+        SourceContext source = new SourceContext("m.sou", model, SourceLayout.of(model));
         return new Said(
                 DiagnosticRenderer.body(arm, Locale.ENGLISH),
                 new JsonRenderer().render(arm, source, Locale.ENGLISH),
                 armLines.get(0), unreached.get(0).get("at"),
                 boundaryLines, origins,
-                new HumanRenderer(false).render(edges.get(0), source, Locale.ENGLISH),
-                new JsonRenderer().render(edges.get(0), source, Locale.ENGLISH),
-                edges.get(0), document);
+                // A model whose lines are all drawn where the reader can see them has no edge
+                // warning pointing at a stand-in, and that is a thing this class asks about rather
+                // than a thing it needs. Read here and demanded by whoever is asking.
+                edges.isEmpty() ? null
+                        : new HumanRenderer(false).render(edges.get(0), source, Locale.ENGLISH),
+                edges.isEmpty() ? null
+                        : new JsonRenderer().render(edges.get(0), source, Locale.ENGLISH),
+                edges.isEmpty() ? null : edges.get(0), document);
     }
 
     /** What the two renderings say about an arm written in another source of this compile. */
@@ -474,7 +483,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         compilation.answerEverything();
-        SourceNameResolver names = id -> "0".equals(id.value()) ? "up.sou" : "down.sou";
+        SourceRendering names = new SourceRendering(
+                id -> "0".equals(id.value()) ? "up.sou" : "down.sou", compilation.texts());
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<String> lines = report.human(names).lines().map(String::strip)
@@ -492,7 +502,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
             }
         }
         assertNotNull(down, "the module the row names is reported");
-        JsonNode unreached = down.get("behaviors").get(0).get("branch").get("unreached");
+        List<JsonNode> unreached = armsNoRowGoesThrough(down.get("behaviors").get(0));
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
         List<String> edges = report.human(names).lines().map(String::strip)

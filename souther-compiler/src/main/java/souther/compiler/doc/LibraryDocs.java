@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -337,8 +338,9 @@ public final class LibraryDocs {
         List<String> terms = asked.stream().map(DocName::canonical).toList();
         List<Hit> hits = new ArrayList<>();
         for (Topic topic : ranked) {
-            Match.Held held = how.held((topic.title() + " " + topic.name()).toLowerCase(),
-                    own(topic).toLowerCase(), terms);
+            Match.Held held = how.held(
+                    (topic.title() + " " + topic.name()).toLowerCase(Locale.ROOT),
+                    own(topic).toLowerCase(Locale.ROOT), terms);
             if (held.matched() > 0) {
                 hits.add(new Hit(topic, held.named(), held.matched(), held.occurrences(),
                         snippet(topic, terms, how)));
@@ -357,7 +359,8 @@ public final class LibraryDocs {
         String line = own(topic).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
-                .filter(l -> terms.stream().anyMatch(term -> how.says(l.toLowerCase(), term)))
+                .filter(l -> terms.stream()
+                        .anyMatch(term -> how.says(l.toLowerCase(Locale.ROOT), term)))
                 .findFirst()
                 .orElse("");
         return line.length() <= 120 ? line : line.substring(0, 119) + "…";

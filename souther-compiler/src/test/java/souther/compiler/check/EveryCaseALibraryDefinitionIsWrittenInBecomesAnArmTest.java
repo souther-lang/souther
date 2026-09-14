@@ -1,12 +1,17 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.ArgumentsStand;
+import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.FixtureReferenceOrigin;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -52,7 +57,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                         + " that nothing was wrong");
         for (ValueName operation : DischargeRules.choosingOperations()) {
             Core.PreservedCall call = callTo(operation);
-            java.util.List<OperationFact.Case> defined = DischargeRules.chosenBy(call);
+            List<DefinitionCase<DeclaredArgument>> defined = DischargeRules.chosenBy(call);
             Choice choice = Choice.of(call);
 
             assertNotNull(choice, operation + " is defined in cases and answers no choice");
@@ -62,7 +67,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                     operation + " has an arm per case it is defined in");
 
             for (int i = 0; i < defined.size(); i++) {
-                OperationFact.Case row = defined.get(i);
+                DefinitionCase<DeclaredArgument> row = defined.get(i);
                 Choice.Arm arm = choice.arms().get(i);
                 String where = operation + " case " + (i + 1);
 
@@ -90,10 +95,10 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
     }
 
     /** The relations the row names, written in the values this call was given. */
-    private static List<Choice.ArgumentRelation> expected(OperationFact.Case row,
+    private static List<Choice.ArgumentRelation> expected(DefinitionCase<DeclaredArgument> row,
                                                           Core.PreservedCall call) {
         List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
-        for (OperationFact.ArgumentsStand stands : row.given()) {
+        for (ArgumentsStand<DeclaredArgument> stands : row.given()) {
             out.add(new Choice.ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
                     CallArguments.of(stands.right(), call)));
         }
@@ -110,6 +115,10 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
         for (int i = 0; i < params.size(); i++) {
             args.add(new Core.Read("arg" + i, new BindingId(OWNER, i), params.get(i), POS));
         }
-        return new Core.PreservedCall(operation, args, entry.signature().result(), POS);
+        return new Core.PreservedCall(
+                KeptCalls.declared((ValueName.Stdlib.Operation) operation), args,
+                new Core.KeptCallPlace(new FixtureReferenceOrigin(0),
+                        new ApplicationOrigin.ComposedFixture(), ExpansionLineage.ORIGINAL),
+                entry.signature().result(), POS);
     }
 }

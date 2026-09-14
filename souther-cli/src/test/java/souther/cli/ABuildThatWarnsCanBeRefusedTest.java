@@ -191,7 +191,7 @@ class ABuildThatWarnsCanBeRefusedTest {
 
         assertEquals(1, said.code(), said.err());
         JsonMapper json = JsonMapper.builder().build();
-        for (String line : said.err().split("\\R")) {
+        for (String line : said.err().lines().toList()) {
             if (line.isBlank()) {
                 continue;
             }

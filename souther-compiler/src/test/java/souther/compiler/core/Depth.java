@@ -24,8 +24,8 @@ public final class Depth {
         above.add(0);
         int most = 0;
         while (!nodes.isEmpty()) {
-            Core node = nodes.remove(nodes.size() - 1);
-            int here = above.remove(above.size() - 1) + 1;
+            Core node = nodes.removeLast();
+            int here = above.removeLast() + 1;
             most = Math.max(most, here);
             Core.forEachChild(node, child -> {
                 if (child != null) {

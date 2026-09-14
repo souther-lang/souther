@@ -5,12 +5,13 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -31,7 +32,8 @@ import java.util.Map;
  * probe method, an assessment path and a report arm apiece.
  *
  * <p><b>Sealed, so a quantity added is one this file answers for.</b> Sealed here and nowhere else:
- * what a variant costs is the four answers below, and nothing downstream gains an arm.
+ * what a variant costs is the answers this interface asks for below, and nothing downstream gains
+ * an arm.
  */
 public sealed interface BorderQuantity {
 
@@ -42,14 +44,30 @@ public sealed interface BorderQuantity {
      * values. A line here divides the position into classes, which is why this one has an axis and
      * the others do not.
      */
-    record OfACoordinate(AxisId axis, NumericTerm.FromOnePosition term, TermOrders of)
+    record OfACoordinate(String behavior, NumericTerm.FromOnePosition term, TermOrders of)
             implements BorderQuantity {
 
         public OfACoordinate {
-            if (axis == null || term == null || of == null) {
-                throw new IllegalArgumentException("a coordinate quantity names a position and an "
-                        + "order: " + axis + " " + term + " " + of);
+            if (behavior == null || behavior.isEmpty() || term == null || of == null) {
+                throw new IllegalArgumentException("a coordinate quantity is a behavior's number "
+                        + "on an order: " + behavior + " " + term + " " + of);
             }
+            // The orders say which number they are of. The second spelling is refused rather than
+            // carried into a document.
+            of.areOf(term);
+        }
+
+        /**
+         * What a report calls the position this cuts.
+         *
+         * <p>Worked out from the number rather than handed in beside it, which is what
+         * {@link Axis} holds a measure to for the same reason: a name a caller chooses is a name
+         * that can be one number's while the cut is on another, and every reader that goes by it —
+         * which behavior the line is of, what a document calls it, whether a measurement divides
+         * there — would then be answering about a position this line is not on.
+         */
+        public AxisId axis() {
+            return AxisId.of(behavior, term);
         }
 
         @Override
@@ -66,10 +84,10 @@ public sealed interface BorderQuantity {
          *  is is one position's own values, so a move that leaves it without one leaves it
          *  something else. */
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            NumericTerm.FromOnePosition landed = to.atOnePosition();
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+            NumericTerm.FromOnePosition landed = to.term().atOnePosition();
             return term.equals(from) && landed != null
-                    ? new OfACoordinate(new AxisId(axis.behavior(), to.toString()), landed, orders)
+                    ? new OfACoordinate(behavior, landed, to)
                     : null;
         }
 
@@ -80,16 +98,17 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             // Read on the order the value is written on and asked on the order the answer is
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (term.read(row.at(term.position()), of)) {
-                case NumericTerm.Reading.Missing _ -> Stands.UNREADABLE;
-                case NumericTerm.Reading.NotNumber _ -> Stands.NO;
-                case NumericTerm.Reading.Number number ->
-                        where.holds(new Level.OnACarrier(of.answered(), number.value()))
+            return switch (WhatATermRead.at(of, observation.at(term.position()))) {
+                case WhatATermRead.CameToNothing(ReadingGap why) -> Stands.couldNotTell(why);
+                case WhatATermRead.NoNumberOfTheValue _, WhatATermRead.NothingWrittenThere _ ->
+                        Stands.NO;
+                case WhatATermRead.Number(Place value) ->
+                        where.holds(new Level.OnACarrier(of.answered(), value))
                                 ? Stands.YES : Stands.NO;
             };
         }
@@ -101,12 +120,12 @@ public sealed interface BorderQuantity {
 
         @Override
         public String named() {
-            return axis.toString();
+            return axis().toString();
         }
 
         @Override
         public String left() {
-            return axis.term();
+            return term.toString();
         }
 
         /** The carrier's own spelling. A day count is a date here and nowhere else. */
@@ -162,75 +181,72 @@ public sealed interface BorderQuantity {
      * arithmetic form over both positions and is read as {@link OverAForm}, whose coefficients are
      * where a conversion between two orders is written.
      */
-    record Apart(String behavior, NumericTerm.FromOnePosition on,
-                 NumericTerm.FromOnePosition against,
-                 Map<NumericTerm, TermOrders> carriers) implements BorderQuantity {
+    record Apart(String behavior, TermOrders on, TermOrders against) implements BorderQuantity {
+
+        /** The position at one end. */
+        public NumericTerm.FromOnePosition onTerm() {
+            return on.term().atOnePosition();
+        }
+
+        /** The position at the other. */
+        public NumericTerm.FromOnePosition againstTerm() {
+            return against.term().atOnePosition();
+        }
 
         @Override
         public List<NumericTerm> terms() {
-            return List.of(on, against);
+            return List.of(on.term(), against.term());
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            if (!on.equals(from) && !against.equals(from)) {
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+            if (!on.term().equals(from) && !against.term().equals(from)) {
                 return null;
             }
+            TermOrders here = on.term().equals(from) ? to : on;
+            TermOrders there = against.term().equals(from) ? to : against;
             // A distance is between two positions, so a move that leaves either end answered by no
-            // single position leaves the pair something a distance is not.
-            NumericTerm.FromOnePosition landed = to.atOnePosition();
-            if (landed == null) {
+            // single position leaves the pair something a distance is not. And a name standing at
+            // more than one can bring the two ends of one together — answered here, because what a
+            // caller has in hand is a name that moved and not a pair it chose.
+            if (here.term().atOnePosition() == null || there.term().atOnePosition() == null
+                    || here.term().equals(there.term())) {
                 return null;
             }
-            NumericTerm.FromOnePosition here = on.equals(from) ? landed : on;
-            NumericTerm.FromOnePosition there = against.equals(from) ? landed : against;
-            // A distance runs between two positions, and a name standing at more than one can bring
-            // the two ends of one together. Answered here, because what a caller has in hand is a
-            // name that moved and not a pair it chose.
-            if (here.equals(there)) {
-                return null;
-            }
-            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
-            moved.put(here, on.equals(from) ? orders : carriers.get(on));
-            moved.put(there, against.equals(from) ? orders : carriers.get(against));
-            return new Apart(behavior, here, there, moved);
+            return new Apart(behavior, here, there);
         }
 
         public Apart {
-            if (behavior == null || on == null || against == null || carriers == null) {
+            if (behavior == null || on == null || against == null) {
                 throw new IllegalArgumentException("a distance names two positions and their orders");
             }
-            // First, because a distance between one position and itself is what the rest of this
-            // cannot be asked about: two terms that are one term are one key, and a map of them
-            // would refuse the pair with a sentence about maps.
-            if (on.equals(against)) {
-                throw new IllegalArgumentException(
-                        "a distance runs between two positions, and this names one twice: " + on);
+            // Each end is a position's own number on the order that position is read and written
+            // on, and the orders say which position that is. Held as a pair of positions beside a
+            // map from position to orders, the keys could name the right pair with the values the
+            // other way round, and both structures would check out.
+            if (on.term().atOnePosition() == null || against.term().atOnePosition() == null) {
+                throw new IllegalArgumentException("a distance runs between two positions, and this"
+                        + " names " + on.term() + " against " + against.term());
             }
-            carriers = Map.copyOf(carriers);
-            // An order per position, held here so no reader has to answer for a position with none.
-            // A map beside a pair is two structures, and two structures are what come apart.
-            if (!carriers.keySet().equals(java.util.Set.of(on, against))) {
-                throw new IllegalArgumentException("a distance is between the positions it names,"
-                        + " each on one order: " + java.util.Set.of(on, against) + " against "
-                        + carriers.keySet());
+            if (on.term().equals(against.term())) {
+                throw new IllegalArgumentException("a distance runs between two positions, and this"
+                        + " names one twice: " + on.term());
             }
-            Carrier here = carriers.get(on).answered();
-            Carrier there = carriers.get(against).answered();
-            if (!here.standsAgainst(there)) {
+            if (!on.answered().standsAgainst(against.answered())) {
                 throw new IllegalArgumentException("a distance is between two orders a value of"
-                        + " one stands somewhere on: " + here + " against " + there);
+                        + " one stands somewhere on: " + on.answered() + " against "
+                        + against.answered());
             }
         }
 
         /** The order the first position is read and written on. */
         private Carrier onCarrier() {
-            return carriers.get(on).answered();
+            return on.answered();
         }
 
         /** The order the other position is read and written on. */
         private Carrier againstCarrier() {
-            return carriers.get(against).answered();
+            return against.answered();
         }
 
         /** Whether the two positions stand on one order, which is every pair a rule names itself and
@@ -263,8 +279,7 @@ public sealed interface BorderQuantity {
             if (!counts()) {
                 return LevelSpace.onlyWhereTheyMeet();
             }
-            return LevelSpace.addedUpOver(carriers.values().stream()
-                    .map(TermOrders::answered).toList())
+            return LevelSpace.addedUpOver(List.of(on.answered(), against.answered()))
                     == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
         }
@@ -272,8 +287,10 @@ public sealed interface BorderQuantity {
         /** That position's own, which is what it is read off a row and written back on. */
         @Override
         public Carrier carrierOf(NumericTerm asked) {
-            TermOrders orders = carriers.get(asked);
-            return orders == null ? null : orders.answered();
+            if (on.term().equals(asked)) {
+                return on.answered();
+            }
+            return against.term().equals(asked) ? against.answered() : null;
         }
 
         /**
@@ -289,19 +306,38 @@ public sealed interface BorderQuantity {
          * decimals read as met by no row, including the rows that meet it.
          */
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(row.at(on.subjectPath()), carriers.get(on));
-            NumericTerm.Reading there =
-                    against.read(row.at(against.subjectPath()), carriers.get(against));
-            if (here instanceof NumericTerm.Reading.Missing
-                    || there instanceof NumericTerm.Reading.Missing) {
-                return Stands.UNREADABLE;
+            WhatATermRead here = WhatATermRead.at(on, observation.at(on.term().subjectPath()));
+            WhatATermRead there =
+                    WhatATermRead.at(against, observation.at(against.term().subjectPath()));
+            // Both sides, and not the first of them. The pair is unreadable for whatever stopped
+            // either, and a reader told about one end is being told which end this happened to
+            // look at first.
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            boolean wroteNothing = false;
+            for (WhatATermRead end : List.of(here, there)) {
+                switch (end) {
+                    case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
+                    case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
+                    case WhatATermRead.NoNumberOfTheValue _, WhatATermRead.Number _ -> { }
+                }
             }
-            if (!(here instanceof NumericTerm.Reading.Number onAt)
-                    || !(there instanceof NumericTerm.Reading.Number againstAt)) {
+            // A row that wrote nothing at one end has no pair to stand anywhere, whatever the other
+            // end came to. Answered after the reasons instead, a row that settles the point would
+            // leave it open because the end nobody needed was unreadable.
+            if (wroteNothing) {
+                return Stands.NO;
+            }
+            Stands unread = Stands.couldNotTell(stopped);
+            if (unread != null) {
+                return unread;
+            }
+            // Which leaves the numbers to take out, the ends having been told apart above.
+            if (!(here instanceof WhatATermRead.Number onAt)
+                    || !(there instanceof WhatATermRead.Number againstAt)) {
                 return Stands.NO;
             }
             if (!counts()) {
@@ -326,7 +362,6 @@ public sealed interface BorderQuantity {
                 // sign is the whole of what the order has.
                 case Criterion.Within within -> within.holds(
                         new Level.ACount(souther.compiler.numeric.Count.of(order)));
-                case Criterion.AnythingBut _ -> order != 0;
             };
         }
 
@@ -351,21 +386,22 @@ public sealed interface BorderQuantity {
         @Override
         public Standing standingAt(Criterion where) {
             if (onOneCarrier()) {
-                return new Standing.OfTwoOnOneCarrier(on, against, onCarrier(), where);
+                return new Standing.OfTwoOnOneCarrier(onTerm(), againstTerm(), onCarrier(), where);
             }
             return new Standing.OfAForm(
-                    LinearForm.<NumericTerm>atom(on).minus(LinearForm.atom(against)),
-                    answeredOn(carriers), levels(), where);
+                    LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term())),
+                    Map.of(on.term(), on.answered(), against.term(), against.answered()),
+                    levels(), where);
         }
 
         @Override
         public String named() {
-            return new AxisId(behavior, on.toString()).toString();
+            return new AxisId(behavior, onTerm().toString()).toString();
         }
 
         @Override
         public String left() {
-            return on.toString();
+            return onTerm().toString();
         }
 
         /**
@@ -378,9 +414,10 @@ public sealed interface BorderQuantity {
         @Override
         public String writtenAt(Level level) {
             Count apart = level.asACount();
-            return apart.signum() == 0 ? against.toString()
-                    : apart.signum() < 0 ? against + " - " + apart.negate().key()
-                            : against + " + " + apart.key();
+            String there = againstTerm().toString();
+            return apart.signum() == 0 ? there
+                    : apart.signum() < 0 ? there + " - " + apart.negate().key()
+                            : there + " + " + apart.key();
         }
 
         @Override
@@ -418,15 +455,16 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders) {
-            if (!form.coefs().containsKey(from) || form.coefs().containsKey(to)) {
+        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+            NumericTerm landed = to.term();
+            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
                 return null;
             }
             Map<NumericTerm, java.math.BigDecimal> coefs = new java.util.LinkedHashMap<>();
-            form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? to : term, coef));
+            form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? landed : term, coef));
             Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
-            on.forEach((term, its) -> moved.put(term.equals(from) ? to : term,
-                    term.equals(from) ? orders : its));
+            on.forEach((term, its) -> moved.put(term.equals(from) ? landed : term,
+                    term.equals(from) ? to : its));
             return new OverAForm(behavior,
                     new LinearForm<>(form.constant(), coefs), moved);
         }
@@ -448,6 +486,10 @@ public sealed interface BorderQuantity {
                         + " of them is read on one order: " + form.coefs().keySet() + " against "
                         + on.keySet());
             }
+            // And each entry's orders are that position's own. The key set agreeing says the map
+            // is about the right positions and says nothing about which of them each answer came
+            // from: a table with the two ends swapped has exactly the same keys.
+            on.forEach((term, orders) -> orders.areOf(term));
             // And each of those orders has counts under it, which is what a sum adds. Nothing
             // more: whether these positions add up to anything is settled by whatever produced the
             // form, and a rule here would be written without the coefficients. `b + a` over two
@@ -506,8 +548,18 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation row) {
+        public Stands standsAt(Criterion where, Observation observation) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
+            // Every term before anything is concluded. What stopped a reading is collected over the
+            // whole form rather than taken from whichever term the map handed over first: the form
+            // is unreadable for whatever stopped any of it, and stopping at the first said which
+            // term this walk happened to begin with. A term that read as no number at all is held
+            // until then for the same reason — a form with one of each is one nothing could read,
+            // and answering that it does not stand would be this compiler's own gap said as the
+            // model's answer.
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            boolean noNumber = false;
+            boolean wroteNothing = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
                 // Each on its own order. Read on one order for the whole form, a position written
                 // back differently from its neighbour was read as a value it does not hold.
@@ -516,19 +568,38 @@ public sealed interface BorderQuantity {
                 // term, every value where the term is over a run of them. Asked for one either way,
                 // a total would be read off whichever element the row's reading happened to pick.
                 TermOrders orders = on.get(each.getKey());
-                NumericTerm.Reading read = switch (each.getKey()) {
+                WhatATermRead read = switch (each.getKey()) {
                     case NumericTerm.FromOnePosition one ->
-                            one.read(row.at(one.position()), orders);
+                            WhatATermRead.at(orders, observation.at(one.position()));
                     case NumericTerm.TakenOver over ->
-                            over.readOver(row.everyValueAt(over.subjectPath()), orders);
+                            WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
                 };
-                if (read instanceof NumericTerm.Reading.Missing) {
-                    return Stands.UNREADABLE;
+                switch (read) {
+                    case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
+                    case WhatATermRead.NoNumberOfTheValue _ -> noNumber = true;
+                    case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
+                    case WhatATermRead.Number(Place value) ->
+                            at = at.add(Count.number(value).at().multiply(each.getValue()));
                 }
-                if (!(read instanceof NumericTerm.Reading.Number number)) {
-                    return Stands.NO;
-                }
-                at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
+            }
+            // Every term, and the answer after them. Left as soon as one of these was known, the
+            // terms behind it would go unasked — and asking them is how the measure finds out how
+            // many elements each position holds, which is what says how many readings of the row
+            // there are to try. A quantity that answered early would be choosing the readings.
+            //
+            // A term whose position the row wrote nothing at leaves the form no value at this row,
+            // and that is the row's answer rather than a reading that came to nothing. It outranks
+            // the reasons for the reason it is not one of them: those are what this compiler could
+            // not find out, and this is what the row says.
+            if (wroteNothing) {
+                return Stands.NO;
+            }
+            Stands unread = Stands.couldNotTell(stopped);
+            if (unread != null) {
+                return unread;
+            }
+            if (noNumber) {
+                return Stands.NO;
             }
             return where.holds(new Level.ACount(new Count(at)))
                     ? Stands.YES : Stands.NO;
@@ -631,10 +702,15 @@ public sealed interface BorderQuantity {
      * counted from one to the other, and a caller building the pair itself would be the second place
      * that has to know it.
      *
-     * @param orders what the term is read on and answers at its new position, which is a fact about
-     *               where it lands and cannot be carried over from where it was
+     * <p>Where it lands is read off the orders rather than named beside them. What the term is read
+     * on and answers at its new position is a fact about that position — it cannot be carried over
+     * from where it was — and the reading's answer says which position it is about, so a second
+     * argument saying it is a second thing to get right and one this could not refuse: it does not
+     * use the name it is given.
+     *
+     * @param to what the term is read on and answers at its new position, and which position that is
      */
-    BorderQuantity movedTo(NumericTerm from, NumericTerm to, TermOrders orders);
+    BorderQuantity movedTo(NumericTerm from, TermOrders to);
 
     /**
      * The order one position under this quantity is read and written back on, or null where the
@@ -654,19 +730,35 @@ public sealed interface BorderQuantity {
     /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
     static Map<NumericTerm, Carrier> answeredOn(Map<NumericTerm, TermOrders> orders) {
         Map<NumericTerm, Carrier> out = new java.util.LinkedHashMap<>();
-        orders.forEach((term, on) -> out.put(term, on.answered()));
+        orders.forEach((term, on) -> {
+            // Each entry's orders are that position's own. A table whose keys are the right numbers
+            // says nothing about which of them each answer came from, and what comes out of here is
+            // a number filed under an order, with the term gone.
+            on.areOf(term);
+            out.put(term, on.answered());
+        });
         return Map.copyOf(out);
     }
 
     /** Whether a row stands at one item of a border on this quantity, or whether it could not be
      *  read. */
-    Stands standsAt(Criterion where, Observation row);
+    Stands standsAt(Criterion where, Observation observation);
 
     /** What a search has to solve to put a row at one item. */
     Standing standingAt(Criterion where);
 
+    /**
+     * Which behavior's input this quantity is of.
+     *
+     * <p>Every quantity is some behavior's: a coordinate is a position of one, and a distance or a
+     * form is over positions of one. Asked here so that a reading of a line has one answer to which
+     * behavior read it, rather than a second copy of this beside the target that nothing checks
+     * agrees with it.
+     */
+    String behavior();
+
     /** The left of the {@code left = right} a report names a border on this by, qualified by the
-     *  behavior it is an input of. */
+     *  behavior it is an input of ({@link #behavior}). */
     String named();
 
     /** The same, as the bare term a generated row is labelled with. */
@@ -705,6 +797,42 @@ public sealed interface BorderQuantity {
     String writtenAt(Level level);
 
     /**
+     * Whether {@link #writtenAt} says the same thing at every reading of one line.
+     *
+     * <p><b>What a debt may be written from.</b> A line an {@code invariant} drew is owed once for
+     * the module and is read at every position the type reaches, so a sentence about the debt may
+     * hold nothing that differs between those readings. Two of the three quantities write a level
+     * as a number or as a value of a carrier, and neither of those is a reading's; one writes it as
+     * a distance from another position, and what that position is called is the path a walk reached
+     * it by.
+     *
+     * <p>So this says whether there is a declaration-relative wording at all — not whether two
+     * readings happen to agree. The readings of a difference disagree because the answer is a
+     * reading's, which is a fact about the quantity and is known without asking any of them; a
+     * report that compared the spellings and refused where they differed was asking whether the
+     * model was written a certain way and getting an answer about which position a walk met first
+     * (issue #1251).
+     *
+     * <p>Exhaustive here, so a quantity added decides this rather than being read as one of the
+     * others by a reader that guessed. Saying yes wrongly puts one reading's position into a
+     * sentence about a line; saying no wrongly leaves a value unsaid that could have been said, and
+     * only the first of those is a report claiming something.
+     */
+    default boolean statesADeclarationRelativeLevel() {
+        return switch (this) {
+            // A carrier's own value, which the type declares. The same at every reading, since what
+            // it writes is the value and not where the value stands.
+            case OfACoordinate _ -> true;
+            // A number the form comes to, likewise the form's and not a position's.
+            case OverAForm _ -> true;
+            // How far from the other position, whose name is the path this reading reached it by.
+            // A declaration has no name for it: the rule relates two positions and places no end,
+            // so nothing about the pair is kept in the declaration's own terms (ADR-0090).
+            case Apart _ -> false;
+        };
+    }
+
+    /**
      * Which shape a border on this has, for a reader that has to tell them apart without holding
      * either.
      *
@@ -715,11 +843,57 @@ public sealed interface BorderQuantity {
      */
     BoundaryTarget.Shape shape();
 
-    /** Whether a row is at an item, where a row that could not be read is neither. */
-    enum Stands {
-        YES,
-        NO,
-        UNREADABLE
+    /**
+     * Whether a row is at an item, where a row that could not be read is neither.
+     *
+     * <p>The third carries what stopped the reading, because that is a fact about this compiler's
+     * observation and never one about the model. Answered without it, a reader is left to work out
+     * from what it has why there was nothing to compare — and what it has is the absence of a
+     * number, which reads exactly like a number that did not match.
+     */
+    sealed interface Stands {
+
+        /** The values stand at the item. */
+        record Yes() implements Stands {}
+
+        /** They were read, and they do not. */
+        record No() implements Stands {}
+
+        /**
+         * There was no number to compare, and this is every reason there was none.
+         *
+         * <p>More than one where the quantity reads more than one term: a rule relating two
+         * positions and a form over several come to nothing for whatever stopped any of them, and
+         * naming one would be picking which of them a reader is told about. Which is as true of the
+         * two kinds of reason as it is of two observations, so both kinds are in the set and
+         * neither is chosen over the other ({@link ReadingGap}).
+         */
+        record CouldNotTell(Set<ReadingGap> why) implements Stands {
+
+            public CouldNotTell {
+                if (why == null || why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a reading nothing could be made of says what stopped it");
+                }
+                // In the order they were met, because a report prints them and a report that
+                // changes between runs cannot be compared between runs.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            }
+        }
+
+        Stands YES = new Yes();
+
+        Stands NO = new No();
+
+        /** Come to nothing for one reason, which is what a quantity reading one term has. */
+        static Stands couldNotTell(ReadingGap why) {
+            return new CouldNotTell(Set.of(why));
+        }
+
+        /** The same over several terms, or null where nothing stopped any of them. */
+        static Stands couldNotTell(Set<ReadingGap> why) {
+            return why.isEmpty() ? null : new CouldNotTell(why);
+        }
     }
 
     /** What one row holds at each of a behavior's positions, for a quantity reading its own value
@@ -727,8 +901,15 @@ public sealed interface BorderQuantity {
      *  one belong to the measure, and a quantity only asks what stands at a path. */
     interface Observation {
 
-        /** The one value standing at {@code path}, for a number taken of what is there. */
-        ObservedValue at(TermPath path);
+        /**
+         * What stands at {@code path}, for a number taken of what is there.
+         *
+         * <p>The walk's own answer first, because a position this compiler could not walk to is not
+         * a position a row holds nothing at. What a reading of a number does about the two differs,
+         * and a measure handing back one shape for both would settle that here, where nothing knows
+         * enough to.
+         */
+        WalkResult<ObservationAtPoint> at(TermPath path);
 
         /**
          * Every value standing at {@code path}, for a number taken over a run of them.
@@ -739,7 +920,11 @@ public sealed interface BorderQuantity {
          * about what they add up to is about all of them and does not. Answered by one method, the
          * caller that wanted one would be handed a list to choose from and the choosing would move
          * to whoever asked — which is the reading of a row being made twice.
+         *
+         * <p>Under the same walk as {@link #at}, and holding none where the row wrote no element. A
+         * total over nothing is what a run starts from rather than a value nobody could read, so
+         * there is nothing here for a row that wrote an empty container to be told apart as.
          */
-        java.util.List<ObservedValue> everyValueAt(TermPath path);
+        WalkResult<java.util.List<ObservedValue>> everyValueAt(TermPath path);
     }
 }

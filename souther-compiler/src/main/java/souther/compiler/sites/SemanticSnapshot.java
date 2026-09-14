@@ -4,11 +4,18 @@ import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BindingEvidence;
-import souther.compiler.check.DeclaredTypeEvidence;
+import souther.compiler.check.DeclarationFacts;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.DeclaredTypeReading;
+import souther.compiler.check.FieldRead;
+import souther.compiler.check.ResolvedFieldTypes;
+import souther.compiler.check.ParameterFact;
 import souther.compiler.check.Sig;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Db;
@@ -21,9 +28,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,7 +72,7 @@ public final class SemanticSnapshot {
      */
     public static Optional<SemanticSnapshot> of(Db db, String module) {
         Answer<AuthoredSites> occurrences = db.ask(new Sites.Authored(module));
-        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         return occurrences.present() && scope.present()
                 ? Optional.of(new SemanticSnapshot(db, module, occurrences.value(), scope.value()))
                 : Optional.empty();
@@ -138,18 +142,23 @@ public final class SemanticSnapshot {
      * What the declarations say about a type, asked of the one reading of them.
      *
      * <p>Every question of that shape goes through here: what fields a value has, what rules it is
-     * held to, what a name it was given comes to. Working one out from the declaration instead —
-     * reading a data's own clauses, naming a newtype's one field — is that reading written a second
+     * held to, whether the name it wears is a newtype. Working one out from the declaration instead
+     * — reading a data's own clauses, naming a newtype's one field — is that reading written a second
      * time, and the copy is right until the language adds a step to the original. It has twice been
      * exactly that: a spread brings in fields and the rules that came with them, and both were being
      * missed by a reading that looked at what the declaration wrote rather than at what applies.
+     *
+     * <p>What an expression is declared to be is not asked here. That reading needs the definitions a
+     * body may name and the signatures it may call, which a question about a type in hand does not,
+     * and it is {@link DeclaredTypeReading}'s.
      *
      * <p>What this reading is not asked is the shape of the module itself — what it declares, what
      * it exposes, what its behaviors are called. Nothing else answers those, and they are read off
      * the resolved module here.
      */
-    private DeclaredTypeEvidence declarations() {
-        return new DeclaredTypeEvidence(symbols, Map.of());
+    private DeclarationFacts declarations() {
+        return new DeclarationFacts(fieldRead(),
+                souther.compiler.query.Shapes.declarationNewtypes(db));
     }
 
     /**
@@ -164,26 +173,24 @@ public final class SemanticSnapshot {
      * body that will not check does not stop it saying so.
      */
     public List<DeclaredParameter> parametersIn(SourceId source) {
-        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
-        Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(module));
-        if (!resolved.present() || !signatures.present()) {
+        Answer<List<ParameterFact>> facts = db.ask(new Bodies.DeclaredParameters(module));
+        if (!facts.present()) {
             return List.of();
         }
         List<DeclaredParameter> out = new ArrayList<>();
-        for (Hir.FnDef fn : resolved.value().fns()) {
-            Sig sig = signatures.value().get(fn.written().canonical());
-            if (sig == null || sig.inputTypes().size() != fn.params().size()) {
+        for (ParameterFact fact : facts.value()) {
+            // The inputs alone. What the signature says arrives is a type an author may write where
+            // the hint is drawn; a parameter a `depends on` clause fills is a behavior handed to the
+            // implementation, and it has no spelling that goes in that place.
+            if (!(fact instanceof ParameterFact.TypedInput(Hir.FnParam written, Type arrives))) {
                 continue;
             }
-            for (int at = 0; at < fn.params().size(); at++) {
-                Hir.Binder binder = fn.params().get(at).binder();
-                Type arrives = sig.inputTypes().get(at);
-                // A parameter written nowhere is one a pass introduced; there is no name in the
-                // source for a hint to stand after.
-                if (binder.written().authored() && binder.pos().isIn(source)) {
-                    out.add(new DeclaredParameter(binder.written().region(),
-                            new TypeFact(arrives, new Evidence.Declared()), heldToARule(arrives)));
-                }
+            Hir.Binder binder = written.binder();
+            // A parameter written nowhere is one a pass introduced; there is no name in the
+            // source for a hint to stand after.
+            if (binder.written().authored() && binder.pos().isIn(source)) {
+                out.add(new DeclaredParameter(binder.written().region(),
+                        new TypeFact(arrives, new Evidence.Declared()), heldToARule(arrives)));
             }
         }
         return List.copyOf(out);
@@ -204,7 +211,8 @@ public final class SemanticSnapshot {
      *
      * <p>Empty where the name reaches no behavior: a helper, a local holding a function, a name that
      * resolves to nothing. What those take is not written on a {@code behavior} line, and there is no
-     * declaration here to show.
+     * declaration here to show. Empty for a composition too, which writes stages rather than
+     * parameters: what it takes is its first stage's, under the names that stage gave them.
      */
     public Optional<CalledBehavior> calledAt(SourcePos cursor) {
         SourceSiteId site = sites.innermostContaining(cursor);
@@ -212,36 +220,24 @@ public final class SemanticSnapshot {
                 || !(called.reachedAs().denotes() instanceof ValueName.Behavior reached)) {
             return Optional.empty();
         }
-        Answer<Map<ValueName.Behavior, Sig>> reachable = db.ask(new Bodies.Reachable(module));
-        Answer<Hir.Module> declaring = db.ask(new Names.Resolved(reached.module()));
-        if (!reachable.present() || !declaring.present()) {
+        Answer<Map<String, DeclaredSig>> declaring =
+                db.ask(new Bodies.DeclaredSignatures(reached.module()));
+        if (!declaring.present()) {
             return Optional.empty();
         }
-        Sig sig = reachable.value().get(reached);
-        List<Hir.Param> written = parametersOf(declaring.value(), reached.name());
-        if (sig == null || written == null || sig.inputTypes().size() != written.size()) {
-            // A signature and a declaration that disagree about how many things arrive is a mistake
-            // in that module, reported where it is written. Pairing them off anyway would name an
-            // argument after a parameter that is not the one arriving there.
+        // Asked of the module that declares the behavior, which is where its parameters were
+        // written and where they were admitted. A composition declares none and is not here at all,
+        // so nothing has to ask which kind of behavior this is.
+        DeclaredSig declared = declaring.value().get(reached.name());
+        if (declared == null) {
             return Optional.empty();
         }
         List<CalledBehavior.Takes> takes = new ArrayList<>();
-        for (int at = 0; at < written.size(); at++) {
-            takes.add(new CalledBehavior.Takes(written.get(at).name(),
-                    new TypeFact(sig.inputTypes().get(at), new Evidence.Declared())));
+        for (DeclaredSig.Input input : declared.inputs()) {
+            takes.add(new CalledBehavior.Takes(input.name(),
+                    new TypeFact(input.type(), new Evidence.Declared())));
         }
         return Optional.of(new CalledBehavior(reached.name(), List.copyOf(takes), site.extent()));
-    }
-
-    /** The parameters {@code behavior} is declared with, or null where the module declares no such
-     *  behavior or declares it as a composition, which writes none. */
-    private static List<Hir.Param> parametersOf(Hir.Module declaring, String behavior) {
-        for (Hir.BehaviorDef each : declaring.behaviors()) {
-            if (each.written().canonical().equals(behavior)) {
-                return each instanceof Hir.SpecBehavior spec ? spec.params() : null;
-            }
-        }
-        return null;
     }
 
     /**
@@ -341,14 +337,41 @@ public final class SemanticSnapshot {
     }
 
     /**
-     * The fields a value of {@code held} has, each with what it is declared to be.
+     * The names a {@code .} written on a value of {@code held} may take, each with what it holds.
      *
-     * <p>Asked of the one walk that says what a declaration wrote, so what an editor lists and what
-     * a reading takes one of are the same account. What a newtype has, what a spread brings in, what
-     * is not a declared type at all — none of that is decided here.
+     * <p>The same reading a field access is typed by, so what an author is offered here is what the
+     * compiler will accept: a record's own fields, a name every case of a sum spreads, a newtype's
+     * {@code value} and nothing of what it wraps. Answered from the layout of the declaration the
+     * type names instead, a sum would offer nothing while the language reads its shared names on
+     * every value of it.
+     *
+     * <p>Asked of what a declaration holds at this revision, which is the reading an editor is owed:
+     * a module still being typed has no checked answer about a value of it, and a reader looking at
+     * a name in it is owed what its declarations denote now.
      */
     public Map<String, Type> fieldsOf(TypeFact held) {
-        return declarations().fieldsOf(held.type());
+        return fieldRead().at(held.type());
+    }
+
+    /**
+     * What a {@code .} may name, as the text stands.
+     *
+     * <p>The same reading the compiler types a field access by, in the world an editor reads: a
+     * declaration that does not read yet — one name written twice, a spread of something that is no
+     * product — makes nothing readable rather than being refused here. What is wrong with it is
+     * reported where the module is checked, and an author who is being told that already is not
+     * also told that the buffer cannot answer what may follow a {@code .}.
+     */
+    private FieldRead fieldRead() {
+        return new FieldRead(symbols, souther.compiler.query.Shapes.publishedDeclarations(db),
+                souther.compiler.query.Shapes.declarationKinds(db),
+                souther.compiler.query.Shapes.newtypeInners(db),
+                fields(), FieldRead.Unreadable.MAKES_NOTHING_READABLE);
+    }
+
+    /** What a declaration holds, as the text has resolved it so far. */
+    private FieldTypes fields() {
+        return new ResolvedFieldTypes(symbols, souther.compiler.query.Shapes.newtypeInners(db));
     }
 
     /**
@@ -373,48 +396,22 @@ public final class SemanticSnapshot {
      *  than this reading being. */
     private Type declaredTypeOf(Hir.Expr e) {
         Answer<Map<String, Hir.FnDef>> values = db.ask(new Bodies.ModuleDefinitions(module));
-        if (!values.present()) {
+        Answer<Map<ValueName.Behavior, Sig>> reachable = db.ask(new Bodies.Reachable(module));
+        // All the parameters of the module at once and not the ones the cursor is inside. A binding
+        // tells itself from every other, so a parameter of one behavior cannot be reached by a name
+        // in another, and working out which body a position is in would be a scope this does not
+        // have to keep.
+        Answer<Map<BindingId, BindingEvidence>> parameters =
+                db.ask(new Bodies.DeclaredParameterBindings(module));
+        if (!values.present() || !reachable.present()) {
             return null;
         }
-        Map<BindingId, BindingEvidence> parameters = parametersOfEveryBehavior();
-        return new DeclaredTypeEvidence(symbols, values.value(), parameters)
-                .declaredTypeOf(e, new HashSet<>(), new HashMap<>(parameters));
-    }
-
-    /**
-     * What every parameter written in this module is declared to arrive as.
-     *
-     * <p>All of them at once and not the ones the cursor is inside. A binding tells itself from
-     * every other, so a parameter of one behavior cannot be reached by a name in another, and
-     * working out which body a position is in would be a scope this does not have to keep.
-     *
-     * <p>A behavior whose signature says a different number of things from what its {@code let}
-     * writes is left out. The two disagreeing is a mistake in the module, reported where it is
-     * written, and pairing them off by position anyway would say a parameter arrives as something
-     * the declaration never said it does.
-     */
-    private Map<BindingId, BindingEvidence> parametersOfEveryBehavior() {
-        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
-        Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(module));
-        if (!resolved.present() || !signatures.present()) {
-            return Map.of();
-        }
-        Map<BindingId, BindingEvidence> declared = new LinkedHashMap<>();
-        for (Hir.FnDef fn : resolved.value().fns()) {
-            Sig sig = signatures.value().get(fn.written().canonical());
-            if (sig == null) {
-                continue;
-            }
-            List<Type> arrives = sig.inputTypes();
-            if (arrives.size() != fn.params().size()) {
-                continue;
-            }
-            for (int at = 0; at < arrives.size(); at++) {
-                declared.put(fn.params().get(at).binder().id(),
-                        new BindingEvidence.DeclaredAs(arrives.get(at)));
-            }
-        }
-        return declared;
+        // What the walk is handed where the table could not be worked out is no bindings, and not
+        // no reading: every expression whose type rests on none of them is stated by the same
+        // declarations either way, and a parameter this cannot speak for is a name the walk goes on
+        // to say nothing about — which is what it says for one nothing declares.
+        return new DeclaredTypeReading(declarations(), values.value(), reachable.value(),
+                parameters.present() ? parameters.value() : Map.of()).declaredTypeOf(e);
     }
 
     /**

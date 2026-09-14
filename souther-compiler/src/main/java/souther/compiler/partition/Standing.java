@@ -66,7 +66,7 @@ public sealed interface Standing {
      * handed one order for all of them, a search walked every position over the values of whichever
      * order it was given.
      */
-    record OfAForm(souther.compiler.numeric.NumericDomain.LinearForm<NumericTerm> form,
+    record OfAForm(souther.compiler.numeric.LinearForm<NumericTerm> form,
                    java.util.Map<NumericTerm, Carrier> on, LevelSpace levels, Criterion where)
             implements Standing {
 

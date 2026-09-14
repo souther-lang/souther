@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.ArmVocabulary;
 
 import java.util.List;
 import java.util.Map;
@@ -155,6 +156,6 @@ coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().o
 
         assertEquals(List.of("then", "else"),
                 branches.get("gate").arms().all().stream()
-                        .map(souther.compiler.report.ArmVocabulary::label).toList());
+                        .map(arm -> ArmVocabulary.label(arm.display())).toList());
     }
 }

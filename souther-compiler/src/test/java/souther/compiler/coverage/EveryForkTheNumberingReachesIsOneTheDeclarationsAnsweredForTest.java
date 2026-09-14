@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,19 +70,18 @@ class EveryForkTheNumberingReachesIsOneTheDeclarationsAnsweredForTest {
                 compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        List<CoverageOrigin> forks = new ArrayList<>();
+        CoverageSites.Plan plan = checked.plan();
+        List<SourceConstructOrigin> forks = new ArrayList<>();
         for (CoverageSites.Site site : plan.sites()) {
-            CoverageOrigin origin = site.obligation().origin();
-            if (site.isArm() && !forks.contains(origin)) {
+            SourceConstructOrigin origin = site.obligation().origin();
+            if (site instanceof CoverageSites.ArmSite && !forks.contains(origin)) {
                 forks.add(origin);
             }
         }
         assertTrue(forks.size() >= 5,
                 () -> "the model under test writes forks of every kind this reads: " + forks);
 
-        List<CoverageOrigin> unanswered = forks.stream()
+        List<SourceConstructOrigin> unanswered = forks.stream()
                 .filter(fork -> !checked.decisions().byFork().containsKey(fork)).toList();
         assertEquals(List.of(), unanswered,
                 () -> "every fork the numbering reaches has an entry: " + unanswered);

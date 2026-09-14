@@ -1,5 +1,10 @@
 package souther.compiler.types;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.SequencedSet;
+import java.util.Set;
+
 /**
  * The Souther value types. Either a primitive ({@code Int}/{@code String}/{@code Bool})
  * or a reference to a named data type. {@code Type.INT} etc. remain usable as constants.
@@ -234,8 +239,37 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     /** An optional value {@code Option<element>} — the desugaring of a {@code T?} field (spec §optional). */
     record OptionOf(Type element) implements Compound {}
 
-    /** An anonymous union of data types (a behavior's multi-success output). */
-    record Union(java.util.Set<TypeSymbol> members) implements Leaf {}
+    /**
+     * An anonymous union of data types (a behavior's multi-success output).
+     *
+     * <p>The members arrive in whatever a caller put them in and are held in the order they are
+     * shown ({@link CanonicalNameOrder}). Two writings of one union are one value and neither is
+     * the author's, so there is nothing here for a reader to be shown but this compiler's own
+     * order — and establishing it where the value is made is what leaves no other order for
+     * anything downstream to reach. A walk that takes the members in the order it finds them is
+     * then right by having done nothing, which is the whole of what is wanted: the reader shown a
+     * different sentence for the same union is not a thing that can be written.
+     *
+     * <p>Held as a set all the same, so that {@code Adult | Minor} and {@code Minor | Adult} go on
+     * being equal. {@link SequencedSet} is what says the order is a real one rather than whichever
+     * container it was built in; that it is {@link CanonicalNameOrder}'s is this record's own
+     * contract, which a type cannot say.
+     */
+    record Union(SequencedSet<TypeSymbol> members) implements Leaf {
+
+        /**
+         * Canonical, its own, and not to be written to afterwards.
+         *
+         * <p>All three, because any one of them left out is a way back to an order somebody else
+         * decided: taken as handed, from the container the caller built; kept over the caller's
+         * own set, from whatever the caller does to it next; left writable, from whatever a reader
+         * of the members does to them.
+         */
+        public Union {
+            members = Collections.unmodifiableSequencedSet(
+                    new LinkedHashSet<>(CanonicalNameOrder.shown(members)));
+        }
+    }
 
     /** A function type {@code (params...) -> result}. Written only on a helper {@code fn}'s
      * parameter (spec §fn-declaration); a value of this type is never stored in a data field, so it
@@ -301,8 +335,8 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         return new SetOf(element);
     }
 
-    static Type union(java.util.Set<TypeSymbol> members) {
-        return new Union(members);
+    static Type union(Set<TypeSymbol> members) {
+        return new Union(new LinkedHashSet<>(members));
     }
 
     static Type fn(java.util.List<Type> params, Type result) {
@@ -537,6 +571,8 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
                     : showAs(o.element(), naming, true) + "?";
             case MapOf m -> "Map<" + showAs(m.key(), naming, true) + ", "
                     + showAs(m.value(), naming, true) + ">";
+            // Taken in the order they are held, which is the order they are shown: a union settles
+            // that where it is made, so there is no second order here to decide.
             case Union u -> u.members().stream().map(naming)
                     .collect(java.util.stream.Collectors.joining(" | "));
             case TupleOf tu -> tu.elements().stream().map(e -> showAs(e, naming, true))

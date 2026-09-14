@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -88,7 +90,7 @@ final class Intervals {
             }
             // One subject and two relations where both ends can name the same one, which is what
             // an author reads a range as. Two subjects are two conditions and are said as two.
-            String subject = subjectOf(carrier);
+            String subject = subjectOf();
             return subject == null ? low + " and " + high
                     : low.substring(0, low.length() - subject.length())
                             + subject + high.substring(subject.length());
@@ -96,7 +98,7 @@ final class Intervals {
 
         /** What both ends of this run relate a row to, where they relate it to the same thing.
          *  Null where one end names the position and the other a multiple of it. */
-        private String subjectOf(Carrier carrier) {
+        private String subjectOf() {
             if (lo != null && hi != null) {
                 return "x";
             }
@@ -179,18 +181,25 @@ final class Intervals {
     /**
      * The classes those ranges are, on the term {@code of} at a position of {@code type}.
      *
-     * <p>The term says how a row's value is read into a number and how its numbers are spaced; the
+     * <p>The orders say how a row's value is read into a number and how its numbers are spaced; the
      * type says what a value written at one of them looks like. A range of lengths has the first and
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
+     *
+     * <p>The orders are asked of the reading rather than handed in beside the term. Which order a
+     * number is measured on follows from where the reading has that term standing, so a caller
+     * working it out from whatever type reached it would be answering about wherever that type came
+     * from — and a caller handing the answer over is handing two arguments that can be about two
+     * terms.
      */
     static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
-                                          Type type,
-                                          ReadingPolicy policy,
-                                          Symbols symbols, Endpoint min, Endpoint max) {
+                                          Type type, Quantities reading,
+                                          RuleReadingContext ruleReading,
+                                          Endpoint min, Endpoint max) {
+        TermOrders orders = reading.ordersOf(of);
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Carrier carrier = of.answeredOn(type, symbols);
+        Carrier carrier = orders.answered();
         List<PartitionClass> classes = new ArrayList<>();
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
@@ -199,21 +208,25 @@ final class Intervals {
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Recognition is = new Recognition.OfACount(of, of.ordersAt(type, symbols),
+            Recognition is = new Recognition.OfACount(of, orders,
                     new Recognition.CountIs.InARun(run));
-            if (inside == null) {
-                classes.add(PartitionClass.ungeneratable(id, label, is,
-                        "no value this position can hold lies inside this range"));
-                continue;
-            }
-            List<FixtureTemplate> values = standingIn(of, inside, type, policy, carrier, symbols);
+            // Nothing composed here says what this compiler did not manage, and says nothing about
+            // what the run holds. Above a string a rule stops short of, the order declines to name
+            // a value on purpose — every string with that one as a prefix is greater, and choosing
+            // between them puts a character nobody wrote into a row somebody reads. So the sentence
+            // both empty answers carry is about composing: it is true of a run that holds nothing
+            // as much as of one the order would not choose in, and it is the only one of the two
+            // claims this compiler is in a position to make (ADR-0091).
+            List<FixtureTemplate> values = inside == null ? List.of()
+                    : standingIn(of, inside, type, carrier, ruleReading);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
                     : PartitionClass.of(id, label, is,
                             RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
-        return List.copyOf(classes);
+        // Classes of the number the runs are runs of, said here because here is where that is known.
+        return classes.stream().map(each -> each.ofTheNumber(of)).toList();
     }
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
@@ -229,8 +242,16 @@ final class Intervals {
     }
 
     /**
-     * A value inside a range, or null where it holds none. Asked of the ends, which is where whether
-     * the range holds the value it stops at is written down.
+     * A value inside a range, or null where nothing composed one. Asked of the ends, which is where
+     * whether the range holds the value it stops at is written down.
+     *
+     * <p>Null says what came back and not what the range holds. Which values are in it is
+     * {@link LevelSpace#inspect}'s answer; this asks the other question, and a caller that read the
+     * two as one would put the order's own restraint into a sentence about the model.
+     *
+     * <p>Nothing on this path asks the first question of a run that gets here. So an empty answer
+     * is a run the order would not choose in, and a run it has nothing in at all, and the caller is
+     * owed a sentence true of both.
      *
      * <p>How the values step is the carrier's to say and is asked of it. Carried as "is it a decimal"
      * it was a second spelling of the same fact, and a carrier that is dense without being the
@@ -254,17 +275,25 @@ final class Intervals {
      * only when the thing that builds them has none to give.
      */
     private static List<FixtureTemplate> standingIn(NumericTerm.FromOnePosition of, Place inside,
-                                                    Type type,
-                                                    ReadingPolicy policy,
-                                                    Carrier carrier, Symbols symbols) {
+                                                    Type type, Carrier carrier,
+                                                    RuleReadingContext reading) {
         // Exhaustive, with no `default`. What a value reading as this number looks like is a
         // different construction per kind of number, so a kind added is one this has to be told
         // how to build for rather than one that falls to whichever branch it was not named in.
+        RuleReadingSource ruleSource = reading.source();
+        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.published());
+        // A name this module cannot write leaves no value to write, whichever number the value is
+        // asked to read as. Asked of the position, once, before anything is built for it.
+        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+            return List.of();
+        }
         switch (of) {
             case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing = Witnesses.wrapped(type,
-                        FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
-                return standing == null ? List.of() : List.of(standing);
+                FixtureTemplate standing =
+                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach);
+                return standing == null ? List.of()
+                        : List.of(RepresentativeSource.under(worn.names(), standing));
             }
             case NumericTerm.TakenOf _ -> { }
         }
@@ -274,8 +303,8 @@ final class Intervals {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, symbols), size, symbols, policy, Set.of()).values()) {
-            out.add(Witnesses.wrapped(type, each, symbols));
+                : Witnesses.ofSize(view, size, reading, Set.of()).values()) {
+            out.add(RepresentativeSource.under(worn.names(), each));
         }
         return List.copyOf(out);
     }

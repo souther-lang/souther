@@ -5,11 +5,14 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.AsACompilationAllows;
+import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -155,8 +158,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         assertTrue(nothing.reachesNothing());
         assertFalse(nothing.numbers().isBottom(), "no domain was made to carry the argument");
         assertFalse(nothing.facts().isBottom());
-        assertFalse(nothing.constraints().values().isBottom());
-        assertFalse(nothing.constraints().ordered().isBottom());
+        assertFalse(nothing.constraints().confinement().holdsNothing());
         assertFalse(nothing.unguarded().constraints().isBottom(),
                 "it is the guards that cannot all hold, not the values that fail");
     }
@@ -177,19 +179,22 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
-        souther.compiler.values.Allowance<FactSubject> sets =
-                souther.compiler.values.Allowance.ofAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingValuesRead(
-                AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
-                        .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        return ConstraintState.<FactSubject>top().takingRead(
+                new Confinement.Planned<>(says("A").meet(says("B")), OrderedIntervals.top(),
+                        Map.<FactSubject, Carrier>of()).resolve(sets), sets);
+    }
+
+    /** One rule about the position. */
+    private static PlannedValues<FactSubject> says(String text) {
+        return PlannedValues.at(A_POSITION, AdmittedPlan.of(ValueSet.just(Value.text(text))));
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
         return ConstraintState.<FactSubject>top()
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
+                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)), Map.of())
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))));
+                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))), Map.of());
     }
 }

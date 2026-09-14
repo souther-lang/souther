@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+import souther.compiler.hash.ValueHash;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,8 +34,9 @@ import java.util.function.Function;
  * makes the answers exact rather than approximate:
  *
  * <pre>
- *     isBottom()   any factor holding nothing, since the rest constrain none of its positions
- *     at(subject)  the one factor that names it, since no other says anything about it
+ *     anyAlternativeAdmits   every factor having one, since an alternative of the conjunction is
+ *                            one alternative of each of them side by side
+ *     at(subject)            the one factor that names it, since no other says anything about it
  * </pre>
  *
  * <p>So a conjunction is kept factored only where keeping it factored loses nothing. Where two
@@ -47,9 +50,16 @@ import java.util.function.Function;
  * over one vocabulary is asking for their product. What is promised is that a conjunction pays the
  * product only where the positions actually meet.
  *
- * <p>No join. A choice between alternatives happens while one declaration is read, which is below
- * this and inside {@link AdmissibleValues}. A disjunction of two factored conjunctions would have to
- * expand them to be said at all, and nothing asks for one.
+ * <p><b>No allowance is held.</b> An {@link Allowance} is what one answer being built may spend, and
+ * this is a value rather than an answer under construction — so every operation of it that may put
+ * two sets together is told which answer pays ({@link #meet}), and the ones that build nothing take
+ * none. Held here, the purse would be the one thing about a conjunction that is not a fact about the
+ * readings in it, and a binary operation between two of them would have two to choose from.
+ *
+ * <p>No join. A choice between alternatives is taken while one declaration is read and while its
+ * values are still descriptions, which is below this and before {@link AdmissibleValues} exists at
+ * all. A disjunction of two factored conjunctions would have to expand them to be said, and nothing
+ * asks for one.
  */
 public final class ConjoinedAdmissibleValues<A> {
 
@@ -67,23 +77,8 @@ public final class ConjoinedAdmissibleValues<A> {
      */
     private final Map<A, AdmissibleValues<A>> naming;
 
-    /**
-     * What put these readings together, and what will put them together with the next one.
-     *
-     * <p>Carried rather than passed in, because the allowance it holds belongs to the answer being
-     * built and not to whoever is asking for the next meet. A conjunction is the one place two
-     * readings of one declaration come together, so the composer that paid for the sets in it is
-     * the composer the next conjunction has to spend from — handed a fresh one, two patterns at a
-     * position would each be affordable and their product would be bought twice.
-     *
-     * <p>Null where nothing has been read, which is a conjunction with no factors and nothing to
-     * put together.
-     */
-    private final Allowance<A> sets;
-
-    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors, Allowance<A> sets) {
+    private ConjoinedAdmissibleValues(List<AdmissibleValues<A>> factors) {
         this.factors = List.copyOf(factors);
-        this.sets = sets;
         Map<A, AdmissibleValues<A>> named = new LinkedHashMap<>();
         for (AdmissibleValues<A> each : this.factors) {
             for (A subject : each.subjects()) {
@@ -96,39 +91,21 @@ public final class ConjoinedAdmissibleValues<A> {
         this.naming = Collections.unmodifiableMap(named);
     }
 
-    /**
-     * What put these sets together, for a reader that has to put one of them together with another.
-     *
-     * <p>Null where nothing was read. A reader holding that is holding every value at every
-     * position, which is what it would have composed its way to anyway.
-     */
-    public Allowance<A> sets() {
-        return sets;
-    }
-
-    /**
-     * The same readings, spending what {@code sets} allows.
-     *
-     * <p>What an answer built out of other answers does with them. The readings below were put
-     * together where each was read, each spending its own declaration's allowance; met into one
-     * they are a different admitted set, over positions this caller names, and it is that set the
-     * allowance has to be about. So the composer comes from whoever is building the answer, and the
-     * readings are taken under it rather than each bringing its own.
-     *
-     * <p>Nothing already read is undone. What is being said is where the next machine is charged.
-     */
-    public ConjoinedAdmissibleValues<A> under(Allowance<A> sets) {
-        return this.sets == sets ? this : new ConjoinedAdmissibleValues<>(factors, sets);
-    }
-
-    /** Nothing read, so every position holds every value — and nothing to put together. */
+    /** Nothing read, so every position holds every value. */
     public static <A> ConjoinedAdmissibleValues<A> top() {
-        return new ConjoinedAdmissibleValues<>(List.of(), null);
+        return new ConjoinedAdmissibleValues<>(List.of());
     }
 
-    /** One reading, which is a conjunction of one, beside what put its sets together. */
-    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read, Allowance<A> sets) {
-        return new ConjoinedAdmissibleValues<>(List.of(read), sets);
+    /**
+     * One reading, which is a conjunction of one.
+     *
+     * <p>No allowance, because holding a reading is not composing one. What the reading admits was
+     * built where the reading was read and out of what that answer was allowed; wrapping it here
+     * puts no two sets together and asks for no machine, so there is nothing to charge and nobody
+     * to charge it to.
+     */
+    public static <A> ConjoinedAdmissibleValues<A> of(AdmissibleValues<A> read) {
+        return new ConjoinedAdmissibleValues<>(List.of(read));
     }
 
     /**
@@ -147,9 +124,9 @@ public final class ConjoinedAdmissibleValues<A> {
     /**
      * Whether any reading has been taken into this.
      *
-     * <p>For a caller that takes a reading in once and has to be able to say so — {@link
-     * souther.compiler.check.ConstraintState#takingValuesRead} is written against nothing having
-     * been taken in yet, and a second reading arriving there would replace the first without a word.
+     * <p>For a caller that takes a reading in once and has to be able to say so — a state takes one
+     * in against nothing having been taken in yet, and a second reading arriving there would replace
+     * the first without a word.
      *
      * <p><b>Whether and not how many.</b> How many factors are here is how many vocabularies the
      * readings fell into, which is not how many readings there were: two readings that name the
@@ -165,14 +142,47 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /**
-     * Whether nothing satisfies the readings together.
+     * Whether an alternative of the conjunction survives a question asked of every position.
      *
-     * <p>Any factor on its own. The others say nothing about the positions it names, so nothing they
-     * hold can put a value back into a factor that has none — and a factor that holds nothing leaves
-     * the conjunction nothing whatever the rest admit.
+     * <p>Factor by factor, and never the product of them. The vocabularies are disjoint, so an
+     * alternative of the conjunction is one alternative of each factor put side by side and the
+     * positions each of them names are asked about in that factor alone: the conjunction stands
+     * where every factor has an alternative that stands, and holds nothing where any factor has
+     * none. Expanded into the product first, the same answer would be reached over as many
+     * alternatives as the factors multiply to.
+     *
+     * <p>Nothing read is every value at every position, which stands whatever is asked — the
+     * question is one about which values a rule leaves, and no rule left any.
      */
-    public boolean isBottom() {
-        return factors.stream().anyMatch(AdmissibleValues::isBottom);
+    public Emptiness anyAlternativeAdmits(AskedOfEachBlock<A> asked, AskedOfARelation<A> relating) {
+        Emptiness stands = Emptiness.identityForMeet();
+        for (AdmissibleValues<A> each : factors) {
+            stands = stands.met(each.anyAlternativeAdmits(asked, relating));
+            if (stands.endsAMeet()) {
+                return stands;
+            }
+        }
+        return stands;
+    }
+
+    /**
+     * The positions every alternative of the conjunction is refused at.
+     *
+     * <p>Read off each factor and put together. An alternative of the conjunction is one alternative
+     * of every factor side by side, so it is refused at a position exactly where the factor naming
+     * that position is — and a position every alternative of its own factor is refused at is one
+     * every alternative of the conjunction is refused at.
+     */
+    public Refusal<A> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked,
+                                                  AskedOfARelation<A> relating) {
+        // What either side of a conjunction showed, which is what every factor showed put together
+        // — each of them is true of the conjunction, and two lacks about two sets of blocks are two
+        // lacks rather than one about all of them.
+        Refusal<A> shown = Refusal.nowhere();
+        for (AdmissibleValues<A> each : factors) {
+            shown = Refusal.eitherShown(shown, each.refusedInEveryAlternativeAt(asked, relating));
+        }
+        return shown;
     }
 
     /**
@@ -210,6 +220,36 @@ public final class ConjoinedAdmissibleValues<A> {
         return names == null ? List.of() : names.whyUnread(subject);
     }
 
+    /**
+     * Which positions one subject is held as one value with, which is the coordinate its answer is
+     * in.
+     *
+     * <p>Asked of the reading that names it. A subject no reading names is one nothing said an
+     * equality about, so it is its own — and two readings kept apart never name one subject
+     * between them, which is what lets this be the one reading's answer rather than a relation
+     * assembled out of several.
+     */
+    public Sameness.Block<A> blockOf(A subject) {
+        AdmissibleValues<A> names = naming.get(subject);
+        return names == null ? Sameness.Block.of(subject) : names.blockOf(subject);
+    }
+
+    /**
+     * Where a factor was refused, over every reading held here — see
+     * {@link AdmissibleValues#refusedBy}.
+     *
+     * <p>Every factor refused is refused of the conjunction, so what is put together is what each
+     * of them was refused by ({@link Refusal#eitherShown}) and not what they agree on. The factors
+     * name disjoint vocabularies, so two lacks at blocks are a lack at all of them.
+     */
+    public Refusal<A> refusedBy() {
+        Refusal<A> out = null;
+        for (AdmissibleValues<A> each : factors) {
+            out = out == null ? each.refusedBy() : Refusal.eitherShown(out, each.refusedBy());
+        }
+        return out == null ? Refusal.nowhere() : out;
+    }
+
     /** Every subject any factor names. */
     public Set<A> subjects() {
         return naming.keySet();
@@ -227,24 +267,26 @@ public final class ConjoinedAdmissibleValues<A> {
      * is one factor over all three. Merged pairwise in one pass, the result would hold two factors
      * that share {@code c}, and every answer that rests on the vocabularies being disjoint would be
      * answering from a factor that is not the only one naming its subject.
+     *
+     * <p><b>{@code sets} is the caller's and not either side's.</b> Where the vocabularies meet, a
+     * factor of the result is a set neither reading holds, and the answer it is part of is the one
+     * being built here. Read off the receiver instead, which of two purses paid would be settled by
+     * which side {@code .meet} was written on: charged to a purse that never admitted these
+     * readings, a composition one of them could not afford gets built; charged to the smaller of
+     * the two, one that both could afford does not. Neither is a fact about the readings, so
+     * neither is a question a value of this can answer.
      */
-    public ConjoinedAdmissibleValues<A> meet(ConjoinedAdmissibleValues<A> other) {
+    public ConjoinedAdmissibleValues<A> meet(ConjoinedAdmissibleValues<A> other,
+                                             Allowance<A> sets) {
         if (other.factors.isEmpty()) {
             return this;
         }
         if (factors.isEmpty()) {
             return other;
         }
-        // One answer is being built, so one composer is spending for it. Two readings that were put
-        // together by different composers are two answers, and meeting them would charge a position
-        // of one against the allowance of the other. An assertion because it is a fact about how
-        // this compiler reads a declaration rather than about any model — see
-        // `ConstraintState.takingValuesRead`, which holds the same kind of thing the same way.
-        assert sets == other.sets
-                : "two readings put together by different composers are two answers";
         List<AdmissibleValues<A>> both = new ArrayList<>(factors);
         both.addAll(other.factors);
-        return new ConjoinedAdmissibleValues<>(byComponent(both, sets), sets);
+        return new ConjoinedAdmissibleValues<>(byComponent(both, sets));
     }
 
     /**
@@ -253,13 +295,14 @@ public final class ConjoinedAdmissibleValues<A> {
      * <p>Factor by factor, and the vocabularies stay disjoint because the naming names two subjects
      * two subjects — which is the caller's to hold to and is what
      * {@code souther.compiler.check.InjectiveRenaming} is.
+     *
+     * <p>Nothing is built, so nothing is charged. The sets are the ones already worked out, filed
+     * under other names.
      */
     public <B> ConjoinedAdmissibleValues<B> renamed(Function<A, B> naming) {
         List<AdmissibleValues<B>> out = new ArrayList<>(factors.size());
         factors.forEach(each -> out.add(each.renamed(naming)));
-        // The allowances go with the names. It is the same answer being built, so what a position
-        // has spent is what it has spent whichever vocabulary it is filed under.
-        return new ConjoinedAdmissibleValues<>(out, sets == null ? null : sets.renamed(naming));
+        return new ConjoinedAdmissibleValues<>(out);
     }
 
     /**
@@ -318,6 +361,35 @@ public final class ConjoinedAdmissibleValues<A> {
             out.add(AdmissibleValues.metAll(members.stream().map(of::get).toList(), sets));
         }
         return out;
+    }
+
+    /**
+     * Two of these say the same thing where they hold the same readings in the same order.
+     *
+     * <p>Written out, because what a query graph stops work on is whether an answer equals the one
+     * before it, and a conjunction ends up inside such an answer ({@code Confinement.Conjoined}).
+     * Left to the default, every conjunction differs from the one the last compile made and nothing
+     * that read one is kept past an edit that changed nothing.
+     *
+     * <p>The readings and not the index beside them: {@link #naming} is worked out from the factors
+     * and holds no fact they do not.
+     *
+     * <p><b>In the order they arrived, though what is answered does not turn on it.</b> The order is
+     * what a compilation writes out, so two of these holding the same readings in two orders write
+     * two things — and equal, one of them would be handed back where the other was made and a model
+     * would come out two ways on two days.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ConjoinedAdmissibleValues<?> it && factors.equals(it.factors);
+    }
+
+    /** The factors it holds, as this kind of value — see {@link ValueHash}. A list hands up a
+     *  number its elements join one at a time, so handing that up is handing up a number whatever
+     *  hashes this next can still take apart. */
+    @Override
+    public int hashCode() {
+        return ValueHash.ofOnePart(ConjoinedAdmissibleValues.class, factors.hashCode());
     }
 
     @Override

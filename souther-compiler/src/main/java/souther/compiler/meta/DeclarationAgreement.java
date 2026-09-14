@@ -9,9 +9,10 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructionOrigin;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.ast.ConstructionOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
 import java.lang.reflect.RecordComponent;
@@ -408,10 +409,12 @@ public final class DeclarationAgreement {
     private static List<Object> crossingParts(Hir.Def def) {
         return switch (def) {
             // Everything a product is: which declaration it is, whether it is a newtype (which is
-            // what it is represented as), what it includes and holds, what it admits, and how it is
-            // read and written.
+            // what it is represented as), what it includes and holds, and what it admits. How a
+            // value of it crosses is read off exactly those, so comparing the derived
+            // representation as well would be comparing the same fact twice — and this reads
+            // declarations as resolution left them, where nothing has derived one.
             case Hir.Data d -> List.of(d.declares(), d.newtype(), d.includes(), named(d.fields()),
-                    d.invariants(), d.decoder(), d.encoder());
+                    d.invariants());
             // Which cases a sum has. How one is told from another is derived from that and from
             // what each case is (`check.Boundary`), and both are reached: a case is followed to its
             // own declaration, where a unit and a product are compared as the different forms they
@@ -627,7 +630,7 @@ public final class DeclarationAgreement {
      */
     private static final Set<Class<?>> ERASED = Set.of(
             SourcePos.class, Region.class,
-            ConstructionOrigin.class, CoverageOrigin.class,
+            ConstructionOrigin.class, SourceConstructOrigin.class,
             // What a definition was made as, and what an example row's position contributes to
             // reading what is written at it. Both are this compile's record of how it built its own
             // tree: a module publishes its declarations and the helpers they are read through, and
@@ -649,7 +652,13 @@ public final class DeclarationAgreement {
             // The spelling, where nothing beside it says what it means — which is the rule this
             // class states about names, and this is the form that carries one on its own. Compared
             // as the word it is, because that is what it means there.
-            WrittenName.class);
+            WrittenName.class,
+            // Who wrote a construct, which is half of what tells one rule from another — the other
+            // half being the number counted within it. Compared whole: two rules are one when one
+            // owner counted them the same, and an owner read component by component would put the
+            // text an owner of rows carries in front of a comparison that has no question about it.
+            WrittenOwner.Declaration.class, WrittenOwner.Stated.class, WrittenOwner.Body.class,
+            WrittenOwner.Examples.class, WrittenOwner.Fake.class);
 
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */

@@ -78,9 +78,9 @@ public final class HumanRenderer implements DiagnosticRenderer {
             out.append(Messages.get("diag.diff.expected", locale)).append('\n');
             out.append("    ").append(d.diff().expectedType()).append('\n');
         }
-        if (d.suggestion() != null) {
+        if (d.repair() != null) {
             out.append(hintLabel(locale))
-                    .append(Messages.get("diag.suggestion", locale, d.suggestion())).append('\n');
+                    .append(Messages.get("diag.suggestion", locale, d.repair().with())).append('\n');
         }
         for (Note note : d.notes()) {
             out.append(hintLabel(locale))
@@ -140,18 +140,23 @@ public final class HumanRenderer implements DiagnosticRenderer {
     }
 
     private String location(SourcePos pos, SourceContext src) {
-        if (pos == null) {
+        PhysicalPos sits = src == null ? null : src.resolve(pos);
+        if (sits == null) {
             return src == null || src.fileName() == null ? "" : src.fileName();
         }
-        String file = src == null || src.fileName() == null ? "" : src.fileName() + ":";
-        return file + pos.line() + ":" + pos.column();
+        String file = src.fileName() == null ? "" : src.fileName() + ":";
+        return file + sits;
     }
 
     private void snippet(StringBuilder out, Region region, SourceContext src, String caretColor) {
         if (region == null || src == null) {
             return;
         }
-        SourcePos start = region.start();
+        PhysicalRegion sits = src.resolve(region);
+        if (sits == null) {
+            return;
+        }
+        PhysicalPos start = sits.start();
         String line = src.line(start.line());
         if (line == null) {
             return;
@@ -164,7 +169,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         // measured from the column it starts at, and the gutter is part of that column, since the
         // quoted line and the carets under it are written on the same terminal line.
         int from = Math.min(Math.max(start.column() - 1, 0), line.length());
-        int to = Math.min(from + region.sourceSpan(), line.length());
+        int to = Math.min(from + sits.sourceSpan(), line.length());
         int at = DisplayColumns.advance(line.substring(0, from), DisplayColumns.width(gutter));
         int span = Math.max(1, DisplayColumns.advance(line.substring(from, to), at) - at);
         out.append(color(caretColor, " ".repeat(at) + "^".repeat(span))).append('\n');

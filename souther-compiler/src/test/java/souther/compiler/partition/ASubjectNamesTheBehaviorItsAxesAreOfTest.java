@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -28,15 +30,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class ASubjectNamesTheBehaviorItsAxesAreOfTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
+
+    /** The reading of an input of one parameter, which is what a subject is asked its numbers
+     *  through. */
+    private static souther.compiler.inputs.InputReading readingOf(String... parameters) {
+        List<souther.compiler.inputs.InputDomain.Parameter> declared = new java.util.ArrayList<>();
+        for (String each : parameters) {
+            declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
+        }
+        return souther.compiler.inputs.InputDomain.of(declared, SYMBOLS,
+                ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+    }
 
     /** A behavior with no divided position, which is where reading the name off an axis ran out. */
     @Test
     void theNameHoldsWhereNothingIsDivided() {
-        Generator.Subject subject = new Generator.Subject("fee",
-                new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
-                        ReadAs.THE_COMPILATION_DOES),
-                List.of(), HeldCounts.NONE);
+        MeasuredInput subject = MeasuredInput.of("fee", readingOf("days"),
+                AxesATestWrote.asAMeasurement("fee", List.of()));
 
         assertEquals("fee", subject.behavior(),
                 "the behavior is named whether or not anything divided its positions");
@@ -46,10 +58,9 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
     @Test
     void anAxisOfAnotherBehaviorIsRefused() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new Generator.Subject("fee",
-                        new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
-                                ReadAs.THE_COMPILATION_DOES),
-                        List.of(axisOf("charge", "days")), HeldCounts.NONE));
+                () -> MeasuredInput.of("fee", readingOf("days"),
+                        AxesATestWrote.asAMeasurement("fee",
+                                List.of(axisOf("charge", "days")))));
 
         assertEquals(true, refused.getMessage().contains("charge"),
                 "the refusal names the axis that disagrees: " + refused.getMessage());
@@ -59,15 +70,14 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
     @Test
     void everyAxisIsAsked() {
         assertThrows(IllegalArgumentException.class,
-                () -> new Generator.Subject("fee",
-                        new BehaviorInputs(List.of("days", "cap"), List.of(Type.INT, Type.INT),
-                                SYMBOLS, ReadAs.THE_COMPILATION_DOES),
-                        List.of(axisOf("fee", "days"), axisOf("charge", "cap")), HeldCounts.NONE),
+                () -> MeasuredInput.of("fee", readingOf("days", "cap"),
+                        AxesATestWrote.asAMeasurement("fee",
+                                List.of(axisOf("fee", "days"), axisOf("charge", "cap")))),
                 "an axis of another behavior standing second is still one");
     }
 
     private static Axis axisOf(String behavior, String position) {
         return new Axis(new AxisId(behavior, position),
-                new NumericTerm.ValueOf(TermPath.of(position)), Type.INT, List.of(), List.of());
+                new NumericTerm.ValueOf(TermPath.of(position)), List.of(), List.of());
     }
 }

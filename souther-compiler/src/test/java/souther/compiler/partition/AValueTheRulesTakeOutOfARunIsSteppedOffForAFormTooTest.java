@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -58,8 +58,8 @@ class AValueTheRulesTakeOutOfARunIsSteppedOffForAFormTooTest {
     void aPointWhoseCosetNamesARefusedValueIsStillOwedARow() {
         String report = report(A_HOLE_IN_BOTH_POSITIONS);
 
-        assertTrue(report.contains("! no row is at the OFF point f/p.a + p.b = 0"), report);
-        assertFalse(report.contains("the search stopped before reaching p.a + p.b = 0"), report);
+        assertTrue(report.contains("read as f/p.a + p.b: = 0"), report);
+        assertFalse(report.contains("the search left something untried before reaching p.a + p.b = 0"), report);
     }
 
     /** And the point above it, which the same walk reaches at the value the coset names. */
@@ -67,12 +67,12 @@ class AValueTheRulesTakeOutOfARunIsSteppedOffForAFormTooTest {
     void theOnPointIsOwedTheSameWay() {
         String report = report(A_HOLE_IN_BOTH_POSITIONS);
 
-        assertTrue(report.contains("! no row is at the ON point f/p.a + p.b = 1"), report);
+        assertTrue(report.contains("read as f/p.a + p.b: = 1"), report);
     }
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

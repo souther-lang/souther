@@ -2,6 +2,8 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,17 +39,29 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
     private static final Value ZERO = Value.text("0");
     private static final Value ONE = Value.text("1");
 
+    /** One rule worked out, which is how a reading of one position is come by. */
     private static AdmissibleValues<String> says(String atom, Value value) {
-        return AdmissibleValues.at(atom, ValueSet.just(value));
+        return built(plans(atom, value));
     }
 
     /** What puts the sets of these readings together. Every set here is values written out, so
      *  nothing is built and no allowance is spent. */
-    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+    private static final Allowance<String> SETS = AsACompilationAllows.forAdmittedValues();
+
+    /** One rule while it is still a description, which is where a choice between two of them is
+     *  taken. */
+    private static PlannedValues<String> plans(String atom, Value value) {
+        return PlannedValues.at(atom, AdmittedPlan.of(ValueSet.just(value)));
+    }
 
     /** Both positions of one alternative, which is a product and is held as one. */
-    private static AdmissibleValues<String> pair(Value a, Value b) {
-        return says(A, a).meet(says(B, b), SETS);
+    private static PlannedValues<String> pair(Value a, Value b) {
+        return plans(A, a).meet(plans(B, b));
+    }
+
+    /** A description worked out, which is the only way a reading holding alternatives is made. */
+    private static AdmissibleValues<String> built(PlannedValues<String> planned) {
+        return planned.resolve(SETS).values();
     }
 
     /** A reading with nothing read is exact about everything it says, which is nothing. */
@@ -63,9 +77,9 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      *  union of two of them is one and nothing is lost. */
     @Test
     void aChoiceAtOnePositionPromisesItsRelation() {
-        AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX), SETS);
+        AdmissibleValues<String> either = built(plans(A, FIVE).joinLive(plans(A, SIX)));
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), either.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), either.at(A));
         assertTrue(either.relationExact(), "two values of one position are a product");
         assertTrue(either.projectionExactAt(A));
     }
@@ -79,10 +93,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aChoiceAcrossTwoPositionsKeepsItsProjectionsAndLosesItsRelation() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
+        AdmissibleValues<String> one = built(pair(FIVE, ZERO).joinLive(pair(SIX, ONE)));
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), one.at(A));
-        assertEquals(ValueSet.oneOf(java.util.Set.of(ZERO, ONE)), one.at(B));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), one.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(ZERO, ONE)), one.at(B));
         assertTrue(one.projectionExactAt(A), "the projection of a union is the union of projections");
         assertFalse(one.relationExact(), "which b went with which a is what the product cannot say");
     }
@@ -97,12 +111,12 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void twoChoicesAcrossTwoPositionsMetTogetherPromiseNeither() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
+        AdmissibleValues<String> one = built(pair(FIVE, ZERO).joinLive(pair(SIX, ONE)));
+        AdmissibleValues<String> two = built(pair(FIVE, ZERO).joinLive(pair(SIX, ZERO)));
 
         AdmissibleValues<String> both = one.meet(two, SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
         assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
         assertFalse(both.relationExact());
     }
@@ -110,7 +124,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
     /** A conjunction of readings that are each a product is a product, and says so. */
     @Test
     void aConjunctionOfProductsPromisesBoth() {
-        AdmissibleValues<String> both = pair(FIVE, ZERO).meet(says(A, FIVE), SETS);
+        AdmissibleValues<String> both = built(pair(FIVE, ZERO).meet(plans(A, FIVE)));
 
         assertTrue(both.relationExact(), "the intersection of two products is a product");
         assertTrue(both.projectionExactAt(A));
@@ -130,9 +144,9 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aPositionNoLostCorrelationReachesKeepsItsPromise() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
-        AdmissibleValues<String> apart = AdmissibleValues.at(C, ValueSet.just(ZERO));
+        AdmissibleValues<String> one = built(pair(FIVE, ZERO).joinLive(pair(SIX, ONE)));
+        AdmissibleValues<String> two = built(pair(FIVE, ZERO).joinLive(pair(SIX, ZERO)));
+        AdmissibleValues<String> apart = says(C, ZERO);
 
         AdmissibleValues<String> all = one.meet(two, SETS).meet(apart, SETS);
 
@@ -148,10 +162,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         for (AdmissibleValues<String> each : java.util.List.<AdmissibleValues<String>>of(
                 AdmissibleValues.top(),
                 says(A, FIVE),
-                says(A, FIVE).join(says(A, SIX), SETS),
-                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS),
-                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS)
-                        .meet(pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS), SETS))) {
+                built(plans(A, FIVE).joinLive(plans(A, SIX))),
+                built(pair(FIVE, ZERO).joinLive(pair(SIX, ONE))),
+                built(pair(FIVE, ZERO).joinLive(pair(SIX, ONE))
+                        .meet(pair(FIVE, ZERO).joinLive(pair(SIX, ZERO)))))) {
             assertTrue(!each.relationExact() || each.projectionExactAt(A),
                     each + " promises its relation and not its projections");
         }

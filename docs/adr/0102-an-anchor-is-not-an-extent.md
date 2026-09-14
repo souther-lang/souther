@@ -132,8 +132,12 @@ a name, since a width that happens to be right is a width nothing measures.
 ## Consequences
 
 Every `Ast.Expr` record gained a component and roughly 190 construction sites say what they mean by
-it. There is no default: a pass that mints a node writes `null` and says so, the way
-`ConstructionOrigin` already has no default for the same reason.
+it. There is no default: a pass that mints a node writes `null` and says so.
+
+`ConstructionOrigin` was the precedent named here and is now the other case. A pass knows what it
+wrote a node over and can be asked for it; where a construction came from is not a pass's to answer,
+so the two forms that hold one take no origin when they are built and carry the one they have when
+they are rebuilt.
 
 `Var` is the one kind whose extent is not its own component in the ordinary case — its constructor
 takes it from the `WrittenName` it holds, because a name is the whole of that expression. It is a

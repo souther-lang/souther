@@ -231,6 +231,9 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
+                Shapes.publishedDeclarations(c.db()),
+                Shapes.declarationKinds(c.db()),
+                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The crossing here is between two loaders of one build, so what the answerer reads
@@ -241,7 +244,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
                 CheckedEnsures.executableOf(

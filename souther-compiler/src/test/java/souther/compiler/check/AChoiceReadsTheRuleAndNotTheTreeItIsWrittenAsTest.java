@@ -21,41 +21,70 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * nothing — and "this clause imposes nothing here", which is what a branch admitting nothing leaves,
  * is not: a further choice imposes nothing either. Held as one, whether the second survived turned
  * on where the brackets fell.
+ *
+ * <p><b>Every choice below is handed an opening of nothing, which is the opening it has.</b> No
+ * branch here narrows a position, so there is no position a choice could be narrower without an
+ * alternative, and that is so under either grouping. Where the alternatives do narrow something the
+ * opening differs from one grouping to the next and is not a caller's to write down; that the two
+ * groupings still come to one account is a fact about the whole walk and is held over sources
+ * ({@code WhetherAConstraintStillBindsIsReadOffWhatTheAlternativesLeaveTest}).
  */
 class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
 
     /** A branch nothing could read, about `x`. */
-    private static final Adoption<String> UNREAD = Adoption.at(Set.of("x"), Set.of(), true);
+    private static final Adoption<String, ReadingLanguage.Values> UNREAD =
+            Adoption.at(Set.of("x"), Set.of(), true);
 
     /** A branch read whole, about `y`. */
-    private static final Adoption<String> READ = Adoption.at(Set.of("y"), Set.of("y"), false);
+    private static final Adoption<String, ReadingLanguage.Values> READ =
+            Adoption.at(Set.of("y"), Set.of("y"), false);
 
     /**
      * One alternative and whether anything satisfies it, composed the way
-     * {@link StatedByClauses#either} composes them.
+     * {@link StatedByClauses.Reading#either} composes them.
      *
      * <p>Whether a branch admits nothing is the state's to know and not the evidence's, so it is
      * carried beside here. A choice is dead where every alternative is, which is the rule the states
      * are composed by.
+     *
+     * <p>Two cases and not four, which is the shape under test as much as the answers are. A
+     * branch is put in a dead branch by what became of it and by nothing about the branch beside
+     * it, and what is left of it composes with a rule that knows nothing of fates — so a choice
+     * neither alternative of which anybody can be in is not written here at all, and cannot come
+     * out anything but what two dead branches leave.
      */
-    private record Branch(Adoption<String> adoption, boolean dead) {
+    private record Branch(Adoption<String, ReadingLanguage.Values> adoption, boolean dead) {
+
+        /** This branch with its fate applied, which is what a choice composes. */
+        Adoption<String, ReadingLanguage.Values> fated() {
+            return dead ? adoption.inADeadBranch() : adoption;
+        }
 
         Branch or(Branch other) {
-            if (dead && other.dead) {
-                return new Branch(adoption.bothDead(other.adoption), true);
+            if (souther.compiler.values.Emptiness.Alternatives.from(
+                            souther.compiler.values.Emptiness.SidesShownEmpty.of(
+                                    said(), other.said()))
+                    .bothStand()) {
+                return new Branch(adoption.either(Opening.nothing(), other.adoption), false);
             }
-            if (dead) {
-                return new Branch(other.adoption.beside(adoption), false);
-            }
-            if (other.dead) {
-                return new Branch(adoption.beside(other.adoption), false);
-            }
-            return new Branch(adoption.either(other.adoption), false);
+            return new Branch(fated().both(other.fated()),
+                    said().joined(other.said()).isEmpty());
+        }
+
+        /** This branch's fate, in the words the classification is read in. */
+        private souther.compiler.values.Emptiness said() {
+            return dead ? souther.compiler.values.Emptiness.EMPTY
+                    : souther.compiler.values.Emptiness.NONEMPTY;
         }
     }
 
     private static final Branch UNREADABLE = new Branch(UNREAD, false);
     private static final Branch IMPOSSIBLE = new Branch(READ, true);
+
+    /** A second branch nothing satisfies, about a position of its own, so that a choice of two of
+     *  them has two answers to keep apart. */
+    private static final Branch ALSO_IMPOSSIBLE =
+            new Branch(Adoption.at(Set.of("z"), Set.of("z"), false), true);
 
     /**
      * Three alternatives compose the same whichever way the brackets fall.
@@ -91,17 +120,23 @@ class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
     }
 
     /**
-     * A constraint is still widened by an alternative nothing could read.
+     * And a choice no alternative of which anybody can be in composes the same way.
      *
-     * <p>The half that has to keep working. Settling is not a constraint and a constraint is not
-     * settling: a value satisfying the unread branch owes the read one nothing, so what that branch
-     * said of its position binds nothing.
+     * <p>The one no report reads: such a choice is empty, so either a choice outside it takes the
+     * alternative beside it and puts this whole one in a dead branch, or the declaration is refused
+     * and its account reaches nothing. Held anyway, because what makes it come out one way is that
+     * nothing here is written about a pair of dead branches — and that is a fact about the
+     * composition, which the next alternative does read.
      */
     @Test
-    void aConstraintIsStillWidenedByAnUnreadAlternative() {
-        assertFalse(READ.either(UNREAD).took("y"),
-                "what the read branch said of `y` binds nothing where the other can be taken");
-        assertTrue(READ.both(UNREAD).took("y"),
-                "and a conjunct nothing read leaves the one beside it saying what it said");
+    void andTwoAlternativesNobodyCanBeInComposeTheSameWayRound() {
+        assertEquals(IMPOSSIBLE.or(ALSO_IMPOSSIBLE).adoption(),
+                ALSO_IMPOSSIBLE.or(IMPOSSIBLE).adoption(),
+                "neither of them speaks for the choice, so neither order does");
+        assertEquals(UNREADABLE.or(IMPOSSIBLE).or(ALSO_IMPOSSIBLE).adoption(),
+                UNREADABLE.or(IMPOSSIBLE.or(ALSO_IMPOSSIBLE)).adoption(),
+                "and a branch that stands beside them reads the same rule either way");
+        assertTrue(IMPOSSIBLE.or(ALSO_IMPOSSIBLE).dead(),
+                "a choice is dead where every alternative of it is");
     }
 }

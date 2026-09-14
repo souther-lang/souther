@@ -93,6 +93,91 @@ public sealed interface DataMessage extends Message {
     record NothingIsLeftForThatPositionToHold(String data, String at)
             implements DataMessage, Reported {}
 
+    /**
+     * The values one position is allowed and the range its order is left share none.
+     *
+     * <p>Beside {@link NothingIsLeftForThatPositionToHold} and not the same sentence. That one is a
+     * position the rules leave no value at all, which an author finds by reading the ends; here the
+     * ends hold values and the rules allow values and the two are apart, so a sentence about what
+     * the rules leave the position would send an author looking at either half and finding nothing
+     * wrong with it.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueItsRulesAllowIsInThatRange(String data, String at)
+            implements DataMessage, Reported {}
+
+    /**
+     * Positions the rules hold as one value are left no value they can all hold.
+     *
+     * <p>The places together and not one of them. Each of these is left something on its own, so a
+     * sentence naming one would send an author to a place whose own rules are fine — what has
+     * nothing is the one value the rules say they are, and the rules that say so are what an
+     * author has to look at.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseCanAllHold(String data, String at) implements DataMessage, Reported {}
+
+    /**
+     * Positions the rules state to hold different values cannot all differ.
+     *
+     * <p>The rule the other way round from {@link NoValueTheseCanAllHold}, and a sentence of its
+     * own rather than that one with the places changed. There the places are one value and it has
+     * none; here each of them holds a value and there are not enough values for them all to differ
+     * — so an author sent to look for a value they share would find one and be none the wiser.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValuesTheseCanAllDifferIn(String data, String at) implements DataMessage, Reported {}
+
+    /**
+     * Positions the rules hold as one value are also stated to differ.
+     *
+     * <p>Beside {@link NoValuesTheseCanAllDifferIn} and not it. That one says there are too few
+     * values for these to differ, which sends an author to look for more; here there is no number
+     * of values that would do, because one value is not two whatever it is.
+     */
+    @Code(DiagnosticCode.E1013)
+    record TheseAreHeldAsOneValueAndStatedToDiffer(String data, String at)
+            implements DataMessage, Reported {}
+
+    /**
+     * The values positions held as one value are allowed and the range they share have none in
+     * common.
+     *
+     * <p>Beside {@link NoValueTheseCanAllHold} for the reason
+     * {@link NoValueItsRulesAllowIsInThatRange} stands beside
+     * {@link NothingIsLeftForThatPositionToHold}: the ends hold values and the rules allow values
+     * and the two are apart, so a sentence about what the rules leave these would send an author
+     * to read either half and find nothing wrong with it.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseAllowIsInTheRangeTheyShare(String data, String at)
+            implements DataMessage, Reported {}
+
+    /**
+     * The values one position is allowed and the bounds the rules require it to be within share
+     * none.
+     *
+     * <p>Beside {@link NoValueItsRulesAllowIsInThatRange} and a different sentence. There, both
+     * halves are rules written about the position, and an author reads them at the place. Here the
+     * bounds follow from rules written about the position and its neighbours together — a position
+     * one past another that is at least two is three or more, however few of those words are at the
+     * place — so the sentence says the position is required to be within them and leaves where they
+     * came from to the rules.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueItsRulesAllowIsWithinTheBoundsTheyRequire(String data, String at)
+            implements DataMessage, Reported {}
+
+    /**
+     * The same, of positions the rules hold as one value.
+     *
+     * <p>The places together and not one of them, for the reason
+     * {@link NoValueTheseAllowIsInTheRangeTheyShare} says it of them.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseAllowIsWithinTheBoundsTheyRequire(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

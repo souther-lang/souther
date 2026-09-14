@@ -1,10 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -70,9 +71,9 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /**
      * A claim nothing settles.
      *
-     * <p>{@code f /= g} refuses pairs and no value of {@code f} on its own, and it is a rule this
-     * compiler does not take into what a position may hold — so nothing here says whether an
-     * {@code Off} arrives, and the case keeps what it was owed.
+     * <p>The rule about {@code f} is stated as an alternative to one this compiler does not take
+     * into what a position may hold, so {@code f} is left open by a branch that never named it —
+     * nothing here says whether an {@code Off} arrives, and the case keeps what it was owed.
      */
     private static final String UNPROVEN = """
             module example.probe
@@ -81,7 +82,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
             data Off
             data Pending
             data Flag = On | Off | Pending
-            data T = { f: Flag, g: Flag } invariant f /= g
+            data T = { f: Flag, g: String } invariant either = UNREAD_G || f == On
             data Answer = Int
 
             behavior pick : (t: T) -> Answer
@@ -93,8 +94,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 | Off     -> unreachable "the probe never passes Off"
 
             example pick
-                | "on" : (T { f = On, g = Off }) -> Answer(1)
-            """;
+                | "on" : (T { f = On, g = "x" }) -> Answer(1)
+            """.replace("UNREAD_G", ARuleNoReadingTakesIn.about("g"));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -263,6 +264,52 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 """;
 
         assertEquals(List.of("E1326"), errorsIn(throughHelper));
+    }
+
+    /**
+     * An arm is held to the rules whichever name it is written by.
+     *
+     * <p>What a position divides into is the leaves its subject reaches, so an arm naming a case
+     * that is itself a sum names none of them and an arm over an optional names neither of its
+     * presences. Asked of the position by name, both came back as a position that had settled
+     * nothing — and a claim nothing settles is judged unproven, so {@code unreachable} written on
+     * an arm the model admits went unreported. The leaf spelling of the same claim was reported all
+     * along, which is what made the hole quiet: one of the two spellings of one model was checked.
+     */
+    @Test
+    void anArmNamingACaseAboveLeavesIsHeldToTheRulesToo() {
+        String bySpelling = """
+                module m
+
+                data Station
+                data Hospital
+                data Renkei
+                data OnceKind  = Station | Hospital
+                data VisitKind = OnceKind | Renkei
+
+                data Box = { k: VisitKind }
+                    invariant k == Station
+
+                data Ack = { at: String }
+
+                behavior byLeaf : (b: Box) -> Ack
+                    constructs Ack
+                let byLeaf (b) =
+                    match b.k with
+                        | Station -> unreachable "but the invariant leaves exactly this one"
+                        | Hospital -> Ack { at = "h" }
+                        | Renkei -> Ack { at = "r" }
+
+                behavior byInnerSum : (b: Box) -> Ack
+                    constructs Ack
+                let byInnerSum (b) =
+                    match b.k with
+                        | OnceKind -> unreachable "but the invariant leaves Station, under this"
+                        | Renkei -> Ack { at = "r" }
+                """;
+
+        assertEquals(List.of("E1326", "E1326"), errorsIn(bySpelling),
+                "the arm over the inner sum reaches Station as surely as the arm naming it");
     }
 
     /** The codes of whatever this model is refused for, in the order they are reported. */
@@ -436,7 +483,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /** The report a build reads, which is where a claim and a measure are put together. */
     private static String reportOn(String source) {
         return souther.compiler.report.AdequacyReport.of(measured(source))
-                .human(SourceNameResolver.identity());
+                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static PartitionEvidence partitionOf(String source) {
@@ -698,14 +745,18 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /**
      * A warning an author cannot act on is worse than no warning.
      *
-     * <p>E1915 asks for a row at an input case and E1918 for a row through an arm. Both are warned
-     * about here and both are about {@code Pending}, which is a row that can be written; neither is
-     * about {@code Off}, which is not.
+     * <p>E1915 asks for a row at an input case, E1918 for a row through an arm, E1931 for a row in
+     * a class and E1935 for a row taking a rule of the decision. All four are warned about here,
+     * and every one of them is about a row that can be written; none is about {@code Off}, which is
+     * not. The rule of the decision names the behavior rather than the case, because a rule is a
+     * way through the body and the case it goes under is what the note beside it says.
      */
     @Test
     void nothingIsWarnedAboutThatNoRowCouldAnswer() {
-        assertEquals(List.of("E1915", "E1918"), warnings(RULED_OUT).stream().sorted().toList());
-        assertTrue(messages(RULED_OUT).stream().allMatch(said -> said.contains("Pending")),
+        assertEquals(List.of("E1915", "E1918", "E1931", "E1935"),
+                warnings(RULED_OUT).stream().sorted().toList());
+        assertTrue(messages(RULED_OUT).stream()
+                        .allMatch(said -> said.contains("Pending") || said.equals("pick")),
                 messages(RULED_OUT).toString());
         assertFalse(messages(RULED_OUT).stream().anyMatch(said -> said.contains("Off")),
                 messages(RULED_OUT).toString());
@@ -742,20 +793,23 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /**
      * What the generator offers has to be what the compiler accepts.
      *
-     * <p>The row it used to write for {@code Off} was E1911 the moment it was uncommented: the tool
-     * handing an author work its own compiler refuses. Checked by writing the rows out, answering
+     * <p>The row it used to write for {@code Off} was E1911 the moment it was compiled: the tool
+     * handing an author work its own compiler refuses. Checked by taking the rows out, answering
      * them and compiling — a generator that offered nothing at all would pass an assertion about
-     * {@code Off} alone, so what it does offer is fixed as well.
+     * {@code Off} alone, so what it does offer is fixed as well, and that there is something to
+     * take is asserted rather than assumed.
      */
     @Test
     void everyRowTheGeneratorOffersCompiles() {
-        String offered = GeneratedRows.of(measured(RULED_OUT), "example.probe", "pick", false,
-                SourceNameResolver.identity()).text();
+        String offered = GeneratedRows.of(measured(RULED_OUT), "example.probe", "pick",
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
 
         assertTrue(offered.contains("(Pending)"), offered);
         assertFalse(offered.contains("(Off)"), offered);
 
-        String answered = RULED_OUT + "\n" + uncommented(offered).replace("<?>", "Answer(0)");
+        String rows = rowsOf(offered);
+        assertTrue(rows.contains("| "), () -> "the block offers rows to compile: " + offered);
+        String answered = RULED_OUT + "\n" + rows.replace("<?>", "Answer(0)");
         Compilation amended = Compilation.ofSource(answered, "Main");
         amended.answerEverything();
         assertEquals(List.of(), amended.db().allReports().stream()
@@ -763,12 +817,12 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 .map(found -> found.report().diagnostic().code()).toList(), answered);
     }
 
-    /** The rows out of a generated block, with the comment marker each is offered behind removed. */
-    private static String uncommented(String offered) {
+    /** The rows out of a generated block, which are the lines of it that are not prose. */
+    private static String rowsOf(String offered) {
         StringBuilder out = new StringBuilder();
-        for (String line : offered.split("\n")) {
-            if (line.startsWith("// example") || line.startsWith("//     |")) {
-                out.append(line.substring(3)).append('\n');
+        for (String line : offered.lines().toList()) {
+            if (!line.startsWith("//")) {
+                out.append(line).append('\n');
             }
         }
         return out.toString();
@@ -928,7 +982,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     void theArmUnderTheForkIsStillNotAnArm() {
         CompileException refused = org.junit.jupiter.api.Assertions.assertThrows(
                 CompileException.class, () -> Compiler.compile(UNPROVEN + """
-                            | "off" : (T { f = Off, g = On }) -> Answer(0)
+                            | "off" : (T { f = Off, g = "x" }) -> Answer(0)
                         """));
 
         assertEquals("E1911", refused.diagnostics().get(0).code(), refused.getMessage());

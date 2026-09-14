@@ -2,24 +2,21 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleKey;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -70,17 +67,16 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
      */
     @Test
     void aNumberTakenOfALocationIsWrittenWhereTheLocationIs() {
-        NumericTerm taken = termAt(TWO_WAYS, "byLength", "h", "name");
-        NumericTerm own = termAt(TWO_WAYS, "byValue", "h", "name");
-        assertInstanceOf(NumericTerm.TakenOf.class, taken, "this one is bounded on its length");
-        assertInstanceOf(NumericTerm.ValueOf.class, own, "and this one on its own values");
+        List<NumericTerm.FromOnePosition> both = numbersAt(TWO_WAYS, "byLength", "h", "name");
+        NumericTerm taken = only(both, NumericTerm.TakenOf.class);
+        NumericTerm own = only(both, NumericTerm.ValueOf.class);
+        assertNotNull(taken, "a string is counted by its length");
+        assertNotNull(own, "and holds its own values besides");
 
         TermPath root = TermPath.of("h");
         souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
-        assertEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).address(),
-                PlacementSeed.of(root, taken, rule, someCitation(rule)).address());
-        assertNotEquals(PlacementSeed.of(root, own, rule, someCitation(rule)).placed(),
-                PlacementSeed.of(root, taken, rule, someCitation(rule)).placed(),
+        assertEquals(seedOf(root, own, rule).address(), seedOf(root, taken, rule).address());
+        assertNotEquals(seedOf(root, own, rule).placed(), seedOf(root, taken, rule).placed(),
                 "and what each says about the location is what tells them apart");
     }
 
@@ -95,16 +91,15 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void twoQuestionsAboutOneLocationAreAtOneAddress() {
         TermPath root = TermPath.of("h");
         souther.compiler.check.RuleRef.Invariant rule = someRule(measuredIn(TWO_WAYS));
-        PlacementSeed values = PlacementSeed.of(root, new Owed.AdmittedValues("name"), rule,
-                someCitation(rule));
+        PlacementSeed values = PlacementSeed.of(root,
+                new Owed.AdmittedValues(RuleKey.of("name")), someCitation(rule));
         PlacementSeed line = PlacementSeed.of(root,
-                new Owed.Boundary(FieldDomains.Coordinate.value("name")), rule,
-                someCitation(rule));
+                new Owed.Boundary(NumberAt.valueOf(RuleKey.of("name"))), someCitation(rule));
 
         assertEquals(values.address(), line.address());
         assertEquals(new PlacementSeed.Placed.TheValuesThere(), values.placed());
         assertEquals(new PlacementSeed.Placed.ANumberOfIt(
-                        new FieldDomains.CoordinateKind.OfItsOwnValue()), line.placed());
+                        new NumberAt.OfWhatNumber.OfItsOwnValue()), line.placed());
     }
 
     /**
@@ -118,9 +113,10 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void oneKeyUnderTwoValuesIsTwoAddresses() {
         InputDomain read = reading(SHARED, "read");
         TermPath sum = TermPath.of("q");
-        TermPath aCase = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
+        TermPath aCase = sum.refine(narrowingTo(read, sum, "A"));
 
-        assertNotEquals(new RuleAddress(sum, "limit"), new RuleAddress(aCase, "limit"));
+        assertNotEquals(new RuleAddress(sum, RuleKey.of("limit")),
+                new RuleAddress(aCase, RuleKey.of("limit")));
     }
 
     /**
@@ -135,8 +131,8 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
     void aPathUnderAnotherValuePlacesNothing() {
         InputDomain read = reading(SHARED, "read");
         TermPath sum = TermPath.of("q");
-        TermPath a = sum.refine(Refinement.sumCase(caseNamed(read, sum, "A")));
-        TermPath b = sum.refine(Refinement.sumCase(caseNamed(read, sum, "B")));
+        TermPath a = sum.refine(narrowingTo(read, sum, "A"));
+        TermPath b = sum.refine(narrowingTo(read, sum, "B"));
 
         assertNull(RuleAddress.of(a, b.then("limit")),
                 "no rule of `A` names a position in `B`");
@@ -145,28 +141,42 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                         + "the sum to that position is the crossing, and an address that stepped "
                         + "through the narrowing would be a second way to say it");
         souther.compiler.check.RuleRef.Invariant rule = someRule(caseNamedAtModule(read, sum, "A"));
-        assertNull(PlacementSeed.of(a, new NumericTerm.ValueOf(b.then("limit")), rule,
-                        someCitation(rule)),
-                "so nothing was placed there, which is not the same as a placement with nowhere "
+        assertNull(RuleAddress.of(a, b.then("limit")),
+                "so there is no address there, which is not the same as a placement with nowhere "
                         + "to go");
-        assertNotNull(PlacementSeed.of(a, new NumericTerm.ValueOf(a.then("limit")), rule,
-                        someCitation(rule)),
+        assertNotNull(seedOf(a, new NumericTerm.ValueOf(a.then("limit")), rule),
                 "and the same rule about its own value does place something");
     }
 
-    /** The term the reading measures one position at. */
-    private static NumericTerm termAt(String source, String behavior, String parameter,
-                                      String field) {
+    /** The numbers the reading gives one position. */
+    private static List<NumericTerm.FromOnePosition> numbersAt(String source, String behavior,
+                                                               String parameter, String field) {
         Position at = reading(source, behavior).at(TermPath.of(parameter).then(field));
         assertNotNull(at, "the field is a position of the input");
-        return at.term();
+        return at.numbers();
+    }
+
+    /** The one of {@code numbers} of that kind, or null where there is none. */
+    private static NumericTerm only(List<NumericTerm.FromOnePosition> numbers,
+                                    Class<? extends NumericTerm> kind) {
+        return numbers.stream().filter(kind::isInstance).findFirst().orElse(null);
     }
 
     /** The case's own name, taken off the reading that holds it. */
     private static TypeSymbol caseNamed(InputDomain read, TermPath sum, String name) {
+        return distinctionAt(read, sum, name).leaf();
+    }
+
+    /** The narrowing to that case, spelled by the distinction the reading holds rather than by the
+     *  case's name — which is how every reader of this path spells it. */
+    private static Refinement narrowingTo(InputDomain read, TermPath sum, String name) {
+        return Refinement.of(distinctionAt(read, sum, name));
+    }
+
+    private static Case.SumCase distinctionAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return one.leaf();
+                return one;
             }
         }
         throw new IllegalStateException("no case named " + name);
@@ -198,10 +208,18 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                         java.util.Optional.of(new souther.compiler.check.ClauseName("here"))));
     }
 
+    /** The seed for a term of the value at {@code root}, at the address that value's rules write
+     *  it at. */
+    private static PlacementSeed seedOf(TermPath root, NumericTerm term,
+                                        souther.compiler.check.RuleRef.Invariant rule) {
+        return PlacementSeed.of(RuleAddress.of(root, term.subjectPath()), term,
+                someCitation(rule));
+    }
+
     /** How a report would send a reader to it. */
     private static souther.compiler.check.RuleCitation someCitation(
             souther.compiler.check.RuleRef.Invariant rule) {
-        return souther.compiler.check.RuleCitation.named(rule);
+        return new souther.compiler.check.RuleCitation.Named(rule);
     }
 
     private static InputDomain reading(String source, String behavior) {
@@ -209,11 +227,9 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 }

@@ -2,18 +2,17 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.InvariantChecker;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -174,16 +173,55 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         assertNotEquals(null, quantities().runsBetween(X));
     }
 
-    private static NumericDomain.LinearForm<NumericTerm> sum() {
+    /** A record whose field is a list, so that a number inside the list is under a value of its
+     *  own. */
+    private static final String INSIDE_A_LIST = """
+            module example.inside
+
+            data N = Int
+                invariant atLeastNone = value >= 0
+
+            data Item = { charge: N }
+
+            data Cart = { items: List<Item> }
+
+            data Taken
+
+            behavior take : (c: Cart) -> Taken
+            """;
+
+    /**
+     * A number inside a sequence is asked about, and is not a place this reading has no name for.
+     *
+     * <p>What names it is the value it is a field of, and the reading roots that value inside the
+     * sequence — so the step into the sequence is above the root and what is left below it is a
+     * field. A reading that took the parameter for the root would have {@code items[*].charge} to
+     * name, which is no name any rule of the parameter writes, and the quantity would be one
+     * nothing could be asked about.
+     */
+    @Test
+    void aNumberInsideASequenceIsUnderAValueWhoseRulesNameIt() {
+        Read read = read(INSIDE_A_LIST, "take");
+        Quantities asked = read.inputs().quantities(read.rules());
+        NumericTerm charge = new NumericTerm.ValueOf(
+                TermPath.of("c").then("items").element().then("charge"));
+
+        assertNotEquals(null, asked.runsBetween(charge),
+                "the number inside the list is one this reading answers about");
+        assertNotEquals(null, asked.given(charge, count(1)),
+                "and one it can be told a value for");
+    }
+
+    private static LinearForm<NumericTerm> sum() {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(X, BigDecimal.ONE);
         coefs.put(Y, BigDecimal.ONE);
-        return new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(BigDecimal.ZERO, coefs);
     }
 
-    private static Map<NumericTerm, Count> fixing(NumericTerm one, int at,
-                                                  NumericTerm other, int also) {
-        Map<NumericTerm, Count> out = new LinkedHashMap<>();
+    private static Map<NumericTerm, souther.compiler.numeric.Place> fixing(
+            NumericTerm one, int at, NumericTerm other, int also) {
+        Map<NumericTerm, souther.compiler.numeric.Place> out = new LinkedHashMap<>();
         out.put(one, count(at));
         out.put(other, count(also));
         return out;
@@ -210,7 +248,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     void aCountFixedBelowNoneLeavesNothingThoughNoClauseSaysSo() {
         Read read = read(BAG, "take");
         NumericTerm size = takenOfWhatIsThere(read, TermPath.of("b").then("xs"));
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
 
         assertTrue(asked.given(size, count(-1)).emptiness().isPresent());
         assertEquals(java.util.Optional.empty(), asked.given(size, count(1)).emptiness());
@@ -243,7 +281,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void fixingOneCountNarrowsTheCountItIsRelatedTo() {
         Read read = read(COUNTED, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         NumericTerm accounts = size(read, "accounts");
         NumericTerm contacts = size(read, "contacts");
 
@@ -256,7 +294,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void twoCountsTheRuleRefusesTogetherLeaveNothing() {
         Read read = read(COUNTED, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         NumericTerm accounts = size(read, "accounts");
         NumericTerm contacts = size(read, "contacts");
 
@@ -268,7 +306,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void theAlgebraHoldsOfACountToo() {
         Read read = read(COUNTED, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         NumericTerm accounts = size(read, "accounts");
         NumericTerm contacts = size(read, "contacts");
         Quantities one = asked.given(accounts, count(0)).given(contacts, count(2));
@@ -298,15 +336,15 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void settlingAPositionDoesNotReadTheDeclarationsAgain() {
         Read read = read(SOURCE, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
-        long before = souther.compiler.check.FieldDomains.readingsMade();
+        Quantities asked = read.inputs().quantities(read.rules());
+        long before = InvariantChecker.readingsMade();
 
         Quantities twice = asked.given(X, count(1)).given(Y, count(1));
         twice.runsBetween(sum());
         twice.runsBetween(Y);
         twice.emptiness();
 
-        assertEquals(before, souther.compiler.check.FieldDomains.readingsMade());
+        assertEquals(before, InvariantChecker.readingsMade());
     }
 
     /**
@@ -322,29 +360,35 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         Read read = read(SOURCE, "take");
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
-                new souther.compiler.types.TypeKey(read.symbols().module(), "P"));
-        Hir.Data data = (Hir.Data) read.symbols().declarations().declaration(name.key());
+                new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
-                name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES);
+                name, read.rules(), ReadAs.THE_COMPILATION_DOES);
 
         for (int at = 0; at <= 5; at++) {
-            Map<String, Count> settled = Map.of("x", count(at));
+            Map<souther.compiler.check.RuleKey, Count> settled =
+                    Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
-                    name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
+                    name, read.rules(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.FieldDomains.Coordinate.value("x"), count(at)))
-                    .constraintsOver(coordinate -> coordinate.kind()
-                                    instanceof souther.compiler.check.FieldDomains
-                                            .CoordinateKind.OfWhatAnOperationAnswers
-                                    ? "#" + coordinate.path() : coordinate.path(),
+                    souther.compiler.check.NumberAt
+                            .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))
+                    .constraintsOver(claim -> claim.of()
+                                    instanceof souther.compiler.check.NumberAt
+                                            .OfWhatNumber.OfWhatAnOperationAnswers
+                                    ? "#" + claim.position() : claim.position().toString(),
                             subject -> "?" + subject);
+            java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
+                    new LinkedHashMap<>();
+            taken.named().forEach((subject, spelled) ->
+                    where.put(subject, new Emptiness.AtAField.Where.In(subject)));
 
             assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(taken.positions()).isPresent(),
+                    taken.constraints().holdsNothing(where).isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt("y", new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
+            assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
+                            new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
-                            NumericDomain.LinearForm.<String>atom("y")),
+                            LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
         }
     }
@@ -361,10 +405,11 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     void aProofThatNamesAPositionIsSaidUnderTheParameter() {
         Read read = read(NOTHING_AT_A_FIELD, "take");
 
-        EmptyInput why = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
+        EmptyInput why = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
 
         assertEquals(new EmptyInput.ProvedByTheRules(
-                        new Emptiness.AtAField("p.x", new Emptiness.EmptyOrderedInterval())),
+                        new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.x"),
+                                new Emptiness.EmptyOrderedInterval())),
                 why);
     }
 
@@ -381,7 +426,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     void aProofAboutNoOnePositionNamesNone() {
         Read read = read(SOURCE, "take");
 
-        EmptyInput why = read.inputs().quantities(read.symbols())
+        EmptyInput why = read.inputs().quantities(read.rules())
                 .given(fixing(X, 4, Y, 4)).emptiness().orElseThrow();
 
         assertEquals(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()), why);
@@ -412,7 +457,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     @Test
     void theProofDoesNotSayWhichImpossibleValueWasFixedFirst() {
         Read read = read(COUNTED, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         NumericTerm accounts = size(read, "accounts");
         NumericTerm contacts = size(read, "contacts");
 
@@ -442,8 +487,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     private static NumericTerm takenOfWhatIsThere(Read read, TermPath at) {
         souther.compiler.types.Type type = read.inputs().at(at).type();
         NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
-                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
-                at, type, read.symbols());
+                souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
+                at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
         return made;
     }
@@ -460,23 +505,21 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             behavior take : (b: Bag) -> Taken
             """;
 
-    private record Read(InputDomain inputs, Symbols symbols) {}
+    private record Read(InputDomain inputs, RuleReadingSource rules) {}
 
     private static Quantities quantities() {
         Read read = read(SOURCE, "take");
-        return read.inputs().quantities(read.symbols());
+        return read.inputs().quantities(read.rules());
     }
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new Read(InputDomain.of(spec, sigs.get(behavior), symbols,
-                ReadAs.THE_COMPILATION_DOES), symbols);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(InputDomain.of(sigs.get(behavior), rules,
+                ReadAs.THE_COMPILATION_DOES), rules);
     }
 }

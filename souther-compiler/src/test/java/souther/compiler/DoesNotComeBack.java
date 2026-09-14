@@ -103,11 +103,11 @@ public final class DoesNotComeBack {
      * is run inline, and a loop nothing picked out would not be cut short but would hang.
      */
     public static JvmExampleDeadlines overrunningOn(Predicate<Deadline.Work> which) {
-        return outerTimeout -> new Deadline() {
+        return compilerTimeout -> new Deadline() {
 
             @Override
-            public long budgetMs() {
-                return outerTimeout.toMillis();   // what a report about an overrun quotes
+            public Duration timeout() {
+                return compilerTimeout;   // what a report about an overrun quotes
             }
 
             @Override
@@ -138,11 +138,11 @@ public final class DoesNotComeBack {
      * the route is stated.
      */
     static JvmExampleDeadlines throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
-        return outerTimeout -> new Deadline() {
+        return compilerTimeout -> new Deadline() {
 
             @Override
-            public long budgetMs() {
-                return outerTimeout.toMillis();
+            public Duration timeout() {
+                return compilerTimeout;
             }
 
             @Override
@@ -161,7 +161,7 @@ public final class DoesNotComeBack {
 
     /** Every row of {@code target}, evaluated — its fixtures built, the behavior applied. */
     static Predicate<Deadline.Work> everyRowOf(String target) {
-        return w -> w instanceof Deadline.Work.Row row && row.target().equals(target);
+        return w -> w instanceof Deadline.Work.WholeRow row && row.target().equals(target);
     }
 
     /** The statements every row of {@code target} is read from, with nothing applied. */
@@ -185,7 +185,7 @@ public final class DoesNotComeBack {
     static Predicate<Deadline.Work> everythingAboutTheRowNamed(String name) {
         RowIdentity named = new RowIdentity.Named(name);
         return w -> switch (w) {
-            case Deadline.Work.Row row -> named.equals(row.identity());
+            case Deadline.Work.WholeRow row -> named.equals(row.identity());
             case Deadline.Work.Fixtures f -> named.equals(f.identity());
             default -> false;
         };

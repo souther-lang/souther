@@ -65,17 +65,17 @@ final class Columns {
         /** Where a fake row's output begins. */
         THE_RESULT_OF_A_FAKE(SyntaxKind.FAKE_ROW, SyntaxKind.ARROW);
 
-        private final SyntaxKind row;
+        private final SyntaxKind rowKind;
         private final SyntaxKind connector;
 
-        Stop(SyntaxKind row, SyntaxKind connector) {
-            this.row = row;
+        Stop(SyntaxKind rowKind, SyntaxKind connector) {
+            this.rowKind = rowKind;
             this.connector = connector;
         }
 
-        /** The row this is a stop of. */
-        SyntaxKind row() {
-            return row;
+        /** What the row this is a stop of is written as. */
+        SyntaxKind rowKind() {
+            return rowKind;
         }
 
         /** The token written at the column. */
@@ -85,10 +85,10 @@ final class Columns {
 
         /** What the rule says, for a reader who is being told their source does not. */
         String said() {
-            return "the rows of a " + switch (row) {
+            return "the rows of a " + switch (rowKind) {
                 case EXAMPLE_ROW -> "table of examples";
                 case FAKE_ROW -> "table of fakes";
-                default -> throw new IllegalStateException("no such table: " + row);
+                default -> throw new IllegalStateException("no such table: " + rowKind);
             } + " write their " + connector.fixedSpelling().orElseThrow()
                     + " at one column";
         }
@@ -114,7 +114,7 @@ final class Columns {
      */
     static Stop at(SyntaxKind joining, SyntaxKind right) {
         for (Stop stop : Stop.values()) {
-            if (stop.row() == joining && stop.connector() == right) {
+            if (stop.rowKind() == joining && stop.connector() == right) {
                 return stop;
             }
         }

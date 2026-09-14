@@ -1,12 +1,15 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -137,7 +140,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
      * stop: {@code borders 5   coverage items 5/10} is what a model read to the end gets.
      */
     @Test
-    void andTheHumanReportSaysWhichMeasureWasNotMadeInFull() throws IOException {
+    void andTheHumanReportSaysWhichMeasureWasNotMadeInFull() {
         String human = humanOfTheCorpus();
 
         assertTrue(human.contains("(not all of it was measured)"), human);
@@ -185,7 +188,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
     }
 
     private static JsonNode documentOf(String source) {
-        return JSON.readTree(reportOf(source).json(SourceNameResolver.identity()));
+        return JSON.readTree(reportOf(source).json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     private static String statusOfTheOneBehaviorIn(String source) {
@@ -193,22 +196,23 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
                 .path("status").asString();
     }
 
-    /** The corpus the checked-in answers are about, read as a person reads it. */
-    private static String humanOfTheCorpus() throws IOException {
-        List<String> sources = new ArrayList<>();
-        for (String name : Files.readAllLines(CORPORA.resolve("catalog/sources.txt"))) {
-            if (!name.isBlank()) {
-                sources.add(Files.readString(CORPORA.resolve("catalog").resolve(name.strip())));
-            }
-        }
-        Compilation compilation = Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
+    /**
+     * One of the corpora the checked-in answers are about, read as a person reads it.
+     *
+     * <p>Taken by name from where the models are declared, so what it is made of and in what order
+     * is the corpus's own answer. Listed here, the files would be a second account of that, and a
+     * file added to the corpus would leave this reading a model nobody writes any more.
+     */
+    private static String humanOfTheCorpus() {
+        List<String> sources = ConformanceCorpus.sourcesOf("catalog");
+        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String humanOf(String source) {
-        return reportOf(source).human(SourceNameResolver.identity());
+        return reportOf(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport reportOf(String source) {

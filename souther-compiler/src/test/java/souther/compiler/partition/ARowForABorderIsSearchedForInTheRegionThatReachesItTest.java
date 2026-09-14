@@ -225,11 +225,11 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
                 """;
 
         for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
-            assertEquals(owed(pointAt(ON_GUARDS, level)).attempt().getClass(),
-                    owed(pointAt(chained, level)).attempt().getClass(),
+            assertEquals(owed(pointAt(ON_GUARDS, level)).searches().only().getClass(),
+                    owed(pointAt(chained, level)).searches().only().getClass(),
                     "one chain and four guards say the same thing, at " + level);
             assertInstanceOf(ItemAssessment.Attempt.Built.class,
-                    owed(pointAt(chained, level)).attempt(),
+                    owed(pointAt(chained, level)).searches().only(),
                     "and both of them find a row at " + level);
         }
     }
@@ -361,7 +361,7 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     /** The row one point was answered with, where one was built at all. */
     private static ItemAssessment.Attempt.Built built(String source, String level) {
         return assertInstanceOf(ItemAssessment.Attempt.Built.class,
-                owed(pointAt(source, level)).attempt(), "a row was composed at " + level);
+                owed(pointAt(source, level)).searches().only(), "a row was composed at " + level);
     }
 
     /**
@@ -375,7 +375,7 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     void aLevelTheRegionHasAnAnswerAtIsComposed() {
         ItemAssessment.Owed off = owed(pointAt(ON_GUARDS, "x + 2 * y = 17"));
 
-        assertInstanceOf(ItemAssessment.Attempt.Built.class, off.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, off.searches().only(),
                 "a row at the level exists in the region that reaches the guard");
     }
 
@@ -388,8 +388,8 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     @Test
     void whereTheBoundsAreWrittenDoesNotMoveTheAnswer() {
         for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
-            assertEquals(owed(pointAt(ON_TYPES, level)).attempt().getClass(),
-                    owed(pointAt(ON_GUARDS, level)).attempt().getClass(),
+            assertEquals(owed(pointAt(ON_TYPES, level)).searches().only().getClass(),
+                    owed(pointAt(ON_GUARDS, level)).searches().only().getClass(),
                     "the same line over the same region, at " + level);
         }
     }
@@ -404,7 +404,7 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     @Test
     void aRowOfferedForALevelReachesTheGuardThatOwesIt() {
         for (String level : List.of("x + 2 * y = 16", "x + 2 * y = 17")) {
-            ItemAssessment.Attempt attempt = owed(pointAt(A_GUARD_ABOVE, level)).attempt();
+            ItemAssessment.Attempt attempt = owed(pointAt(A_GUARD_ABOVE, level)).searches().only();
             ItemAssessment.Attempt.Built built = assertInstanceOf(
                     ItemAssessment.Attempt.Built.class, attempt, "a row was composed at " + level);
             assertTrue(largeIn(built.row()) <= 6,
@@ -422,7 +422,7 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
     @Test
     void aRowForALineInsideTheOtherArmStandsWhereThatConditionFails() {
         ItemAssessment.Attempt.Built built = assertInstanceOf(ItemAssessment.Attempt.Built.class,
-                owed(pointAt(INSIDE_THE_OTHER_ARM, "x + 2 * y = 16")).attempt(),
+                owed(pointAt(INSIDE_THE_OTHER_ARM, "x + 2 * y = 16")).searches().only(),
                 "a row at the level exists in the arm the condition fails on");
 
         assertTrue(largeIn(built.row()) <= 6,

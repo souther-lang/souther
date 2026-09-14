@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.reading.Condition;
+import souther.compiler.numeric.Towards;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.Outcome;
@@ -368,9 +369,9 @@ public final class InteractionCells {
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
-    private static Cell narrowedBy(List<Condition> holds, List<Axis> axes) {
+    private static Cell narrowedBy(List<souther.compiler.reading.Condition> holds, List<Axis> axes) {
         Cell cell = Cell.anything(axes);
-        for (Condition each : holds) {
+        for (souther.compiler.reading.Condition each : holds) {
             Cell said = admittedBy(each, axes);
             if (said == null) {
                 return null;
@@ -393,9 +394,9 @@ public final class InteractionCells {
     }
 
     /** Which classes {@code condition} leaves its position, or null where it names none. */
-    private static Cell admittedBy(Condition condition, List<Axis> axes) {
+    private static Cell admittedBy(souther.compiler.reading.Condition condition, List<Axis> axes) {
         switch (condition) {
-            case Condition.Case one -> {
+            case souther.compiler.reading.Condition.Case one -> {
                 int axis = axisAt(axes, one.at());
                 if (axis < 0) {
                     return null;
@@ -408,28 +409,47 @@ public final class InteractionCells {
                 }
                 return null;
             }
-            case Condition.Side one -> {
+            case souther.compiler.reading.Condition.Side one -> {
                 int axis = axisOf(axes, one.at());
                 if (axis < 0) {
                     return null;
                 }
-                Cut line = cutAt(axes.get(axis), one.comparison());
+                // Which construct of the model the decision was about, since a rule is stated at
+                // one and the decision was recorded at whichever materialisation of it ran. Empty
+                // where the model states nothing there — a comparison inside one of the language's
+                // own operations — and no rule draws a line on such a place, so there is no cut of
+                // this axis it could be the reading of.
+                ModelOccurrence states =
+                        ModelOccurrence.statedAt(one.comparison()).orElse(null);
+                if (states == null) {
+                    return null;
+                }
+                Cut line = cutAt(axes.get(axis), states);
                 if (line == null) {
                     return null;
                 }
-                OriginRef.ComparisonOrigin guard = guardOf(line, one.comparison());
+                LineOrigin.ComparisonOrigin guard = guardOf(line, states);
                 int home = holding(axes.get(axis), line);
                 if (home < 0) {
                     return null;
                 }
-                // Which side the comparison is true on, from the two facts the line carries: which
+                // Which side the comparison is true on, from the two facts the order carries: which
                 // side of it the cut value itself sits on, and whether the comparison holds there.
                 // The whole side and not its nearest class: the comparison admits every value out
                 // that way, and a reading that answered with one of them would have said more than
                 // the rule does — which is what makes two of them impossible to take together.
-                boolean homeSideIsUp = !guard.valueBelongsBelow();
-                boolean wantedIsHomeSide = guard.holdsAtTheValue() == one.held();
-                boolean wantedIsUp = wantedIsHomeSide == homeSideIsUp;
+                //
+                // Asked of a rule that ordered the values, and of no other. A rule that names one
+                // has no side its values are true on — what it distinguishes is that value from
+                // every other — so there is no cell either way of it to take.
+                if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
+                    return null;
+                }
+                boolean wantedIsHomeSide = order.holdsAtTheValue() == one.held();
+                // The side the cell wants: the one the rule is satisfied on where it wants the rule
+                // met, and the other where it wants it broken.
+                boolean wantedIsUp = (one.held() ? order.satisfyingSide()
+                        : order.satisfyingSide().opposite()) == Towards.ABOVE;
                 int last = axes.get(axis).classes().size() - 1;
                 int edge = wantedIsHomeSide ? home : (wantedIsUp ? home + 1 : home - 1);
                 if (edge < 0 || edge > last) {
@@ -438,7 +458,7 @@ public final class InteractionCells {
                 return wantedIsUp ? only(axes, axis, edge, last) : only(axes, axis, 0, edge);
             }
             // A fork this reading could not name a position for narrows nothing.
-            case Condition.Arm ignored -> {
+            case souther.compiler.reading.Condition.Arm ignored -> {
                 return null;
             }
         }
@@ -504,33 +524,39 @@ public final class InteractionCells {
         return found;
     }
 
-    /** The cut this reading of the comparison drew, or null where it drew none. */
-    private static Cut cutAt(Axis axis, ComparisonOccurrence comparison) {
+    /** The cut the rule stated at {@code states} drew, or null where it drew none. */
+    private static Cut cutAt(Axis axis, ModelOccurrence states) {
         for (Cut each : axis.cuts()) {
-            if (guardOf(each, comparison) != null) {
+            if (guardOf(each, states) != null) {
                 return each;
             }
         }
         return null;
     }
 
-    /** Which rule of the cut this reading of the comparison is. */
-    private static OriginRef.ComparisonOrigin guardOf(Cut cut, ComparisonOccurrence comparison) {
-        for (OriginRef origin : cut.origins()) {
-            if (origin instanceof OriginRef.ComparisonOrigin guard
-                    && guard.read().comparison().equals(comparison)) {
+    /** Which rule of the cut the one stated at {@code states} is. */
+    private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states) {
+        for (LineOrigin origin : cut.origins()) {
+            if (origin instanceof LineOrigin.ComparisonOrigin guard
+                    && guard.read().states().equals(states)) {
                 return guard;
             }
         }
         return null;
     }
 
-    /** Which class of the axis holds the value the line is drawn at. */
+    /**
+     * Which class of the axis holds the number the line is drawn at, or -1 where none does.
+     *
+     * <p>Asked with the place the line is at, on the order of the number the axis measures. The
+     * classes of that axis are classes of that number, so the two meet as they stand — asked with a
+     * value of the position instead, a class about something taken of it is handed the taken number
+     * where it expects what stands there, and every class says no.
+     */
     private static int holding(Axis axis, Cut line) {
         List<PartitionClass> classes = axis.classes();
         for (int c = 0; c < classes.size(); c++) {
-            if (classes.get(c).classifier().membershipOf(line.value())
-                    instanceof souther.compiler.inputs.Membership.Match) {
+            if (classes.get(c).holdsTheNumberAt(line.at())) {
                 return c;
             }
         }

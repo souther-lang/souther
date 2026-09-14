@@ -16,9 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * only where a declaration does not reach that module under two names — otherwise one identity
  * would answer for two methods and the reader would take whichever it met first.
  *
- * <p>It holds because {@link ReachName#of} decides a helper's reach from the declaring module and
- * the reading one, and reads the spelling for neither. That is a fact about that method and not
- * about the language, so it is asked of that method here.
+ * <p>It holds because {@link ReachName#of} decides a declaration's reach from the declaring module
+ * and the reading one, and reads the spelling for neither. That is a fact about that method and not
+ * about the language, so it is asked of that method here — of a behavior as well as of a helper,
+ * because a behavior was once answered with the spelling instead, so a qualified reference came back
+ * as a bare name that is not bare.
  */
 class AHelperIsReachedOneWayFromOneModuleTest {
 
@@ -64,6 +66,23 @@ class AHelperIsReachedOneWayFromOneModuleTest {
     void whichModuleIsReadingDecidesIt() {
         assertEquals(new ReachName.Own(THEIRS), ReachName.of(THEIRS, "flatten", "lib"));
         assertEquals(new ReachName.OfModule(THEIRS), ReachName.of(THEIRS, "flatten", "app"));
+    }
+
+    /**
+     * A behavior is reached the same two ways, whichever spelling reached it: another module's
+     * under the module that declares it, and the module's own bare — also where the reference was
+     * written through its own module, since the qualifier names this module and nothing is in the
+     * way of the name. What is rendered is what was written.
+     */
+    @Test
+    void aBehaviorIsReachedTheSameTwoWays() {
+        ValueName.Behavior theirs = new ValueName.Behavior("app.a", "f");
+        ValueName.Behavior ours = new ValueName.Behavior("app.own", "f");
+
+        assertEquals(new ReachName.OfModule(theirs), ReachName.of(theirs, "app.a.f", "app.own"));
+        assertEquals("app.a.f", ReachName.of(theirs, "app.a.f", "app.own").rendered());
+        assertEquals(new ReachName.Own(ours), ReachName.of(ours, "f", "app.own"));
+        assertEquals(new ReachName.Own(ours), ReachName.of(ours, "app.own.f", "app.own"));
     }
 
     /** How {@code declaration} is reached from {@code self}, over every spelling a body could

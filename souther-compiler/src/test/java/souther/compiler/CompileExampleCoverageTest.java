@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.ArmVocabulary;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -57,8 +58,8 @@ class CompileExampleCoverageTest {
     }
 
     private static List<String> unreached(Adequacy.BranchEvidence branch) {
-        return branch.unreached().orElseThrow().stream()
-                .map(souther.compiler.report.ArmVocabulary::label).toList();
+        return branch.arms().unmet().stream()
+                .map(arm -> ArmVocabulary.label(arm.display())).toList();
     }
 
     /** One row through the guard leaves the other arm with nothing going through it. */
@@ -71,7 +72,7 @@ class CompileExampleCoverageTest {
                 """, "submit");
 
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(branch.measured()));
-        assertEquals(2, branch.arms().all().size(), "a guard is two arms");
+        assertEquals(2, branch.arms().counted(), "a guard is two arms");
         assertEquals(List.of("else"), unreached(branch));
     }
 
@@ -85,7 +86,7 @@ class CompileExampleCoverageTest {
                 """, "submit");
 
         assertEquals(List.of(), unreached(branch));
-        assertEquals(2, branch.arms().covered().size());
+        assertEquals(2, branch.arms().covered());
     }
 
     /** A match's arms are counted one per arm, and cases written together on one arm are one. */
@@ -179,7 +180,8 @@ class CompileExampleCoverageTest {
                 """, "pick");
 
         assertEquals(List.of("case Off"),
-                branch.arms().all().stream().map(site -> souther.compiler.report.ArmVocabulary.label(site)).toList());
+                branch.arms().all().stream()
+                        .map(arm -> ArmVocabulary.label(arm.display())).toList());
         assertEquals(List.of(), unreached(branch), "the row went through the arm that is left");
     }
 
@@ -274,8 +276,8 @@ class CompileExampleCoverageTest {
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(module)).value().get("go");
-        assertEquals(2, branch.arms().all().size(), "the arms are there to reach");
-        assertEquals(List.of(), branch.arms().covered().stream().sorted().toList(),
+        assertEquals(2, branch.arms().counted(), "the arms are there to reach");
+        assertEquals(0, branch.arms().covered(),
                 "a row that never came back left no arms behind");
     }
 
@@ -356,8 +358,9 @@ class CompileExampleCoverageTest {
 
         assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(branch.measured()));
         // Silent, and that is the absence of a value rather than an empty answer. Which arms no row
-        // reaches is a claim about the rows there were, and there were none to read.
-        assertTrue(branch.unreached().isEmpty(),
+        // reaches is a claim about the rows there were, and there were none to read — so there is
+        // no account to ask, rather than an account holding arms with nothing said about them.
+        assertTrue(branch.measured().made().isEmpty(),
                 () -> "nothing was measured, so no arm can be named unreached: "
                         + branch.measured());
     }

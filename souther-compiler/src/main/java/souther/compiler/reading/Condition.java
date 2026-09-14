@@ -1,7 +1,7 @@
 package souther.compiler.reading;
 
-import souther.compiler.coverage.ComparisonOccurrence;
-import souther.compiler.coverage.ForkOccurrence;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
@@ -37,17 +37,21 @@ public sealed interface Condition {
      * and has nothing to pick with.
      *
      * @param at         which number, which is a location's own content or something taken of it
-     * @param comparison which comparison, which is what tells one reading of one rule from another:
-     *                   a comparison inside a non-recursive helper is read once per call of that
-     *                   helper. The occurrence and not the number it is instrumented under — the
-     *                   number is how a run is recorded and is no part of what this decision is
+     * @param comparison which place in the tree that runs, which is what tells one decision from
+     *                   another. The materialisation and not the construct of the model it is one
+     *                   of: an operation that evaluates a closure it was handed twice compares two
+     *                   values, so the two coming out different ways is a row doing two things and
+     *                   not a row contradicting itself. Read as one, a path the body has would be
+     *                   thrown away.
+     *                   <p>The occurrence and not the number it is instrumented under — the number
+     *                   is how a run is recorded and is no part of what this decision is
      * @param held       the way it came out
      */
-    record Side(NumericTerm at, ComparisonOccurrence comparison, boolean held) implements Condition {
+    record Side(NumericTerm at, ConstructOccurrence comparison, boolean held) implements Condition {
 
         @Override
         public String toString() {
-            return at + (held ? " holds" : " fails") + "@" + comparison.emissionSite();
+            return at + (held ? " holds" : " fails") + " at " + comparison;
         }
     }
 
@@ -63,14 +67,16 @@ public sealed interface Condition {
      * could not name, and a reading that left it out instead would offer the group with one of the
      * ways it can be settled quietly missing.
      *
-     * @param fork which fork, as the plan named it
-     * @param part which arm of it
+     * @param arm which arm of which fork. The fork as the tree that runs has it and not the number
+     *            a plan handed its arms: an operation that applies the block it was handed twice
+     *            settles the fork inside it twice, on values of its own, so the two are two
+     *            decisions — and the number that told them apart was the walk's and not theirs
      */
-    record Arm(ForkOccurrence fork, int part) implements Condition {
+    record Arm(ArmOccurrence arm) implements Condition {
 
         @Override
         public String toString() {
-            return fork + "/" + part;
+            return String.valueOf(arm);
         }
     }
 }

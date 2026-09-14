@@ -3,16 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -164,7 +163,6 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     /** And arithmetic over a position named first, which is what took the line away. */
     @Test
     void aNameGivenArithmeticOverAPositionIsThatArithmetic() {
-        Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
         // The pair says the two spellings agree; this says what they agree on is a line, so a
         // reading that lost it in both would not pass for agreement.
         assertFalse(linesOf(lines(MODEL, "example.named").get("overOnePosition")).isEmpty(),
@@ -216,22 +214,22 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(spec.name());
-        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                        checked.supplied()),
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior), symbols);
+        GuardThresholds.Guards guards = GuardThresholds.of(behavior,
+                checked.analysisBodies().get(spec.name()), body,
+                checked.plan(),
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior), rules);
         List<String> out = new java.util.ArrayList<>();
         // The quantity a line is on and where it cuts it, with what names the behavior left out:
         // an axis and an origin carry the behavior's own name, which is the one thing two spellings
         // of one rule cannot agree on.
         guards.thresholds().forEach(each ->
                 out.add(each.term() + " " + each.parts().below() + "|" + each.parts().above()
-                        + " below=" + each.valueBelongsBelow()));
+                        + " belongs=" + each.valueBelongs()));
         guards.between().forEach(each -> out.add(quantityOf(each.cuts().of())
                 + " at " + each.cuts().at() + " " + each.cuts().claim()));
         return out.stream().sorted().toList();
@@ -242,7 +240,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             case BorderQuantity.OfACoordinate one -> one.term() + " on " + one.of();
             case BorderQuantity.OverAForm form -> form.form() + " on " + form.on();
             case BorderQuantity.Apart apart ->
-                    apart.on() + " vs " + apart.against() + " on " + apart.carriers();
+                    apart.onTerm() + " vs " + apart.againstTerm()
+                            + " on " + apart.on() + ", " + apart.against();
         };
     }
 

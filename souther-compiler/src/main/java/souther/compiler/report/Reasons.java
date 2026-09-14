@@ -1,6 +1,6 @@
 package souther.compiler.report;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
 
 /**
@@ -37,7 +37,11 @@ final class Reasons {
     /**
      * What happened, said as what happened — and no further than every producer agrees.
      *
-     * <p>Each has been read against its own. {@code ROW_UNDECIDED} has one producer;
+     * <p>Each has been read against its own. {@code ROW_UNDECIDED} and
+     * {@code ROW_EVALUATION_LIMIT_REACHED} have one producer between them, a switch over what
+     * stopped the row, and they are two codes because the sentence below could say nothing of the
+     * phases it was written over that was true at all of them: a row a figure stopped is one a run
+     * that allows more keeps, and a row the evaluation had no answer for is not.
      * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code INSTRUMENTATION_ABSENT}
      * has one, on a branch taken only where arm coverage was asked for and returning no rows, so
      * the sentence may name the request and the empty result both.
@@ -62,8 +66,8 @@ final class Reasons {
      * the block that prints it: a position it left out and a search that ended are things it did,
      * not things a measurement could not read.
      */
-    static String said(Incompleteness gap, SourceNameResolver names) {
-        String subject = gap.shown(names);
+    static String said(Incompleteness.Fact gap, SourceRendering rendering) {
+        String subject = gap.shown(rendering);
         return switch (gap.code()) {
             case OBSERVATION_ABSENT -> String.format(
                     "no rows were read from `%s`, so what they cover is unknown", subject);
@@ -71,6 +75,9 @@ final class Reasons {
                     "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(
                     "a row of `%s` did not come back, so what it covers is unknown", subject);
+            case ROW_EVALUATION_LIMIT_REACHED -> String.format(
+                    "a row of `%s` was stopped by a limit it was evaluated under, so what it covers"
+                            + " is unknown", subject);
             case ANSWERER_NOT_ESTABLISHED -> String.format(
                     "a row of `%s` was not run against what answers it, because nothing could"
                             + " establish that it was built against this model", subject);

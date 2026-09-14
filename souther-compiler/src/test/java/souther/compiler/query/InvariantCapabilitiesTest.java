@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.WhereItSits;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.StaticRoute;
@@ -139,11 +140,12 @@ class InvariantCapabilitiesTest {
     }
 
     /**
-     * And one that settles only once the reading has normalized it.
+     * And one that settles only once it is read as what it states.
      *
      * <p>{@code Int.compare(1, 2) >= 0} is a call to a reader folding what an author wrote, and is
-     * {@code 1 >= 2} to the walk that reads clauses, which rewrites comparisons before it reads them.
-     * Folded before that walk, the clause fell through to be read as a relation over two constants,
+     * the order of {@code 1} and {@code 2} to the walk that reads clauses, which reads a clause as
+     * the comparisons it states before it decides anything. Folded before that walk, the clause fell
+     * through to be read as a relation over two constants,
      * and an author was told that any guard implying it discharges the construction — for a clause
      * no guard implies and no value satisfies.
      */
@@ -162,10 +164,14 @@ class InvariantCapabilitiesTest {
      * the clause.
      *
      * <p>Conjuncts are split from what the author wrote, so {@code a && b} inside a helper is not two
-     * of them. The clause is the call, which the check names as a term — and what matters here is
-     * that {@code 1 >= 0} inside the helper does not come back as a clause holding of every value.
-     * A reading that took the settled half for the whole would say no guard is needed for a rule
-     * that plainly needs one.
+     * of them. The clause is the call, and what matters here is that {@code 1 >= 0} inside the
+     * helper does not come back as a clause holding of every value. A reading that took the settled
+     * half for the whole would say no guard is needed for a rule that plainly needs one.
+     *
+     * <p>Both routes, because the rule the helper states is read as the rule it is: the domain
+     * reasons over {@code n >= 0} as a bound on the value, and the check names the call as a term
+     * that a guard may state. The clause still needs one of them, which is the whole of what is
+     * being held.
      */
     @Test
     void aConjunctionAHelperBringsDoesNotSettleFromOneHalf() {
@@ -176,8 +182,9 @@ class InvariantCapabilitiesTest {
                     invariant nonNegative(value)
                 """, "Money");
         assertEquals(1, clauses.size(), "one conjunct, because the author wrote one");
-        assertEquals(routed(new StaticRoute.AsATerm()), read(clauses, 0),
-                "the clause is the call, and a guard stating the same thing discharges it");
+        assertEquals(routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
+                read(clauses, 0),
+                "the rule the helper states is a bound, and the call is a term a guard may state");
     }
 
     /**
@@ -216,28 +223,30 @@ class InvariantCapabilitiesTest {
 
     @Test
     void aClauseIsAnsweredAtItsOwnPosition() {
-        List<ClauseDischarge> clauses = of("""
+        String source = """
                 module m.a
                 data Row = { product: String }
                 data Lines = List<Row>
                     invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
-                """, "Lines");
-        assertEquals(4, clauses.get(0).owed().clause().line(), "both clauses are on the invariant's line");
-        assertEquals(4, clauses.get(1).owed().clause().line());
-        assertTrue(clauses.get(0).owed().clause().column() < clauses.get(1).owed().clause().column(),
+                """;
+        List<ClauseDischarge> clauses = of(source, "Lines");
+        assertEquals(4, WhereItSits.in(source, clauses.get(0).owed().clause()).line(), "both clauses are on the invariant's line");
+        assertEquals(4, WhereItSits.in(source, clauses.get(1).owed().clause()).line());
+        assertTrue(WhereItSits.in(source, clauses.get(0).owed().clause()).column() < WhereItSits.in(source, clauses.get(1).owed().clause()).column(),
                 "in the order they are written, so a position picks one out");
     }
 
     @Test
     void aClauseThroughAHelperIsAnsweredAsWhatTheHelperSays() {
         // the helper is expanded before the clause is read, so `twice(value) >= 0` is arithmetic
-        List<ClauseDischarge> clauses = of("""
+        String source = """
                 module m.a
                 let twice (n: Int): Int = n * 2
                 data Even = Int
                     invariant twice(value) >= 0
-                """, "Even");
+                """;
+        List<ClauseDischarge> clauses = of(source, "Even");
         assertEquals(aBound(), read(clauses, 0));
-        assertEquals(4, clauses.get(0).owed().clause().line(), "reported where it is written, not where it expands");
+        assertEquals(4, WhereItSits.in(source, clauses.get(0).owed().clause()).line(), "reported where it is written, not where it expands");
     }
 }

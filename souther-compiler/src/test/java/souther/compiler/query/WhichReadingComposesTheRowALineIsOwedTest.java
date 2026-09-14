@@ -4,10 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -68,6 +67,40 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                         + " composing nothing");
         assertEquals(List.of("held", "anywhere"), asked,
                 "and the reading past it was never asked: a row anywhere settles the line");
+    }
+
+    /**
+     * A row read back where it was built for outranks one nothing could place.
+     *
+     * <p>Both are rows a search composed and an author may be handed either, so a walk stopping at
+     * the first of them stops at whichever reading the module happened to declare first. What tells
+     * them apart is that only one has been seen at the point — which is what a reader asking
+     * whether a row can be written there is asking about, and it is not something the order of two
+     * call sites of one helper may decide.
+     */
+    @Test
+    void aRowThatWasPlacedOutranksOneNothingCouldPlace() {
+        PointResolution resolved = PointResolver.resolveAt(owed(),
+                List.of(at("unplaced"), at("placed")),
+                reading -> searched(reading.behavior().equals("unplaced")
+                        ? unverified(reading.behavior()) : built(reading.behavior())));
+
+        assertEquals("placed", assertInstanceOf(PointResolution.Generated.class, resolved)
+                        .composedBy(),
+                "the reading whose row was read back where it was built for is the one kept");
+    }
+
+    /** And where no reading placed one, the row nothing placed is still a row to offer. */
+    @Test
+    void aRowNothingPlacedIsStillOfferedWhereNothingBetterWas() {
+        PointResolution resolved = PointResolver.resolveAt(owed(),
+                List.of(at("unplaced"), at("neither")),
+                reading -> searched(reading.behavior().equals("unplaced")
+                        ? unverified(reading.behavior()) : notComposed()));
+
+        assertEquals("unplaced", assertInstanceOf(PointResolution.Generated.class, resolved)
+                        .composedBy(),
+                "a row this compiler could not read back is a row an author asked for");
     }
 
     /** In the order the readings were handed over, which is the order the module declares them. */
@@ -152,8 +185,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading("one", aLineAt("one", "x.a"));
-        Reading second = new Reading("one", aLineAt("one", "x.b"));
+        Reading first = new Reading(aLineAt("one", "x.a"));
+        Reading second = new Reading(aLineAt("one", "x.b"));
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -242,9 +275,9 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
-                new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
-                        new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
-                        ItemAssessment.WritabilityProjection.PROVEN, null),
+                new ObligationAssessment(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                        new ObligationCoverage.Witnessed(),
+                        ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none()),
                 List.of(at("anywhere")), _ -> {
                     throw new AssertionError("nothing is searched at a point a row stands at");
                 });
@@ -266,32 +299,42 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(behavior, aLineAt(behavior, behavior + ".value"));
+        return new Reading(aLineAt(behavior, behavior + ".value"));
     }
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(path));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(new AxisId(behavior, path),
-                        new NumericTerm.ValueOf(TermPath.of(path)), TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(behavior, term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(1)));
     }
 
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody
      *  something. */
-    private static ItemAssessment.Owed owed() {
-        return new ItemAssessment.Owed(new Criterion.AtTheLevel(Level.ACount.of(1)),
-                new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
-                ItemAssessment.WritabilityProjection.PROVEN, null);
+    private static ObligationAssessment owed() {
+        return new ObligationAssessment(new Criterion.AtTheLevel(Level.ACount.of(1)),
+                new ObligationCoverage.Missed(),
+                ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none());
     }
 
     private static PointResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
-        return new PointResolver.ReadingEvidence.Searched(attempt);
+        return new PointResolver.ReadingEvidence.Searched(SearchOutcomes.of(attempt));
     }
 
     private static ItemAssessment.Attempt built(String carrier) {
-        return new ItemAssessment.Attempt.Built(new Generator.GeneratedRow(
+        return ItemAssessment.Attempt.Built.certified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null);
+    }
+
+    /** The same row, with nothing having read it back where it was built for. */
+    private static ItemAssessment.Attempt unverified(String carrier) {
+        return new ItemAssessment.Attempt.Unverified(new Generator.GeneratedRow(
+                new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
+                List.of(), EstablishmentGap.Observation.of(
+                        java.util.Set.of(souther.compiler.observe.Incompleteness.Code
+                                .VALUE_TRUNCATED)));
     }
 
     /** The same, as what a reading holds at the point. */

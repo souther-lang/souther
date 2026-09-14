@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 
 import java.util.Map;
 import java.util.Optional;
@@ -53,24 +55,73 @@ public interface SearchRegion {
      * leaves a region that still holds every row that arrives, and a region narrowed on a condition
      * nothing established would leave it narrower than they are.
      */
-    SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel);
+    SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel);
 
-    /** The same region, with these positions standing at these values. */
-    SearchRegion given(Map<NumericTerm, Count> fixed);
+    /**
+     * The same region, with {@code term rel at} taken in on the order {@code term} stands on.
+     *
+     * <p>The other value vocabulary, for a position whose values do not count to numbers. A string
+     * is ordered and stands no measurable distance from another, so a rule holding one against a
+     * written value states where on the order it lies and states no arithmetic — and the form above
+     * has nowhere to put a place that is not a number.
+     *
+     * <p>One position and a place, never a form: a sum needs its terms to add, and two strings do
+     * not. A relation between two such positions is a distance and goes to the form above, which is
+     * why this is asked only where a written value is one side of the comparison.
+     *
+     * <p>{@code rel} says where a run stops. A relation that leaves a hole rather than an end is
+     * not one this narrows by, and it is refused where such a constraint would be built rather than
+     * arriving here to be dropped — a caller whose condition went nowhere would otherwise have no
+     * way of finding out.
+     *
+     * <p>Unchanged where nothing here orders that term, on the same principle as the form above: a
+     * condition nothing took in leaves a region that still holds every row that arrives.
+     */
+    SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
+
+    /**
+     * The same region, with {@code term} held away from {@code at}.
+     *
+     * <p>A hole, which is what a disequality states and is not an end: the values either side of it
+     * are both still there. A range cannot say it, so it is its own verb rather than a relation the
+     * one above would have to refuse.
+     *
+     * <p>What it changes is {@link #emptiness}: a row standing where a rule holds the position away
+     * is a row that cannot be written. There is no question here for a chooser to ask before it
+     * offers a value, because nothing yet could spend one — on an order that counts nothing the
+     * places a chooser can name are the ones a rule wrote, so a hole at one of them leaves it with
+     * nothing else to offer and the refusal is what says so.
+     */
+    SearchRegion apartFrom(NumericTerm.FromOnePosition term, Place at);
+
+    /**
+     * The same region, with these positions standing at these values.
+     *
+     * <p>A place and not a number, because what a position stands at is a place on its carrier's
+     * order. A count is one kind of place; a string is the other, and a row writes one there as
+     * surely as it writes a number anywhere else. Taken as a number, every value a carrier that
+     * counts nothing offers had to be dropped by whoever was choosing one — which is a position
+     * nothing could compose a value for, said of a position whose values were in hand.
+     *
+     * <p>What the declarations are told of it is theirs to decide. The rules are read with the
+     * arithmetic, so a fixing they have no number for narrows this region and is not among what
+     * they are asked to solve.
+     */
+    SearchRegion given(Map<NumericTerm, Place> fixed);
 
     /** The same, of one position. */
-    default SearchRegion given(NumericTerm term, Count fixed) {
+    default SearchRegion given(NumericTerm term, Place fixed) {
         return given(Map.of(term, fixed));
     }
 
     /** Where the values of {@code form} run inside this region, or null at either end where
      *  nothing bounds them. */
-    NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form);
+    NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form);
 
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
     default NumericDomain.Bounds runsBetween(NumericTerm term) {
-        return runsBetween(NumericDomain.LinearForm.atom(term));
+        return runsBetween(LinearForm.atom(term));
     }
 
     /**

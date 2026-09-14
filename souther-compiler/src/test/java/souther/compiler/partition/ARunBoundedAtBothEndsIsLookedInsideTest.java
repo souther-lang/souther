@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What the order takes and what a search could name used to be two answers, and on an order whose
  * values fill they disagreed: {@code 3 * n} over decimals reaches every third of one, and the only
  * levels anything offered were the whole multiples of three. A run between one and two holds
- * infinitely many of the first and none of the second, so the point inside it was reported as one
- * the search stopped before reaching — with no search having run at all (issue #903).
+ * infinitely many of the first and none of the second, so the point inside it was reported as one a
+ * search had left something untried before reaching — with no search having run at all.
  *
  * <p>Measured against a run three times as wide, which differs in one thing: whether a whole multiple
  * of the generator happens to fall inside it. That one already worked, and an expectation on it alone
@@ -66,11 +66,14 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
      */
     @Test
     void aRunHoldingNoWholeMultipleOfTheGeneratorIsStillLookedIn() {
-        assertEquals(souther.compiler.query.ItemAssessment.Attempt.Built.class,
-                attemptAt(cut("10"), "3 * n = 1", PointRole.IN).getClass(),
+        // A row was offered, which is what looking inside the run produces. Which of the ways of
+        // having been built it is is a second question and not this one's: the run is looked in or
+        // it is not, and a candidate that came out of it settles that either way.
+        assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.Built.class,
+                attemptAt(cut("10"), "3 * n = 1", PointRole.IN),
                 "a run from one to ten holds three, which anything could name");
-        assertEquals(souther.compiler.query.ItemAssessment.Attempt.Built.class,
-                attemptAt(cut("2"), "3 * n = 1", PointRole.IN).getClass(),
+        assertInstanceOf(souther.compiler.query.ItemAssessment.Attempt.Built.class,
+                attemptAt(cut("2"), "3 * n = 1", PointRole.IN),
                 "and one from one to two holds 1.5, which only looking inside it finds");
     }
 
@@ -204,7 +207,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
             String model, String border, PointRole role) {
         BorderAssessment at = bordersOf(model).get(border);
         assertNotNull(at, bordersOf(model).keySet().toString());
-        return at.owedAt(role).attempt();
+        return at.owedAt(role).searches().only();
     }
 
     /** The row offered at one point, as a reader would paste it, or null where none was. */

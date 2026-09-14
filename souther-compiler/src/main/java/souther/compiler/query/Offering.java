@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.ObligationIdentity;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -33,14 +35,15 @@ import java.util.SequencedMap;
 public final class Offering {
 
     private final OfferingRequest request;
-    private final SequencedMap<String, List<OfferedRow>> rows;
+    private final SequencedMap<String, List<OfferedRow>> rowsByBehavior;
     private final SequencedMap<String, Adequacy.Filling> searched;
     private final BorderAccount account;
-    private final Set<OfferItem> answered;
+    private final Set<ObligationIdentity> answered;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
-     * @param rows     one entry per behavior with rows to offer, in the order they were asked about
+     * @param rowsByBehavior one entry per behavior with rows to offer, in the order they were asked
+     *                 about
      * @param searched what each behavior's own search came to, keyed the way a report keys them
      * @param account every point of a line this request answers for, whosever it is — a body's own
      *                 and its declarations' alike — or null where the request asked for no boundary
@@ -48,11 +51,12 @@ public final class Offering {
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
      */
-    Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rows,
+    Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
-             Set<OfferItem> answered) {
+             Set<ObligationIdentity> answered) {
         this.request = request;
-        this.rows = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rows));
+        this.rowsByBehavior =
+                Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rowsByBehavior));
         this.searched = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(searched));
         this.account = account;
         this.answered = Collections.unmodifiableSet(new LinkedHashSet<>(answered));
@@ -64,8 +68,8 @@ public final class Offering {
     }
 
     /** The rows a person is handed, under the behavior each is written for. */
-    public SequencedMap<String, List<OfferedRow>> rows() {
-        return rows;
+    public SequencedMap<String, List<OfferedRow>> rowsByBehavior() {
+        return rowsByBehavior;
     }
 
     /** What each behavior's own search came to. */
@@ -80,12 +84,12 @@ public final class Offering {
     }
 
     /** The items one of these rows would answer if it were written. */
-    public Set<OfferItem> answered() {
+    public Set<ObligationIdentity> answered() {
         return answered;
     }
 
     /** How many pieces of work this offers, which is what a block says at the top of it. */
     public int count() {
-        return rows.values().stream().mapToInt(List::size).sum();
+        return rowsByBehavior.values().stream().mapToInt(List::size).sum();
     }
 }

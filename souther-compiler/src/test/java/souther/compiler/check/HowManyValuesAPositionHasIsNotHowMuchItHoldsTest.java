@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -20,16 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
-    private static Hir.Data data(Compilation compilation, String name) {
-        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
-            if (def instanceof Hir.Data found && found.name().equals(name)) {
-                return found;
-            }
-        }
-        throw new IllegalArgumentException("no such declaration: " + name);
-    }
-
-    private static Cardinality valuesAt(String source, String name, String path) {
+    private static Cardinality valuesAt(String source, String name, RuleKey path) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         // A rule nothing could type is a rule nothing reads, and a row resting on one is answered by
@@ -39,7 +29,9 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                         .map(each -> each.diagnostic().code().toString()).toList(),
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
+                RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .wholeValuesAt(path);
     }
 
@@ -50,7 +42,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data One = Int
                     invariant only = value >= 1 && value <= 1
-                """, "One", FieldDomains.THE_VALUE));
+                """, "One", RuleKey.THE_VALUE));
     }
 
     @Test
@@ -60,7 +52,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data Ten = Int
                     invariant range = value >= 1 && value <= 10
-                """, "Ten", FieldDomains.THE_VALUE));
+                """, "Ten", RuleKey.THE_VALUE));
     }
 
     @Test
@@ -70,7 +62,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data Inner = Int
                     invariant range = value > 1 && value < 10
-                """, "Inner", FieldDomains.THE_VALUE));
+                """, "Inner", RuleKey.THE_VALUE));
     }
 
     @Test
@@ -80,7 +72,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data R = { n: Int }
                     invariant small = n >= 1 && n <= 3
-                """, "R", "n"));
+                """, "R", RuleKey.of("n")));
     }
 
     /** Open at an end, and there is no number of values to give. */
@@ -91,12 +83,12 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data Positive = Int
                     invariant up = value >= 1
-                """, "Positive", FieldDomains.THE_VALUE));
+                """, "Positive", RuleKey.THE_VALUE));
         assertEquals(Cardinality.UNKNOWN, valuesAt("""
                 module demo
 
                 data Any = Int
-                """, "Any", FieldDomains.THE_VALUE));
+                """, "Any", RuleKey.THE_VALUE));
     }
 
     /**
@@ -111,13 +103,13 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
 
                 data Money = Decimal
                     invariant range = value >= 1.0m && value <= 10.0m
-                """, "Money", FieldDomains.THE_VALUE));
+                """, "Money", RuleKey.THE_VALUE));
         assertEquals(Cardinality.atMost(10), valuesAt("""
                 module demo
 
                 data Ten = Int
                     invariant range = value >= 1 && value <= 10
-                """, "Ten", FieldDomains.THE_VALUE), "and the integer between them still is");
+                """, "Ten", RuleKey.THE_VALUE), "and the integer between them still is");
     }
 
     /**
@@ -132,6 +124,6 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                 data Pair = Set<Int>
                     invariant two = Set.size(value) >= 2
                 """;
-        assertEquals(Cardinality.UNKNOWN, valuesAt(source, "Pair", FieldDomains.THE_VALUE));
+        assertEquals(Cardinality.UNKNOWN, valuesAt(source, "Pair", RuleKey.THE_VALUE));
     }
 }

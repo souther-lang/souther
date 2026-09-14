@@ -2,11 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -16,7 +16,6 @@ import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -82,35 +81,35 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         Core body = checked.behaviorBodies().get(spec.name());
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         InputDomain domain = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         GuardThresholds.Guards guards =
-                GuardThresholds.of(spec.name(), body, plan, domain, symbols);
-        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+                GuardThresholds.of(spec.name(), checked.analysisBodies().get(spec.name()), body,
+                        plan, domain, rules);
+        souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
-                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                guards.thresholds(),
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
-        Generator.Subject subject = new Generator.Subject(spec.name(),
-                new BehaviorInputs(names, sigs.get(spec.name()).inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), p.axes(),
-                HeldCounts.of(domain, symbols));
+        MeasuredInput subject = MeasuredInput.of(spec.name(), domain.reading(rules), p);
 
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
             for (Border border
-                    : Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()), new LinesRead())) {
+                    : Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
                         instanceof Criterion.AtTheLevel each)) {
@@ -118,10 +117,10 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                 }
                 out.add(role + " -> "
                         + (Generator.probeFixing(subject, border.label(role),
-                                ignored -> axis.term().answeredOn(axis.type(), symbols),
-                                java.util.Map.of(axis.term(),
+                                java.util.Map.of(
+                                        new RealizationTarget.AtOnePosition(axis.term()),
                                         ((Level.OnACarrier) each.at()).at()),
-                                Reachability.untouched(domain.quantities(symbols).region()),
+                                Reachability.untouched(domain.quantities(rules).region()),
                                 Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built
                                         ? String.join(", ", built.row().inputs().stream()

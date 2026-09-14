@@ -35,45 +35,185 @@ import java.util.Set;
  * is — so a rule comparing a date against a written one lands here, and one comparing two fields of
  * a record lands there. Both may hold the same rule about an {@code Int}, and neither is the other's
  * copy: what each of them can show is its own, and a contradiction shown anywhere is a contradiction.
+ *
+ * <p><b>The states are the ones these operations reach.</b> The two parts depend on each other —
+ * {@code nothing} says the whole is empty where no position is, and a position left an empty range
+ * says it where the whole need not carry it — so a pair of them written down side by side is a
+ * combination nothing read. What the parts are is this one's own; a caller reaches a state by doing
+ * to a reading what the state says was done to it.
  */
-public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothing) {
+@souther.compiler.reading.StateOfAReading
+public final class OrderedIntervals<A> {
 
-    public OrderedIntervals {
-        // Kept in the order the positions were read. What is written out of these has to come out
-        // the same on two runs of the compiler, and the iteration order of an immutable copy does
-        // not.
-        ranges = Collections.unmodifiableMap(new LinkedHashMap<>(ranges));
+    /**
+     * The parts, together, so that everything answered from all of them is answered from one place.
+     *
+     * <p>Equality and the parts a reader may be shown are the whole of what this is, and both of
+     * them are the record's. A part added here arrives in each of them the day it is declared, which
+     * is what keeps a state that differs from telling a caller it does not.
+     */
+    private record Parts<A>(Map<A, OrderedInterval> ranges, boolean nothing) {
+
+        private Parts {
+            // Kept in the order the positions were read. What is written out of these has to come
+            // out the same on two runs of the compiler, and the iteration order of an immutable
+            // copy does not.
+            ranges = Collections.unmodifiableMap(new LinkedHashMap<>(ranges));
+        }
     }
 
+    private final Parts<A> parts;
+
+    /** The one constructor there is, and it takes the parts as one — see {@code AdmissibleValues},
+     *  where a maker handed the parts is what a reading may not be come by. */
+    private OrderedIntervals(Parts<A> parts) {
+        this.parts = parts;
+    }
+
+    /**
+     * The parts of a reading that has taken nothing in, which are the same parts whoever asks.
+     *
+     * <p>Held rather than built, because a reading starts here for every leaf a connective is
+     * composed over and for every branch nobody can be in, and the parts copy the map they are
+     * handed. The reading itself is still made by {@link #top()}, which is what keeps that the one
+     * way to a reading that has read nothing
+     * ({@code AReadingIsWhatItsOperationsReachTest}) — a state handed out of a field here would be
+     * a way in that no operation of this named.
+     */
+    private static final Parts<?> NOTHING_READ = new Parts<>(Map.of(), false);
+
     /** Nothing read, so every position holds every value its order has. */
+    @SuppressWarnings("unchecked")
     public static <A> OrderedIntervals<A> top() {
-        return new OrderedIntervals<>(Map.of(), false);
+        return new OrderedIntervals<>((Parts<A>) NOTHING_READ);
     }
 
     /** One position said to lie inside {@code range}. */
     public static <A> OrderedIntervals<A> at(A position, OrderedInterval range) {
-        return new OrderedIntervals<>(Map.of(position, range), false);
+        return new OrderedIntervals<>(new Parts<>(Map.of(position, range), false));
+    }
+
+    private Map<A, OrderedInterval> ranges() {
+        return parts.ranges();
+    }
+
+    private boolean nothing() {
+        return parts.nothing();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof OrderedIntervals<?> it && parts.equals(it.parts);
+    }
+
+    @Override
+    public int hashCode() {
+        return parts.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return parts.toString();
     }
 
     /**
-     * This where it already holds nothing, and a state holding nothing where it does not.
+     * The positions these rules bounded, which is what a caller asking what this took in is asking.
      *
-     * <p>What a caller says when something outside this showed that nothing satisfies the rules —
-     * another domain reading the same clause, say. Nothing is claimed about any position: what is
-     * known is about the whole, and writing it at a position would name one the rules are fine with.
+     * <p>The positions and not the ranges, which are this one's own: what a rule left a position is
+     * read through {@link #at}, and a caller holding the map would be holding a state to work its
+     * own answers out of.
      */
-    public OrderedIntervals<A> leavingNothing() {
-        return isBottom() ? this : new OrderedIntervals<>(Map.of(), true);
+    public Set<A> boundedAt() {
+        return ranges().keySet();
     }
 
-    /** What {@code position} is left, every value of its order where nothing was said. */
-    public OrderedInterval at(A position) {
-        return ranges.getOrDefault(position, OrderedInterval.OPEN);
+    /**
+     * The ends these rules put on {@code position}, or null where they put none.
+     *
+     * <p>The writing and not the values. Null is the absence itself, said as itself: answered with
+     * a pair of absent ends, a position no rule spoke of would be handed back as a range, and a
+     * range is read against an order — so the answer would be right about a decimal, wrong about an
+     * {@code Int}, and indistinguishable either way. Which values the position is left is
+     * {@link #valuesAt}, and it is the question a reader comparing two readings has.
+     */
+    public OrderedInterval statedAt(A position) {
+        return ranges().get(position);
+    }
+
+    /**
+     * Which values of its own order {@code position} is left.
+     *
+     * <p>What the class above promises: a position not held here is every value its order has, and
+     * that is what comes back for one — not a pair of absent ends, which is every value of an order
+     * that stops nowhere and is more than an order that stops has.
+     *
+     * <p>The one reading a caller may compare, and the reason the two are separate methods. A
+     * choice between {@code n >= 2} and {@code n <= 0} leaves an {@code Int} where it found it, and
+     * a reading that answered from the ends alone would have {@code [MIN..MAX]} on one side and a
+     * pair of absent ends on the other and call them two answers — which is how a border nobody
+     * drew was reported as one this compiler could not measure.
+     *
+     * <p>Handed the vocabulary and not one order, so that the order this is answered against is the
+     * one belonging to the position asked about. Given an order directly, a caller can hand in the
+     * one beside it — the type would have ruled out a bare pair of ends and nothing else — and the
+     * answer would be about a position nobody asked about.
+     *
+     * <p><b>And there is no way to ask this without one, least of all about a position nothing was
+     * written about.</b> That position is exactly the one whose answer is its order and nothing
+     * else: what a reading that took nothing in leaves an {@code Int} is every whole number, which
+     * is a pair of ends, and answering the pair of absent ends instead is the reading with no order
+     * in it that this whole distinction exists to remove. A caller that dropped the vocabulary on
+     * the way would have that handed back as a value, which is where this began.
+     *
+     * <p>So a position no order here names is this compiler asking what a range leaves on an order
+     * it cannot name, and it is said as the mistake it is. Whether a rule wrote anything there is
+     * {@link #statedAt}'s question and is answered without an order.
+     */
+    public OrderedInterval valuesAt(A position, Map<A, ? extends ValueOrder> orders) {
+        ValueOrder onItsOrder = orders.get(position);
+        if (onItsOrder == null) {
+            throw new IllegalStateException(
+                    "what " + position + " is left was asked on an order nothing here names");
+        }
+        OrderedInterval extent = onItsOrder.extent();
+        OrderedInterval stated = ranges().get(position);
+        return stated == null ? extent : extent.meet(stated);
+    }
+
+    /**
+     * The positions these rules leave holding less than every value of their own order.
+     *
+     * <p>Where an end becomes a line, which is the one thing a reader of the ends is really asking
+     * and the one thing a set of bounded positions cannot say. A pair of bounds reaching both ends
+     * of a carrier is two rules about the position and stops it nowhere, and a caller that took
+     * {@link #boundedAt} for this would credit such a rule with a line nobody draws.
+     *
+     * <p>Over the positions the rules bounded, since a position they bounded nowhere is left every
+     * value its order has. A bounded position {@code orders} does not name is this compiler holding
+     * a range on an order it cannot name, and {@link #valuesAt} says so — kept here instead, as a
+     * position whose ends cannot be shown to leave all of anything, it would go out as a position
+     * the rules stop, which is the answer nobody could have checked.
+     */
+    public Set<A> stoppedShortOfTheirOrders(Map<A, ? extends ValueOrder> orders) {
+        // Nothing until there is something to hold. This is asked of every leaf of every clause,
+        // and most leaves stop no position at all — a set built and wrapped for each of them is
+        // made as often as anything in this reading.
+        Set<A> out = null;
+        for (A position : ranges().keySet()) {
+            if (valuesAt(position, orders).sameValuesAs(orders.get(position).extent())) {
+                continue;
+            }
+            if (out == null) {
+                out = new LinkedHashSet<>();
+            }
+            out.add(position);
+        }
+        return out == null ? Set.of() : Collections.unmodifiableSet(out);
     }
 
     /** Whether nothing satisfies these rules, at a position or otherwise. */
     public boolean isBottom() {
-        return nothing || ranges.values().stream().anyMatch(OrderedInterval::holdsNothing);
+        return nothing() || ranges().values().stream().anyMatch(OrderedInterval::holdsNothing);
     }
 
     /**
@@ -86,7 +226,7 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
      */
     public Set<A> holdingNothing() {
         Set<A> out = new LinkedHashSet<>();
-        ranges.forEach((position, range) -> {
+        ranges().forEach((position, range) -> {
             if (range.holdsNothing()) {
                 out.add(position);
             }
@@ -96,9 +236,20 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
 
     /** Both readings holding at once. */
     public OrderedIntervals<A> meet(OrderedIntervals<A> other) {
-        Map<A, OrderedInterval> out = new LinkedHashMap<>(ranges);
-        other.ranges.forEach((position, range) -> out.merge(position, range, OrderedInterval::meet));
-        return new OrderedIntervals<>(out, nothing || other.nothing);
+        // A side that bounded no position and showed nothing empty is what a conjunction leaves the
+        // other side alone: every position it holds is every value of its order, and a meet with
+        // every value is what it was met with. Most sides are that — a leaf the ends have no word
+        // for bounds nothing, and every clause is composed out of leaves.
+        if (other.ranges().isEmpty() && !other.nothing()) {
+            return this;
+        }
+        if (ranges().isEmpty() && !nothing()) {
+            return other;
+        }
+        Map<A, OrderedInterval> out = new LinkedHashMap<>(ranges());
+        other.ranges().forEach((position, range) ->
+                out.merge(position, range, OrderedInterval::meet));
+        return new OrderedIntervals<>(new Parts<>(out, nothing() || other.nothing()));
     }
 
     /**
@@ -119,55 +270,77 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
      */
     public <B> OrderedIntervals<B> renamed(java.util.function.Function<A, B> naming) {
         Map<B, OrderedInterval> out = new LinkedHashMap<>();
-        ranges.forEach((position, range) -> out.put(naming.apply(position), range));
-        return new OrderedIntervals<>(out, nothing);
+        ranges().forEach((position, range) -> out.put(naming.apply(position), range));
+        return new OrderedIntervals<>(new Parts<>(out, nothing()));
     }
 
     /**
-     * Either reading holding.
+     * A choice no alternative of which anybody can take, said of the ranges.
      *
-     * <p>Over the positions both spoke about, since a position one of them left open is one the two
-     * of them together leave open.
-     *
-     * <p>A side holding nothing is an alternative nobody can take, so the choice is the other one.
-     * Asked of the whole side rather than position by position: a branch with one position empty is
-     * a branch no value satisfies, and hulling its other positions in would widen the answer by ends
-     * no value of the model is ever at.
-     *
-     * <p><b>Both sides holding nothing is a different case.</b> No side speaks for the other there,
-     * so answering with either would settle which position is named by the order the two were
-     * written in. Nor may the two be met: a meet is a conjunction, and the alternatives were never
-     * stated together — {@code (a < "" && b == 0) || (a < "" && b == 1)} met is a {@code b} bounded
-     * at 0 and at 1, which is a contradiction neither alternative contains and a position the rules
-     * are fine with.
+     * <p>No side speaks for the other, so answering with either would settle which position is
+     * named by the order the two were written in. Nor may the two be met: a meet is a conjunction,
+     * and the alternatives were never stated together — {@code (a < "" && b == 0) || (a < "" && b
+     * == 1)} met is a {@code b} bounded at 0 and at 1, which is a contradiction neither alternative
+     * contains and a position the rules are fine with.
      *
      * <p>What the choice leaves empty is what <em>every</em> alternative leaves empty, which is the
      * positions in both. Where there are none, the choice still admits nothing and no position is at
      * fault, and that is said as itself.
+     *
+     * <p>This realises a decision rather than making one, and it does not ask what it was made of.
+     * Which alternatives nobody can take turns on what every language reading the clause left, and
+     * a branch these ranges are perfectly happy with is one the values may have refused — so what
+     * arrives is the ranges as they were read, of a branch something else settled. What is answered
+     * is what the two of them leave empty between them, and the whole is said to hold nothing
+     * because the choice does, not because these ranges show it.
+     *
+     * <p>Which is why there is no question here about the sides. Asked whether they hold nothing,
+     * this would be deciding what it was called to realise; told a side that stands, it answers
+     * that a choice somebody can take admits nothing, which is the one direction a state deciding
+     * emptiness may not move in. What keeps that from arriving is the caller having settled it,
+     * and there is no reading of a caller that has not.
      */
-    public OrderedIntervals<A> join(OrderedIntervals<A> other) {
-        if (isBottom() && other.isBottom()) {
-            Map<A, OrderedInterval> both = new LinkedHashMap<>();
-            for (A position : holdingNothing()) {
-                if (other.holdingNothing().contains(position)) {
-                    both.put(position, at(position).meet(other.at(position)));
-                }
+    public OrderedIntervals<A> bothDead(OrderedIntervals<A> other) {
+        Map<A, OrderedInterval> both = new LinkedHashMap<>();
+        for (A position : holdingNothing()) {
+            if (other.holdingNothing().contains(position)) {
+                // Both hold the position, since both leave it no value, so the ends are there to
+                // be met and no order has to be named to find them.
+                both.put(position, statedAt(position).meet(other.statedAt(position)));
             }
-            return new OrderedIntervals<>(both, true);
         }
-        if (isBottom()) {
-            return other;
-        }
-        if (other.isBottom()) {
-            return this;
-        }
+        return new OrderedIntervals<>(new Parts<>(both, true));
+    }
+
+    /**
+     * Either reading holding, both alternatives being ones somebody can take.
+     *
+     * <p>Over the positions both spoke about, since a position one of them left open is one the two
+     * of them together leave open.
+     *
+     * <p>Which alternatives those are is not decided here, for the reason {@link #bothDead} gives:
+     * a branch nobody can be in is shown by what every language left, and a choice settled from the
+     * ranges alone would drop a branch no order admits while keeping one no set of values admits.
+     * A choice every alternative of which is dead is {@link #bothDead}, and a choice with one dead
+     * alternative is the other alternative, which the caller holds already.
+     *
+     * <p>An assertion and not a branch, because a caller passing a side nobody can take is this
+     * compiler disagreeing with itself rather than anything a model says. With assertions off the
+     * hull is taken over what the two spoke about, which admits everything either of them did: an
+     * empty range at a position both named contributes nothing to the hull, and a position only the
+     * live side named is left out and so left open. What is lost is what the dead side proved, and
+     * no end is invented — which is the direction this state is only ever allowed to move in.
+     */
+    public OrderedIntervals<A> joinLive(OrderedIntervals<A> other) {
+        assert !isBottom() && !other.isBottom()
+                : "a choice of two live alternatives was asked of " + this + " and " + other;
         Map<A, OrderedInterval> out = new LinkedHashMap<>();
-        ranges.forEach((position, range) -> {
-            OrderedInterval there = other.ranges.get(position);
+        ranges().forEach((position, range) -> {
+            OrderedInterval there = other.ranges().get(position);
             if (there != null) {
                 out.put(position, range.join(there));
             }
         });
-        return new OrderedIntervals<>(out, false);
+        return new OrderedIntervals<>(new Parts<>(out, false));
     }
 }

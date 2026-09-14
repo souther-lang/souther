@@ -2,7 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
-import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -35,7 +36,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 c.db().ask(new Adequacy.PathReached(module)).value();
         return byBehavior == null || byBehavior.get(behavior) == null ? List.of()
                 : byBehavior.get(behavior).found().entrySet().stream()
-                        .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
+                        .filter(each -> each.getKey() instanceof ControlPlace.Arm)
                         .map(Map.Entry::getValue)
                         .toList();
     }
@@ -183,16 +184,16 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         // What that answer does with a run, at the value it is made of.
         PathReachability.Answers answers =
                 c.db().ask(new Adequacy.PathReached("demo")).value().get("charge");
-        int probe = answers.found().entrySet().stream()
+        ArmProbe probe = answers.found().entrySet().stream()
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
-                .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
-                .map(each -> (ControlPointId.ArmOccurrence) each.getKey())
+                .filter(each -> each.getKey() instanceof ControlPlace.Arm)
+                .map(each -> (ControlPlace.Arm) each.getKey())
                 .findFirst().orElseThrow().probe().orElseThrow();
         PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe));
         assertEquals(Set.of(probe), ran.provedWrong(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()
-                        .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
+                        .filter(each -> each.getKey() instanceof ControlPlace.Arm)
                         .map(Map.Entry::getValue)
                         .filter(Reachability.Unreachable.class::isInstance).toList(),
                 "so no arm is left for the diagnostic to be about");

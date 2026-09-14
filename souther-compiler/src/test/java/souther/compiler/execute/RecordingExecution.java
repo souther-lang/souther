@@ -61,9 +61,9 @@ final class RecordingExecution implements ProgramExecution {
      */
     private static String read(ExampleExecution about) {
         EvaluationPolicy held = about.policy();
-        long written = Math.max(1, about.rows().rows().size());
+        long written = Math.max(1, about.forExamples().examples().size());
         return about.module()
-                + " (" + about.rows().rows().size() + " examples"
+                + " (" + about.forExamples().examples().size() + " examples"
                 + ", " + about.signatures().size() + " behaviors"
                 + ", " + about.requirements().size() + " requirement tables"
                 + ", " + about.definitions().size() + " definitions"
@@ -71,13 +71,13 @@ final class RecordingExecution implements ProgramExecution {
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
                 + ", " + held.stepLimit() / written + " steps an example"
                 + ", " + held.recursionDepthLimit() + " deep"
-                + ", given up on after " + held.outerTimeout().toMillis() + "ms)";
+                + ", given up on after " + held.compilerTimeout().toMillis() + "ms)";
     }
 
     @Override
     public TableBuild fakeTables(ExampleExecution about, SourceId source) {
         asked.add("fakes of " + read(about) + " written in " + source
-                + ", " + about.rowsWrittenIn(source).rows().size() + " of them here");
+                + ", " + about.forExamplesWrittenIn(source).examples().size() + " of them here");
         return new TableBuild.NotBuiltHere();
     }
 

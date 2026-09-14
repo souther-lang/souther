@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,11 +42,16 @@ public final class Desugared {
          * — measured, by rewriting a definition of a settled module and of an unsettled one and
          * getting the same answer.
          *
-         * @throws CompileException where a construction written in the body cannot be read as one
+         * <p>Answered for every definition. A rewrite is not a check: what it writes as a
+         * construction is a newtype applied to one value, and an application of one to any other
+         * count is left as the application it is, to be said where the check reads it
+         * ({@code CallElaborator.noCallee}). A refusal here would make a body nobody could read into
+         * a definition nobody could see, and a module is assembled from all of them.
          */
         public static Fn desugar(Hir.FnDef fn, Symbols scope) {
             return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
         }
+
 
         /**
          * This state, of a definition a rung above rewrote after it was desugared.
@@ -63,7 +67,6 @@ public final class Desugared {
          * re-transformation wearing a re-proof's name, and this is where it stops.
          *
          * @throws IllegalArgumentException where the definition is not one this state holds of
-         * @throws CompileException where a construction written in the body cannot be read as one
          */
         public static Fn reestablish(Hir.FnDef rewritten, Symbols scope) {
             Hir.FnDef again = NewtypeDesugar.rewriteOf(rewritten, scope);
@@ -154,6 +157,12 @@ public final class Desugared {
         /** What the module is called. */
         public String name() {
             return derived.name();
+        }
+
+        /** Whether this was built over {@code settling}, asked of the rung below for the reason
+         *  {@link Derived.Module#settledFrom} gives. */
+        boolean settledFrom(InvariantSettled settling) {
+            return derived.settledFrom(settling);
         }
 
         /** Its declarations, which the rung below answered for and this one does not touch. */

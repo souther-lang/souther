@@ -1,11 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -102,7 +102,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
-        JsonNode document = JSON.readTree(report.json(SourceNameResolver.identity()));
+        JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
         List<String> weakening = new ArrayList<>();
         behavior.path("weakening").forEach(each -> weakening.add(each.asString()));
@@ -116,7 +116,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 declaration.get("findings")
                         .forEach(each -> kinds.add(each.get("kind").asString())));
         return new Measured(behavior.get("status").asString(), weakening, kinds,
-                report.human(SourceNameResolver.identity()));
+                report.human(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** A clause that draws a line, which is what the three below are read against. */
@@ -190,6 +190,48 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * Every operator against every way the cancelled positions can leave a number.
+     *
+     * <p>Which rows a clause holds of, once its positions have cancelled, is what the number left
+     * over stands to nought — and the operator says which way that has to be. {@code lo - lo <= 1}
+     * holds of every row for the same reason {@code lo - lo >= 0} does, and neither is more read
+     * than the other.
+     *
+     * <p>Both directions of every operator are here because the number left over is what
+     * {@code left - right} came to, and a reading that took it as what {@code right - left} came to
+     * would answer every strict comparison backwards while still agreeing about the equalities.
+     * Read at nought alone the two are the same reading.
+     */
+    @Test
+    void whichRowsAClauseHoldsOfIsWhatItsPositionsCancelTo() {
+        List<String> expected = List.of(
+                "lo - lo >= 0: every row", "lo - lo >= 1: not every row",
+                "lo - lo >= -1: every row",
+                "lo - lo > 0: not every row", "lo - lo > 1: not every row",
+                "lo - lo > -1: every row",
+                "lo - lo <= 0: every row", "lo - lo <= 1: every row",
+                "lo - lo <= -1: not every row",
+                "lo - lo < 0: not every row", "lo - lo < 1: every row",
+                "lo - lo < -1: not every row",
+                "lo - lo == 0: every row", "lo - lo == 1: not every row",
+                "lo - lo == -1: not every row",
+                "lo - lo /= 0: not every row", "lo - lo /= 1: every row",
+                "lo - lo /= -1: every row");
+
+        List<String> answered = new ArrayList<>();
+        for (String operator : List.of(">=", ">", "<=", "<", "==", "/=")) {
+            for (String against : List.of("0", "1", "-1")) {
+                String clause = "lo - lo " + operator + " " + against;
+                Measured measured = of("    invariant " + clause);
+                answered.add(clause + ": "
+                        + (measured.status().equals("complete") ? "every row" : "not every row"));
+            }
+        }
+
+        assertEquals(expected, answered);
+    }
+
+    /**
      * And a clause whose positions cancel to something no row satisfies, which is the opposite.
      *
      * <p>{@code lo - lo >= 1} is {@code 0 >= 1}. The quantity it cuts is empty, exactly as the two
@@ -229,6 +271,41 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * A pattern this reads no deeper into, which is a limit of the reading and says so.
+     *
+     * <p>Every construct in it is one this reads. What stopped the reading is how deeply they are
+     * written, which is this compiler's measure and not the author's spelling — told that the form
+     * is one nothing reads, they would go looking for the construct that was the trouble.
+     */
+    @Test
+    void aPatternThisReadsNoDeeperIntoIsSaidAsThat() {
+        String deep = "(".repeat(201) + "a" + ")".repeat(201);
+        Measured measured = of("    invariant String.matches(\"" + deep + "\", name)");
+
+        assertTrue(measured.says("written more deeply nested than this compiler reads"),
+                measured.human());
+        assertFalse(measured.says("written in a form this compiler does not read"),
+                measured.human());
+    }
+
+    /**
+     * And a pattern stopped by a construct the subset has no word for, which is not that.
+     *
+     * <p>{@code \\p{Alpha}} names a property of a character, and the subset here names symbols by
+     * their numbers. So the rule is one written in a form nothing read, like any other — the pair
+     * with the one above is what says the two are told apart by what stopped the reading rather
+     * than by the reading having stopped.
+     */
+    @Test
+    void aPatternStoppedByAConstructThisHasNoWordForIsAFormNothingRead() {
+        Measured measured = of("    invariant String.matches(\"\\\\p{Alpha}+\", name)");
+
+        assertTrue(measured.says("written in a form this compiler does not read"), measured.human());
+        assertFalse(measured.says("written more deeply nested than this compiler reads"),
+                measured.human());
+    }
+
+    /**
      * And a clause nothing here takes apart, which is what a limit of this compiler looks like.
      *
      * <p>Here the question standing is the truth: what the clause says about the values was never
@@ -245,9 +322,12 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         Measured measured = of("    invariant String.length(name) <= 1 - 0");
 
         assertEquals("partial", measured.status());
-        assertTrue(measured.weakening().contains("rule_unread"), measured.weakening().toString());
         assertTrue(measured.weakening().contains("question_unanswered"),
                 measured.weakening().toString());
+        // And one word for it. The clause states where the values stop, so the question is raised
+        // and nothing answered it; the finding the reader made when it gave up is what a report
+        // says about the same rule, and counting it here as well is one shortfall under two words.
+        assertFalse(measured.weakening().contains("rule_unread"), measured.weakening().toString());
         assertTrue(measured.says("written in a form this compiler does not read"), measured.human());
         assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
     }
@@ -272,7 +352,8 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     void aProvedEmptyInputOutranksWhatAReadingOfItManaged() {
         Measured measured = of("    invariant String.length(name) <= 0 - 1");
 
-        assertTrue(measured.says("no_feasible_input"), measured.human());
+        assertTrue(measured.says("the rules reaching this behavior's input leave it no value"),
+                measured.human());
         assertFalse(measured.weakening().contains("rule_unread"),
                 "the measurement is not weaker, it is not there: " + measured.weakening());
         assertFalse(measured.weakening().contains("question_unanswered"),

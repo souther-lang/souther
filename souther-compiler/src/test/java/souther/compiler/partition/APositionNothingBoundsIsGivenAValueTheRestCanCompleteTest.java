@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -98,8 +98,9 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
     void aLevelAProgressionReachesIsOwedARowAndNotAnAccountOfWhyNoneWasFound() {
         String report = report(COUNTING);
 
-        assertTrue(report.contains("! no row is at the ON point f/3 * p.a + 6 * p.b = 3"), report);
-        assertFalse(report.contains("the search stopped before reaching 3 * p.a + 6 * p.b = 3"),
+        assertTrue(report.contains("! no row is at the ON point (comparison"), report);
+        assertTrue(report.contains("read as f/3 * p.a + 6 * p.b: = 3"), report);
+        assertFalse(report.contains("the search left something untried before reaching 3 * p.a + 6 * p.b = 3"),
                 report);
     }
 
@@ -109,13 +110,14 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
     void aLevelACosetOfDecimalsReachesIsOwedARowToo() {
         String report = report(FILLING);
 
-        assertTrue(report.contains("! no row is at the OFF point f/p.a + 3 * p.b = 1"), report);
-        assertFalse(report.contains("the search stopped before reaching p.a + 3 * p.b = 1"), report);
+        assertTrue(report.contains("! no row is at the OFF point (comparison"), report);
+        assertTrue(report.contains("read as f/p.a + 3 * p.b: = 1"), report);
+        assertFalse(report.contains("the search left something untried before reaching p.a + 3 * p.b = 1"), report);
     }
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

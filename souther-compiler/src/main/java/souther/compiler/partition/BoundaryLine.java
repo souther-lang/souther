@@ -8,7 +8,7 @@ import souther.compiler.check.RuleRef;
  * <p>One of four equivalences and not a correction of any of them. Which rule it is is
  * {@link RuleRef}'s and is the same value however many times the rule is read; which line of the
  * model that rule drew is {@link AuthoredLine}'s; which reading of it drew a boundary is
- * {@link OriginRef}'s; and this says which of those boundaries a partition folds into one. A reader
+ * {@link LineOrigin}'s; and this says which of those boundaries a partition folds into one. A reader
  * that had one of them for another folded two lines together or asked for a row twice.
  *
  * <p>Where the line is is part of it, and it has to be. One comparison written in a helper draws a
@@ -22,7 +22,7 @@ import souther.compiler.check.RuleRef;
  * each is a real occurrence measured on its own, and they are one line.
  *
  * <p><b>Which authored line it is, and not the folding, is asked of the origin.</b> A reading knows
- * which line of the model it is a reading of, and says so ({@link OriginRef#authoredLine}); what
+ * which line of the model it is a reading of, and says so ({@link LineOrigin#authoredLine}); what
  * this adds is where that line was read, which is the position and behavior a row would be written
  * for. The folding stays a partition's answer rather than an origin's, so that what an origin
  * answers about itself is never the key something else groups it by.

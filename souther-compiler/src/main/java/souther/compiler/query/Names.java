@@ -6,18 +6,25 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.DeclarationRefusals;
+import souther.compiler.check.Derived;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.Normalized;
+import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.examples.ExampleStatements;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
@@ -54,6 +61,18 @@ public final class Names {
     private Names() {}
 
     /**
+     * What every registry over this store answers {@link Registry#declares} with.
+     *
+     * <p>One answer and not one per rung, because being declared is not a fact about a rung. Written
+     * here rather than defaulted on the interface so that a registry reading this store cannot be
+     * left answering it out of the declaration it happens to hold, which is what puts where a
+     * declaration stands into a reader that asked only whether it was there.
+     */
+    private static boolean declared(Db db, TypeKey address) {
+        return Boolean.TRUE.equals(db.ask(new CompilationDeclares(address)).value());
+    }
+
+    /**
      * A registry over this compilation, reading each module's declarations as resolution left them.
      *
      * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
@@ -68,6 +87,11 @@ public final class Names {
             public Hir.Def declaration(TypeKey address) {
                 Answer<Hir.Def> def = db.ask(new ResolvedDeclaration(address));
                 return def.present() ? def.value() : null;
+            }
+
+            @Override
+            public boolean declares(TypeKey address) {
+                return declared(db, address);
             }
 
             @Override
@@ -107,6 +131,11 @@ public final class Names {
             }
 
             @Override
+            public boolean declares(TypeKey address) {
+                return declared(db, address);
+            }
+
+            @Override
             public Map<String, Ast.Def> declaredIn(String moduleName) {
                 Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
@@ -127,38 +156,81 @@ public final class Names {
     }
 
     /**
-     * A registry over this compilation, reading each module's declarations as they were derived.
+     * A registry over this compilation, reading each module's declarations as they were normalized.
      *
-     * <p>Where a derived declaration becomes a node, and the only place it does. What the derived
-     * stage answers with says that the constructions in what a declaration says are constructions;
-     * this hands over {@link Hir.Def}, and what settles that is the other source a reader is
-     * answered from rather than a step nobody has taken. {@link souther.compiler.check.Declarations}
-     * answers an identity from this registry and from the language's own vocabulary, and the
-     * prelude's declarations are loaded resolved and kept out of derivation — so there is no derived
-     * declaration for the second source to hand over, and the representation both can be in is the
-     * node. What says a reader is at the derived world is which of the two it asked for:
-     * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
-     * resolved one.
+     * <p>What a reader of declarations below the settling is answered from. Every declaration a
+     * module writes is here, because normalizing one is declaration-local and asks nothing of the
+     * shapes its fields name — so which form a reader gets is not decided by whether a
+     * representation could be derived for the declaration it asked about.
      */
-    static Registry<Hir.Def> derivedRegistry(Db db) {
-        return new Registry<Hir.Def>() {
+    static Registry<Normalized.Def> normalizedRegistry(Db db) {
+        return new Registry<Normalized.Def>() {
             @Override
-            public Hir.Def declaration(TypeKey address) {
-                Answer<souther.compiler.check.Derived.Def> def =
-                        db.ask(new Shapes.DerivedDef(address));
-                return def.present() ? def.value().read() : null;
+            public Normalized.Def declaration(TypeKey address) {
+                Answer<Normalized.Def> def = db.ask(new Shapes.NormalizedDef(address));
+                return def.present() ? def.value() : null;
             }
 
             @Override
-            public Map<String, Hir.Def> declaredIn(String moduleName) {
-                Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+            public boolean declares(TypeKey address) {
+                return declared(db, address);
+            }
+
+            @Override
+            public Map<String, Normalized.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Normalized.Def>> defs =
+                        db.ask(new Shapes.NormalizedDeclarations(moduleName));
+                return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
+    }
+
+    /**
+     * A registry over this compilation, reading each module's declarations with the representation
+     * derived for each.
+     *
+     * <p>What it hands over is the derived declaration and not the node it was derived from. A table
+     * of nodes would say of every declaration below the stage what nothing established of it. Both
+     * sources a reader is answered from are at this rung: the compilation's, here, and the
+     * language's own vocabulary, which is lifted to the same representation
+     * ({@link Declarations.Vocabulary#ofDerived}) rather than left resolved with no derived
+     * declaration to give.
+     *
+     * <p>Short of the declarations a module writes, by exactly the products whose representation
+     * could not be derived. Which is why it is not what a declaration is read through:
+     * {@link #normalizedRegistry} is, and it is missing none of them.
+     */
+    static Registry<Derived.Def> derivedRegistry(Db db) {
+        return new Registry<Derived.Def>() {
+            @Override
+            public Derived.Def declaration(TypeKey address) {
+                Answer<Derived.Def> def =
+                        db.ask(new Shapes.DerivedDef(address));
+                return def.present() ? def.value() : null;
+            }
+
+            @Override
+            public boolean declares(TypeKey address) {
+                return declared(db, address);
+            }
+
+            @Override
+            public Map<String, Derived.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Derived.Def>> defs =
                         db.ask(new Shapes.DerivedDeclarations(moduleName));
-                if (!defs.present()) {
-                    return Map.of();
-                }
-                Map<String, Hir.Def> out = new LinkedHashMap<>();
-                defs.value().forEach((name, def) -> out.put(name, def.read()));
-                return Map.copyOf(out);
+                return defs.present() ? defs.value() : Map.of();
             }
 
             @Override
@@ -268,6 +340,113 @@ public final class Names {
             }
             Ast.Def def = defs.value().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
+    /**
+     * Whether a module of this compilation declares something at {@code named}.
+     *
+     * <p>A question of its own because of what its answer is, and {@link HasScope} is the same shape
+     * for a module: read off a declaration, whose answer moves whenever the declaration is written
+     * over or written somewhere else in its text, and answered as a yes or a no, which does not. A
+     * reader that took the declaration to find out whether there was one would be told where it now
+     * stands, and so would every reader of that in turn.
+     *
+     * <p>Not a fact about any representation. Which rung the declarations a reader holds have
+     * reached decides what one says, and decides nothing about whether one is there — a product no
+     * representation could be derived for is a name this compilation declares all the same. So this
+     * is read off the declarations as they were indexed, which is where a name's being declared here
+     * was settled, and every rung is answered the same.
+     */
+    public record CompilationDeclares(TypeKey named) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            return Answer.of(db.ask(new Declaration(named)).present());
+        }
+    }
+
+    /**
+     * Which form the declaration at {@code named} was written in.
+     *
+     * <p>Beside {@link CompilationDeclares} and not inside it, for the reason they are two
+     * questions: a product rewritten as a sum keeps the presence answer and changes this one, so a
+     * reader that only wanted to know there was a declaration is not told about a change it has no
+     * use for.
+     *
+     * <p>Read off the declarations as they were indexed, which is where the form was settled. What
+     * the declaration says is worked out further up and takes the names in it resolving with it; the
+     * form does not, so a reader asking only which form it is depends on neither. That is what lets
+     * this be asked while a declaration's own meaning is being made, which is where asking what it
+     * says would be asking for the answer being worked out.
+     */
+    public record DeclarationKindOf(TypeKey named) implements Key<DeclarationKind> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<DeclarationKind> compute(Db db) {
+            Answer<Ast.Def> mine = db.ask(new Declaration(named));
+            if (mine.present()) {
+                return Answer.of(switch (mine.value()) {
+                    case Ast.Data _ -> DeclarationKind.PRODUCT;
+                    case Ast.SumData _ -> DeclarationKind.SUM;
+                    case Ast.UnitData _ -> DeclarationKind.UNIT;
+                });
+            }
+            // What the language declares, which no module of this compilation wrote and which is
+            // indexed where the library is read. Left out, a reader asking the form of a library
+            // name would be told nothing declares it — and a rule about how one crosses would go
+            // unasked rather than being answered.
+            Answer<Stdlib> library = db.ask(new Front.Library());
+            Hir.Def declared =
+                    library.present() ? library.value().languageDeclaration(named) : null;
+            return declared == null ? Answer.absent() : Answer.of(switch (declared) {
+                case Hir.Data _ -> DeclarationKind.PRODUCT;
+                case Hir.SumData _ -> DeclarationKind.SUM;
+                case Hir.UnitData _ -> DeclarationKind.UNIT;
+            });
+        }
+    }
+
+    /**
+     * Whether the declaration at {@code named} is written as one value wearing a name.
+     *
+     * <p>Beside the form and not part of it. A product written over again as a sum changes which
+     * form it is and says nothing different about whether it is a newtype — both are false — so a
+     * reader that asks only this keeps its answer through an edit that changes only that. Answered
+     * together as one four-valued form, every such reader would be worked out again.
+     *
+     * <p>Settled where the module was indexed, like the form: it is which way the declaration was
+     * written, and resolution copies it rather than deciding it.
+     */
+    public record DeclarationIsNewtype(TypeKey named) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<Ast.Def> mine = db.ask(new Declaration(named));
+            if (mine.present()) {
+                return Answer.of(mine.value() instanceof Ast.Data data && data.newtype());
+            }
+            // What the language declares, read where the library is, for the reason the form is read
+            // there: a reader asking this of a library name is asking about a declaration, and being
+            // told nothing declares it is a different answer from being told it is not a newtype.
+            Answer<Stdlib> library = db.ask(new Front.Library());
+            Hir.Def declared =
+                    library.present() ? library.value().languageDeclaration(named) : null;
+            return declared == null
+                    ? Answer.absent()
+                    : Answer.of(declared instanceof Hir.Data data && data.newtype());
         }
     }
 
@@ -431,11 +610,12 @@ public final class Names {
      * against whichever question was being answered when it made them — which is one declaration at
      * a time, and is the finer dependency this hands out.
      */
-    private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
+    private static <S> Answer<S> symbols(Db db, String name,
+                                         java.util.function.BiFunction<Denoting, Stdlib, S> over) {
         if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(Symbols.of(name, registry, asked(db, name), library(db)));
+        return Answer.of(over.apply(asked(db, name), library(db)));
     }
 
     /**
@@ -531,8 +711,9 @@ public final class Names {
 
     /** What names mean in a module over the declarations as resolution left them — what
      * {@link Resolved} is resolved against. */
-    static Answer<Symbols> resolvedSymbols(Db db, String name) {
-        return symbols(db, name, resolvedRegistry(db));
+    static Answer<ResolvedSymbols> resolvedSymbols(Db db, String name) {
+        return symbols(db, name, (names, stdlib) -> ResolvedSymbols
+                .over(name, resolvedRegistry(db), names, stdlib));
     }
 
     /**
@@ -547,8 +728,11 @@ public final class Names {
      * memoised by, and a caller that kept one would be holding the compilation it was made from. It
      * is built where it is used and dropped there.
      */
-    public static Answer<Symbols> derivedSymbols(Db db, String name) {
-        return symbols(db, name, derivedRegistry(db));
+    public static Answer<DerivedSymbols> derivedSymbols(
+            Db db, String name) {
+        return symbols(db, name, (names, stdlib) -> DerivedSymbols
+                .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
+                        names, stdlib));
     }
 
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
@@ -579,7 +763,7 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Hir.Def>> compute(Db db) {
-            Answer<Symbols> symbols = resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> symbols = resolvedSymbols(db, name);
             return symbols.present() ? Answer.of(symbols.value().reachable()) : Answer.absent();
         }
     }
@@ -1028,6 +1212,100 @@ public final class Names {
     }
 
     /**
+     * What this module's {@code fake} blocks declare: which behavior each names, and how many name
+     * one.
+     *
+     * <p>Asked of the resolved module, which is as early as it can be asked and as late as it needs
+     * to be. What it takes is that the module has every block — its own source's and every attached
+     * {@code examples for} file's, which are joined before resolution — and that each block's
+     * target has been read against the names in scope. Nothing else about the module bears on it: a
+     * block naming a behavior twice is written twice whether or not a representation was derived
+     * for a declaration elsewhere, or a body desugared. Asked further down, that is what would
+     * decide whether the refusal is said at all.
+     */
+    public record FakeTables(String name) implements Key<souther.compiler.check.FakeTables> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.check.FakeTables> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Resolved(name));
+            return resolved.present()
+                    ? Answer.of(souther.compiler.check.FakeTables.classify(resolved.value()))
+                    : Answer.absent();
+        }
+    }
+
+    /**
+     * What {@code id} is told about the blocks it writes that stand in for a behavior another block
+     * of the module also stands in for.
+     *
+     * <p>Counted over the module and said in the file: a module's blocks are its own source's and
+     * its attached files', and a report is quoted from the file the block is written in. Every
+     * block naming the behavior is reported, none of them marked as the one to keep — the blocks
+     * are what they are whichever order the compile was handed its files in, so which is the one to
+     * write differently is not the language's to answer.
+     *
+     * <p>Asked of the classification and of nothing further down. What is wrong is wrong about what
+     * was written, and a module that failed to derive a representation or desugar a body has the
+     * same two blocks in it.
+     */
+    public record StandInBlocks(SourceId id) implements Key<Boolean> {
+        @Override
+        public SourceId sourceId() {
+            return id;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            String module = db.ask(new Front.ModuleOf(id)).value();
+            if (module == null) {
+                return Answer.of(Boolean.TRUE);   // said where the source is read
+            }
+            Answer<souther.compiler.check.FakeTables> declared = db.ask(new FakeTables(module));
+            if (!declared.present()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (souther.compiler.check.FakeTables.Declaration.Conflict conflict
+                    : declared.value().conflicts()) {
+                // The behavior, as this module writes it, and one spelling for every block of the
+                // conflict. Each block's own target says how that block was typed, and two blocks
+                // reaching one behavior may be typed differently — so a report naming what stands
+                // beside the fact would say two names for one refusal, and tell each author to
+                // merge blocks under a spelling only theirs is written in.
+                String named = Requirements.writtenIn(module, conflict.behavior());
+                for (souther.compiler.check.FakeTables.Occurrence.Resolved block
+                        : conflict.tables()) {
+                    Hir.Fake wrote = block.read();
+                    if (!wrote.pos().isIn(id)) {
+                        continue;   // written in another file, and reported by that file's own key
+                    }
+                    Diagnostic.Builder said =
+                            Diagnostic.at(ExampleStatements.marked(wrote))
+                                    .say(new ExampleMessage
+                                            .MoreThanOneFakeStandsInForOneBehavior(named));
+                    // Where the others are, so the blocks read as one refusal rather than as one
+                    // report each. None of them is marked as the one to keep.
+                    for (souther.compiler.check.FakeTables.Occurrence.Resolved other
+                            : conflict.tables()) {
+                        if (other != block) {
+                            said.secondary(ExampleStatements.marked(other.read()),
+                                    new ExampleMessage.AnotherFakeStandsInForItHere(named));
+                        }
+                    }
+                    reports.add(Report.of(said
+                            .hint(new ExampleMessage.WriteTheRowsAsOneFake(named))
+                            .build()));
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.of(Boolean.TRUE, reports);
+        }
+    }
+
+    /**
      * The module a question about a place is a question about, or null when this compilation does
      * not have the file — including a question that names no file at all, which names no place and
      * so has no module to be asked of.
@@ -1407,6 +1685,8 @@ public final class Names {
     public record Cycles() implements Key<Cycles.Of> {
 
         /**
+         * The cycles the module references close, and who is caught in them.
+         *
          * @param reported the error for each module a cycle was closed at — one per cycle, on the
          *                 source that wrote the reference that closes it
          * @param members every module taking part in one, which is more: the error belongs to one

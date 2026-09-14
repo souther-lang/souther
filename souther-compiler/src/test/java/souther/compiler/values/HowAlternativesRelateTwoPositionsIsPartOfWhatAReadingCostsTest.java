@@ -31,14 +31,14 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         PatternRead said = PatternParser.read(regex);
         return ValueSet.matching(PatternPlan.of(
                 assertInstanceOf(PatternRead.Read.class, said, regex).syntax())
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES));
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()));
     }
 
-    /** One alternative: {@code left} holds one language and {@code right} holds the other. */
-    private static AdmissibleValues<String> pair(ValueSet left, ValueSet right,
-                                                 Allowance<String> by) {
-        return AdmissibleValues.at("left", left)
-                .meet(AdmissibleValues.at("right", right), by);
+    /** One alternative: {@code left} holds one language and {@code right} holds the other, while
+     *  it is still a description. */
+    private static PlannedValues<String> pair(ValueSet left, ValueSet right) {
+        return PlannedValues.at("left", AdmittedPlan.of(left))
+                .meet(PlannedValues.at("right", AdmittedPlan.of(right)));
     }
 
     /** Two alternatives held apart, which is a reading whose positions are related by its boxes. */
@@ -47,15 +47,17 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         ValueSet b = matching("x|b{300}");
         ValueSet c = matching("x|c{300}");
         ValueSet d = matching("x|d{300}");
-        return crossed
-                ? pair(a, d, by).joinApart(pair(c, b, by), by)
-                : pair(a, b, by).joinApart(pair(c, d, by), by);
+        return (crossed
+                // Every alternative here was read whole, so the choice left nothing open.
+                ? pair(a, d).joinLiveApart(pair(c, b))
+                : pair(a, b).joinLiveApart(pair(c, d)))
+                .resolve(by).values();
     }
 
     /** The same positions, the same sets, and the pairs the other way round. */
     @Test
     void twoWaysOfRelatingTheSameSetsAreTwoReadings() {
-        Allowance<String> by = Allowance.ofAdmittedValues();
+        Allowance<String> by = AsACompilationAllows.forAdmittedValues();
         AdmissibleValues<String> straight = related(false, by);
         AdmissibleValues<String> crossed = related(true, by);
 
@@ -79,9 +81,10 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         int spent = -1;
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
                 List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
-            Allowance<String> by = Allowance.ofAdmittedValues();
+            Allowance<String> by = AsACompilationAllows.forAdmittedValues();
             List<AdmissibleValues<String>> read = List.of(related(false, by), related(true, by),
-                    AdmissibleValues.at("left", ValueSet.just(Value.text("x"))));
+                    PlannedValues.at("left", AdmittedPlan.of(ValueSet.just(Value.text("x"))))
+                            .resolve(by).values());
             AdmissibleValues<String> made =
                     AdmissibleValues.metAll(order.stream().map(read::get).toList(), by);
 
@@ -98,6 +101,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
 
     /** How much of one position's allowance has gone. */
     private static int spentOn(Allowance<String> by) {
-        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt() - by.left("left");
+        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt()
+                - by.left(Sameness.Block.of("left"));
     }
 }

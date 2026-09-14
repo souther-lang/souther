@@ -1,7 +1,11 @@
 package souther.compiler.codegen;
 
+import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.FixtureReferenceOrigin;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -40,15 +44,25 @@ class APreservedCallIsRefusedByWhatItIsNotByWhatItNamesTest {
 
     @Test
     void soIsOneThatNamesAModulesOwnHelper() {
-        assertRefused(new ValueName.Helper("demo", "half"));
+        ValueName helper = new ValueName.Helper("demo", "half");
+        // A value the representation kept standing rather than a call: it declares no parameters,
+        // and reaching the emitter is the same thing having gone wrong.
+        assertRefused(helper, new Core.PreservedCall(KeptCalls.settledValue(helper, Type.INT),
+                List.of(), new Core.KeptCallPlace(new FixtureReferenceOrigin(0),
+                        new ApplicationOrigin.ComposedFixture(), ExpansionLineage.ORIGINAL),
+                Type.INT, POS));
     }
 
-    private static void assertRefused(ValueName operation) {
-        IllegalStateException e = new Core.PreservedCall(operation, List.of(), Type.INT, POS)
-                .unexpectedIn("the emitter");
+    private static void assertRefused(ValueName.Stdlib.Operation operation) {
+        assertRefused(operation, KeptCalls.to(operation, POS));
+    }
+
+    private static void assertRefused(ValueName operation, Core.PreservedCall call) {
+        IllegalStateException e = call.unexpectedIn("the emitter");
 
         assertEquals(IllegalStateException.class, e.getClass());
         assertTrue(e.getMessage().contains(String.valueOf(operation)), e.getMessage());
-        assertTrue(e.getMessage().contains("3:7"), "and where it was: " + e.getMessage());
+        assertTrue(e.getMessage().contains(String.valueOf(POS)),
+                "and where it was: " + e.getMessage());
     }
 }

@@ -1,11 +1,16 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.publish.PublishedRuleHandle;
+import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -44,19 +49,28 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                 | "one" : (Length(1)) -> 1
             """;
 
-    private static PartitionEvidence partition() {
+    /** The page these read, assembled once. The places it may send a reader to are worked out when
+     *  it is assembled, so what a sentence says is asked of the page rather than of the finding. */
+    private static AdequacyReport.BehaviorReport page() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
+        return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
     }
 
     /** The findings this reading left that a reader is sent to a place for. */
-    private static List<PartitionEvidence.NotRead.ARule> writtenComparisons() {
-        return partition().notRead().stream()
-                .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
-                .map(PartitionEvidence.NotRead.ARule.class::cast)
-                .filter(each -> each.cited() instanceof RuleCitation.WrittenAt)
+    private static List<PartitionEvidence.NotRead.AnUnclassifiedRule> writtenComparisons() {
+        return writtenComparisons(page());
+    }
+
+    /** The same, of a page already assembled. */
+    private static List<PartitionEvidence.NotRead.AnUnclassifiedRule> writtenComparisons(
+            AdequacyReport.BehaviorReport page) {
+        return page.partition().notRead().stream()
+                .filter(PartitionEvidence.NotRead.AnUnclassifiedRule.class::isInstance)
+                .map(PartitionEvidence.NotRead.AnUnclassifiedRule.class::cast)
+                .filter(each -> each.cited().stream()
+                        .anyMatch(RuleCitation.Written.class::isInstance))
                 .toList();
     }
 
@@ -70,7 +84,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
      */
     @Test
     void aComparisonNothingCouldReadIsStillReportedAtThePositionItIsAbout() {
-        List<PartitionEvidence.NotRead.ARule> said = writtenComparisons();
+        List<PartitionEvidence.NotRead.AnUnclassifiedRule> said = writtenComparisons();
 
         assertEquals(List.of("length"),
                 said.stream().map(PartitionEvidence.NotRead::at).toList(),
@@ -82,13 +96,25 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
      *  the construct standing round it. */
     @Test
     void itIsCitedByThePlaceAndNamedByNothing() {
-        PartitionEvidence.NotRead.ARule one = writtenComparisons().getFirst();
+        AdequacyReport.BehaviorReport page = page();
+        PartitionEvidence.NotRead.AnUnclassifiedRule one = writtenComparisons(page).getFirst();
 
-        RuleCitation.WrittenAt written =
-                assertInstanceOf(RuleCitation.WrittenAt.class, one.cited());
-        assertTrue(written.said(SourceNameResolver.identity(), null).startsWith("comparison@"),
-                () -> "what the rule is and where it is written: "
-                        + written.said(SourceNameResolver.identity(), null));
+        RuleCitation.Written written = one.cited().stream()
+                .filter(RuleCitation.Written.class::isInstance)
+                .map(each -> (RuleCitation.Written) each).findFirst()
+                .orElseThrow(() -> new AssertionError("a comparison has no name, so it is cited by"
+                        + " where it is written: " + one.cited()));
+        // And the question it names is the writing module's, because this compilation holds the
+        // file the comparison is in. Asked of the page, which worked the answer out when it was
+        // assembled.
+        assertInstanceOf(RuleReportAnchor.ByTheModuleThatWroteIt.class, written.anchor(),
+                () -> "a comparison in a file this compile holds is placed by whoever wrote it: "
+                        + written);
+        String said = RuleHandleProse.said(
+                PublishedRuleHandle.of(written, page.rulePlace()),
+                new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE), null);
+        assertTrue(said.startsWith("comparison@"),
+                () -> "what the rule is and where it is written: " + said);
     }
 
     /** The invariant beside it keeps its name, which is the other half of the same rule. */
@@ -111,8 +137,11 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
         PartitionEvidence evidence = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
 
-        RuleCitation.Named named = assertInstanceOf(RuleCitation.Named.class,
-                evidence.unanswered().get(0).cited());
-        assertEquals("invariant Length (square)", named.name());
+        RuleCitation.Named named = evidence.unanswered().get(0).cited().stream()
+                .filter(RuleCitation.Named.class::isInstance)
+                .map(RuleCitation.Named.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("an invariant is cited by the name the"
+                        + " author gave it: " + evidence.unanswered().get(0).cited()));
+        assertEquals("invariant Length (square)", named.rule().citedName());
     }
 }

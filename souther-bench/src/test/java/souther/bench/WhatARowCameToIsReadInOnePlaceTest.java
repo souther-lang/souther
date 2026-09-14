@@ -2,6 +2,8 @@ package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Adequacy;
+
 import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -32,6 +34,10 @@ class WhatARowCameToIsReadInOnePlaceTest {
 
     /** Where a row's outcome becomes a reason a measure could not read everything. */
     private static final String PRODUCER = "souther.compiler.examples.ExampleVerifier";
+
+    /** What every behavior's rows came to, named by its class so that renaming it is a thing javac
+     *  says here rather than something this goes on spelling. */
+    private static final String READINGS = Adequacy.RowReadings.class.getName();
 
     /**
      * Nothing but the producer asks whether a row did not come back.
@@ -74,24 +80,29 @@ class WhatARowCameToIsReadInOnePlaceTest {
     /**
      * One method reads what a module's sources saw, and it is the one the answer is made in.
      *
-     * <p>{@code rowsOf} gathers the rows and the reasons behind them. Its callers each decided for
-     * themselves what to do where the build reads no rows — the same `level → nothing was asked`
-     * reading, written five times — so what the answer says about a level and what a measure made
-     * of it were two statements of one thing. The answer says it now, and the gathering is reached
-     * only through the answer (issue #996).
+     * <p>{@code Adequacy.rowsOf} makes the reading a measure is counted over. Its callers each
+     * decided for themselves what to do where the build reads no rows — the same `level → nothing
+     * was asked` reading, written five times — so what the answer says about a level and what a
+     * measure made of it were two statements of one thing. The answer says it now, and the reading
+     * is reached only through the answer (issue #996).
+     *
+     * <p>Of that method and not of every one named for the rows. What a behavior's rows are is asked
+     * elsewhere, by whoever is not measuring, and a check spelled by a member's name alone answers
+     * about whatever else was named that.
      */
     @Test
     void whatTheSourcesSawIsGatheredWhereTheAnswerIsMade() throws IOException {
         Set<String> gathering = new LinkedHashSet<>();
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.member().equals("rowsOf")
-                    && !site.at().startsWith("souther.compiler.query.Adequacy$Rows#compute")) {
+            if (site.owner().equals(Adequacy.class.getName())
+                    && site.member().equals("rowsOf")
+                    && !site.at().startsWith(READINGS + "#compute")) {
                 gathering.add(site.at());
             }
         }
         assertEquals(Set.of(), gathering,
-                "a caller reached past `Adequacy.Rows` for the gathering under it, which is where"
-                        + " what a level asked for stops being one answer");
+                "a caller reached past `" + READINGS + "` for the gathering under it, which is"
+                        + " where what a level asked for stops being one answer");
     }
 
     /**
@@ -116,7 +127,7 @@ class WhatARowCameToIsReadInOnePlaceTest {
         }
         assertEquals(Set.of(), gathering,
                 "a reader outside the queries assembled what a module's sources saw. What every"
-                        + " behavior's rows came to is `Adequacy.Rows`, and a second assembly of it"
-                        + " is a second answer to keep agreeing");
+                        + " behavior's rows came to is `" + READINGS + "`, and a second assembly"
+                        + " of it is a second answer to keep agreeing");
     }
 }

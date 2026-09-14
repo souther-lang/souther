@@ -1,5 +1,6 @@
 package souther.cli;
 
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -40,10 +41,7 @@ enum CliCommand {
     FMT("fmt", "<file.sou>...", "format source, to stdout or in place"),
     EXAMPLES("examples", "<file.sou>...", "how well the `example`s cover the model",
             Map.of(CliOption.FORMAT, Reads.saying("how to render the report, and any compile "
-                            + "error (default human)"),
-                    CliOption.ADEQUACY, Reads.taking("reliable-domain|classes",
-                            "which bar the report is read against (default reliable-domain); "
-                                    + "this command measures everything either way"))),
+                    + "error (default human)"))),
     DOC("doc", "[<anchor> | <error-code> | <set>/<topic>[/<section>]]",
             "read the language specification"),
     API("api", "[<Module>[.<name>]]", "the stdlib surface and its signatures",
@@ -53,7 +51,8 @@ enum CliCommand {
             Map.of(CliOption.CLASS_PATH, Reads.saying("where to find the jar to read"))),
     MCP("mcp", "", "serve doc, api and japi over MCP stdio"),
     LSP("lsp", "", "serve the language server over LSP stdio"),
-    HELP("help", "[<command>]", "what a command takes, and what its options mean");
+    HELP("help", "[<command>]", "what a command takes, and what its options mean"),
+    VERSION("version", "", "which Souther this is");
 
     private static final Map<String, CliCommand> BY_SPELLING = spellingIndex();
 
@@ -84,7 +83,11 @@ enum CliCommand {
         this.spelling = spelling;
         this.operands = operands;
         this.summary = summary;
-        this.reads = reads.isEmpty() ? Map.of() : new EnumMap<>(reads);
+        // Held unmodifiable, which is what a field of an enum constant has to be: every caller of
+        // this command sees the one map, so a caller that could write to it would be writing for
+        // all of them.
+        this.reads = reads.isEmpty() ? Map.of()
+                : Collections.unmodifiableMap(new EnumMap<>(reads));
     }
 
     /** The command this name is, or null where this compiler has no such command. */
@@ -123,10 +126,8 @@ enum CliCommand {
      * Which values the option takes under this command.
      *
      * <p>Beside {@link #describe} because a command reading an option its own way can take fewer
-     * values with it, and the two go together: {@code --adequacy} names a bar and, on a compile,
-     * how much to measure, while {@code examples} measures everything and so has nothing for the
-     * measurement words to choose. Written once in the table, the usage offered a value this
-     * command refuses — and the table exists so that what is printed and what is parsed cannot
+     * values with it, and the two go together. Written once in the table, the usage offered a value
+     * the command refuses — and the table exists so that what is printed and what is parsed cannot
      * come apart.
      */
     String valueSpelling(CliOption option) {

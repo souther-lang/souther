@@ -1,24 +1,39 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Towards;
+
+import java.util.Objects;
 
 /**
- * What a comparison places on a position's values, read off the comparison and nothing else.
+ * What a comparison placed on a position's values, read off the comparison and nothing else.
  *
  * <p>One classification, asked wherever a rule compares a position to something: a clause of an
  * invariant, a comparison in a body, a clause of an {@code ensures}. A rule is read the same way
  * wherever it is written (spec §boundary-coordinates), and this is the reading that says what it
- * placed. It was three: {@code InvariantBound.ordering} answered it for a {@code data}'s clauses,
- * {@code ComparedLine.of} for a body's and a declaration's comparisons, and
- * {@code GuardThresholds.orders} answered a coarser version of the same question under the same
- * word. Three answers to one question drift, and two of them already had: an equality places a line
- * where a body writes it and placed nothing where a {@code data} did.
+ * placed. Answered once and carried: a second answer to it drifts from this one, and an equality
+ * places a line under one of them and nothing under the other while both go on being called what a
+ * rule placed.
  *
- * <p><b>Nothing about a carrier, a term, or a number here.</b> Whether the other side can be read as
- * a value of the position's order, and where the position sits in the value, are what a reading
- * answers about the comparison — and a question the model raises may not be decided by what a
- * reading managed (#851). So this takes an operator and gives what the model states, and a reader
- * that could not find the number still knows a line was placed.
+ * <p><b>Two ways in, and a list of the bridges.</b> A comparison the source wrote is answered from
+ * the operator it was written with, where it is recognised. A comparison this compiler composed out
+ * of what the rules proved never had an operator, and is answered from the relation the reasoning
+ * arrived at ({@link #stating}). Those two are the whole of where a claim comes from, and there is
+ * no third that reads one off something else again.
+ *
+ * <p>How many recognitions the first is written as is a different question, and not one this can
+ * answer with a number: a tree a check produces ({@link Comparison}) and a tree a fold walks are
+ * different trees, and each is recognised where it is read. Which sites those are is enumerated off
+ * the compiled classes, together with what each is licensed for
+ * ({@code AnOperatorIsAskedWhatItPlacesInOnePlaceTest}). What every one of them is for is the same:
+ * below it, no reader holds an operator or goes back to one.
+ *
+ * <p><b>Two cases, because an operator that placed nothing is no comparison.</b> That an operator
+ * compares is settled where a comparison is recognised ({@link Comparison}), and this is what such
+ * an operator placed — so there is no arm here for one that placed nothing, and no reader below
+ * that point has one to answer for. Held as the wider {@link ComparisonPlacement}, every one of
+ * them did, and what each answered was invented: a {@code null} for a relation that does not exist,
+ * a {@code false} for a rule that holds at no value because there is no rule.
  *
  * <p><b>And nothing about which values exist.</b> Whether there is anything on the far side of the
  * line is not the comparison's to say: an invariant refuses everything outside its bound at
@@ -26,19 +41,185 @@ import souther.compiler.types.BinOp;
  * fact about the construct the rule is written in, asked beside this rather than inside it — read as
  * one question, a guard's classification would carry an invariant's reason.
  */
-public sealed interface ComparisonClaim {
+public sealed interface ComparisonClaim
+        extends ComparisonPlacement permits ComparisonClaim.Cut, ComparisonClaim.Singled {
+
+    /**
+     * What a comparison stating {@code rel} of its two sides placed on them.
+     *
+     * <p>{@link #statedRelation} the other way round, and the whole of the way back. The six
+     * relations and the six claims stand one to one — an order is a side and whether the value it
+     * names is on it, which is four, and an equality is the value singled out or everything else,
+     * which is two — so this loses nothing and neither does the way out.
+     *
+     * <p>Here, and one place, because it is the crossing between the two vocabularies read
+     * backwards. A reading that composes a comparison out of what the rules proved has a relation
+     * and needs what such a comparison places; written as the operator the language spells that
+     * relation with, and recognised again from the operator, the way back would be a second table
+     * of six for the recognition to agree with.
+     *
+     * <p>An order is asked for by the side it is satisfied on ({@link Cut#satisfiedOn}), so which
+     * class the value it names is in is worked out where a cut's two facts are already paired
+     * rather than restated here.
+     */
+    static ComparisonClaim stating(Rel rel) {
+        return switch (rel) {
+            case EQ -> new Singled(true);
+            case NE -> new Singled(false);
+            case LE -> Cut.satisfiedOn(Towards.BELOW, true);
+            case LT -> Cut.satisfiedOn(Towards.BELOW, false);
+            case GE -> Cut.satisfiedOn(Towards.ABOVE, true);
+            case GT -> Cut.satisfiedOn(Towards.ABOVE, false);
+        };
+    }
+
+    /**
+     * Whether the comparison is true at the value it names.
+     *
+     * <p>Asked of either shape, because either answers it: {@code x <= c} and {@code x > c} agree
+     * about which class the value is in and disagree here, and {@code x == c} is met at the value
+     * where {@code x /= c} is not.
+     */
+    boolean holdsAtTheValue();
+
+    /**
+     * The relation this states of its two sides, which is what the numeric reasoning is written in.
+     *
+     * <p>The one crossing between the two vocabularies, and it is a crossing rather than a second
+     * name for one thing. What is here says how a comparison divided a position's values, and
+     * answers which class the number named is in and which side the rule is satisfied on; a
+     * relation says which way a sum stands to nought, and is what a domain is told and what a bound
+     * arriving from somewhere no comparison was written is also said in. The six of each line up,
+     * so nothing is lost crossing over — and that they line up is why it is written once here
+     * rather than wherever a reader happens to need the other words.
+     *
+     * <p>Stated of the left side against the right, which is the way round every reader of a
+     * relation reads it ({@link Rel#holds}).
+     */
+    Rel statedRelation();
+
+    /**
+     * The canonical statement this claim makes of {@code left} and {@code right}.
+     *
+     * <p>The one derivation from what a comparison placed to what it states. Two facts decide it
+     * and neither decides the other: which class the value named is in says which side of the
+     * canonical order each of the two goes on, and whether the comparison holds at the value says
+     * whether the canonical statement is denied. The two shapes read the second fact opposite ways,
+     * because an order does not hold at the value it names and an equality does.
+     *
+     * <p>Here rather than wherever a reader wants it, because a reader that pairs the two facts
+     * itself remembers the pairing in as many places as there are readers, and one that pairs them
+     * the other way round states the comparison that holds exactly where this one does not while
+     * answering every one of its own questions consistently.
+     */
+    <A> CanonicalComparison<A> canonical(A left, A right);
+
+    @Override
+    ComparisonClaim turned();
+
+    /**
+     * What the comparison that holds exactly where this one does not places, which is the same
+     * partition selected the other way round.
+     *
+     * <p>A denial is the comparison's own meaning and not a reader's arrangement: {@code x <= c}
+     * fails exactly where {@code x > c} holds, and both say the number named is on the low side.
+     * Answered from the claim, a reader that meets a rule under a negation has the claim of the
+     * rule it states; answered from the operator, it is a second table of operators that agrees
+     * with this one only for as long as somebody keeps it so.
+     *
+     * <p>Asked of a claim and not of a {@link ComparisonPlacement}, because a denial is of
+     * something stated. There is nothing an operator that placed nothing states the failure of.
+     */
+    ComparisonClaim denied();
 
     /**
      * An order: the values either side of the line are different classes.
      *
-     * @param valueBelongsBelow whether the number named is on the low side. {@code x <= c} puts it
-     *                          there; {@code x < c} puts it on the high side. Getting this wrong
-     *                          moves the line by one and asks for a row that proves nothing
-     * @param holdsAtTheValue   whether the comparison is true at the number named. Not derivable
-     *                          from the other: {@code x <= c} and {@code x > c} agree about which
-     *                          class the number is in and disagree here
+     * @param valueBelongs    which class the number named is itself in. {@code x <= c} puts it
+     *                        below; {@code x < c} puts it above. Getting this wrong moves the line
+     *                        by one and asks for a row that proves nothing
+     * @param holdsAtTheValue whether the comparison is true at the number named. Not derivable
+     *                        from the other: {@code x <= c} and {@code x > c} agree about which
+     *                        class the number is in and disagree here
      */
-    record Cut(boolean valueBelongsBelow, boolean holdsAtTheValue) implements ComparisonClaim {}
+    record Cut(Towards valueBelongs, boolean holdsAtTheValue) implements ComparisonClaim {
+
+        /**
+         * A side and not the absence of one.
+         *
+         * <p>Which class the number named is in is one of two answers and the language has no way
+         * to say so of a reference, so it is said here. Absent, every reader comparing it to a
+         * side gets the other one — a cut with no side reads as one bounding the values below, and
+         * an order the model never stated goes on being answered about.
+         */
+        public Cut {
+            Objects.requireNonNull(valueBelongs, "which class the number a cut names is in");
+        }
+
+        /** Turning the sides round moves the number named to the other class and leaves whether the
+         *  rule holds there alone: {@code x <= c} and {@code -x >= -c} are one statement. */
+        @Override
+        public Cut turned() {
+            return new Cut(valueBelongs.opposite(), holdsAtTheValue);
+        }
+
+        /** The same line with the other class selected, which is what a denial of an order is. */
+        @Override
+        public Cut denied() {
+            return new Cut(valueBelongs, !holdsAtTheValue);
+        }
+
+        /** The canonical order, taken with the value named above the other — which is the side the
+         *  canonical form wants it on, so a cut that puts it below states the same thing with its
+         *  sides exchanged — and denied where the comparison holds at the value, because the
+         *  canonical order does not hold there. */
+        @Override
+        public <A> CanonicalComparison<A> canonical(A left, A right) {
+            boolean exchanged = valueBelongs == Towards.BELOW;
+            CanonicalComparison<A> order = CanonicalComparison.below(
+                    exchanged ? right : left, exchanged ? left : right);
+            return holdsAtTheValue ? order.denied() : order;
+        }
+
+        /** Which way the values it admits lie, and whether the number named is one of them: the
+         *  side is the claim's own answer ({@link #satisfyingSide}) and is not worked out here from
+         *  the two facts a cut holds. */
+        @Override
+        public Rel statedRelation() {
+            return satisfyingSide() == Towards.BELOW
+                    ? (holdsAtTheValue ? Rel.LE : Rel.LT)
+                    : (holdsAtTheValue ? Rel.GE : Rel.GT);
+        }
+
+        /**
+         * Which side of the line the comparison is true on.
+         *
+         * <p>The one place the two facts a cut holds are put together. Which class the number named
+         * is in and whether the rule holds there are separate answers, and every question about the
+         * line — which end of a range it is, which way a run of values has to lie to satisfy it,
+         * which side a row is owed on — is this one. Worked out where each of those is asked, the
+         * pairing of the two is remembered in as many places as there are readers, and a reader
+         * that pairs them the other way round answers every one of its own questions consistently
+         * about a line whose sides are swapped.
+         */
+        public Towards satisfyingSide() {
+            return holdsAtTheValue ? valueBelongs : valueBelongs.opposite();
+        }
+
+        /**
+         * The order satisfied on {@code side} that answers {@code holdsAtTheValue} at the value it
+         * names, which is {@link #satisfyingSide} read the other way.
+         *
+         * <p>For a reader that kept the side rather than the class the value is in — a bound
+         * records which end of a range it placed, and which side its own value falls on follows
+         * from that end together with whether the bound admits it. Run backwards by such a reader,
+         * the derivation is the pairing of the two facts written a second time, and a line stated
+         * as one end and read back as the other is a line whose sides are the wrong way round.
+         */
+        public static Cut satisfiedOn(Towards side, boolean holdsAtTheValue) {
+            return new Cut(holdsAtTheValue ? side : side.opposite(), holdsAtTheValue);
+        }
+    }
 
     /**
      * A value singled out: the number named, and every other value as one class.
@@ -53,40 +234,36 @@ public sealed interface ComparisonClaim {
      * and a refused one leaves a hole rather than an edge: the values beside it are on both sides,
      * which is not what a boundary with a low side and a high side can carry.
      */
-    record Singled(boolean holdsAtTheValue) implements ComparisonClaim {}
+    record Singled(boolean holdsAtTheValue) implements ComparisonClaim {
 
-    /** Not a comparison of values at all, so nothing was placed. */
-    record Nothing() implements ComparisonClaim {}
-
-    /**
-     * What {@code op} places, which is nothing where it is not a comparison.
-     *
-     * <p>Which operators compare is {@link BinOp#compares}'s answer and this asks it rather
-     * than listing them again. Two lists can be given different answers about one operator added
-     * later, and they fail in opposite directions: the numbering would leave it out of the
-     * comparisons of a body while this said what it cuts, so a line would be drawn on a comparison
-     * no run records and no row could ever meet it.
-     */
-    static ComparisonClaim of(BinOp op) {
-        if (!op.compares()) {
-            return new Nothing();
+        /** An equality names a value and orders nothing, so there is nothing to turn round. */
+        @Override
+        public Singled turned() {
+            return this;
         }
-        return switch (op) {
-            case LE -> new Cut(true, true);
-            case GT -> new Cut(true, false);
-            case LT -> new Cut(false, false);
-            case GE -> new Cut(false, true);
-            case EQ -> new Singled(true);
-            case NE -> new Singled(false);
-            // Refused above and written out here so the switch stays exhaustive: an operator added
-            // to the language stops the compile here and is decided about rather than falling in.
-            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> new Nothing();
-        };
-    }
 
-    /** Whether {@code op} orders the values either side of what it names. */
-    static boolean orders(BinOp op) {
-        return of(op) instanceof Cut;
+        /** The other of the two classes: what is denied of the value named is met everywhere
+         *  else. */
+        @Override
+        public Singled denied() {
+            return new Singled(!holdsAtTheValue);
+        }
+
+        /** The two sides being the same value, denied where the comparison does not hold at the
+         *  value it names — which is the canonical equality read the way round it is stated, and
+         *  the opposite of how an order reads that same fact. Nothing is exchanged: an equality
+         *  orders nothing, so neither side is the one the canonical form wants. */
+        @Override
+        public <A> CanonicalComparison<A> canonical(A left, A right) {
+            CanonicalComparison<A> equality = CanonicalComparison.theSameValue(left, right);
+            return holdsAtTheValue ? equality : equality.denied();
+        }
+
+        /** An equality or its denial, which is the whole of what singling a value out states. */
+        @Override
+        public Rel statedRelation() {
+            return holdsAtTheValue ? Rel.EQ : Rel.NE;
+        }
     }
 
 }

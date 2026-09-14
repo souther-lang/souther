@@ -67,7 +67,12 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
         table.put("noLineAt", new Decided(Above.ASKED, "both",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
                         + ".aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase"));
+        table.put("endsLeftOpenAt", new Decided(Above.ASKED, "both, as the rules with no line are",
+                "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
+                        + ".aClauseWhoseEndAChoiceLeftOpenNamesTheSharedFieldUnderEachCase"));
         table.put("unanswered", new Decided(Above.ASKED, "both",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.aQuestionRaisedAboveIsRaisedAtEachCase"));
+        table.put("unclassified", new Decided(Above.ASKED, "both, as the questions beside them are",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.aQuestionRaisedAboveIsRaisedAtEachCase"));
         table.put("everyRuleReachedAt", new Decided(Above.ASKED, "both, and short if either is",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
@@ -93,6 +98,31 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + "every rule reaching it, and this is asked of a reading and owes the "
                         + "clauses that reading holds",
                 "AClauseAboveASumDrawsItsLineOnceTest"));
+        table.put("movedAtTheValue", new Decided(Above.NOT_ASKED,
+                "the same answer as `placed` and for the same reason, which is what it is the "
+                        + "other half of: an end a rule of the value above moved is an end of that "
+                        + "value's own coordinate, placed under that value and accounted for "
+                        + "there. What is asked here is only the ends moved at the value this "
+                        + "reading is opened at, which is the one place the reading of the clauses "
+                        + "as they are written cannot see them",
+                "NoRuleIsPlacedWhereNothingAccountsForItTest.everyRuleThatPlacedAnEndIsInTheAccount"));
+        table.put("statedAtTheValue", new Decided(Above.NOT_ASKED,
+                "the same answer as `placed` and for the same reason, and the other half of what "
+                        + "`movedAtTheValue` is the first half of: an end of the value above is "
+                        + "placed under that value and accounted for there. What is asked here is "
+                        + "the ends this value's own conjuncts state on its own coordinates, which "
+                        + "is where a rule stating no comparison puts one",
+                "ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest"));
+        table.put("ownEndsAt", new Decided(Above.NOT_ASKED,
+                "the two above, asked about one position rather than about the reading, and so the "
+                        + "same answer for the same reason: an end of the value above is placed "
+                        + "under that value and accounted for there. What this adds to them is "
+                        + "which position their ends are of — they are the ends of the value this "
+                        + "reading is opened at, and at any other position they are ends of "
+                        + "another value. Answered here because this reading is what knows which "
+                        + "value that is; answered by the caller, the root's ends were held "
+                        + "against the numbers of whatever it was reading",
+                "ATypeWritingAboutBothOfItsNumbersChoosesNeitherTest"));
         table.put("bounds", new Decided(Above.NOT_ASKED,
                 "what a reading holds of its own value, which is what the answers above are taken "
                         + "from — the value above is asked through them and not through this",
@@ -100,6 +130,15 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
         table.put("given", new Decided(Above.NOT_ASKED,
                 "the value above is a reading of its own, and what it constrains is taken under its "
                         + "own root; asked here as well, one rule would be given twice",
+                null));
+        table.put("machines", new Decided(Above.NOT_ASKED,
+                "where the answers about a declaration's string machines are asked for — a "
+                        + "capability this reading was handed and hands on, not an answer about any "
+                        + "position; the value above was handed the same one",
+                null));
+        table.put("answers", new Decided(Above.NOT_ASKED,
+                "the answers about this value's own string machines, which `bounds` is asked "
+                        + "with; the value above has its own, filed under its own declaration",
                 null));
         return table;
     }

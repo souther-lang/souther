@@ -11,7 +11,8 @@ import souther.compiler.types.ValueName;
  * business with. This is that answerer trying and the making failing — the dependency's base class not
  * being there, its {@code apply} not being found, the subclass not defining.
  *
- * <p>Raised from {@link Answerer#applying} and never from {@link Answerer.Applying#to}. Where a row
+ * <p>Raised from {@link Answerer.Answer.Something#applying} and never from
+ * {@link Answerer.Applying#to}. Where a row
  * stops decides what its outcome records, and a row whose stand-ins could not be made never applied
  * the behavior: it stops where a row with no fake for a dependency stops, and says the same thing
  * about itself.

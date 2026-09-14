@@ -1,9 +1,12 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleKey;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -38,7 +41,7 @@ import java.util.Map;
  *
  * <p>Steps are fields, elements and refinements, and nothing else. That a newtype contributes no
  * step is not this type's rule and nothing here enforces it — whoever reads a structure takes its
- * steps from what {@link StructuralDescent} answers with, off a shape {@code TypeView} has already
+ * steps from whichever question about a shape it is asking, off a shape {@code TypeView} has already
  * taken the worn names off. So {@code data Amount = Int} is one location whether it is written
  * {@code request.cost} or {@code request.cost.value}, and a path ends at the newtype itself.
  */
@@ -46,6 +49,18 @@ public record TermPath(String head, List<Step> steps) {
 
     /** One step of a path: two that go somewhere, and one that stays and narrows. */
     public sealed interface Step {
+
+        /**
+         * How this is written where a narrowing says which kind it is as well.
+         *
+         * <p>The same text for every step that carries no narrowing, which is why this is here
+         * rather than at the one that does: a caller spelling a path asks each step how it is
+         * written, and a caller that reached inside a step to add the kind would be deciding a
+         * step's separator somewhere other than the step.
+         */
+        default String discriminated() {
+            return toString();
+        }
 
         /** The field of a record. */
         record Field(String name) implements Step {
@@ -87,10 +102,18 @@ public record TermPath(String head, List<Step> steps) {
             public String toString() {
                 return "@" + refinement.spelled();
             }
+
+            @Override
+            public String discriminated() {
+                return "@" + refinement.discriminated();
+            }
         }
     }
 
     public TermPath {
+        // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
+        // place of, and every answer that carries one says a position was reached.
+        Objects.requireNonNull(head, "a path is rooted at a parameter");
         steps = List.copyOf(steps);
     }
 
@@ -152,6 +175,32 @@ public record TermPath(String head, List<Step> steps) {
         return !steps.isEmpty() && steps.get(steps.size() - 1) instanceof Step.Refine;
     }
 
+    /**
+     * The position the last step narrows, which is this path with that step dropped.
+     *
+     * <p>Beside {@link #narrowing}, and the pair is what tells a question from its answer. A fork
+     * asks one thing of the scrutinee's position and its arms are the answers to it, so a reader
+     * that has to say which conditions two arms of one fork are needs the position on its own —
+     * held only as the narrowed path, every arm is a value of its own and the fork is no question
+     * anything asked.
+     */
+    public TermPath narrowedFrom() {
+        return new TermPath(head, requireNarrowing().subList(0, steps.size() - 1));
+    }
+
+    /** Which values the last step leaves, which is what the arm that took it came out as. */
+    public Refinement narrowing() {
+        return ((Step.Refine) requireNarrowing().get(steps.size() - 1)).refinement();
+    }
+
+    private List<Step> requireNarrowing() {
+        if (!narrowsWhatItReaches()) {
+            throw new IllegalStateException(
+                    "a position whose last step narrows nothing was asked what it narrows: " + this);
+        }
+        return steps;
+    }
+
     /** Whether any step of this reaches inside a sequence. */
     public boolean insideASequence() {
         for (Step step : steps) {
@@ -194,44 +243,38 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The dotted field name the clauses of the value at {@code root} name this position by, or null
-     * where none of them can name it.
+     * The name the rules of the value at {@code root} call this position by, or null where none of
+     * them can name it.
      *
-     * <p>{@link #fieldKey} asked of a value that is not the parameter. The rules of a
+     * <p>{@link #ruleKey} asked of a value that is not the parameter. The rules of a
      * {@code GlobalQuery} are written about {@code tag} and the position is
      * {@code query@GlobalQuery.tag}: the translation belongs to whoever knows which value's rules
-     * are being read, and putting it in {@link #fieldKey} would make this path know that too.
+     * are being read, and putting it in {@link #ruleKey} would make this path know that too.
+     *
+     * <p>The one way a position becomes a name. Which of the steps below the root are names is
+     * decided here and nowhere else — a step into a sequence and a narrowing to a case are places
+     * a value can be and are not names any rule writes — so a name is never assembled out of the
+     * steps by anybody who would have to remember that.
      *
      * <p>Null for a position under no such value as readily as for one no clause can name. A
      * reading of one value has nothing to say about a position in another, and answering with a
      * name would be that value's rules read at somebody else's position.
      */
-    public String fieldKeyUnder(TermPath root) {
+    public RuleKey ruleKeyUnder(TermPath root) {
         List<Step> below = below(root);
         if (below == null) {
             return null;
         }
+        List<String> named = new ArrayList<>();
         for (Step step : below) {
             switch (step) {
-                case Step.Field _ -> { }
+                case Step.Field field -> named.add(field.name());
                 case Step.Element _, Step.Refine _ -> {
                     return null;
                 }
             }
         }
-        return spelled(below);
-    }
-
-    /**
-     * The steps below {@code root} written out, or null where this is not under it.
-     *
-     * <p>{@link #stepsSpelled} asked of a value that is not the parameter, and what a table keyed by
-     * such names looks a position up by. {@link #fieldKeyUnder} is this where a clause of that value
-     * could name the position and null where none can.
-     */
-    public String stepsSpelledUnder(TermPath root) {
-        List<Step> below = below(root);
-        return below == null ? null : spelled(below);
+        return new RuleKey(named);
     }
 
     /** The steps of this below {@code root}, or null where this is not under it. */
@@ -274,8 +317,8 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The dotted field name the clauses of a value name this position by, or null where no clause
-     * of the value this is rooted at can name it.
+     * The name the clauses of a value call this position by, or null where no clause of the value
+     * this is rooted at can name it.
      *
      * <p>Null for two unlike reasons, and both of them are the same shape of answer. The clauses of
      * a record relate the fields of that record, and a position inside a sequence is not one of
@@ -283,7 +326,7 @@ public record TermPath(String head, List<Step> steps) {
      * holding the list is written at that name. And a clause is not written across a refinement
      * either: what a {@code GlobalQuery} says about its {@code tag} is written in
      * {@code GlobalQuery}, not in the sum, so a reader with those rules in hand asks
-     * {@link #fieldKeyUnder} the case rather than this.
+     * {@link #ruleKeyUnder} the case rather than this.
      *
      * <p>Joined without those steps the name would be looked up as a field of the value itself,
      * which is either nothing or, on the day such a field exists, another position's rules.
@@ -292,31 +335,23 @@ public record TermPath(String head, List<Step> steps) {
      * the clause (spec §invariant-discharge-quantified) and is not one of these keys. So null says
      * this reading has nothing to say about the position, and not that nothing does.
      */
-    public String fieldKey() {
-        return fieldKeyUnder(TermPath.of(head));
+    public RuleKey ruleKey() {
+        return ruleKeyUnder(TermPath.of(head));
     }
 
     /**
-     * The steps written out, with the parameter left off.
+     * The same path, with each narrowing saying which kind it is.
      *
-     * <p>A name for the location under whatever holds it, which is what a table keyed by such names
-     * looks a position up by. Where a step reaches inside a sequence or narrows the position the
-     * name still spells it, so two positions never come to one name — and no clause of a value is
-     * written at such a name, so a lookup finds nothing, which is the true answer and not a
-     * collision.
-     *
-     * <p>{@link #fieldKey} is this where a clause of the value could name the position and null
-     * where none can. A caller deciding what a clause says wants that one; a caller needing a name
-     * for every position wants this.
+     * <p>For a message about this compiler and never for one about a model. Two paths spelled alike
+     * can hold narrowings that are not equal — an optional's present carrier and a sum's case
+     * declared as {@code Some} are both written {@code @Some} — and a message that spelled only the
+     * path would say two positions this compiler holds apart are one place, which leaves an author
+     * reading a sentence that is true of the words and false of the model.
      */
-    public String stepsSpelled() {
-        return spelled(steps);
-    }
-
-    private static String spelled(List<Step> steps) {
-        StringBuilder out = new StringBuilder();
+    public String discriminated() {
+        StringBuilder out = new StringBuilder(head);
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, true);
         }
         return out.toString();
     }
@@ -328,7 +363,7 @@ public record TermPath(String head, List<Step> steps) {
      * separator is decided. A step added later stops this compiling rather than arriving in a
      * report under a dot that says it is a field.
      */
-    private static void spell(StringBuilder out, Step step) {
+    private static void spell(StringBuilder out, Step step, boolean discriminating) {
         switch (step) {
             case Step.Field field -> {
                 if (!out.isEmpty()) {
@@ -338,7 +373,8 @@ public record TermPath(String head, List<Step> steps) {
             }
             // Neither wears a separator: what a list holds follows the list, and a narrowing of a
             // position follows the position, and a dot before either would read as a field of it.
-            case Step.Element _, Step.Refine _ -> out.append(step);
+            case Step.Element _, Step.Refine _ ->
+                    out.append(discriminating ? step.discriminated() : step.toString());
         }
     }
 
@@ -346,7 +382,7 @@ public record TermPath(String head, List<Step> steps) {
     public String toString() {
         StringBuilder out = new StringBuilder(head);
         for (Step step : steps) {
-            spell(out, step);
+            spell(out, step, false);
         }
         return out.toString();
     }

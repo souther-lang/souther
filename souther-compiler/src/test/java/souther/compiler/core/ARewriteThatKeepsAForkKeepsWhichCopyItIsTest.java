@@ -98,7 +98,7 @@ class ARewriteThatKeepsAForkKeepsWhichCopyItIsTest {
                 && origin(each).equals(origin(fork))).count() > 1;
     }
 
-    private static souther.compiler.types.CoverageOrigin origin(Core fork) {
+    private static souther.compiler.types.SourceConstructOrigin origin(Core fork) {
         return switch (fork) {
             case Core.If iff -> iff.origin();
             case Core.Match m -> m.origin();

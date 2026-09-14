@@ -1,24 +1,23 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.Observation;
-import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
-import souther.compiler.observe.Classification;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashSet;
@@ -92,7 +91,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
         List<InteractionCells.Group> groups = offered.groups();
         assertEquals(1, groups.size(), "the two decisions meet once");
         assertEquals(List.of(), offered.notOffered(),
@@ -101,7 +100,7 @@ class ARowNothingRanFillsNoCombinationTest {
         assertNotNull(first, "and its first choice is a combination");
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
-        Set<Integer> every =
+        Set<ArmProbe> every =
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertTrue(offeredFor(model, every).containsAll(claimedBy(first)),
                 "asked about the arms this combination takes, a row is composed for each of them");
@@ -119,10 +118,10 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation())
+        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation())
                 .groups().get(0).at(0);
         assertNotNull(first);
-        Set<Integer> takes = claimedBy(first);
+        Set<ArmProbe> takes = claimedBy(first);
         assertTrue(takes.size() > 1, "the combination takes an arm of each decision: " + takes);
 
         List<Generator.GeneratedRow> composed = Generator.fill(model.subject(), List.of(),
@@ -151,14 +150,14 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void anArmKeepsWhatEveryCombinationClaimingItCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        Set<Integer> every =
+        Set<ArmProbe> every =
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every), Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing builds, so nothing is composed");
-        for (int probe : every) {
+        for (ArmProbe probe : every) {
             ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
             assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm was tried and says so: " + probe);
@@ -178,7 +177,7 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        Set<Integer> every =
+        Set<ArmProbe> every =
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         // Refuses the first case of the first position, so the combinations naming it fail and the
         // ones beside them build. Every arm of the second decision is claimed by both.
@@ -189,7 +188,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every), Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the combinations that build compose their rows");
-        List<Integer> built = every.stream()
+        List<ArmProbe> built = every.stream()
                 .filter(probe -> filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built)
                 .toList();
         assertEquals(3, built.size(),
@@ -249,7 +248,7 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void anArmTheLimitCutOffSaysSoRatherThanReadingAsUnreachable() {
         Model model = Model.of(wide(), "submit");
-        Set<Integer> every =
+        Set<ArmProbe> every =
                 Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms");
 
@@ -261,11 +260,11 @@ class ARowNothingRanFillsNoCombinationTest {
         assertTrue(filled.reasons().stream()
                         .anyMatch(GenerationReason.SearchLimit.class::isInstance),
                 "the classes alone spend the budget: " + filled.reasons());
-        for (int probe : every) {
+        for (ArmProbe probe : every) {
             ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
             assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm has an entry rather than the silence of one nothing claims: " + probe);
-            assertEquals(List.of(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
+            assertEquals(List.of(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                     ((ArmDisposition.Unresolved) at).why().stream()
                             .map(Generator.UnresolvedCombination::reason).toList(),
                     "and says the search stopped, nothing having been tried at it");
@@ -273,11 +272,11 @@ class ARowNothingRanFillsNoCombinationTest {
     }
 
     /** The arms one combination claims a run through. */
-    private static Set<Integer> claimedBy(CellSelection selection) {
-        Set<Integer> out = new LinkedHashSet<>();
+    private static Set<ArmProbe> claimedBy(CellSelection selection) {
+        Set<ArmProbe> out = new LinkedHashSet<>();
         for (ControlClaim claim : selection.claims()) {
-            if (claim.at() instanceof ControlPointId.ArmOccurrence arm && arm.probe().isPresent()) {
-                out.add(arm.probe().getAsInt());
+            if (claim.at() instanceof ControlPlace.Arm arm && arm.probe().isPresent()) {
+                out.add(arm.probe().get());
             }
         }
         return out;
@@ -294,10 +293,10 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aClassIsComposedForWhenItIsOnTheListAndNotOtherwise() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        List<Generator.ClassOwed> every =
+        List<ClassOfAPosition> every =
                 Generator.everyClassNoRowSitsIn(model.subject(), List.of());
         assertFalse(every.isEmpty(), "the model divides its positions");
-        Generator.ClassOwed one = every.get(0);
+        ClassOfAPosition one = every.get(0);
 
         assertEquals(List.of(), composedFor(model, List.of()),
                 "asked for no class, nothing is composed");
@@ -306,18 +305,18 @@ class ARowNothingRanFillsNoCombinationTest {
     }
 
     /** Which classes the generator composes a row for when it is asked about {@code classes}. */
-    private static List<Generator.ClassOwed> composedFor(Model model,
-                                                         List<Generator.ClassOwed> classes) {
+    private static List<ClassOfAPosition> composedFor(Model model,
+                                                         List<ClassOfAPosition> classes) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
                         List.of(), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAClass.class::cast)
-                .map(at -> new Generator.ClassOwed(at.at(), at.classId())).toList();
+                .map(at -> new ClassOfAPosition(at.at(), at.classId())).toList();
     }
 
     /** Which arms the generator composes a row for when it is asked about {@code arms}. */
-    private static Set<Integer> offeredFor(Model model, Set<Integer> arms) {
+    private static Set<ArmProbe> offeredFor(Model model, Set<ArmProbe> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(arms), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
@@ -326,52 +325,8 @@ class ARowNothingRanFillsNoCombinationTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** One class per divided position, taken from the one class the combination leaves there. */
-    private static Map<AxisId, Classification> at(List<Axis> axes, CellSelection selection) {
-        Map<AxisId, Classification> out = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            out.put(axes.get(i).id(), Classification.in(axes.get(i).classes().get(only(selection, i))
-                    .id()));
-        }
-        return out;
-    }
-
-    /** Which single class the combination leaves the position, the model having one per outcome. */
-    private static int only(CellSelection selection, int axis) {
-        for (int c = 0; c < selection.cell().allowed()[axis].length; c++) {
-            if (selection.cell().admits(axis, c)) {
-                return c;
-            }
-        }
-        throw new AssertionError("a combination leaves every position something");
-    }
-
-    /** How the generator names a row sitting at these classes. */
-    private static String labelOf(List<Axis> axes, Map<AxisId, Classification> sitting) {
-        List<String> parts = axes.stream()
-                .map(axis -> axis.term() + "="
-                        + String.join("|", ((Classification.Classified) sitting.get(axis.id())).classIds()))
-                .toList();
-        return String.join(" x ", parts);
-    }
-
-    /** A run that did everything {@code claims} names and nothing else. */
-    private static Observation doing(List<ControlClaim> claims) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        for (ControlClaim claim : claims) {
-            switch (claim.at()) {
-                case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                case ControlPointId.ComparisonPoint point -> {
-                    taken.add(point.at().emissionSite());
-                    ways.add(point.way());
-                }
-            }
-        }
-        return new Observation(taken, ways);
-    }
-
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -384,30 +339,25 @@ class ARowNothingRanFillsNoCombinationTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared);
             assertNotNull(sigs);
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs = compilation.db()
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value()
                     .get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, symbols,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    CoverageRead.of(spec.name(), body, plan, inputs, symbols));
+            CoverageSites.Plan plan = checked.plan();
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    partitioning),
+                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
         }
     }
 }

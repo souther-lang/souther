@@ -20,7 +20,7 @@ import java.math.BigInteger;
  * @param written what the rule compared against, on the form it was written in
  * @param per     how much of the quantity that form is, which is never zero and never negative
  */
-public record CutPosition(Level written, BigDecimal per) {
+public record CutPosition(Level written, BigDecimal per) implements Comparable<CutPosition> {
 
     public CutPosition {
         if (written == null || per == null || per.signum() <= 0) {
@@ -80,6 +80,18 @@ public record CutPosition(Level written, BigDecimal per) {
         }
         BigDecimal[] rule = asARule();
         return new CutPosition(reduced(written, rule[1]), rule[0]);
+    }
+
+    /**
+     * The same line on the quantity read the other way round.
+     *
+     * <p>The place negates and the share does not. How much of the quantity the rule wrote is a
+     * fact about the rule's form and says nothing about which way the quantity is measured, so a
+     * line at a third of {@code a - b} is at minus a third of {@code b - a} and is still a third of
+     * whatever was written.
+     */
+    public CutPosition reflected() {
+        return new CutPosition(written.negated(), per);
     }
 
     /** The reduced numerator, put back on whatever order the line was written on. */
@@ -188,6 +200,7 @@ public record CutPosition(Level written, BigDecimal per) {
      * and one at two sixths fall in one place, and neither of them is a number this language can
      * write out to compare.
      */
+    @Override
     public int compareTo(CutPosition other) {
         BigDecimal mine = numberOf(written);
         BigDecimal theirs = numberOf(other.written);

@@ -54,11 +54,12 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
             case "Decimal" -> Type.DECIMAL;
             default -> Type.ref(TypeSymbols.declared(new TypeKey(module, type)));
         };
-        Type base = TypeOps.base(t, symbols);
+        Type base = TypeOps.base(t, ScopedDeclarations.wrapsOf(symbols));
         return new Answers(
                 TypeOps.directNumericNewtypeBase(t, symbols),
                 base == Type.INT || base == Type.DECIMAL ? base : null,
-                new Terms(symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).affineScalarBase(t));
+                RuleReadings.termsOfNoClauseFiled(symbols,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).affineScalarBase(t));
     }
 
     /** A primitive is no newtype, so the first column has nothing to say about it; it is a number to

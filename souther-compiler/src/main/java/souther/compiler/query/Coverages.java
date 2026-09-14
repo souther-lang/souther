@@ -1,35 +1,46 @@
 package souther.compiler.query;
 
+import souther.compiler.check.CoverageObligation;
+import souther.compiler.diag.Citation;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.partition.LinesWhereTheyFall;
+import souther.compiler.partition.RuleReachNumbering;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
-import souther.compiler.partition.PointRole;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
-import souther.compiler.inputs.InputDomain;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.ValuesTried;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
-import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.InputClassifications;
 
 import java.util.ArrayList;
@@ -37,7 +48,9 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Measuring one behavior's rows against the distinctions its model draws.
@@ -61,7 +74,10 @@ final class Coverages {
      * twice would read them twice.
      */
     record Partitioned(Partitions.Partitioning geometry,
-                       souther.compiler.inputs.Quantities reading) {}
+                       souther.compiler.inputs.Quantities reading,
+                       java.util.Map<souther.compiler.partition.ConditionOccurrence,
+                               souther.compiler.diag.Citation> conditionsMet,
+                       Map<Integer, Citation> rulesReachedAt) {}
 
     /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
@@ -69,40 +85,70 @@ final class Coverages {
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
+     *
+     * <p><b>Measured against the reading it is handed.</b> Which positions the input has and what
+     * its rules leave the numbers at them are the reading's to say, and the names and the policy
+     * both were read against come with it. Taken apart and handed over as a domain beside the names
+     * to read it under, the measurement would be free to be made against one reading and the
+     * behavior's rows walked by another.
      */
-    static Partitioned partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
-                                      Sig sig, Symbols symbols, ReadingPolicy policy,
+    static Partitioned partitioningOf(Hir.SpecBehavior behavior,
+                                      souther.compiler.inputs.InputReading read,
                                       Core body,
-                                      souther.compiler.check.ElementBindings elements,
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
-                                      souther.compiler.check.StatedContract stated) {
-        List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
-        // What a row's values are, where they sit and what they are written as, read together:
-        // a field under a name is reached by taking the name off, and a walk given the paths
-        // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
-        // Read once for the three below, and handed back beside what they produce. What it holds is
-        // a way of asking the declarations reaching this input a further question, and each of them
-        // asking for its own would read every rule of every parameter three times over to arrive at
-        // the same answers.
-        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
+                                      souther.compiler.check.StatedContract stated,
+                                      souther.compiler.check.AnalysisBody analysis,
+                                      souther.compiler.values.Allowance<
+                                              souther.compiler.inputs.NumericTerm.FromOnePosition>
+                                              distinctions) {
+        ReadingPolicy policy = read.domain().policy();
+        // The one world the rules of this behavior's declarations are read in, which is the reading
+        // this input already made of them.
+        RuleReadingContext ruleReading = RuleReadingContext.of(read.rules(), policy,
+                read.domain().machines());
+        souther.compiler.inputs.Quantities quantities = read.quantities();
         Partitions.Partitioning partitioning =
-                Partitions.of(behavior.name(), inputs, quantities, symbols, policy);
+                Partitions.of(behavior.name(), read, policy);
         // What the behavior states about its own answer, which is read whether or not anything
         // implements it: a clause is written against the declaration, so an injected behavior draws
         // its lines like any other and there is no body for them to have come out of.
-        EnsuresThresholds.Clauses clauses =
-                EnsuresThresholds.of(stated, inputs, quantities, symbols);
+        EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, read);
+        // What the analysis tree binds to the elements of what, built once for both readers of it.
+        // The bindings an expansion wrote are the bindings of the tree it expanded: the two
+        // representations of one body are two expansions with two sets of them, so `elements` —
+        // which is the emitted tree's — is about bindings neither reader below has.
+        ElementBindings standing = analysis == null
+                ? ElementBindings.NONE
+                : ElementBindings.of(analysis.core(), analysis.elements(),
+                        read.rules().newtypes());
+        // Whether there is a tree to read is the reading's own answer, so a body with no analysis
+        // representation is handed over and comes back with nothing rather than being checked for
+        // here as well.
+        // Where this reading writes down the places it met rules nothing this compilation holds
+        // wrote. One numbering for every reader of this body, because an address means a place only
+        // under something that says which addresses were being handed out — numbered apiece, one
+        // number would name a place per reader and nothing downstream could tell them apart.
+        RuleReachNumbering reaches =
+                new RuleReachNumbering(read.symbols().module(), behavior.name());
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
-                : GuardThresholds.of(behavior.name(), body, plan, inputs, quantities,
-                        symbols, elements);
+                : GuardThresholds.of(behavior.name(), analysis, body, plan, read, standing, arrives,
+                        reaches);
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
+        // And what the behavior states about the strings at its positions, in its body and in its
+        // own clauses alike. Read off the tree that has those rules in it: the emitted body has
+        // each of them expanded into what it does, so a reading of it holds none — which is why
+        // this is the other body and not the one above. Both go to one reader, because a term
+        // written about in both places is one term with one set of classes, and two readers would
+        // be two measures of it, each told nothing of the other's.
+        souther.compiler.partition.BehaviorSetStatements.Read sets =
+                souther.compiler.partition.BehaviorSetStatements.of(behavior.name(), analysis, stated, read,
+                        read.domain().parameterReads(), standing, distinctions, guards.forks(),
+                        reaches);
         List<souther.compiler.partition.LineDrawn> declared =
-                souther.compiler.partition.DeclaredThresholds.between(behavior.name(), inputs,
-                        quantities, symbols);
+                souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
         // Every producer of one kind of line, put together before the position is divided. Two
         // rules at one value are one cut and stay separate obligations, which is what the merge
         // below does — applied one producer at a time, a clause and a guard naming one number would
@@ -112,21 +158,59 @@ final class Coverages {
         // written under a case, so one line there is one line per case — on the same number and from
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
-                souther.compiler.partition.LinesWhereTheyFall.of(inputs,
-                        both(clauses.evidence(), guards.evidence()),
-                        both(declared, both(clauses.between(), guards.between())),
-                        quantities, symbols);
+                souther.compiler.partition.LinesWhereTheyFall.of(read,
+                        both(both(clauses.evidence(), guards.evidence()), sets.statements()),
+                        sets.blocked(),
+                        both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
-                filed.evidence(), symbols, policy,
+                filed.evidence(), filed.blocked(), distinctions, ruleReading,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
-                both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
-                        filed.notPlaced()),
-                filed.between(), arrives,
+                everyRuleWithNoLine(clauses, guards, filed, sets),
+                filed.between(),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
-                guards.reaching()), quantities);
+                guards.reaching()), quantities,
+                // Where this reading met each condition it places itself, beside the geometry and
+                // not inside it. A report points at a condition and an answer says which condition
+                // it is, and the two are kept apart so that moving one leaves the other alone.
+                guards.conditionsMet(),
+                // And the same for the rules it places itself, which is every rule written where
+                // this compilation holds no file to open.
+                reaches.reachedAt());
+    }
+
+    /**
+     * Every rule that came to no line, from all three readers, sorted the one way.
+     *
+     * <p>Which of them found a rule is not part of what any of them found: a clause of a
+     * declaration, a body's comparison and a line nothing could place are three producers of one
+     * kind of evidence, and a reader downstream is told the same thing about any of them.
+     */
+    private static RulesWithNoLine everyRuleWithNoLine(
+            EnsuresThresholds.Clauses clauses, GuardThresholds.Guards guards,
+            LinesWhereTheyFall.Filed filed,
+            souther.compiler.partition.BehaviorSetStatements.Read sets) {
+        // Every producer's answer in one gathering. Left out of it, a rule an author wrote would
+        // reach the measure, come to nothing, and be shown to nobody — while the position it names
+        // came back as one the model says nothing about.
+        souther.compiler.inputs.RulesWithNoLine.Gathered found =
+                new souther.compiler.inputs.RulesWithNoLine.Gathered();
+        // The lines that had nowhere to fall, as the findings whoever could not place them made.
+        filed.blocked().forEach(each -> found.add(each.reported()));
+        // And the rules about the strings whose subject this reading could not place at a position.
+        // A question each and no finding: what a report is owed about such a rule is that nothing
+        // worked out what it states there, which the question says, and a measure that closed over
+        // it would be closing over a reading that stopped.
+        sets.nothingClassifies().forEach(found::asked);
+        // And the forks whose condition no reader took in. A question for each and no finding: what
+        // a report is owed about such a rule is that nothing worked out what it states, which the
+        // question says, and where it says it is what the reading got to rather than what the fork
+        // is about.
+        sets.forks().forEach(each ->
+                each.filed().forEach((at, why) -> found.unclassified(each.cited(), at, why)));
+        return clauses.noLine().and(guards.noLine()).and(filed.notPlaced()).and(found.found());
     }
 
     /** The two producers' lines, in one list. */
@@ -140,46 +224,38 @@ final class Coverages {
     }
 
     /**
-     * @param partitioning what the model divides this behavior into, made once by
-     *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
-     *                   again on the way in, this and the boundaries beside it would be two
-     *                   derivations of one thing and two chances to disagree about it
-     * @param lines      what was established about every line this behavior's rules drew, and how
-     *                   far the reading that found them got, made once by
-     *                   {@link souther.compiler.query.Adequacy.BoundaryReadings} and read here.
-     *                   Measuring a line takes putting a value through the module's decoders, which
-     *                   is not something a coverage count can do on its own and not something that
-     *                   should happen twice. What comes out of it here is this behavior's own
-     *                   account: which of a border's points are its to write a row at is the
-     *                   reading's answer and is read once, where the account is made
+     * What the classes measure comes to for one behavior.
+     *
+     * <p>What the model divides this behavior into is made once by
+     * {@link souther.compiler.query.Adequacy.Divided} and read off {@code subject} here. Worked out
+     * again on the way in, this and the boundaries beside it would be two derivations of one thing
+     * and two chances to disagree about it. The lines those rules drew are not part of it: what a
+     * behavior is owed at them is the module's one relation projected to it
+     * ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes measure reads none of
+     * it.
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
-                                Symbols symbols, ReadingPolicy policy,
-                                Partitions.Partitioning partitioning,
+    static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
-                                Measure<List<BorderAssessment>> lines,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
         List<RowOutcome> rows = observed.rowsSeen();
-        List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
-        // What a row's values are, where they sit and what they are written as, read together:
-        // a field under a name is reached by taking the name off, and a walk given the paths
-        // alone reaches nothing where the derivation reaches a field.
-        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols, policy);
+        Partitions.Partitioning partitioning = subject.partitioning();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
-        List<Axis> divided = new ArrayList<>();
-        Readings readings = Readings.of(rows, where, partitioning.axes(),
+        // The measures that divide their number, which are the ones a row is placed at. Handed
+        // every measure, this asks a classifier about numbers there are no classes to place a value
+        // in, and the count it comes back with is over a set no answer here is about.
+        Readings readings = Readings.of(rows, subject,
                 observed.gaps().stream()
-                        .filter(gap -> gap.code().leftNoRowRead()).toList());
-        for (Axis axis : partitioning.axes()) {
-            if (!axis.measurable()) {
-                continue;   // said by `undivided`, which also says which kind of nothing it is
-            }
-            if (axis.derivable()) {
-                axes.add(coverageOf(axis, partitioning, readings, level.readsRows()));
-                divided.add(axis);
+                        .filter(gap -> gap.fact().code().leftNoRowRead()).toList());
+        // Walked as the reading holds it: a location at a time, and each measure beside the
+        // location it sits at. What one of its measures is owed to say includes what the reading of
+        // the position left unread, which is the position's answer — asked of the entry the walk is
+        // at rather than of whichever measure happens to be in hand.
+        for (Readings.AtPosition at : readings.positions()) {
+            for (Readings.AxisReading reading : at.axes()) {
+                axes.add(coverageOf(at, reading, readings, partitioning, level.readsRows()));
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -189,45 +265,14 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                OwedBoundaryPoint.accountOf(lines),
-                pairsOf(behavior.name(), divided, readings, level.readsRows(), budget),
+                pairsOf(subject.behavior(), readings, level.readsRows(), budget),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
                 // measured is the separate answer `undivided` beside them carries, and a position
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
-                whyUnclassified(readings.byRow(),
-                        partitioning.axes().stream().map(Axis::id).toList()));
-    }
-
-    /**
-     * Why the rows that could not be placed could not be placed — one reason per kind per position.
-     *
-     * <p>Not one per row. A hundred rows too large at the same position are one thing to say about
-     * that position, and how many there were is the axis's count. Carrying the number here as well
-     * would be the same fact under two names, and the two would be read side by side.
-     *
-     * <p>Walked in the order of {@code order} rather than of a row's own map, which is built with
-     * {@code Map.copyOf} and so iterates in an order that changes between runs. A report that
-     * changes between runs cannot be compared between runs.
-     */
-    static List<Incompleteness> whyUnclassified(List<Map<AxisId, Classification>> byRow,
-                                                List<AxisId> order) {
-        Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
-        for (Map<AxisId, Classification> where : byRow) {
-            for (AxisId axis : order) {
-                // Asked of every reading and not of the ones that placed nothing. A row that put
-                // one value in a class and could not read the value beside it is counted among the
-                // rows that could not say, so the reason it could not say is owed here too — left
-                // to the arm, the count went up and the report said nothing about why.
-                Classification said = where.get(axis);
-                if (said != null && said.stopped() != null) {
-                    byKind.putIfAbsent(said.stopped().identity(), said.stopped());
-                }
-            }
-        }
-        return List.copyOf(byKind.values());
+                readings.whyUnclassified());
     }
 
     /**
@@ -242,15 +287,84 @@ final class Coverages {
      * @param unseen rows that were never observed at all, which no reading can show — each as the
      *               reason it was not observed, so that a measure weakened by one of them says which
      */
-    private record Readings(List<Map<AxisId, Classification>> byRow, List<Incompleteness> unseen) {
+    record Readings(List<AtPosition> positions, List<WhereARowSat> byRow,
+                    List<Incompleteness.Met> unseen) {
 
-        static Readings of(List<RowOutcome> rows, BehaviorInputs where, List<Axis> axes,
-                           List<Incompleteness> unseen) {
-            List<Map<AxisId, Classification>> read = new ArrayList<>();
+        /**
+         * What the rows came to at every measure of one location.
+         *
+         * <p>The unit a reader of a location answers in: the location's own account, and beside it
+         * what the rows said at each number measured there. Which measure belongs to which location
+         * is settled while this is built and is never worked out again from a measure in hand.
+         */
+        record AtPosition(souther.compiler.partition.MeasuredInput.MeasuredPosition position,
+                          List<AxisReading> axes) {}
+
+        /**
+         * What the rows came to at one measure.
+         *
+         * <p>The classes they reached, how many could not say where they were, and one reason per
+         * kind for those that could not. Read once as the rows are walked: a caller that asked
+         * again with a measure in hand would be putting a question to this reading about something
+         * it holds, which is what an axis from another measurement gets a wrong answer out of.
+         */
+        record AxisReading(Axis axis, int at, Set<String> covered, int couldNotSay,
+                           List<Incompleteness> stopped) {}
+
+        /** Where one row was placed at each measure, in the order the measures are walked. Null at
+         *  a measure the row is not placed by, which is one the model only bounds. */
+        record WhereARowSat(List<Classification> at) {}
+
+        static Readings of(List<RowOutcome> rows,
+                           souther.compiler.partition.MeasuredInput subject,
+                           List<Incompleteness.Met> unseen) {
+            // The measures a row is placed at, in the measurement's own order, and what each row
+            // came to at each of them — asked for in that order and answered in it, so nothing
+            // here looks a measure up in what it was just handed.
+            souther.compiler.partition.MeasuredInput.MeasuredAxes walked = subject.partitionAxes();
+            List<WhereARowSat> read = new ArrayList<>(rows.size());
             for (RowOutcome row : rows) {
-                read.add(InputClassifications.of(row.inputs(), where, axes));
+                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked)));
             }
-            return new Readings(List.copyOf(read), List.copyOf(unseen));
+            // And the same run of measures cut where the locations cut it, which is what the walk
+            // above is the flattening of.
+            List<AtPosition> out = new ArrayList<>();
+            int index = 0;
+            for (souther.compiler.partition.MeasuredInput.MeasuredPosition at
+                    : subject.measurements()) {
+                List<AxisReading> here = new ArrayList<>();
+                for (Axis axis : at.partitionAxes().axes()) {
+                    here.add(readingOf(axis, index++, read));
+                }
+                out.add(new AtPosition(at, List.copyOf(here)));
+            }
+            return new Readings(List.copyOf(out), List.copyOf(read), List.copyOf(unseen));
+        }
+
+        /**
+         * What the rows came to at the measure the walk has reached.
+         *
+         * <p>A row that could not read a value here is counted among those that could not say,
+         * whatever else it placed; one that read every value and put none in a class is not, since
+         * it was read and says so. One reason per kind, which is what a hundred rows too large at
+         * one position are — how many there were is the count beside it.
+         */
+        static AxisReading readingOf(Axis axis, int at, List<WhereARowSat> rows) {
+            Set<String> covered = new LinkedHashSet<>();
+            Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
+            int couldNotSay = 0;
+            for (WhereARowSat row : rows) {
+                Classification said = row.at().get(at);
+                if (said instanceof Classification.Classified in) {
+                    covered.addAll(in.classIds());
+                }
+                if (said != null && said.stopped() != null) {
+                    couldNotSay++;
+                    byKind.putIfAbsent(said.stopped().identity(), said.stopped());
+                }
+            }
+            return new AxisReading(axis, at, covered, couldNotSay,
+                    List.copyOf(byKind.values()));
         }
 
         boolean someRowsUnseen() {
@@ -261,57 +375,54 @@ final class Coverages {
             return byRow.isEmpty();
         }
 
-        /**
-         * Which classes a row fell in at one position, or nothing where it did not say.
-         *
-         * <p>More than one where the position is inside a sequence and the row's elements did not
-         * fall together. Nothing where the row could not be read there, which is a different answer
-         * from a row whose list held no element — that one is read and falls in no class.
-         */
-        static List<String> classesIn(Map<AxisId, Classification> where, Axis axis) {
-            return where.get(axis.id()) instanceof Classification.Classified in ? in.classIds()
-                    : null;
-        }
-
-        /** Whether the row could not read some value at {@code axis}, whatever else it placed. */
-        static boolean stoppedAt(Map<AxisId, Classification> where, Axis axis) {
-            Classification said = where.get(axis.id());
-            return said != null && said.stopped() != null;
-        }
-
-        /** How many rows could not say where they were at this position. */
-        int couldNotSay(Axis axis) {
-            // A row that could not read a value here, whatever else it placed. One that read every
-            // value and put none in a class is not one of these: it was read, and says so.
-            return (int) byRow.stream().filter(where -> stoppedAt(where, axis)).count();
+        /** Every measure a row is placed at, in the order they were walked. The flattening of the
+         *  locations above and not a second list beside them. */
+        List<AxisReading> everyAxis() {
+            List<AxisReading> out = new ArrayList<>();
+            positions.forEach(at -> out.addAll(at.axes()));
+            return List.copyOf(out);
         }
 
         /**
-         * Whether every row that bears on {@code axes} said where it was at all of them.
+         * Whether every row said where it was at {@code read}.
          *
-         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One row
-         * that could not be placed at one of the positions leaves every class of that position, and
-         * every combination it takes part in, undecided rather than untried.
+         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One
+         * row that could not be placed at one of the positions leaves every class of that position,
+         * and every combination it takes part in, undecided rather than untried.
          */
-        WeakeningSet weakening(List<Axis> axes) {
+        WeakeningSet weakening(List<AxisReading> read) {
             Set<Weakening> out = new LinkedHashSet<>();
-            for (Incompleteness gap : unseen) {
+            for (Incompleteness.Met gap : unseen) {
                 out.add(new Weakening.ObservationIncomplete(gap));
             }
-            // One reason per kind per position, which is what a hundred rows too large at one
-            // position are: how many there were is the count beside this, and carrying the number
-            // here as well would be the same fact under two names.
-            Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
-            for (Map<AxisId, Classification> where : byRow) {
-                for (Axis axis : axes) {
-                    Classification said = where.get(axis.id());
-                    if (said != null && said.stopped() != null) {
-                        byKind.putIfAbsent(said.stopped().identity(), said.stopped());
-                    }
-                }
+            // Every reading's, whatever else met the same thing. What makes two of these one fact
+            // and what happens to the places they were met at is the account's, asked once there
+            // rather than settled again by whichever reading this walk reached first.
+            for (AxisReading each : read) {
+                each.stopped().forEach(gap -> out.add(Weakening.ObservationIncomplete.of(gap)));
             }
-            byKind.values().forEach(gap -> out.add(new Weakening.ObservationIncomplete(gap)));
             return WeakeningSet.ofAll(out);
+        }
+
+        /**
+         * Why the rows that could not be placed could not be placed — one reason per kind, in the
+         * order the measures were walked.
+         *
+         * <p>Walked in that order rather than in a row's own map, which is built with
+         * {@code Map.copyOf} and so iterates in an order that changes between runs. A report that
+         * changes between runs cannot be compared between runs.
+         */
+        List<Incompleteness> whyUnclassified() {
+            return reasonsIn(everyAxis());
+        }
+
+        /** The same over any run of measures the walk produced. */
+        static List<Incompleteness> reasonsIn(List<AxisReading> read) {
+            Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
+            for (AxisReading each : read) {
+                each.stopped().forEach(gap -> byKind.putIfAbsent(gap.identity(), gap));
+            }
+            return List.copyOf(byKind.values());
         }
     }
 
@@ -328,10 +439,15 @@ final class Coverages {
      * than anyone writes. A behavior with one divided position has no pairs at all, which is why the
      * single-position coverage is measured on its own and not derived from this.
      */
-    private static PartitionEvidence.PairSpace pairsOf(String behavior, List<Axis> axes,
+    private static PartitionEvidence.PairSpace pairsOf(String behavior,
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
                                                               .OfTheMeasures budget) {
+        // Every measure a row is placed at, which is the locations above flattened rather than a
+        // list somebody gathered beside them. A pair is between two positions, so this question is
+        // the one that reads across them.
+        List<Readings.AxisReading> read = readings.everyAxis();
+        List<Axis> axes = read.stream().map(Readings.AxisReading::axis).toList();
         // The product of what a row can be written at, not of what the types declare. A case the
         // rules refuse is not a class of its position at all, so the slice of the product it would
         // have taken part in is not here to be counted — which is a different thing from a pair
@@ -341,55 +457,99 @@ final class Coverages {
         // position under another are not in one value, so their classes make no combination: counted
         // as the product, the measure of a behavior taking a sum would fall by however many
         // combinations the model does not have.
-        long total = 0;
+        //
+        // Kept as the pairs they were worked out between, rather than added up here. Which two
+        // positions a combination is between is what the walk knows at the moment it counts, and a
+        // sum is the one projection of that from which no reader can get it back.
+        List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                total += combinationsOf(axes.get(i), axes.get(j));
+                long between = combinationsOf(axes.get(i), axes.get(j));
+                if (between > 0) {
+                    space.add(new PartitionEvidence.PairSpace.AxisPair(
+                            new PartitionEvidence.PairSpace.Between(
+                                    axes.get(i).id(), axes.get(j).id()), between));
+                }
             }
         }
-        if (total == 0) {
+        if (space.isEmpty()) {
             return PartitionEvidence.PairSpace.NONE;
         }
         // Before anything about the rows, because there are none to be about: a build that asked for
-        // no measurement read no row, and how large the space is stays what the model says it is.
+        // no measurement read no row, and what the model holds stays what the model says it is.
         if (!asked) {
-            return PartitionEvidence.PairSpace.notAsked((int) Math.min(total, Integer.MAX_VALUE));
+            return PartitionEvidence.PairSpace.notAsked(space);
         }
         // Before the size of the space is worth mentioning. A combination nothing tried to sit in is
         // not a combination left untried by anybody, and how many of them there are says nothing
         // about a behavior no row names.
         if (readings.noRows() && !readings.someRowsUnseen()) {
-            return PartitionEvidence.PairSpace.noRows((int) Math.min(total, Integer.MAX_VALUE));
+            return PartitionEvidence.PairSpace.noRows(space);
         }
+        long total = space.stream().mapToLong(PartitionEvidence.PairSpace.AxisPair::total).sum();
         if (total > budget.pairSpace()) {
-            return PartitionEvidence.PairSpace.truncated(behavior, total, budget.pairSpace());
+            return PartitionEvidence.PairSpace.truncated(behavior, space, total,
+                    budget.pairSpace());
         }
-        Set<String> covered = new LinkedHashSet<>();
-        for (Map<AxisId, Classification> where : readings.byRow()) {
+        // One set of combinations per relation, in the order the relations were worked out. What is
+        // counted is the same as it was; where the count goes is what changed.
+        SequencedMap<PartitionEvidence.PairSpace.Between, Set<String>> reached =
+                new LinkedHashMap<>();
+        space.forEach(pair -> reached.put(pair.between(), new LinkedHashSet<>()));
+        // Which relation each pair of positions is, worked out once. Which two positions they are
+        // does not turn on the row, and made inside the walk over the rows it is a name built and
+        // thrown away for every row the behavior has.
+        Map<Long, Set<String>> byPositions = new LinkedHashMap<>();
+        for (int i = 0; i < axes.size(); i++) {
+            for (int j = i + 1; j < axes.size(); j++) {
+                Set<String> here = reached.get(new PartitionEvidence.PairSpace.Between(
+                        axes.get(i).id(), axes.get(j).id()));
+                if (here != null) {
+                    byPositions.put((long) i * axes.size() + j, here);
+                }
+            }
+        }
+        for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
+                    Set<String> here = byPositions.get((long) i * axes.size() + j);
+                    if (here == null) {
+                        continue;
+                    }
                     // Every pairing the row reaches, and only those. A row whose list holds
                     // elements either side of a line stands in both classes there, and which of
                     // them went with what the position beside it holds is settled by which element
                     // each came from — taken as every combination, a row is evidence for a pair
                     // none of its elements is in.
                     for (Map.Entry<String, String> pair : Classification.pairsOf(
-                            where.get(axes.get(i).id()), where.get(axes.get(j).id()))) {
-                        // Which positions, and not only which classes. A class id is unique within
-                        // its axis and not across axes — three `Flag` inputs all have a `Yes` — so
-                        // a key of two class names alone collapses every pair one row covers into
-                        // one.
-                        covered.add(i + "/" + pair.getKey() + " " + j + "/" + pair.getValue());
+                            where.at().get(i), where.at().get(j))) {
+                        // Which classes, within the relation that holds them. The relation is the
+                        // key above and a class id is unique within its axis, so what is written
+                        // here needs to tell two combinations of these two positions apart and no
+                        // more.
+                        here.add(pair.getKey() + " " + pair.getValue());
                     }
                 }
             }
         }
-        int reached = covered.size();
-        PartitionEvidence.PairSpace.PairCounts counts = new PartitionEvidence.PairSpace.PairCounts(
-                reached, reached, 0, (int) total - reached);
-        WeakeningSet by = readings.weakening(axes);
-        return new PartitionEvidence.PairSpace((int) total, by.isEmpty()
-                ? new Measurement.Complete<>(counts) : new Measurement.Partial<>(counts, by));
+        SequencedMap<PartitionEvidence.PairSpace.Between, Integer> counts = new LinkedHashMap<>();
+        reached.forEach((between, in) -> counts.put(between, in.size()));
+        PartitionEvidence.PairSpace.CoveredBetween made = new PartitionEvidence.PairSpace.CoveredBetween(counts);
+        WeakeningSet by = readings.weakening(read);
+        return new PartitionEvidence.PairSpace(space, by.isEmpty()
+                ? new Measurement.Complete<>(made) : new Measurement.Partial<>(made, by));
+    }
+
+    /**
+     * Whether the rules made this position's classes by cutting or parting its values.
+     *
+     * <p>Asked of the axis's own two lists, which are what say so. A position whose classes are the
+     * cases of a sum has neither: nothing was cut, nothing was parted, and the classes are what the
+     * value's shape already had. So this is what tells a division the rules made from one they
+     * merely count.
+     */
+    private static boolean cutOrParted(Axis axis) {
+        return !axis.cuts().isEmpty() || !axis.parted().isEmpty();
     }
 
     /**
@@ -436,28 +596,37 @@ final class Coverages {
      * vocabulary and the comparison is between those two names — which is a different thing from
      * recovering the question's subject from what the axis happens to be measured at.
      */
-    private static boolean appliesTo(souther.compiler.inputs.StandingQuestion asked, Axis axis) {
-        return switch (asked.asks()) {
-            case souther.compiler.inputs.InputQuestion.AboutAPosition it ->
-                    it.path().equals(axis.path());
-            case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                    it.term().equals(axis.term());
+    private static boolean appliesTo(StandingQuestion asked, Axis axis) {
+        return switch (asked) {
+            case StandingQuestion.Exact one -> switch (one.asks()) {
+                case InputQuestion.AboutAPosition it -> it.path().equals(axis.path());
+                case InputQuestion.AboutANumber it -> it.about().equals(axis.subject());
+            };
+            // Where the reader was sent, which is what such a question has instead of a subject.
+            // A measure of the place a rule was filed at is a reader of it: nothing worked out what
+            // the rule states there, so what this axis says about the place rests on it.
+            case StandingQuestion.Unclassified one -> switch (one.at()) {
+                case FilingCoordinate.AtPosition it -> it.path().equals(axis.path());
+                case FilingCoordinate.OfTerm it -> it.term().equals(axis.term());
+            };
         };
     }
 
 
 
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis,
-            souther.compiler.partition.Partitions.Partitioning partitioning, Readings readings,
+    private static PartitionEvidence.AxisCoverage coverageOf(Readings.AtPosition where,
+            Readings.AxisReading reading, Readings readings,
+            souther.compiler.partition.Partitions.Partitioning partitioning,
             boolean asked) {
+        Axis axis = reading.axis();
+        souther.compiler.partition.PositionAccount at = where.position().position();
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
-        // What the axis already says about which of this position's rules nothing accounted for,
-        // each named. Read off the axis rather than worked out here, and in the questions' own
-        // words: the vocabulary beside it says why a division could not be derived, which is a
-        // different question, and borrowing it left a reader with a sentence that named neither
-        // (issue #842).
+        // Which of this position's rules nothing accounted for, each named. Read off the position
+        // rather than worked out here, and in the questions' own words: the vocabulary beside it
+        // says why a division could not be derived, which is a different question, and borrowing it
+        // left a reader with a sentence that named neither.
         PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
-                axis.at().residue().rulesLeftUnread().isEmpty()
+                at.residue().rulesLeftUnread().isEmpty()
                         ? PartitionEvidence.AxisCoverage.Reach.EVERY_RULE
                         : PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
                 // Of the questions standing at this position, the ones this measure is the reader
@@ -467,8 +636,8 @@ final class Coverages {
                 // and are said there once.
                 partitioning.unanswered().stream()
                         .filter(each -> appliesTo(each, axis))
-                        .noneMatch(each -> each.obligation()
-                                == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
+                        .noneMatch(each -> each.holdsOpen(
+                                CoverageObligation.Measure.PARTITION)));
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
@@ -477,24 +646,18 @@ final class Coverages {
         // below, and a build that asked for no measurement read no row.
         if (!asked) {
             return PartitionEvidence.AxisCoverage.notAsked(axis.id(),
-                    axis.term().toString(), classes, read);
+                    axis.term().toString(), classes, axis.divides(), cutOrParted(axis), read);
         }
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.noRows(axis.id(),
-                    axis.term().toString(), classes, read);
-        }
-        Set<String> covered = new LinkedHashSet<>();
-        for (Map<AxisId, Classification> where : readings.byRow()) {
-            List<String> in = Readings.classesIn(where, axis);
-            if (in != null) {
-                covered.addAll(in);
-            }
+                    axis.term().toString(), classes, axis.divides(), cutOrParted(axis), read);
         }
         PartitionEvidence.AxisCoverage.Reached reached =
-                new PartitionEvidence.AxisCoverage.Reached(covered, readings.couldNotSay(axis));
-        WeakeningSet by = readings.weakening(List.of(axis));
+                new PartitionEvidence.AxisCoverage.Reached(reading.covered(),
+                        reading.couldNotSay());
+        WeakeningSet by = readings.weakening(List.of(reading));
         return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
-                classes, read, by.isEmpty()
+                classes, axis.divides(), cutOrParted(axis), read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)
                         : new Measurement.Partial<>(reached, by));
     }
@@ -512,26 +675,41 @@ final class Coverages {
 
         /**
          * What building a row for {@code label} came to, with each position of the item fixed
-         * where {@code fixing} puts it and the rest of the row built to reach the border, or null
-         * where the attempt could not be made at all — which leaves the point unknown rather than
-         * refused.
+         * where {@code fixing} puts it and the rest of the row built to reach the border, and
+         * empty where the attempt could not be made at all — which leaves the point unknown rather
+         * than refused.
+         *
+         * <p><b>One attempt per way of standing the dependencies in.</b> A behavior whose union
+         * answer the demands leave open has a value of each case to be stood up with, and which of
+         * them a row carries decides where the row goes — so whether a row reaches this item is
+         * whether any of them does. Which of the ones that reach it is offered is the caller's, and
+         * is a choice between rows that each answer what was asked.
          *
          * <p>One method, whatever the border was drawn on. What the row is for is the coverage item
          * and what is fixed to build it is a placement that stands for it; a side of a border is met
          * by a row anywhere in it, so a row labelled by the places a search happened to compose
          * would name a witness as though it were the item.
          *
+         * <p>What each position's number is measured on is not among the arguments. That is the
+         * reading the row is composed against, which the generator holds; passed in, a caller would
+         * be answering a question about where a term stands from wherever it found the term.
+         *
          * @param reaching what the row has to be to arrive at the border at all. Handed in beside
          *                 the placement rather than left out: the placement is about the positions
          *                 the item names and a condition above the line is about the others, and a
          *                 row is one row
+         * @param demands  what the thing being searched for asks of the dependencies the behavior
+         *                 requires. Part of the request and not of the probe, because it is what
+         *                 differs between the things one behavior is searched for: a point of a
+         *                 line asks nothing of them, and a rule of the decision asks what the body
+         *                 read. Held by the probe, a search would compose its row under whatever
+         *                 the behavior answers generally and be run under what it actually needs
          */
-        souther.compiler.partition.Generator.BoundaryAttempt attempt(
+        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
                 String label,
-                java.util.function.Function<souther.compiler.inputs.NumericTerm,
-                        souther.compiler.check.Carrier> on,
-                Map<souther.compiler.inputs.NumericTerm.FromOnePosition, Place> fixing,
-                souther.compiler.partition.Reachability.Reaching reaching);
+                Map<souther.compiler.partition.RealizationTarget, Place> fixing,
+                souther.compiler.partition.Reachability.Reaching reaching,
+                souther.compiler.partition.AnswersDemanded demands);
 
         /**
          * A composed row built and run, so that what it turned out to be can be asked.
@@ -541,7 +719,7 @@ final class Coverages {
          * read by the walk that reads the file's rows and never by a second account written where
          * the candidate was composed.
          */
-        RowAsRead read(java.util.List<souther.compiler.partition.FixtureTemplate> inputs);
+        RowAsRead read(souther.compiler.partition.RowToRun row);
     }
 
     /**
@@ -560,28 +738,27 @@ final class Coverages {
      * it because an earlier branch went the other way. Nothing measures that until the arms are
      * instrumented, so a guard's boundary is unmeasured rather than met or missed.
      *
-     * @param armsAsked whether the build asked for the arms at all. Whether the run then managed to
-     *                  read them is a second question, and {@code observed} answers it — the two fail
-     *                  differently and a measure that took one boolean for both could not say which
-     *                  had happened.
-     * @param probe     null where the module's classes or the runtime are not there to build against
-     * @param reaching  what a row had already satisfied when each comparison ran. Threaded here as
-     *                  well as into {@link #assessBetween} because which shape of quantity a rule
-     *                  cuts says nothing about where a row for it may be written — and a region put
-     *                  into one of the two paths would leave the other searching over everything its
-     *                  position could ever hold. No model was found where it moves an answer down
-     *                  this path, and no test holds it: the points of a line at one position all sit
-     *                  beside the line, and every line tried that the region excludes turned out to
-     *                  be one {@link souther.compiler.check.PathReachability} had already taken the
-     *                  obligation away for. Whether those two always coincide is not established
-     *                  here — they are different readings — so what this says is that a path is not
-     *                  left short of what it is owed, and not that the region is idle here.
+     * <p>Whether the build asked for the arms at all and whether the run then managed to read them
+     * are two questions, and {@code observed} answers the second — the two fail differently, and a
+     * measure that took one answer for both could not say which had happened.
+     *
+     * <p>What a row had already satisfied when each comparison ran is threaded here as well as into
+     * {@link #assessBetween}, because which shape of quantity a rule cuts says nothing about where a
+     * row for it may be written — and a region put into one of the two paths would leave the other
+     * searching over everything its position could ever hold. No model was found where it moves an
+     * answer down this path, and no test holds it: the points of a line at one position all sit
+     * beside the line, and every line tried that the region excludes turned out to be one
+     * {@link souther.compiler.check.PathReachability} had already taken the obligation away for.
+     * Whether those two always coincide is not established here — they are different readings — so
+     * what this says is that a path is not left short of what it is owed, and not that the region is
+     * idle here.
      */
     static List<BorderAssessment> assess(
-            List<Border> lines, BehaviorInputs where,
+            List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level,
-            ItemAssessment.WritabilityProjection projection) {
+            ItemAssessment.WritabilityProjection projection,
+            java.util.Optional<SiteNumbering> numbering) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
         // offered it twice — but each reading is reached under its caller's own conditions, so what
@@ -589,32 +766,10 @@ final class Coverages {
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.add(assessed(each, reading(each, where, projection), observed, level));
+            out.add(assessed(each, reading(subject.at(each), projection), observed, level,
+                    numbering));
         }
         return List.copyOf(out);
-    }
-
-    /**
-     * The readings of one behavior's lines, one entry per line.
-     *
-     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
-     * other reading of the line takes that back.
-     *
-     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
-     * reach the comparison is one of those, so a search is made per reading and merged here rather
-     * than made once against whichever reading this kept. Merged first, the region a row is composed
-     * in is one reading's, chosen by the order a walk took.
-     *
-     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
-     * a debt holds the authored line and the value it is at — so two readings under one line are one
-     * debt by construction, and a pair that is not says the two identities have come apart.
-     */
-    static List<BorderAssessment> merged(LineReadings readings) {
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        for (BorderAssessment each : readings.each()) {
-            out.merge(BoundaryLine.of(each.border()), each, Coverages::whicheverSawMore);
-        }
-        return List.copyOf(out.values());
     }
 
     /**
@@ -629,21 +784,20 @@ final class Coverages {
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
      */
-    static LineReadings searched(LineReadings measured, BehaviorInputs where,
-                                 Probe probe, souther.compiler.inputs.Quantities rules,
-                                 ReachingCuts reaching) {
+    static LineReadings searched(LineReadings measured,
+                                 souther.compiler.partition.MeasuredInput input,
+                                 Probe probe, ReachingCuts reaching) {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         for (BorderAssessment border : measured.each()) {
-            OneSearchOfABorder search = searching(border.border(), where, probe, realizer,
-                    wayTo(border.border(), reaching), rules);
-            java.util.EnumMap<PointRole, ItemAssessment> items =
-                    new java.util.EnumMap<>(PointRole.class);
-            for (PointRole role : PointRole.values()) {
-                ItemAssessment item = border.at(role);
-                items.put(role, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
+            OneSearchOfABorder search = searching(border.border(), input, probe, realizer,
+                    wayTo(border.border(), reaching));
+            java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
+            for (DomainPoint point : border.items().keySet()) {
+                ItemAssessment item = border.at(point);
+                items.put(point, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
                         ? owed.settledBy(search.search(owed.criterion(),
-                                border.border().label(role)))
+                                border.border().label(point)))
                         : item);
             }
             out.add(new BorderAssessment(border.border(), items));
@@ -698,8 +852,17 @@ final class Coverages {
      *  and the other is work somebody asked for. */
     private interface OneSearchOfABorder {
 
-        /** What building a row at it came to, asked only where one is worth building. */
-        ItemAssessment.Attempt search(Criterion criterion, String label);
+        /**
+         * What building a row at it came to, asked only where one is worth building.
+         *
+         * <p>What each way of standing the dependencies in came to, and not one of them. A way that
+         * leaves the case of a union answer open is several rows, each going where the case it
+         * carries takes it, and what they came to is as many pieces of news as there are of them:
+         * one held back by a figure of this compiler's and one that composed nothing are not each
+         * other's representatives ({@link SearchOutcomes}). Answered with one, the point would
+         * carry whichever way was tried first.
+         */
+        SearchOutcomes search(Criterion criterion, String label);
     }
 
     /**
@@ -719,36 +882,37 @@ final class Coverages {
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
                                              souther.compiler.query.Adequacy.RowReading observed,
-                                             souther.compiler.query.Adequacy.Level level) {
+                                             souther.compiler.query.Adequacy.Level level,
+                                             java.util.Optional<SiteNumbering> numbering) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
         // guard's line is about a place in a body and is reached or not; an invariant's and a
         // clause's are about the values — one refuses everything outside its bound, the other states
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
-        Measurement<ItemAssessment.Coverage> absent = guard
-                ? whyNoGuardLine(observed, level)
-                : whyNoInvariantLine(observed, level);
+        Measurement<ItemAssessment.Coverage> absent =
+                whyNothingWasReadAgainstTheLine(guard, observed, level);
 
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
         // many of the four points it is put to.
-        List<ObservedInputs> rows = observed.rowsSeen().stream().map(ObservedInputs::of).toList();
+        List<ObservedInputs> rows = observed.rowsSeen().stream()
+                .map(row -> ObservedInputs.of(row, numbering)).toList();
 
-        java.util.EnumMap<PointRole, ItemAssessment> items = new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            items.put(role, switch (border.demand(role)) {
+        java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
+        for (DomainPoint point : border.answers().keySet()) {
+            items.put(point, switch (border.demand(point)) {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), rows), guard,
                                     border, observed);
-                    // No attempt. Nothing was searched for here, and that is said by there being no
-                    // attempt rather than by an attempt saying nobody asked: whether a value was
+                    // No search. Nothing was searched for here, and that is said by there being no
+                    // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), null);
+                            shape.projection(), SearchOutcomes.none());
                 }
             });
         }
@@ -764,16 +928,16 @@ final class Coverages {
      * asks which kind of line this is. Two readings written apart is what left a criterion about one
      * place reaching the reader of a pair as an {@code IllegalStateException}.
      */
-    private static OneShapeOfBorder reading(Border border, BehaviorInputs where,
-                                            ItemAssessment.WritabilityProjection projection) {
-        BorderQuantity quantity = border.cut().of();
-        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
-                border.origin().comparisonAt();
+    private static OneShapeOfBorder reading(
+            souther.compiler.partition.MeasuredInput.BorderReading line,
+            ItemAssessment.WritabilityProjection projection) {
+        List<ComparisonEmissionSite> site =
+                line.border().origin().recordedAt();
         return new OneShapeOfBorder() {
 
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
-                return StandingAtAPoint.met(quantity, where, rows, criterion, site);
+                return StandingAtAPoint.met(line, rows, criterion, site);
             }
 
             @Override
@@ -784,140 +948,332 @@ final class Coverages {
     }
 
     /**
+     * The readings of one behavior's lines, one entry per line.
+     *
+     * <p>What each reading saw, kept whole: a point one reading found a row at is found, and no
+     * other reading of the line takes that back.
+     *
+     * <p><b>After everything that is a reading's own.</b> Which conditions a row has to satisfy to
+     * reach the comparison is one of those, so a search is made per reading and the searches are
+     * put together here rather than one being made against whichever reading came first. Put
+     * together first, the region a row is composed in is one reading's, chosen by the order a walk
+     * took.
+     *
+     * <p><b>And never across two debts.</b> A line holds the authored line and where it was read;
+     * a debt holds the authored line and the value it is at — so two readings under one line are one
+     * debt by construction, and a pair that is not says the two identities have come apart.
+     */
+    static List<BorderAssessment> merged(LineReadings readings) {
+        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        for (BorderAssessment each : readings.each()) {
+            out.merge(BoundaryLine.of(each.border()), each, Coverages::asOneLine);
+        }
+        return List.copyOf(out.values());
+    }
+
+    /**
      * How a row is looked for at one border, on whatever it was drawn on.
      *
      * <p>Beside {@link #reading} rather than inside it. Both are about one border and neither is the
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      */
-    private static OneSearchOfABorder searching(Border border, BehaviorInputs where, Probe probe,
-                                                LevelRealizer realizer,
-                                                souther.compiler.partition.WayToTheBorder within,
-                                                souther.compiler.inputs.Quantities rules) {
-        BorderQuantity quantity = border.cut().of();
-        java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site =
-                border.origin().comparisonAt();
+    private static OneSearchOfABorder searching(Border border,
+                                                souther.compiler.partition.MeasuredInput input,
+                                                Probe probe, LevelRealizer realizer,
+                                                souther.compiler.partition.WayToTheBorder within) {
+        souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
+        souther.compiler.inputs.Quantities rules = input.quantities();
+        BorderQuantity quantity = line.quantity();
+        List<ComparisonEmissionSite> site =
+                border.origin().recordedAt();
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.
         souther.compiler.partition.Reachability reaching =
                 souther.compiler.partition.Reachability.of(within, rules.region());
+        // Once for the border rather than once for each of its points. What the positions of this
+        // input admit is the same answer at every point of it, and working it out where it is spent
+        // walks every position of the input at every point a row is searched for.
+        souther.compiler.partition.WitnessSearch looking = input.witnessSearch();
         return new OneSearchOfABorder() {
 
             @Override
-            public ItemAssessment.Attempt search(Criterion criterion, String label) {
+            public SearchOutcomes search(Criterion criterion, String label) {
                 // Nothing to build against. Told apart from nobody having asked, which is not a
                 // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
-                    return new ItemAssessment.Attempt.Unavailable(
-                            ItemAssessment.Attempt.Reason.NO_CLASSES);
+                    return SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
+                            ItemAssessment.Attempt.Reason.NO_CLASSES));
                 }
                 // A way one position would have to take two of its cases to reach, which no value
                 // is. Said in that word and not in the one for a walk that tried what the rules
                 // leave and reached nothing: nothing was walked here, and what settles it is that
                 // the two cases are not in one value.
                 if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return new ItemAssessment.Attempt.Unresolved(
+                    return SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                             new souther.compiler.partition.Generator.UnresolvedCombination(
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within);
+                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within));
                 }
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
-                return switch (realizer.realize(quantity.standingAt(criterion), able.region())) {
-                    case Realization.Found found -> whatCameOfIt(
-                            standingThere(probe, quantity, where, criterion, site, label,
-                                    probe.attempt(label, quantity::carrierOf, found.fixing(), able)),
-                            label, within);
+                //
+                // And a candidate is put to the point before the next one is asked for. What the
+                // realizer hands over is a place the region admits, which is less than the question:
+                // a row built there may turn back above the line and never arrive, and the value
+                // beside it arrive perfectly well. Stopping at the first place the region admits,
+                // the search answered a point it had one more value for.
+                ValuesTried tried = ValuesTried.NONE;
+                SearchOutcomes last = null;
+                for (int value = 0;
+                        value < CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum(); value++) {
+                    Searching came = searchingWith(criterion, label, able, tried);
+                    if (came.stood()) {
+                        return came.outcomes();
+                    }
+                    // Nothing was composed this time round. On the first asking that is the point's
+                    // answer; on a later one it is the answer to a question this narrowed by
+                    // leaving a value out, and what the point came to is what the value that was
+                    // composed came to — said with whatever of this compiler's ended the asking.
+                    if (came.realized() == null) {
+                        return last == null ? came.outcomes() : endedBy(last, came.came());
+                    }
+                    // The row a reader is offered is the first one composed. Every asking after it
+                    // is put a narrower question — the values already tried are not there to be
+                    // found again — so a row from a later one is a row built with values kept from
+                    // it for a reason of this search's rather than of the model's.
+                    if (last == null) {
+                        last = came.outcomes();
+                    }
+                    // Every way of standing the dependencies in was built and none of them stood,
+                    // so this is the value that did not answer and not one of the rows it was built
+                    // into. Charged here for that reason: a point with more ways to stand its
+                    // dependencies in would otherwise be allowed fewer values than one with fewer.
+                    tried = tried.and(came.realized().fixing());
+                }
+                // The count ran out, and whether that is what ended the asking is the realizer's to
+                // say. Asked once more and for nothing else: a figure reported where the values
+                // themselves had run out is a number an author raises to be told the same thing,
+                // and a search that stopped where a figure of this compiler's is the only thing
+                // between the point and another value has to say so.
+                //
+                // Nothing is put to the point here, so no value is tried and none is charged for.
+                return endedBy(last, realizer.realize(quantity.standingAt(criterion), able.region(),
+                        looking, tried));
+            }
+
+            /**
+             * One value put to the point.
+             *
+             * <p>{@code came} is what the realizer answered, whatever that was; {@code realized} is
+             * the same answer where it was a value with rows built from it, which is the one case
+             * there is another value to ask for. Both, because what ended the asking is read off
+             * the first and what to do next off the second.
+             */
+            private record Searching(Realization came, Realization.Found realized,
+                                     SearchOutcomes outcomes, boolean stood) {}
+
+            /**
+             * What the values came to, said with whatever of this compiler's ended the asking.
+             *
+             * <p><b>Read off what the realizer answered last and never off the loop.</b> A point
+             * put every value it had and a point this compiler stopped putting values to are
+             * different news — only the second has a number somebody could raise — and the count of
+             * askings says nothing about which of them this was. A figure named from the count
+             * alone is one reported where a point had exactly as many values as this tries, which
+             * is a number an author raises to be told the same thing.
+             *
+             * <p>And the last answer's own shortfall travels. A walk that could name one place on a
+             * line and no second one is short of a population this compiler writes some of, not of
+             * values; dropped for the word the first value came back with, the point is reported as
+             * one that had everything tried at it.
+             *
+             * <p>What each search came to is kept either way. The vocabulary beside it says the
+             * word is about what was tried rather than about the point, which is a second half and
+             * not a different first one.
+             */
+            private SearchOutcomes endedBy(SearchOutcomes last, Realization ended) {
+                if (ended instanceof Realization.Found) {
+                    return overLessThanThePointHad(last,
+                            java.util.Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH),
+                            java.util.Set.of());
+                }
+                // A proof about what was left is no proof about the point: what it is a proof about
+                // is the question this narrowed by leaving values out.
+                if (ended instanceof Realization.Unknown left
+                        && !(left.stoppedBy().isEmpty() && left.notAllOf().isEmpty())) {
+                    return overLessThanThePointHad(last, left.stoppedBy(), left.notAllOf());
+                }
+                return last;
+            }
+
+            /**
+             * The same answer, said as one that is about less than the point had.
+             *
+             * <p>On the searches' own answers and nowhere else. An outcome already naming something
+             * of this compiler's is one where this was not what fell short, and a second name
+             * beside it is a thing an author would act on to be told the same thing.
+             */
+            private SearchOutcomes overLessThanThePointHad(SearchOutcomes outcomes,
+                    java.util.Set<CompositionBudget> budgets,
+                    java.util.Set<CompositionRepertoire> repertoires) {
+                // A walk with no step to take reaches no figure, and a walk that met one had a step
+                // — so one asking is short of one of the two and never of both. Said here rather
+                // than left to whichever of them this wrote down: the two are what a reader would
+                // do about it, and a shortfall that arrived holding both would go out as one of
+                // them with nobody the wiser.
+                if (!budgets.isEmpty() && !repertoires.isEmpty()) {
+                    throw new IllegalStateException("one asking short of a figure and of a"
+                            + " population at once: " + budgets + " and " + repertoires);
+                }
+                java.util.List<ItemAssessment.Attempt> out = new java.util.ArrayList<>();
+                for (ItemAssessment.Attempt each : outcomes.each()) {
+                    out.add(each instanceof ItemAssessment.Attempt.Unresolved it
+                            ? shortOf(it, budgets, repertoires) : each);
+                }
+                return new SearchOutcomes(out);
+            }
+
+            /** One search's answer, wearing what the asking after it was short of. */
+            private ItemAssessment.Attempt shortOf(ItemAssessment.Attempt.Unresolved it,
+                    java.util.Set<CompositionBudget> budgets,
+                    java.util.Set<CompositionRepertoire> repertoires) {
+                return budgets.isEmpty()
+                        ? new ItemAssessment.Attempt.Unexhausted(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires))
+                        : new ItemAssessment.Attempt.Limited(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_BUDGETS.keep(budgets));
+            }
+
+            private Searching searchingWith(Criterion criterion, String label,
+                    souther.compiler.partition.Reachability.Reaching able, ValuesTried tried) {
+                Realization answered = realizer.realize(quantity.standingAt(criterion),
+                        able.region(), looking, tried);
+                return switch (answered) {
+                    case Realization.Found found -> {
+                        // Asking nothing of what the dependencies answer. A point of a line is a
+                        // place the positions stand at, and nothing about it turns on what a
+                        // dependency says — so the row is stood in with whatever answers the
+                        // behavior generally, which is what asking nothing gets.
+                        //
+                        // Which leaves the case of a union answer open, and a row arrives at a
+                        // point inside one of the cases only by carrying that case. So each way of
+                        // standing the dependencies in is built, read back, and kept: what the
+                        // point comes to is what they all came to, and a reader asking whether one
+                        // reached it, which row to offer, or what would have to give for the rest,
+                        // asks that of {@link SearchOutcomes}.
+                        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> made =
+                                probe.attempt(label, found.fixing(), able,
+                                        souther.compiler.partition.AnswersDemanded.NOTHING);
+                        // Nothing was tried at all, which is the classes not linking. An empty
+                        // answer would say the point was searched and nothing happened. Not a value
+                        // this point was tried with either: nothing was built, so there is nothing
+                        // to leave out of the next asking and nothing another value would fix.
+                        if (made.isEmpty()) {
+                            yield new Searching(answered, null,
+                                    SearchOutcomes.of(whatCameOfIt(null, label, within, () -> null)),
+                                    false);
+                        }
+                        SearchOutcomes outcomes = SearchOutcomes.none();
+                        boolean stood = false;
+                        for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
+                            ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
+                                    () -> standingThere(probe, line, criterion, site,
+                                            (souther.compiler.partition.Generator
+                                                    .BoundaryAttempt.Built) each));
+                            stood |= came instanceof ItemAssessment.Attempt.Certified;
+                            outcomes = outcomes.plus(SearchOutcomes.of(came));
+                        }
+                        yield new Searching(answered, found, outcomes, stood);
+                    }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing
                     // (ADR-0091).
-                    case Realization.Impossible _ -> new ItemAssessment.Attempt.Unresolved(
-                            new souther.compiler.partition.Generator.UnresolvedCombination(
-                                    java.util.List.of(label),
-                                    souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.THE_RULES_LEAVE_NOTHING_THERE), within);
-                    case Realization.Unknown unknown -> switch (unknown.why()) {
-                        case NOTHING_COMPOSED_ONE -> nothingComposedOne(label, within);
-                        case THE_SEARCH_RAN_OUT -> new ItemAssessment.Attempt.Unresolved(
-                                new souther.compiler.partition.Generator.UnresolvedCombination(
-                                        java.util.List.of(label),
-                                        souther.compiler.partition.Generator.UnresolvedCombination
-                                                .Reason.SEARCH_LIMIT), within);
-                    };
+                    case Realization.Impossible _ -> new Searching(answered, null, SearchOutcomes.of(
+                            new ItemAssessment.Attempt.Unresolved(
+                                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                                            java.util.List.of(label),
+                                            souther.compiler.partition.Generator
+                                                    .UnresolvedCombination.Reason
+                                                    .THE_RULES_LEAVE_NOTHING_THERE), within)),
+                            false);
+                    // A walk that reached no placement. Where a budget of this compiler's is why it
+                    // reached none, that travels: the point is one this declined to look further
+                    // for, which is not the point being one nothing promises.
+                    //
+                    // And where what it could not reach is a population rather than a figure, that
+                    // travels too and under its own name. Raising nothing reaches the rest of one,
+                    // so a walk that wrote some of a population is neither a walk a figure stopped
+                    // nor a walk that narrowed nothing — read as the second, a pair this looked for
+                    // in the one place such an order names came out as the rules leaving none.
+                    case Realization.Unknown unknown -> new Searching(answered, null,
+                            SearchOutcomes.of(whatAWalkLeft(label, within, unknown)), false);
                 };
             }
         };
     }
 
     /**
-     * Which of two readings of one line the report keeps.
+     * Two readings of one line, as the one line they are readings of.
      *
-     * <p>Existential and per point, the same way an arm is: a row met a point if it met it through
-     * any reading of the line. So a reading that found a row outranks one that could not tell, which
-     * outranks one that looked and found none, which outranks one that was never made. Anything else
-     * would let a second call site of a helper take back what a row at the first one established.
+     * <p><b>Nothing is chosen between.</b> A helper called from two places is one line read once
+     * and searched twice — the authored line and the target are the same, and what differs is the
+     * region a row for it was composed in — so the two are put together and neither stands for the
+     * other. Kept as whichever saw more, whatever the other established was gone before anything
+     * downstream could ask, and a point whose only search a budget stopped came out holding nothing.
      *
-     * <p>Point by point rather than border by border. Two readings of one line are the same border
-     * and can have seen different things at different points, and keeping whichever border saw more
-     * on the whole would throw away a point the other one had.
+     * <p>Point by point rather than border by border. Two readings of one line can have seen
+     * different things at different points, and one answer for the whole border would settle a
+     * point from what happened at another.
      */
-    private static BorderAssessment whicheverSawMore(BorderAssessment a, BorderAssessment b) {
+    private static BorderAssessment asOneLine(BorderAssessment a, BorderAssessment b) {
         if (!a.border().obligation().equals(b.border().obligation())) {
             throw new IllegalStateException("two readings of one line owing different rows: "
                     + a.border().obligation() + " and " + b.border().obligation());
         }
-        java.util.EnumMap<PointRole, ItemAssessment> kept = new java.util.EnumMap<>(PointRole.class);
-        for (PointRole role : PointRole.values()) {
-            kept.put(role, keeps(a.at(role), b.at(role)) ? a.at(role) : b.at(role));
+        java.util.Map<DomainPoint, ItemAssessment> kept = new java.util.LinkedHashMap<>();
+        for (DomainPoint point : a.items().keySet()) {
+            kept.put(point, together(a.at(point), b.at(point)));
         }
         return new BorderAssessment(a.border(), kept);
     }
 
     /**
-     * Whether what the first reading saw at a point stands, rather than what the second saw.
+     * What two searches of one point of one reading come to, dimension by dimension.
      *
-     * <p>What was measured first, and what was composed only where the two measured alike. A row
-     * that was found is the whole of what a point asks for; where neither reading found one, the
-     * reading that composed a row to offer has something to say that a reading which composed
-     * nothing does not, and the point is owed the same row either way.
+     * <p><b>Not one of them.</b> They are searches of the same point under one reading, and the
+     * point is owed once — so what a reader is owed is what both of them found out. Taking whichever
+     * saw more, every fact the other one established was gone before anything downstream could ask:
+     * a search a budget of this compiler's stopped, dropped for one that came back with nothing, is
+     * how a point this declined to work on left the count as one the model admits no row at.
      *
-     * <p>Here because the search is made per reading. One search against one region has one outcome
-     * and nothing to choose between; two readings carry two, and keeping the first would drop a row
-     * an author could have been offered.
+     * <p>Each dimension by whatever owns it. What the rows came to is coverage's own question
+     * ({@link ObligationCoverage#acrossOneReadingsSearches}); what the rules prove is a reading of
+     * the declarations and the two searches read the same ones, so a difference there is not
+     * something to fold but something that has gone wrong.
      */
-    private static boolean keeps(ItemAssessment a, ItemAssessment b) {
-        if (rank(a) != rank(b)) {
-            return rank(a) > rank(b);
+    private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
+        if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
+            // Two readings of one line owe the same points, so a point no row is owed at is that
+            // under both — and there is nothing about it to put together.
+            return a;
         }
-        return composed(a) >= composed(b);
-    }
-
-    /** Whether the search of this reading's own region built a row to offer. */
-    private static int composed(ItemAssessment item) {
-        return item instanceof ItemAssessment.Owed owed
-                && owed.attempt() instanceof ItemAssessment.Attempt.Built ? 1 : 0;
-    }
-
-    private static int rank(ItemAssessment item) {
-        if (!(item instanceof ItemAssessment.Owed owed)) {
-            // Two readings of one line owe the same points, so this is one of them against itself.
-            return 0;
+        if (!one.criterion().equals(two.criterion())) {
+            throw new IllegalStateException("two searches of one point asking for different"
+                    + " values: " + one.criterion() + " and " + two.criterion());
         }
-        return switch (owed.coverage()) {
-            case Measurement.Complete<ItemAssessment.Coverage> whole ->
-                    whole.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 1;
-            // A reading made in part saw less than a settled one and more than none: found is
-            // found either way, and what it did not find is undecided rather than absent.
-            case Measurement.Partial<ItemAssessment.Coverage> part ->
-                    part.value() instanceof ItemAssessment.Coverage.Hit ? 3 : 2;
-            case Measurement.NotMeasured<ItemAssessment.Coverage> _,
-                 Measurement.FailedToMeasure<ItemAssessment.Coverage> _ -> 0;
-        };
+        if (one.projection() != two.projection()) {
+            throw new IllegalStateException("two searches of one point disagreeing about what the"
+                    + " rules prove there: " + one.projection() + " and " + two.projection());
+        }
+        return new ItemAssessment.Owed(one.criterion(),
+                ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
+                one.projection(), one.searches().plus(two.searches()));
     }
 
     /**
@@ -950,39 +1306,96 @@ final class Coverages {
      * stand at the point says the way to the border was not composed against in full; the point is
      * owed the same row it was owed before, and nothing here says one cannot be written.
      */
-    private static souther.compiler.partition.Generator.BoundaryAttempt standingThere(
-            Probe probe, BorderQuantity quantity, BehaviorInputs where, Criterion criterion,
-            java.util.Optional<souther.compiler.coverage.ComparisonOccurrence> site, String label,
-            souther.compiler.partition.Generator.BoundaryAttempt made) {
-        if (!(made instanceof souther.compiler.partition.Generator.BoundaryAttempt.Built built)) {
-            return made;
-        }
+    private static StandingAtAPoint.Met standingThere(
+            Probe probe, souther.compiler.partition.MeasuredInput.BorderReading line,
+            Criterion criterion,
+            List<ComparisonEmissionSite> site,
+            souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
-                probe.read(built.row().inputs()).asInputs();
+                probe.read(built.row().toRun()).asInputs();
         if (read == null) {
-            return made;   // nothing built it, so nothing here can say where it went
+            // Nothing came back to read the row off, which is not an observation of it and is not a
+            // position holding no value either. What did not happen here is the running: the values
+            // would not build a second time, or the model refused them, or the classes would not
+            // link — and every one of those is something this run did rather than a value a limit
+            // shortened or a place a row wrote nothing at. Named as the first, a linkage failure
+            // arrives at the account as an observation that was stopped and the report says a limit
+            // did something that never fired; named as the second, it says the row put nothing
+            // where nothing ever looked.
+            return new StandingAtAPoint.Met.CouldNotTell(
+                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW));
         }
-        return switch (StandingAtAPoint.met(quantity, where, List.of(read), criterion, site)) {
-            case YES, NOT_WATCHED -> made;
-            // Carrying what the composer could not compose against. This is the outcome that most
-            // needs it: a row was built and was not seen reaching the point, and whether some
-            // condition above the line went unused is the first thing that would explain it.
-            case NO, UNREADABLE -> new souther.compiler.partition.Generator.BoundaryAttempt.Unresolved(
-                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                            List.of(label),
-                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                    .NO_CERTIFIED_WITNESS),
-                    built.unrepresented());
-        };
+        return StandingAtAPoint.met(line, List.of(read), criterion, site);
     }
 
-    /** A search that came to nothing at {@code subject}, which is what a point is written as. */
-    private static ItemAssessment.Attempt nothingComposedOne(
-            String subject, souther.compiler.partition.WayToTheBorder within) {
-        return new ItemAssessment.Attempt.Unresolved(
-                new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
-                        souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                .NOTHING_COMPOSES_ONE), within);
+    /** Whether an observation is among the reasons a reading came to nothing. */
+    private static boolean observed(StandingAtAPoint.Met.CouldNotTell why) {
+        return why.why().stream()
+                .anyMatch(each -> each instanceof souther.compiler.partition.ReadingGap.Observation);
+    }
+
+    /**
+     * The observations among them, which is what a gap about an observation may hold.
+     *
+     * <p>Only those. A walk that reached no value is a reason the reading came to nothing and is
+     * not a thing an observation did, so it travels as far as the account's own reasons go and no
+     * further.
+     */
+    private static EstablishmentGap.Observation stopped(StandingAtAPoint.Met.CouldNotTell why) {
+        Set<Incompleteness.Code> codes = new LinkedHashSet<>();
+        for (souther.compiler.partition.ReadingGap each : why.why()) {
+            if (each instanceof souther.compiler.partition.ReadingGap.Observation it) {
+                codes.add(it.code());
+            }
+        }
+        return EstablishmentGap.Observation.of(codes);
+    }
+
+    /**
+     * What a walk that reached no placement left behind, in the words an assessment is read in.
+     *
+     * <p>Three shapes and not two, because what a reader does about each differs. A figure is a
+     * number to raise; a population this writes some of is work nobody has done and no number
+     * reaches the rest of it; and a walk with neither to say narrowed nothing at all. Held as two,
+     * the middle one was read as the last — so a search that looked in the one place an order
+     * without a step names came back saying the rules leave nothing there.
+     *
+     * <p>The word is the walk's own either way and is not read off what it left, which is why it is
+     * taken from the same place for all three.
+     */
+    private static ItemAssessment.Attempt whatAWalkLeft(
+            String label, souther.compiler.partition.WayToTheBorder within,
+            Realization.Unknown unknown) {
+        souther.compiler.partition.Generator.UnresolvedCombination why =
+                new souther.compiler.partition.Generator.UnresolvedCombination(
+                        java.util.List.of(label), wordOf(unknown));
+        if (!unknown.stoppedBy().isEmpty()) {
+            return new ItemAssessment.Attempt.Stopped(why, within, java.util.List.of(),
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+        }
+        if (!unknown.notAllOf().isEmpty()) {
+            return new ItemAssessment.Attempt.Unexhausted(why, within, java.util.List.of(),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+        }
+        return new ItemAssessment.Attempt.Unresolved(why, within);
+    }
+
+    /**
+     * The word a walk that reached no placement comes back with.
+     *
+     * <p>The realizer's own, kept as it is. What it says is which of the two things a walk that
+     * found nothing did, and it says it whether or not a figure of this compiler's was reached —
+     * which is why the figure travels beside it rather than being read out of it.
+     */
+    private static souther.compiler.partition.Generator.UnresolvedCombination.Reason wordOf(
+            Realization.Unknown unknown) {
+        return switch (unknown.why()) {
+            case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+        };
     }
 
     /**
@@ -1000,9 +1413,10 @@ final class Coverages {
      * outcome of a search that dropped its region, and the reader that wanted it back built the
      * same value by hand a moment later.
      */
-    private static ItemAssessment.Attempt.Searched whatCameOfIt(
+    private static ItemAssessment.Attempt whatCameOfIt(
             souther.compiler.partition.Generator.BoundaryAttempt made, String subject,
-            souther.compiler.partition.WayToTheBorder within) {
+            souther.compiler.partition.WayToTheBorder within,
+            Supplier<StandingAtAPoint.Met> standing) {
         return switch (made) {
             case null -> new ItemAssessment.Attempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(
@@ -1013,11 +1427,77 @@ final class Coverages {
             // stages and two answers: a condition the walk stated stays stated, and writing the
             // composer's own failure onto the way would have one condition wearing two of the
             // walk's words.
+            //
+            // And the row read back, which is where a composed value becomes a value at the point
+            // or stops short of being one. The three answers of that reading are the three this
+            // hands on, and this is the only place they are turned into what a search came to.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
-                    new ItemAssessment.Attempt.Built(built.row(), within, built.unrepresented());
+                    switch (standing.get()) {
+                        case StandingAtAPoint.Met.AtPoint _ ->
+                                new ItemAssessment.Attempt.Certified(built.row(), within,
+                                        built.unrepresented());
+                        // Composed and not seen where it was composed for. Which says the way to
+                        // the border was not composed against in full and never that the point is
+                        // unwritable, and it carries what the composer could not act on because
+                        // that is the first thing that would explain it.
+                        case StandingAtAPoint.Met.NotAtPoint _ ->
+                                new ItemAssessment.Attempt.Unresolved(
+                                        new souther.compiler.partition.Generator
+                                                .UnresolvedCombination(List.of(subject),
+                                                souther.compiler.partition.Generator
+                                                        .UnresolvedCombination.Reason
+                                                        .NO_CERTIFIED_WITNESS),
+                                        within, built.unrepresented());
+                        // And a reading that could not look is not a reading that looked. The value
+                        // was built and the decoders took it; what did not happen is the reading
+                        // back. Said as the answer above, a point a value was just built at is
+                        // reported as one nothing can write a row at.
+                        // And only the observations among the reasons make an observation's gap. A
+                        // walk that reached no value made no observation, so there is none to have
+                        // been stopped, and a gap built from it would put a limit's name on
+                        // something no limit did. Where that is all there was, what this run did is
+                        // the search's own to say, in the generator's words.
+                        case StandingAtAPoint.Met.CouldNotTell it ->
+                                observed(it) ? new ItemAssessment.Attempt.Unverified(built.row(),
+                                        within, built.unrepresented(), stopped(it))
+                                        : new ItemAssessment.Attempt.Unresolved(
+                                                new souther.compiler.partition.Generator
+                                                        .UnresolvedCombination(List.of(subject),
+                                                        souther.compiler.partition.Generator
+                                                                .UnresolvedCombination.Reason
+                                                                .NO_CERTIFIED_WITNESS),
+                                                within, built.unrepresented());
+                    };
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
                     new ItemAssessment.Attempt.Unresolved(left.why(), within,
                             left.unrepresented());
+            // And a search a budget of this compiler's ended, which is the one outcome here that
+            // names something anybody could raise. Said as the one above, an obligation this
+            // declined to work on left the count as one the model admits no row at.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
+                    new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()));
+            // A search that ran to the end of what this compiler writes, where that is not the end
+            // of what there is to write. It leaves the point open the way the one above does and
+            // names nothing anybody could raise, which is why it arrives as its own arm and its
+            // gap holds a vocabulary of its own.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unexhausted left ->
+                    new ItemAssessment.Attempt.Unexhausted(left.why(), within,
+                            left.unrepresented(),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()));
+            // A search that ran to the end of what it was handed, where what it was handed was
+            // short of the point. It names a figure like the one above and its word is its own, so
+            // the two are carried side by side rather than one being read off the other.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
+                    new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
+            // And a point no search was made for at all. It names a figure like the two above and
+            // is not an outcome of a search, which is what keeps it out of what the readings of a
+            // line together establish.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unplanned left ->
+                    new ItemAssessment.Attempt.Unplanned(left.why(), within, left.unrepresented(),
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
         };
     }
 
@@ -1036,17 +1516,19 @@ final class Coverages {
      * not counted, the same account any other unpromised edge gets.
      */
     static List<BorderAssessment> assessBetween(
-            Partitions.Partitioning partitioning, BehaviorInputs where,
+            souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level) {
+            souther.compiler.query.Adequacy.Level level,
+            java.util.Optional<SiteNumbering> numbering) {
+        Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
         // reading's own has been asked ({@link #merged}).
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
-            out.add(assessed(each, reading(each, where,
+            out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED),
-                    observed, level));
+                    observed, level, numbering));
         }
         return List.copyOf(out);
     }
@@ -1063,8 +1545,7 @@ final class Coverages {
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
-        List<RowOutcome> rows = observed.rowsSeen();
-        if (met == StandingAtAPoint.Met.YES) {
+        if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
         }
@@ -1073,10 +1554,15 @@ final class Coverages {
         // nothing read at all, which may be the row that is at this value; and, for a line a fork
         // drew, a row that never finished and so never reached the comparison.
         Set<Weakening> by = new LinkedHashSet<>();
-        if (met == StandingAtAPoint.Met.UNREADABLE) {
-            by.add(new Weakening.BorderValueUnreadable(border));
+        // One per reason, each in its own words. What the rows leave open is the same whichever it
+        // was — no row of theirs settles the point — and why there was nothing to read is not, so
+        // every reason travels even where this block treats them alike.
+        if (met instanceof StandingAtAPoint.Met.CouldNotTell it) {
+            for (souther.compiler.partition.ReadingGap why : it.why()) {
+                by.add(new Weakening.BorderValueUnreadable(border, why));
+            }
         }
-        for (Incompleteness gap : observed.gaps()) {
+        for (Incompleteness.Met gap : observed.gaps()) {
             // Rows nothing read at all bear on every line. Rows that were read and did not finish
             // bear on a line a fork drew and on no other: meeting one takes the comparison having
             // run, which a row that stopped never reached.
@@ -1084,14 +1570,29 @@ final class Coverages {
             // Read off the reasons rather than off the dispositions beside them. What a row that
             // stopped costs a measure is said once, where the row stopped (`ExampleVerifier`), and
             // a second reading here was a second statement of it that could differ (issue #996).
-            if (gap.code().leftNoRowRead()
-                    || (guard && gap.scope() == Incompleteness.Scope.ROW)) {
+            if (gap.fact().code().leftNoRowRead()
+                    || (guard && gap.fact().scope() == Incompleteness.Scope.ROW)) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
         }
         ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();
         return by.isEmpty() ? new Measurement.Complete<>(seen)
                 : new Measurement.Partial<>(seen, WeakeningSet.ofAll(by));
+    }
+
+    /**
+     * Why nothing was read against a line at all, or null where the rows are what answer it.
+     *
+     * <p>The gates, behind one name. Which of them a line goes through is settled by the level the
+     * build asked for and by whether a fork or an invariant drew it, and that is one decision with
+     * one owner — a caller writing the choice out again, and a check enumerating what a reading can
+     * come to, would be two more statements of it, free to say what this stopped saying.
+     */
+    static Measurement<ItemAssessment.Coverage> whyNothingWasReadAgainstTheLine(
+            boolean drawnByAFork,
+            souther.compiler.query.Adequacy.RowReading observed,
+            souther.compiler.query.Adequacy.Level level) {
+        return drawnByAFork ? whyNoGuardLine(observed, level) : whyNoInvariantLine(observed, level);
     }
 
     /**
@@ -1115,7 +1616,7 @@ final class Coverages {
         if (observed.armsUnseen()) {
             // Started and not finished, so it says what it went without.
             Set<Weakening> by = new LinkedHashSet<>();
-            for (Incompleteness gap : observed.gaps()) {
+            for (Incompleteness.Met gap : observed.gaps()) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
             return new Measurement.FailedToMeasure<>(

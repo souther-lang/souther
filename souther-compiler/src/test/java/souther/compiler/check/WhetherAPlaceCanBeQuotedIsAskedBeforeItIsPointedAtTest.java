@@ -32,8 +32,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
+    /** A place somebody spells by hand in the file {@code file}. */
+    private static SourcePos at(String file, int token, int within) {
+        return Placement.aFileOfThisCompile(new SourceId(file)).at(token, within);
+    }
+
+    /** A region in {@code sourceId}, or in a text nothing names where it is none. */
     private static Region in(SourceId sourceId) {
-        return new Region(new SourcePos(3, 5, sourceId), new SourcePos(3, 20, sourceId));
+        Placement text = sourceId == null ? Placement.aTextWithNoIdentity()
+                : Placement.aFileOfThisCompile(sourceId);
+        return new Region(text.at(3, 5), text.at(3, 20));
     }
 
     /** A region read from a text put back together out of what a module published. */
@@ -80,8 +88,8 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
     @Test
     void aRegionRunningBetweenTwoSourcesIsNotAPlaceAtAll() {
         DiagnosticPlace.NotOnePlace refused = assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
-                        new SourcePos(3, 20, new SourceId("other.sou")))));
+                () -> DiagnosticPlace.of(new Region(at("model.sou", 3, 5),
+                        at("other.sou", 3, 20))));
 
         assertTrue(refused.getMessage().contains("model.sou"), refused.getMessage());
         assertTrue(refused.getMessage().contains("other.sou"), refused.getMessage());
@@ -105,8 +113,8 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(fromA, fromB)));
         assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
-                        new SourcePos(3, 20, new SourceId("model.sou")).standingInFor(
+                () -> DiagnosticPlace.of(new Region(at("model.sou", 3, 5),
+                        at("model.sou", 3, 20).standingInFor(
                                 new DeclaringCode(
                                         new SourceProvenance.APublishedModule("lib.a"))))));
     }
@@ -116,39 +124,10 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
     @Test
     void aRegionWithOneEndInASourceIsRefusedToo() {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
+                () -> DiagnosticPlace.of(new Region(at("model.sou", 3, 5),
                         new SourcePos(3, 20))));
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5),
-                        new SourcePos(3, 20, new SourceId("model.sou")))));
-    }
-
-    /**
-     * And it is not swallowed. The check that would build one fails open — an analysis that fell
-     * over leaves the run-time check standing — so an exception thrown down there is not an
-     * assertion but a behavior that quietly reports nothing, which is what a behavior whose
-     * invariants all discharge reports.
-     *
-     * <p>Asked of what the failure is and not of which ones the boundary has met. The refusal is
-     * raised where regions become places and the others are raised where clauses are read, which is
-     * two layers and one question ({@code TheCompilerDisagreesWithItself}).
-     */
-    @Test
-    void aRefusalToPlaceARegionIsNotSomethingTheCheckMayGiveUpOn() {
-        DiagnosticPlace.NotAPlace refused = assertThrows(DiagnosticPlace.NotAPlace.class,
-                () -> DiagnosticPlace.of(in(null)));
-
-        assertThrows(DiagnosticPlace.NotAPlace.class,
-                () -> InvariantChecker.gaveUp("a test", refused));
-    }
-
-    @Test
-    void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
-        DiagnosticPlace.NotOnePlace broken = assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, new SourceId("a.sou")),
-                        new SourcePos(1, 9, new SourceId("b.sou")))));
-
-        assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> InvariantChecker.gaveUp("a test", broken));
+                        at("model.sou", 3, 20))));
     }
 }

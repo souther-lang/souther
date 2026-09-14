@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
@@ -53,9 +52,9 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
-        assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /**
@@ -298,12 +297,12 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 """, "Length");
 
         assertEquals(Endpoint.inclusive(Count.of(0)),
-                domains.placedAt(FieldDomains.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
+                domains.placedAt(RuleKey.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
                         .findFirst().orElseThrow().end(),
                 "`floor` writes the end at none");
-        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(FieldDomains.THE_VALUE, new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
                 "and the rules leave the count at one");
-        assertEquals(null, domains.leftAt(FieldDomains.THE_VALUE, new FieldDomains.CoordinateKind.OfItsOwnValue()),
+        assertEquals(null, domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfItsOwnValue()),
                 "while the position's own values have no range for a line to be clamped by");
     }
 
@@ -329,7 +328,8 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
             FieldDomains domains = read(only(written));
             assertEquals(List.of("invariant Length (nonfive)"),
                     domains.projection().causes().stream()
-                            .map(cause -> ((ProjectionEvidence.Cause.Lossy) cause).rule().named())
+                            .map(cause -> ((RuleRef.Named)
+                                    ((ProjectionEvidence.Cause.Lossy) cause).rule()).citedName())
                             .distinct().toList(),
                     "written as `" + written.replace('\n', ';') + "`");
         }
@@ -400,7 +400,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 .filter(rule -> rule instanceof RuleRef.Invariant invariant
                         && invariant.clause().name().map(ClauseName::value)
                                 .filter(name::equals).isPresent())
-                .map(rule -> ((RuleRef.Invariant) rule).clause())
+                .map(RuleRef.Invariant::clause)
                 .findFirst().orElseThrow(() -> new AssertionError("no clause called `" + name + "`"));
     }
 }

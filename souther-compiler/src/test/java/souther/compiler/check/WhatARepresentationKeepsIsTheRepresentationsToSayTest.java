@@ -2,17 +2,21 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -25,6 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * states nothing, and typing a call never waits on someone having a rule for it.
  */
 class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
+
+    /** The applications are a body's: this test stands where an author's call stands. */
+    private static final ApplicationOrigin WROTE = new ApplicationOrigin.Written(
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0, SourceConstruct.CALL));
 
     private static final SourcePos POS = new SourcePos(1, 1);
     private static final ValueName.Stdlib.Operation MAP =
@@ -59,9 +67,9 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Hir.Expr twoArgs = new Hir.Apply("List.map", new ReachName.OfLibrary(MAP),
-                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
-                ConstructionOrigin.own(), POS, null);
+        Hir.Expr twoArgs = Hir.Apply.synthetic("List.map", new ReachName.OfLibrary(MAP),
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
     }
@@ -76,10 +84,12 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         // built rather than derived from whatever context reached them (issue #1080). This used to
         // be a context you could carry across the boundary and a method that emptied it on the way.
         assertEquals(Preserved.NONE,
-                CheckContext.executableInvariant(Symbols.none(DefaultStdlib.get()), null)
+                CheckContext.executableInvariant(Symbols.none(DefaultStdlib.get()),
+                                PublishedDeclarations.NONE, DeclarationKinds.NONE, null)
                         .preserved());
         assertEquals(Preserved.NONE,
-                CheckContext.executableEnsures(Symbols.none(DefaultStdlib.get())).preserved(),
+                CheckContext.executableEnsures(Symbols.none(DefaultStdlib.get()),
+                                PublishedDeclarations.NONE, DeclarationKinds.NONE).preserved(),
                 "and a rule is read at an entry of its own, as a clause is");
     }
 
@@ -87,23 +97,26 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     void whichDataIsBeingCheckedIsNotWhereARepresentationEnds() {
         // `forData` moves within one representation as well, so it must not quietly mean the
         // permission is gone
-        CheckContext keeping = CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(keeping(MAP, SIGNATURE));
+        CheckContext keeping = CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                DeclarationKinds.NONE).preserving(keeping(MAP, SIGNATURE));
 
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
 
     private static Hir.Expr callTo(ValueName.Stdlib.Operation operation) {
-        return new Hir.Apply(operation.qualified(), new ReachName.OfLibrary(operation),
-                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+        return Hir.Apply.synthetic(operation.qualified(), new ReachName.OfLibrary(operation),
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                List.of(new Hir.IntLit(1, POS, null)), POS, null);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {
-        return new Preserved(Map.of(operation,
-                new CompleteSignature(signature.params(), signature.result())));
+        return Preserved.keeping(List.of(CompleteSignature.ofDeclaration(operation,
+                signature.params(), signature.result())));
     }
 
     private static Core elaborate(Hir.Expr e, Preserved kept) {
         return Elaborator.elaborate(e, Scope.NONE,
-                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(kept));
+                CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                DeclarationKinds.NONE).preserving(kept));
     }
 }

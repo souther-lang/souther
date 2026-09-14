@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
@@ -14,6 +13,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,16 +69,15 @@ final class PathEngine {
     /** Getting to the positions that reading is asked about, which is nobody's semantics. */
     private final GuaranteeWalk walk;
     /** What each behavior a body may call states about its answer, by the name it is called under. */
-    private final Map<ValueName.Behavior, StatedContract> contracts;
+    private final Map<ValueName.Behavior, AssumedContract> contracts;
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               ReadingPolicy policy) {
-        this(symbols, dischargeInvariants, Map.of(), Terms.Of.THE_DISCHARGE_TREE, policy);
+    PathEngine(RuleReadingContext reading) {
+        this(reading, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
     }
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Map<ValueName.Behavior, StatedContract> contracts, ReadingPolicy policy) {
-        this(symbols, dischargeInvariants, contracts, Terms.Of.THE_DISCHARGE_TREE, policy);
+    PathEngine(RuleReadingContext reading,
+               Map<ValueName.Behavior, AssumedContract> contracts) {
+        this(reading, contracts, Terms.Of.THE_DISCHARGE_TREE);
     }
 
     /**
@@ -89,17 +88,16 @@ final class PathEngine {
      * recorded the fold as a shape this compiler has no term for would be answering about the
      * representation under the name of a gap.
      */
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Terms.Of reading, ReadingPolicy policy) {
-        this(symbols, dischargeInvariants, Map.of(), reading, policy);
+    PathEngine(RuleReadingContext ruleReading, Terms.Of reading) {
+        this(ruleReading, Map.of(), reading);
     }
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-               Map<ValueName.Behavior, StatedContract> contracts, Terms.Of reading,
-               ReadingPolicy policy) {
-        this.symbols = symbols;
-        this.clauses = new Clauses(symbols, dischargeInvariants);
-        this.terms = new Terms(symbols, reading, policy, clauses);
+    PathEngine(RuleReadingContext ruleReading,
+               Map<ValueName.Behavior, AssumedContract> contracts,
+               Terms.Of reading) {
+        this.symbols = ruleReading.source().symbols();
+        this.terms = new Terms(reading, ruleReading);
+        this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.guarantees = terms.guarantees();
         this.walk = terms.walk();
@@ -317,13 +315,13 @@ final class PathEngine {
                 || !(reached.denotes() instanceof ValueName.Behavior behavior)) {
             return null;
         }
-        StatedContract stated = contracts.get(behavior);
-        return stated == null ? null : new Answered(stated, call);
+        AssumedContract assumed = contracts.get(behavior);
+        return assumed == null ? null : new Answered(assumed, call);
     }
 
     /** An answer and what was declared about it: the rules, and the call they are read at — a rule
      * names the behavior's own parameters, and what those are here is what this call handed over. */
-    private record Answered(StatedContract stated, Core.Call call) {}
+    private record Answered(AssumedContract stated, Core.Call call) {}
 
     /** The call {@code value} came from, through however many names it was given, or null where it
      * came from something else. {@code seen} stops a binding given itself. */
@@ -353,11 +351,10 @@ final class PathEngine {
      * holds of every one of them. Nothing special is done about that: the union is what the arm
      * covers.
      *
-     * <p>{@code Core} carries the selector and not what it covers, so the arm's side is resolved
-     * back here. That is this pass crossing into the one that resolves a case, and not a second
-     * reading of what a case means: {@link CaseSpace#resolve} is where that is worked out, and
-     * the selector is what it is asked about — a carrier of an optional is not the case a name of
-     * the same spelling would be.
+     * <p>What the arm covers is taken off the arm. {@code Core} carries each case as this compile
+     * resolved it, so the atoms are already there; resolved again here they would be the same
+     * answer worked out twice, and the day the two differed one side of an inclusion would be
+     * reading a case the other side never saw.
      *
      * <p>A rule under no case applies to every answer, so any arm reaching it is an arm it holds of.
      *
@@ -374,8 +371,8 @@ final class PathEngine {
             return false;
         }
         Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
-        for (CaseSelector armCase : pattern.selectors()) {
-            if (!ruleCovers.containsAll(CaseSpace.resolve(armCase, symbols).atoms())) {
+        for (ResolvedCase armCase : pattern.cases()) {
+            if (!ruleCovers.containsAll(armCase.atoms())) {
                 return false;
             }
         }
@@ -402,7 +399,7 @@ final class PathEngine {
             return in;
         }
         Known out = in.known();
-        for (StatedContract.StatedRule rule : answered.stated().rules()) {
+        for (AssumedContract.AssumedRule rule : answered.stated().rules()) {
             if (!reached.test(rule.guard())) {
                 continue;
             }
@@ -410,12 +407,13 @@ final class PathEngine {
             if (given == null) {
                 continue;
             }
-            for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
-                if (conjunct.stated().orNull() == null) {
+            for (AssumedContract.Conjunct conjunct : rule.conjuncts()) {
+                if (conjunct.means().isEmpty()) {
                     continue;
                 }
-                Core here = Clauses.substituted(conjunct.stated().orNull(), given);
-                out = predicates.assume(predicates.assumed(here, in.at(), false), out,
+                TermMeaning here = conjunct.means().get().substituted(given);
+                answered.stated().takenIn();
+                out = predicates.assume(here.assumedBy(predicates, in.at(), false), out,
                         Known.Held.OF_THE_VALUE);
             }
         }
@@ -435,7 +433,7 @@ final class PathEngine {
      * argument would be a relation nobody declared.
      */
     private static Map<BindingId, Core> handedOver(Answered answered,
-                                                   StatedContract.StatedRule rule, Core answer) {
+                                                   AssumedContract.AssumedRule rule, Core answer) {
         List<Core> args = answered.call().args();
         if (args.size() != answered.stated().params().size()) {
             return null;
@@ -571,7 +569,7 @@ final class PathEngine {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at,
+        return seedAt(root, RuleKey.THE_VALUE, k, at,
                 new GuaranteeWalk.Extent.AsFarAs(GuaranteeWalk.FIELDS_SEEDED), null,
                 InvariantChecker.Reach.EVERYTHING);
     }
@@ -592,11 +590,13 @@ final class PathEngine {
      *                  that list has to be told here or walk the same descent again and rebase it a
      *                  second way.
      */
-    Known seedAt(Core root, String path, Known k, Denotations at, GuaranteeWalk.Extent extent,
+    Known seedAt(Core root, RuleKey path, Known k, Denotations at, GuaranteeWalk.Extent extent,
                  InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
         Seeding seeding = new Seeding(k, gathering);
         walk.from(root, path, at,
-                new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses()), seeding);
+                new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses(),
+                        reach.withoutParts()),
+                seeding);
         return seeding.known;
     }
 
@@ -621,17 +621,17 @@ final class PathEngine {
         }
 
         @Override
-        public void guaranteed(String path, TypeGuarantee guarantee) {
+        public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
             known = taking(guarantee, known, gathering);
         }
 
         @Override
-        public void stopped(String path, Type type, GuaranteeWalk.Stop why) {
+        public void stopped(RuleKey path, Type type, GuaranteeWalk.Stop why) {
             stopping(type, path, gathering, why);
         }
 
         @Override
-        public void handedOn(String path, Type type) {
+        public void handedOn(RuleKey path, Type type) {
             // Whether a rule stands under what is being left is the reading's answer and was asked
             // there. Nothing is re-derived here from the type.
             if (gathering != null) {
@@ -640,12 +640,12 @@ final class PathEngine {
         }
 
         @Override
-        public void lostAClause(String path, List<RuleRef.Invariant> lost) {
+        public void lostAClause(RuleKey path, List<RuleRef.Invariant> lost) {
             // Said whatever stands under the position, because the clause was read and lost rather
             // than never reached: a reader answering for the clauses it was handed would otherwise
             // answer for a rule it never saw.
             if (gathering != null) {
-                gathering.missed(path, InvariantChecker.Borne.BY_EVERY_VALUE);
+                gathering.missed(path, new RulesMissed.ClauseLost());
             }
         }
 
@@ -664,12 +664,18 @@ final class PathEngine {
      */
     private Known taking(TypeGuarantee guarantee, Known k, InvariantChecker.Gathering gathering) {
         if (gathering != null) {
+            // What this reading made of each occurrence of each part, handed over with the reading
+            // it belongs to. Written into a table every reading shares instead, an entry would be
+            // told from the next reading's only by which objects a substitution allocated.
+            Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, InvariantChecker.PartAsRead>>
+                    constrained = new LinkedHashMap<>();
             for (TypeGuarantee.Part part : guarantee.parts()) {
-                gathering.constrained(guarantee.rule(), part.part(),
-                        InvariantChecker.partRead(part.owed()));
+                constrained.computeIfAbsent(part.of(), _ -> new LinkedHashMap<>())
+                        .put(part.shape().at(), new InvariantChecker.PartAsRead(part.shape(),
+                                InvariantChecker.partRead(part.owed())));
             }
-            gathering.gathered(guarantee.rule(), guarantee.clause(),
-                    Predicates.subjectsIn(guarantee.owed()));
+            gathering.gathered(guarantee.rule(), guarantee.clause(), guarantee.written(),
+                    constrained, Predicates.subjectsIn(guarantee.owed()));
         }
         return predicates.assume(guarantee.owed(), k, Known.Held.OF_THE_VALUE)
                 .and(guarantee.quantified());
@@ -688,12 +694,12 @@ final class PathEngine {
      * elsewhere is not a position this walk stopped at: the walk reads it, says what it states, and
      * says separately that something below it is somebody else's ({@link Seeding#handedOn}).
      */
-    private void stopping(Type type, String path, InvariantChecker.Gathering gathering,
+    private void stopping(Type type, RuleKey path, InvariantChecker.Gathering gathering,
                           GuaranteeWalk.Stop why) {
         if (gathering == null || type == null || !guarantees.anyRuleUnder(type)) {
             return;
         }
-        gathering.missed(path, leftBy(why));
+        gathering.missed(path, new RulesMissed.WalkStopped(why));
     }
 
     /**

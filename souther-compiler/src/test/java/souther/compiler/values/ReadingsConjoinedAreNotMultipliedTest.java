@@ -25,21 +25,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ReadingsConjoinedAreNotMultipliedTest {
 
     /**
-     * What puts the sets of these readings together.
+     * What the answer built in each of these is allowed to spend putting sets together.
      *
-     * <p>One for the file, and one for every conjunction in it: a conjunction is the one place two
-     * readings of a declaration come together, so the composer that paid for the sets in one is the
-     * composer the next meet spends from. Every set here is values written out, so nothing is built
-     * and no allowance is spent.
+     * <p>One for the file rather than one per test, which is what a file of readings over values
+     * written out can have: every set here is values, so nothing below builds a machine and nothing
+     * is spent. A test about what a composition costs makes its own — see
+     * {@code WhatAConjunctionCostsIsTheComposersToSayTest}.
      */
-    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+    private static final Allowance<String> SETS = AsACompilationAllows.forAdmittedValues();
 
     /** Two readings over positions neither shares, each holding two alternatives. */
     @Test
     void readingsOverDisjointPositionsStayApart() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
-                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d"), SETS));
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
+                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d")), SETS);
 
         assertEquals(2, both.factors().size(), "one factor per reading");
         both.factors().forEach(each -> assertEquals(2, alternativesOf(each),
@@ -50,12 +50,13 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void andEachPositionIsAnsweredAsItWas() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
-                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d"), SETS));
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
+                        .meet(ConjoinedAdmissibleValues.of(twoAlternatives("c", "d")), SETS);
 
         assertEquals(twoAlternatives("a", "b").at("a"), both.at("a"));
         assertEquals(twoAlternatives("c", "d").at("d"), both.at("d"));
-        assertFalse(both.isBottom());
+        assertEquals(Emptiness.NONEMPTY, both.anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY,
+                (_, _) -> new Apartness.Reduction.Standing<>()));
     }
 
     /**
@@ -70,14 +71,14 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void factorsReachingEachOtherThroughAThirdAreOneFactor() {
         ConjoinedAdmissibleValues<String> apart =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
                         .meet(ConjoinedAdmissibleValues.of(
-                                AdmissibleValues.at("c", just("x")), SETS));
+                                says("c", just("x"))), SETS);
         assertEquals(2, apart.factors().size());
 
         ConjoinedAdmissibleValues<String> joined = apart.meet(ConjoinedAdmissibleValues.of(
-                AdmissibleValues.at("b", just("y"))
-                        .meet(AdmissibleValues.at("c", just("x")), SETS), SETS));
+                says("b", just("y"))
+                        .meet(says("c", just("x")), SETS)), SETS);
 
         assertEquals(1, joined.factors().size(), "all three reach each other");
         assertEquals(Set.of("a", "b", "c"), joined.subjects());
@@ -89,12 +90,13 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void oneFactorHoldingNothingIsTheWholeHoldingNothing() {
         ConjoinedAdmissibleValues<String> both =
-                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"), SETS)
+                ConjoinedAdmissibleValues.of(twoAlternatives("a", "b"))
                         .meet(ConjoinedAdmissibleValues.of(
-                                AdmissibleValues.at("c", just("x"))
-                                        .meet(AdmissibleValues.at("c", just("y")), SETS), SETS));
+                                says("c", just("x"))
+                                        .meet(says("c", just("y")), SETS)), SETS);
 
-        assertTrue(both.isBottom());
+        assertEquals(Emptiness.EMPTY, both.anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY,
+                (_, _) -> new Apartness.Reduction.Standing<>()));
     }
 
     /**
@@ -115,19 +117,18 @@ class ReadingsConjoinedAreNotMultipliedTest {
      */
     @Test
     void aComponentIsMetInTheOrderItsReadingsArrived() {
-        AdmissibleValues<String> named = AdmissibleValues.at("a", just("x"))
-                .meet(AdmissibleValues.at("b", just("y")), SETS);
-        AdmissibleValues<String> arrivedSecond =
-                AdmissibleValues.unreadable(Set.of("x"), UnreadReason.FORM_NOT_READ);
+        AdmissibleValues<String> named = says("a", just("x"))
+                .meet(says("b", just("y")), SETS);
+        AdmissibleValues<String> arrivedSecond = unread(Set.of("x"), UnreadReason.FORM_NOT_READ);
         AdmissibleValues<String> bridge =
-                AdmissibleValues.unreadable(Set.of("b", "x"), UnreadReason.RELATES_TWO_POSITIONS);
+                unread(Set.of("b", "x"), UnreadReason.RELATES_TWO_POSITIONS);
 
-        ConjoinedAdmissibleValues<String> apart = ConjoinedAdmissibleValues.of(named, SETS)
-                .meet(ConjoinedAdmissibleValues.of(arrivedSecond, SETS));
+        ConjoinedAdmissibleValues<String> apart = ConjoinedAdmissibleValues.of(named)
+                .meet(ConjoinedAdmissibleValues.of(arrivedSecond), SETS);
         assertEquals(2, apart.factors().size(), "these two share nothing");
 
         ConjoinedAdmissibleValues<String> joined =
-                apart.meet(ConjoinedAdmissibleValues.of(bridge, SETS));
+                apart.meet(ConjoinedAdmissibleValues.of(bridge), SETS);
 
         assertEquals(1, joined.factors().size(), "and the third reaches both of them");
         assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.RELATES_TWO_POSITIONS),
@@ -152,7 +153,7 @@ class ReadingsConjoinedAreNotMultipliedTest {
         assertTrue(read.projectionExactAt("elsewhere"));
         assertEquals(List.of(), read.whyUnread("elsewhere"));
 
-        assertTrue(ConjoinedAdmissibleValues.of(read, SETS).at("elsewhere").isAny());
+        assertTrue(ConjoinedAdmissibleValues.of(read).at("elsewhere").isAny());
         assertTrue(ConjoinedAdmissibleValues.<String>top().at("elsewhere").isAny(),
                 "and a conjunction of no readings names nothing at all");
     }
@@ -172,9 +173,8 @@ class ReadingsConjoinedAreNotMultipliedTest {
         assertFalse(nothing.hasReadings());
 
         ConjoinedAdmissibleValues<String> overOneVocabulary =
-                ConjoinedAdmissibleValues.of(AdmissibleValues.at("x", just("A")), SETS)
-                        .meet(ConjoinedAdmissibleValues.of(
-                                AdmissibleValues.at("x", just("B")), SETS));
+                ConjoinedAdmissibleValues.of(says("x", just("A")))
+                        .meet(ConjoinedAdmissibleValues.of(says("x", just("B"))), SETS);
 
         assertEquals(1, overOneVocabulary.factors().size(),
                 "two readings of one position are one factor");
@@ -182,37 +182,95 @@ class ReadingsConjoinedAreNotMultipliedTest {
     }
 
     /**
+     * A position a reading knows only as one a choice opened is still one it is about.
+     *
+     * <p>The proof the tripwire below is a tripwire for. What is filed under a subject is what
+     * {@link AdmissibleValues#subjects} has to reach, and a reading shown to hold nothing keeps
+     * what a choice opened while it keeps nothing else — so a position can be there and nowhere
+     * else. Missed, the conjunction reads it as a name this reading never heard of and answers
+     * about it from a factor that never named it.
+     */
+    @Test
+    void aPositionAChoiceOpenedIsOneTheReadingIsAbout() {
+        AdmissibleValues<String> opened = pair("y", "A", "y", "B")
+                .bothDead(pair("z", "A", "z", "B"))
+                .resolve(SETS).values()
+                .alsoOpenedAt(Set.of("x"));
+
+        assertEquals(Set.of("x"), opened.subjects(),
+                "the reading holds `x` nowhere but among the positions a choice opened, and it is"
+                        + " a position the reading is about all the same");
+        assertEquals(opened.whyUnread("x"),
+                ConjoinedAdmissibleValues.of(opened).whyUnread("x"),
+                "so a conjunction of it answers about `x` out of the factor that names it");
+    }
+
+    /**
      * A tripwire, and not the proof above it.
      *
      * <p>{@link AdmissibleValues#subjects} is what says which positions a reading is about, and
-     * everything here rests on it being all of them. It is worked out from the six places a subject
-     * is filed under today, and a seventh added tomorrow would leave a reading naming a position
-     * that {@code subjects()} does not — so the conjunction would call two overlapping factors
-     * disjoint and answer one of them from the other's silence.
+     * everything here rests on it being all of them. A place a subject is filed under that it does
+     * not reach leaves a reading naming a position {@code subjects()} does not — so the conjunction
+     * calls two overlapping factors disjoint and answers one of them from the other's silence.
      *
      * <p>The same list {@link AdmissibleValues#renamed} rewrites, for the same reason.
+     *
+     * <p><b>Every component named and classified, rather than counted.</b> A count says nothing
+     * about a component whose type changed under its name: turning a flag about the whole reading
+     * into something the positions are filed under adds a place a subject comes from and leaves the
+     * count where it was. So each of them is written down here as one that holds subjects or one
+     * that does not, and a component that changes its mind about which is a change to this list.
+     *
+     * <p>{@link Standing} holds both kinds of evidence there are — a rule of the positions that
+     * went unread, and a position an alternative nothing could read left open — so a subject
+     * reaching this reading through either arrives under the same name.
      */
     @Test
     void everyPlaceASubjectIsFiledUnderIsOneSubjectsKnowsAbout() {
-        RecordComponent[] components = AdmissibleValues.class.getRecordComponents();
+        List<String> named = java.util.Arrays.stream(WhatAReadingIsMadeOf.of(AdmissibleValues.class))
+                .map(RecordComponent::getName).toList();
 
-        assertEquals(9, components.length,
-                "a component was added to a reading. If it is filed under a subject, `subjects()`"
-                        + " and `renamed()` both have to reach it; if it is not, say so here: "
-                        + List.of(components));
+        assertEquals(List.of("held", "perPosition", "standing", "guaranteed", "defaultGuaranteed",
+                        "guaranteedTogether", "tangled", "widened"),
+                named,
+                "a reading holds something this list does not name. If it is filed under a subject,"
+                        + " `subjects()` and `renamed()` both have to reach it; if it is not, say so"
+                        + " below");
+        assertEquals(List.of("held", "perPosition", "standing", "guaranteed", "tangled", "widened"),
+                named.stream().filter(each -> !NAMES_NO_SUBJECT.contains(each)).toList(),
+                "which of them file a position under a subject, which is what `subjects()` and"
+                        + " `renamed()` are the two readings of");
     }
+
+    /** What a reading holds about itself rather than about any position of the value. */
+    private static final Set<String> NAMES_NO_SUBJECT =
+            Set.of("defaultGuaranteed", "guaranteedTogether");
 
     /** A reading of two positions leaving two alternatives, which is what a choice written across
      *  two positions comes to. */
     private static AdmissibleValues<String> twoAlternatives(String one, String other) {
-        return AdmissibleValues.at(one, just("x"))
-                .meet(AdmissibleValues.at(other, just("y")), SETS)
-                .joinApart(AdmissibleValues.at(one, just("p"))
-                        .meet(AdmissibleValues.at(other, just("q")), SETS), SETS);
+        return pair(one, "x", other, "y").joinLiveApart(pair(one, "p", other, "q"))
+                .resolve(SETS).values();
+    }
+
+    /** One alternative of that reading, while it is still a description. */
+    private static PlannedValues<String> pair(String one, String here, String other, String there) {
+        return PlannedValues.at(one, AdmittedPlan.of(just(here)))
+                .meet(PlannedValues.at(other, AdmittedPlan.of(just(there))));
     }
 
     private static ValueSet just(String text) {
         return ValueSet.just(Value.text(text));
+    }
+
+    /** One rule about one position, worked out. */
+    private static AdmissibleValues<String> says(String atom, ValueSet set) {
+        return PlannedValues.at(atom, AdmittedPlan.of(set)).resolve(SETS).values();
+    }
+
+    /** A rule nothing could read, worked out. */
+    private static AdmissibleValues<String> unread(Set<String> named, UnreadReason why) {
+        return PlannedValues.unreadable(named, why).resolve(SETS).values();
     }
 
     private static int alternativesOf(AdmissibleValues<String> read) {

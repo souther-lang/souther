@@ -3,6 +3,10 @@
 Status: Accepted. The rounding-mode entry under "what is still refused" is superseded by
 ADR-0087, which makes `RoundingMode` an ordinary value type.
 
+The `ConstructionOrigin` component written in the signatures below is no longer part of `Ast.Apply`.
+Where a construction came from is settled below resolution, and the parsed tree says nothing about
+it; what this decided — that what is applied is an ordinary subexpression — is unchanged.
+
 ## Context
 
 Issue #261 reported that the specification writes `Map.empty` and the compiler rejects it, and that the rejection names `Map` as an unknown local and suggests a parameter called `p`. Both symptoms come from one shape in the tree:
@@ -45,6 +49,8 @@ It is not implementable. `list.sou` has a block whose statements end with a call
 ## Consequences
 
 Five passes were rebuilding an application from its name and discarding whatever else was there — `Exposing`, `AstBuilder.pipe`, `NewtypeDesugar`, `HelperInliner` in two places, and `InvariantChecker`. Under `Ast.Call` that was invisible, because there was nothing else to discard. Each now carries the callee expression through. The compiler error that surfaced them is the sealed `Expr` switch in `Ast.mapChildren` and `Ast.forEachChild`, which has no `default` arm.
+
+`Ast.mapChildren` was later removed, when the last pass that rewrote a parsed expression went with the expansion forms of the parsed tree. The compile brake described here is `Ast.forEachChild`'s switch, which is exhaustive over `Expr` with no `default` arm and now only reads.
 
 `Exposing` no longer walks the tree. It validates the import lines and answers what they bring in; the catch-all that dropped `Ast.Var` and `Ast.IfConstructed` went with the walk, and example rows and fake rows are covered because `Resolve` visits them like any other expression. A parameter named `map` now wins over `import List ( map )`.
 

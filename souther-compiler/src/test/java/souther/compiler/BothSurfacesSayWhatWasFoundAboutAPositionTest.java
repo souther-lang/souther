@@ -1,11 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -51,20 +51,27 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
             }
             """;
 
-    private static AdequacyReport reportOf(String source) {
+    /** A report and the texts the compile it is about was holding, which is what places it. */
+    private record Made(AdequacyReport report, SourceRendering sources) {
+    }
+
+    private static Made reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return new Made(AdequacyReport.of(compilation),
+                SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String humanOf(String source) {
-        return reportOf(source).human(SourceNameResolver.identity());
+        Made made = reportOf(source);
+        return made.report().human(made.sources());
     }
 
     private static JsonNode partitionOf(String source) {
+        Made made = reportOf(source);
         JsonNode document = JsonMapper.builder().build()
-                .readTree(reportOf(source).json(SourceNameResolver.identity()));
+                .readTree(made.report().json(made.sources()));
         return document.get("modules").get(0).get("behaviors").get(0).get("partition");
     }
 
@@ -85,7 +92,17 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // The handle too, because that is the half a person is shown. Keyed on the position and the
         // reason alone, two rules stopped alike here were one entry and the document could not say
         // which of them a reader was being told about.
-        assertEquals(List.of("n:unsupported_syntax:comparison@0:11:32"),
+        //
+        // One entry, about the guard the author wrote. `Int.clamp` answers a number nothing states
+        // anything about, so the comparison against it is a rule about a value an operation made.
+        //
+        // The reading this is made over keeps that operation standing, so the comparisons inside
+        // `Int.clamp` are not here. They were: the call was spliced in, its own first comparison
+        // asked whether `n` is below zero, and the guard above left nothing arriving at the line it
+        // draws — so the document carried an entry about a rule the author never wrote, at a number
+        // their model never mentions. Those comparisons are that operation's implementation, and a
+        // caller owes rows for what a caller wrote.
+        assertEquals(List.of("n:rule_about_a_derived_value:comparison@0:11:32"),
                 documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
     }

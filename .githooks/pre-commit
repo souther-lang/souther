@@ -1,9 +1,9 @@
 #!/bin/sh
-# Stops a commit that adds an unused import.
+# Stops a commit that adds what CI is going to refuse and a parser can already see.
 #
-# CI answers the same question with Error Prone, but only after the push and only on a `clean`
-# build. This runs Checkstyle over the staged Java files alone, which is a parse and costs about
-# two seconds.
+# CI answers the same questions with Error Prone, but only after the push and only on a `clean`
+# build that takes twenty minutes. This runs Checkstyle over the staged Java files alone, which is
+# a parse and costs about two seconds. `config/checkstyle.xml` says which questions those are.
 #
 # What it reads is the staged content — `git show :path`, written to a temporary directory — and
 # not the working tree, so a `git add -p` that stages half a file is judged on the half being
@@ -51,7 +51,7 @@ if [ "$status" -ne 0 ]; then
     if [ -n "$violations" ]; then
         printf '%s\n' "$violations"
         echo
-        echo "pre-commit: fix the imports above, or commit with --no-verify."
+        echo "pre-commit: fix what is above, or commit with --no-verify."
     else
         # Not a violation: Maven itself did not run. The whole log, since nothing here knows what
         # part of it matters.

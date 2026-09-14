@@ -39,6 +39,35 @@ public sealed interface AdmittedPlan {
     /** Nothing at all, which is what refuses a declaration. */
     AdmittedPlan NONE = new Nothing();
 
+    /**
+     * The machines this plan asks for, which is where a refusal is answered from.
+     *
+     * <p>Every leaf that names one, and the compositions name none: what a meet of two patterns
+     * asks for is what each of them asks for, and a refusal happens at one of them. Asked of the
+     * plan rather than kept beside it, so a plan put together out of others carries what its parts
+     * ask without anybody adding them up.
+     *
+     * <p>The pattern and not the rule that wrote it. A machine is the pattern's — the same one
+     * written into three rules is one machine — so what a refusal is about is this, and the rules
+     * that asked for it are the ones whose reading asked for this. Two of them are two rules
+     * answerable for one refusal, which is what writing the same pattern twice comes to.
+     */
+    default java.util.Set<souther.compiler.regex.PatternPlan> asked() {
+        java.util.Set<souther.compiler.regex.PatternPlan> out = new java.util.LinkedHashSet<>();
+        asked(out);
+        return out;
+    }
+
+    /** The same, into {@code out}, so a plan of plans is walked once and allocates once. */
+    private void asked(java.util.Set<souther.compiler.regex.PatternPlan> out) {
+        switch (this) {
+            case Everything _, Nothing _, Of _ -> { }
+            case Pattern it -> out.add(it.plan());
+            case Both it -> it.parts().forEach(each -> each.asked(out));
+            case Either it -> it.parts().forEach(each -> each.asked(out));
+        }
+    }
+
     /** Every value, as a plan. */
     record Everything() implements AdmittedPlan {}
 
@@ -80,6 +109,12 @@ public sealed interface AdmittedPlan {
      * <p>Named by how it is written and not by what it accepts, for the same reason: two spellings
      * of one language are told apart by building both, which is the question being deferred. So
      * they are two leaves, which is also what they cost.
+     *
+     * <p><b>Which rules wrote it is no part of this.</b> A plan is told from another by what would
+     * be built, and the same pattern written into three rules is one machine paid for once — so a
+     * leaf carrying who asked is a leaf that is three leaves, three machines, an allowance spent
+     * three times and a refusal where there was none. What a refusal is about is the pattern, which
+     * is what this holds; who asked for the pattern is asked of the readings that asked.
      *
      * @param plan what would be built, which is the pattern a rule stated or every string less the
      *             pattern a rule denied

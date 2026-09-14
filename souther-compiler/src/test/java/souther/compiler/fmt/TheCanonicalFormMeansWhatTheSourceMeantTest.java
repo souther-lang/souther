@@ -1,6 +1,7 @@
 package souther.compiler.fmt;
 
 import souther.compiler.diag.msg.MessageKeys;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -53,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparison drops. Everything else a node carries is compared, names and modifiers and structure
  * included.
  */
+@Tag("population")
 class TheCanonicalFormMeansWhatTheSourceMeantTest {
 
     /** The sources the layout rules are swept over: the bundled standard library, and the written

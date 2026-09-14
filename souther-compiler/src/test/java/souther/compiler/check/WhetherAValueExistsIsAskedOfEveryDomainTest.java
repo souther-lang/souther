@@ -7,9 +7,12 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
-import souther.compiler.values.AdmissibleValues;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.AsACompilationAllows;
+import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -88,7 +91,26 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertTrue(orderedAtBottom().isBottom());
         assertFalse(orderedAtBottom().numbers().isBottom(), "and the other domains are untouched");
         assertFalse(orderedAtBottom().facts().isBottom());
-        assertFalse(orderedAtBottom().values().isBottom());
+    }
+
+    /**
+     * A set of values and a range on the same position with no value in both.
+     *
+     * <p>The case neither of the two above is. The set admits something and the range holds
+     * something, so each of them, asked alone, finds nothing wrong — and what is left is nothing.
+     * That is why they are one component here and not two arms: an arm apiece is what read this
+     * state as one somebody can be in.
+     */
+    @Test
+    void aSetAndARangeThatShareNoValueLeaveNothing() {
+        assertTrue(setBesideARangeItIsOutside().isBottom());
+        assertFalse(setBesideARangeItIsOutside().numbers().isBottom(),
+                "and neither half of it holds nothing on its own");
+        assertFalse(setBesideARangeItIsOutside().facts().isBottom());
+        assertFalse(setBesideARangeItIsOutside().confinement().holdingNothing()
+                .contains(A_POSITION));
+        assertEquals(ValueSet.just(Value.text("A")),
+                setBesideARangeItIsOutside().values().at(A_POSITION));
     }
 
     /** A caller having shown it, by an argument no domain holds: the cases an operation is defined
@@ -98,8 +120,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertTrue(shownAtBottom().isBottom());
         assertFalse(shownAtBottom().numbers().isBottom(), "and every domain is untouched");
         assertFalse(shownAtBottom().facts().isBottom());
-        assertFalse(shownAtBottom().values().isBottom());
-        assertFalse(shownAtBottom().ordered().isBottom());
+        assertFalse(shownAtBottom().confinement().holdsNothing());
     }
 
     private static ConstraintState<FactSubject> numbersAtBottom() {
@@ -115,20 +136,33 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
-        souther.compiler.values.Allowance<FactSubject> sets =
-                souther.compiler.values.Allowance.ofAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingValuesRead(
-                AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
-                        .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        return ConstraintState.<FactSubject>top().takingRead(
+                new Confinement.Planned<>(says("A").meet(says("B")), OrderedIntervals.top(),
+                        Map.<FactSubject, Carrier>of()).resolve(sets), sets);
+    }
+
+    /** One rule about the position. */
+    private static PlannedValues<FactSubject> says(String text) {
+        return PlannedValues.at(A_POSITION, AdmittedPlan.of(ValueSet.just(Value.text(text))));
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
         return ConstraintState.<FactSubject>top()
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
+                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)), Map.of())
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))));
+                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))), Map.of());
+    }
+
+    /** The values pinned at one string, and the order left the strings above another. */
+    private static ConstraintState<FactSubject> setBesideARangeItIsOutside() {
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        return ConstraintState.<FactSubject>top().takingRead(
+                new Confinement.Planned<>(says("A"),
+                        OrderedIntervals.at(A_POSITION, new OrderedInterval(
+                                Endpoint.inclusive(souther.compiler.numeric.Text.of("B")), null)),
+                        Map.of(A_POSITION, Carrier.TEXT)).resolve(sets), sets);
     }
 
     private static ConstraintState<FactSubject> shownAtBottom() {
@@ -153,7 +187,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     @Test
     void everyComponentThatCanMakeTheStateHoldNothingIsOneThisTestPutAtItsOwnBottom() {
         RecordComponent[] components = ConstraintState.class.getRecordComponents();
-        assertEquals(5, components.length,
+        assertEquals(4, components.length,
                 "each component of the state needs a case above putting that one, and only that "
                         + "one, at its bottom");
     }

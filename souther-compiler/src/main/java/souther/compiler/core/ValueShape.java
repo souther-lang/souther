@@ -20,6 +20,12 @@ import java.util.Optional;
  * a clause means is the elaboration, and a reader elaborating one of its own would be the second
  * place that decided it — which is what {@code Core} was made to end.
  *
+ * <p>What a value is made of, and nothing about how one is written. Whether the declaration was
+ * written with its fields out or as {@code data X = Y} is not here, and nothing here derives it:
+ * the two are made alike, and which one a declaration is decides how a value of it crosses (spec
+ * §newtype). That is a fact about the declaration and is held where a declaration is published
+ * ({@code program.CheckedData}). A value is laid out from the same shape either way.
+ *
  * <p>The shape of the data a value is being built as, and not of the declaration a clause was
  * written on. An include carries a clause into the data that includes it (spec §invariant), and it
  * is checked there, over the fields that data has; the binding it reads is the one the declaration

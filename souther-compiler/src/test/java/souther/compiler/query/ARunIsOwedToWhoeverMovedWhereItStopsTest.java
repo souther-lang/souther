@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.PointRole;
-import souther.compiler.partition.RegionBasis;
 
 import java.util.List;
 
@@ -71,8 +70,8 @@ class ARunIsOwedToWhoeverMovedWhereItStopsTest {
     void whoMovedTheEndIsNoPartOfWhichPointItIs() {
         BorderObligationPoint point = pointOf(PointRole.IN, "value in 0 < value <= 50");
 
-        RegionBasis basis = ((BorderObligationPoint.InRegion) point).region();
-        assertInstanceOf(FarEnd.AtTheDomain.class, ((RegionBasis.Beside) basis).farEnd(),
+        assertInstanceOf(FarEnd.AtTheDomain.class,
+                ((BorderObligationPoint.InRegion) point).region(),
                 "the run stops where every rule about the position leaves it, which is nobody's"
                         + " line — so the point names the place and not the record");
     }

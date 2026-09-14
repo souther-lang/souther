@@ -1,0 +1,247 @@
+package souther.compiler.query;
+
+import souther.compiler.observe.MeasureReason;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Whether a row is at one point of an authored line, over every reading of that line.
+ *
+ * <p>Not a {@link Measurement}, and its own type so that it cannot be read as one. A reading's
+ * coverage is a measurement of that reading — it may be made in part and still have found a row,
+ * because what a reading could not read and what it did find are separate facts about it. A debt's
+ * is not: a row found at any reading settles the line ({@link
+ * souther.compiler.partition.BorderObligationId}), so the state where something went unread and a
+ * row was seen anyway is one this cannot hold, and a reader of a debt has no such state to consider.
+ *
+ * <p>Four states, and the fold below is the one place they are chosen between.
+ */
+public sealed interface ObligationCoverage {
+
+    /** A row this compilation observed stands at the point. */
+    record Witnessed() implements ObligationCoverage {}
+
+    /** Every reading ran to the end, and no row is at the point. */
+    record Missed() implements ObligationCoverage {}
+
+    /**
+     * No row was seen, and a reading that could have been holding one did not run to the end.
+     *
+     * <p>What was not found is undecided rather than absent: the row that answers this point may be
+     * in the part nobody read. Never weakened by nothing, for the reason {@link Measurement.Partial}
+     * is not — a state that says it is short of something and cannot say what would be the absence
+     * of the answer written as an answer.
+     */
+    record Undecided(WeakeningSet by) implements ObligationCoverage {
+
+        public Undecided {
+            if (by == null || by.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "an obligation left undecided says what left it so");
+            }
+        }
+    }
+
+    /**
+     * Nothing was read against this point, and these are the reasons that leave it unmeasured.
+     *
+     * <p>Every one of them and not one, for the reason {@link Undecided} holds everything that
+     * left it undecided. One debt is read once per behavior carrying the type, and where more than
+     * one of those readings accounts for this state they are independent facts about one point — so
+     * a debt holding one of them said whichever reading the walk reached last.
+     *
+     * <p><b>What accounts for the state, and not everything the readings said.</b> A reading that
+     * had nothing to look at does not put a point here: it hides nothing, so it neither takes back
+     * a miss nor is one of the reasons that outranked one. Which is the same thing {@code Undecided}
+     * does — a reading that ran to the end went without nothing, and nothing of it is in there.
+     */
+    record NotMeasured(UnaskedReasons why) implements ObligationCoverage {
+
+        public NotMeasured {
+            Objects.requireNonNull(why, "an obligation nobody measured says why");
+        }
+    }
+
+    /** Whether a row this compilation observed stands at the point. */
+    default boolean hasRowWitness() {
+        return this instanceof Witnessed;
+    }
+
+    /**
+     * Whether the readings came to an answer about this point at all.
+     *
+     * <p>Not what became of the obligation. That is {@link ObligationDisposition}'s, and it reads
+     * this beside what has shown a row can be written here: a point read to the end and missed is
+     * a gap where something promises a row could stand there and one nobody could decide where
+     * nothing does. Neither reading takes the obligation away — what the model owes is settled
+     * before either of them.
+     */
+    default boolean hasAnswer() {
+        return !(this instanceof NotMeasured);
+    }
+
+    /**
+     * Whether that answer is short of nothing, which is what a verdict rests on.
+     *
+     * <p>What {@link Measurement.Complete} is to a measure. A row found and a point read to the end
+     * and missed are both answers; a point left undecided and one nobody read are the two states a
+     * build cannot be called satisfied over.
+     */
+    default boolean settled() {
+        return this instanceof Witnessed || this instanceof Missed;
+    }
+
+    /** What the readings behind this went without, which is empty unless they left it undecided. */
+    default WeakeningSet weakening() {
+        return this instanceof Undecided it ? it.by() : WeakeningSet.none();
+    }
+
+    /**
+     * The one reason a surface that publishes one writes, or none where there is an answer.
+     *
+     * <p>The projection and not the fact. What a reader gets here is what a boundary item of the
+     * report has room for, and {@link UnaskedReasons#asOne()} refuses an account that does not fit
+     * rather than picking from it. A reader wanting the facts asks {@link NotMeasured#why()}, which
+     * is the arm that has them.
+     */
+    default Optional<MeasureReason> theReasonAsOne() {
+        return this instanceof NotMeasured it ? Optional.of(it.why().asOne()) : Optional.empty();
+    }
+
+    /**
+     * What the readings of one authored line come to together.
+     *
+     * <p>One debt is read at every position of every behavior carrying the type, and each of those
+     * readings measures it on its own. What the debt came to is not any one of them: a row standing
+     * at the line through {@code draft.owner} is evidence about {@code UserId}, and the reading at
+     * {@code activities[*]@CallTask.owner} cannot disagree with it.
+     *
+     * <p><b>Here and nowhere else.</b> A report, a build's refusal, an editor and the generator all
+     * ask what became of a debt, and four foldings of the same readings would be four answers about
+     * one line.
+     *
+     * <p>The order is the whole of it. A row found settles the line whatever else went unread, so a
+     * hit outranks everything. Below that, a reading that could be hiding a row outranks one that
+     * ran out and found none, because the second is an answer and the first is the absence of one.
+     * And a reading with no rows to look at is neither: it hides nothing, so it cannot take back a
+     * miss another reading established, and where every reading is one there was nothing anywhere to
+     * look at.
+     *
+     * <p><b>The ranking chooses a state, and the state keeps every reason that accounts for it.</b>
+     * Which of the four this is turns on what the readings came to and, in the one state a reason
+     * decides, on what those reasons are. Once it is chosen, the readings that put it there can be
+     * several and none of them outranks another — so they are held as a set, the way everything
+     * that left a point undecided is.
+     */
+    static ObligationCoverage acrossTheReadings(
+            List<Measurement<ItemAssessment.Coverage>> readings) {
+        if (readings.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a debt is what its readings came to, and this is none of them");
+        }
+        WeakeningSet unread = WeakeningSet.none();
+        List<ItemAssessment.Coverage.NotAsked> unasked = new ArrayList<>();
+        boolean missed = false;
+        for (Measurement<ItemAssessment.Coverage> reading : readings) {
+            // Found is found. Said before anything else is looked at, so that no accounting of what
+            // went unread can weaken a row somebody wrote.
+            if (reading.made().map(ItemAssessment.Coverage::hit).orElse(false)) {
+                return new Witnessed();
+            }
+            switch (reading) {
+                // A reading of this line that did not run out. Whatever it could not read may be
+                // holding the row.
+                case Measurement.Partial<ItemAssessment.Coverage> in -> unread = unread.union(in.by());
+                // And one that was started and could not be finished, which is the same thing said
+                // by a state with no value: it did not run out, and what it went without may be
+                // holding the row. Asked of the state and not of the reason — a measurement that
+                // failed carries what it went without and cannot carry nothing, so there is no
+                // failure here that leaves the point where it found it.
+                case Measurement.FailedToMeasure<ItemAssessment.Coverage> stopped ->
+                        unread = unread.union(stopped.by());
+                // The reasons a question was not put are kept as themselves rather than turned into
+                // weakenings: nothing was read, so there is no reading for a weakening to be about.
+                // Every one of them, whatever it is a fact about — which of these outranks a miss
+                // is decided below, over the reasons together.
+                case Measurement.NotMeasured<ItemAssessment.Coverage> none ->
+                        unasked.add((ItemAssessment.Coverage.NotAsked) none.why());
+                // Read to the end and no row is at the point, which is what a miss is.
+                case Measurement.Complete<ItemAssessment.Coverage> _ -> missed = true;
+            }
+        }
+        if (!unread.isEmpty()) {
+            return new Undecided(unread);
+        }
+        // Above a miss another reading established, because a reading that looked at nothing leaves
+        // the rows it would have looked at unaccounted for. All of them and not one, and every one
+        // of them is one that could be hiding a row: what a debt says is what put it in the state
+        // it is in, the way an undecided one says what left it undecided. A reading with nothing to
+        // look at did not put it here — it hides nothing, so it neither takes back a miss nor joins
+        // the reasons that outranked one.
+        List<ItemAssessment.Coverage.NotAsked> mayHideARow = new ArrayList<>();
+        for (ItemAssessment.Coverage.NotAsked each : unasked) {
+            if (each.mayHideARow()) {
+                mayHideARow.add(each);
+            }
+        }
+        if (!mayHideARow.isEmpty()) {
+            return new NotMeasured(UnaskedReasons.ofAll(mayHideARow));
+        }
+        // Nothing among them hides a row, so a miss another reading established stands. Where there
+        // was no such reading, every reading had nothing to look at and neither has the debt — said
+        // in the reasons they gave rather than in one minted here.
+        return missed ? new Missed() : new NotMeasured(UnaskedReasons.ofAll(unasked));
+    }
+
+    /**
+     * What two searches of one reading of one line saw, as one reading's measurement.
+     *
+     * <p>For the one place two of those meet: a line read once and searched twice, which is a
+     * helper called from two arms. They are not two readings — the authored line and the target are
+     * the same, and what differs is the region a row for it was composed in — so what a debt is
+     * gathered from has to be one measurement, and this is how the two become it.
+     *
+     * <p><b>Written in terms of {@link #acrossTheReadings} and not beside it.</b> What a set of
+     * measurements comes to is that one's answer, and a second reading of the same question here
+     * would be a second coverage semantics free to part from it. So the pair is put through it and
+     * the answer is written back as the measurement that says the same thing, which makes
+     * {@code acrossTheReadings(a, b)} and {@code acrossTheReadings(across(a, b))} the same answer by
+     * construction rather than by two pieces of code being kept in step.
+     */
+    static Measurement<ItemAssessment.Coverage> acrossOneReadingsSearches(
+            Measurement<ItemAssessment.Coverage> a, Measurement<ItemAssessment.Coverage> b) {
+        return switch (acrossTheReadings(List.of(a, b))) {
+            // A row was seen, and what the searches behind it went without is what both of them
+            // went without. Kept as whichever of the two saw it, the answer turned on which was
+            // walked first — the one that saw a row and read everything, and the one that saw a row
+            // and could not, are one reading here, and what it could not read is a fact of its own.
+            case Witnessed _ -> {
+                WeakeningSet went = wentWithout(a).union(wentWithout(b));
+                yield went.isEmpty()
+                        ? new Measurement.Complete<>(new ItemAssessment.Coverage.Hit())
+                        : new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), went);
+            }
+            case Undecided it -> new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
+                    it.weakening());
+            case Missed _ -> new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit());
+            // A reading says the one reason it asked nothing for. Two searches of one reading are
+            // of one line of one behavior under one level, so what left them unasked is one
+            // reason — and where it is not, this is a state a reading's measurement has no room
+            // for rather than one to pick from.
+            case NotMeasured it -> new Measurement.NotMeasured<>(it.why().asOne());
+        };
+    }
+
+    /** What one search of a reading could not read, and none where it read everything. */
+    private static WeakeningSet wentWithout(Measurement<ItemAssessment.Coverage> made) {
+        return switch (made) {
+            case Measurement.Partial<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.FailedToMeasure<ItemAssessment.Coverage> it -> it.by();
+            case Measurement.Complete<ItemAssessment.Coverage> _,
+                 Measurement.NotMeasured<ItemAssessment.Coverage> _ -> WeakeningSet.none();
+        };
+    }
+}

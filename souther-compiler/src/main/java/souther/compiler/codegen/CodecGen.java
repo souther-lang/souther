@@ -1,10 +1,14 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AuthoredShape;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.Elaborator;
 import souther.compiler.check.Lower;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.Derived;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.InvariantStatement;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.MapKeyRepresentation;
@@ -52,7 +56,7 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class CodecGen {
 
     private final CodegenContext ctx;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
     /** The $Dec class currently being generated — the owner of the {@code __rekey} helpers a
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
@@ -183,6 +187,7 @@ final class CodecGen {
      * canonicalization collision is caught, and that is a property of every key type, not of the
      * ones that need converting.
      */
+    @SuppressWarnings("UnusedVariable")   // the key is what a narrowing would read; see above
     private static boolean needsRekey(MapKeyRepresentation key) {
         return true;
     }
@@ -245,7 +250,7 @@ final class CodecGen {
     }
 
     private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type) instanceof Hir.SumData);
+        code.invokestatic(cd(type), method, mtd, symbols.declaredNode(type) instanceof Hir.SumData);
     }
 
     byte[] generateSumEncoder(Hir.SumData sum, Boundary.Alternatives alternatives) {
@@ -496,8 +501,8 @@ final class CodecGen {
 
     /** The runtime type a data's {@code encode} returns: a {@code Map} for objects/sums, the bare
      * boxed scalar (or {@code Object} for a nested/list/optional value) for a newtype. */
-    private static ClassDesc encoderOutput(Hir.Data data) {
-        return data.encoder().map(enc -> rawOutputType(enc.result())).orElse(CD_Map);
+    private ClassDesc encoderOutput(Hir.Data data) {
+        return rawOutputType(symbols.derived(data).encoder().result());
     }
 
     private static ClassDesc rawOutputType(Hir.RawExpr raw) {
@@ -545,7 +550,7 @@ final class CodecGen {
             }
             for (Hir.Name written : sum.cases()) {
                 TypeSymbol caseName = Backend.names(written);
-                Hir.Def caseDef = symbols.declarations().declaration(caseName);
+                Hir.Def caseDef = symbols.declaredNode(caseName);
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
@@ -561,7 +566,7 @@ final class CodecGen {
     }
 
     private boolean isFlatObject(Hir.Data data) {
-        if (!(data.decoder().orElse(null) instanceof Hir.ObjectDecoder)) {
+        if (!(symbols.derived(data).decoder() instanceof Hir.ObjectDecoder)) {
             return false;   // a newtype is a bare column, not a whole-row object
         }
         for (Type t : fieldTypes(data).values()) {
@@ -575,8 +580,8 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.declarations().declaration(r.name()) instanceof Hir.Data d
-                    && d.decoder().orElse(null) instanceof Hir.PrimDecoder;   // newtype column only
+            return symbols.declarations().declaration(r.name()) instanceof Derived.Data d
+                    && d.decoder() instanceof Hir.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
     }
@@ -666,7 +671,7 @@ final class CodecGen {
         if (!data.newtype()) {
             return Invariants.NONE;   // an object's invariant has no single value to constrain
         }
-        List<Hir.InvariantClause> declared = dischargeForm(data);
+        List<TypeOps.Declared> declared = dischargeForm(data);
         if (declared.isEmpty()) {
             return Invariants.NONE;
         }
@@ -678,20 +683,56 @@ final class CodecGen {
             boolean refine = true;
             if (!refining) {
                 refine = false;
-                for (Hir.Expr conjunct : ClauseHelpers.conjunctsOf(declared.get(i).expr())) {
-                    Optional<InvariantConstraints.Constraint> c =
-                            InvariantConstraints.against(symbols).of(conjunct, base);
-                    if (c.isPresent()) {
-                        mapped.add(c.get());
-                    } else {
+                // The parts the clause was split into, with the tree the expansion made of each.
+                // Split again here, this would be a second answer to which parts a clause has,
+                // taken off a tree an expansion left.
+                for (AuthoredShape.Written conjunct : declared.get(i).parts()) {
+                    List<InvariantConstraints.Constraint> states =
+                            constraintsOf(conjunct.id(), base);
+                    if (states == null) {
                         refine = true;
+                    } else {
+                        mapped.addAll(states);
                     }
                 }
             }
             refining |= refine;
-            out.add(new ClauseEmit(i, declared.get(i).name(), List.copyOf(mapped), refine));
+            out.add(new ClauseEmit(i, declared.get(i).clause().name(), List.copyOf(mapped),
+                    refine));
         }
         return new Invariants(out);
+    }
+
+    /**
+     * The constraints one conjunct maps onto, or null where it keeps its own check.
+     *
+     * <p><b>Recognised statement by statement and committed conjunct by conjunct.</b> A conjunct
+     * states as many rules as the reading arrives at — a denied choice states one per branch — and
+     * each of them is mapped on its own. What is emitted is all of them or none: a conjunct half of
+     * whose rules became constraints would report one of its own statements as {@code too_short} and
+     * the other as {@code invariant_violation}, so one thing an author wrote would break in two
+     * different words depending on which half the value broke.
+     *
+     * <p>Null where the reading has no form for the clause, which is not a conjunct that constrains
+     * nothing: the rule still runs, and what it reaches the boundary as is the fallback.
+     */
+    private List<InvariantConstraints.Constraint> constraintsOf(
+            PartId<RuleRef.Invariant> conjunct, Type base) {
+        List<InvariantStatement> statements = ctx.invariantStatements().of(conjunct);
+        if (statements == null) {
+            return null;
+        }
+        InvariantConstraints mapping =
+                InvariantConstraints.against(symbols, ctx.invariantStatements());
+        List<InvariantConstraints.Constraint> out = new ArrayList<>();
+        for (InvariantStatement each : statements) {
+            Optional<InvariantConstraints.Constraint> c = mapping.of(each, base);
+            if (c.isEmpty()) {
+                return null;
+            }
+            out.add(c.get());
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -702,12 +743,42 @@ final class CodecGen {
      * <p>The mapping is written against the operations an author wrote — {@code List.length},
      * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
      * fold it is derived from. Reading the settled form instead would leave every collection rule
-     * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
-     * decoder is generated where the type is declared.
+     * unrecognised.
+     *
+     * <p><b>Every rule or none.</b> A decoder is what the boundary holds a value to, so one built
+     * from the rules that happened to be readable holds it to less than the model says and carries
+     * no word for having done so — a value the model refuses would cross. Where a rule was not
+     * reached this refuses instead, and the module emits nothing.
+     *
+     * <p>Refused as a disagreement and not reported to an author, because nothing an author writes
+     * reaches it: a module that spreads a declaration nothing expanded is already short of an input
+     * the emission takes and stops before here. What holds that is a dependency of the emission
+     * rather than anything this reads, so it is said here rather than assumed — reaching this line
+     * is the emitter having run past its own precondition, and the answer at it is the difference
+     * between a boundary that holds and one that quietly does not.
      */
-    private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
-        return TypeOps.effectiveInvariants(data.declares(), data, symbols,
-                ctx.dischargeInvariants()::get);
+    private List<TypeOps.Declared> dischargeForm(Hir.Data data) {
+        return TypeOps.expandedInvariants(data.declares(), symbols,
+                ctx.dischargeInvariants()).whole()
+                .orElseThrow(() -> new RulesWereNotAllRead(data.declares().name()));
+    }
+
+    /**
+     * Raised where a decoder was to be built and a rule about the value had not been read.
+     *
+     * <p>Not a limit and not an author's mistake: the emission does not begin where a rule it reads
+     * could not be worked out, so arriving here is this compiler having gone past its own
+     * precondition. What a decoder built from the rules that happened to be readable holds a value
+     * to is less than the model says, and it carries no word for having done so.
+     */
+    static final class RulesWereNotAllRead extends IllegalStateException {
+
+        private static final long serialVersionUID = 1L;
+
+        RulesWereNotAllRead(String declaration) {
+            super("a decoder for `" + declaration + "` was to be built from rules this compiler had"
+                    + " not all read");
+        }
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */
@@ -863,7 +934,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(TypeSymbol type) {
-        return isMapInputOf(symbols.declarations().declaration(type));
+        return isMapInputOf(symbols.declaredNode(type));
     }
 
     /**
@@ -875,7 +946,7 @@ final class CodecGen {
      * whatever it says today.
      */
     private boolean readsABareTag(Hir.SumData sum) {
-        return Boundary.of(Type.ref(sum.declares()), symbols)
+        return Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.published)
                 .representation() instanceof Boundary.Representation.Enumeration;
     }
 
@@ -885,7 +956,7 @@ final class CodecGen {
             return !readsABareTag(sum);
         }
         if (def instanceof Hir.Data data) {
-            Hir.DecoderDef d = data.decoder().orElse(null);
+            Hir.DecoderDef d = symbols.derived(data).decoder();
             if (d instanceof Hir.ObjectDecoder) {
                 return true;
             }
@@ -1015,7 +1086,7 @@ final class CodecGen {
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
             case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
-        emitInvariantConstraints(code, cdName, inputType, invariants);
+        emitInvariantConstraints(code, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -1063,17 +1134,17 @@ final class CodecGen {
             // needs the map the model declared — the keys converted and canonical — so it goes after.
             emitDecoderObject(code, mp.value(), src);
             code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.MAPPED);
             code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
             code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.REFINED);
         } else {
             emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
             // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
             // invariant says is checked through refine (and again by __construct).
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants);
         }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
@@ -1339,19 +1410,18 @@ final class CodecGen {
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
-                                          Invariants invariants) {
-        emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
+    private void emitInvariantConstraints(CodeBuilder code, Type base, Invariants invariants) {
+        emitInvariantConstraints(code, base, invariants, ConstraintPhase.BOTH);
     }
 
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+    private void emitInvariantConstraints(CodeBuilder code, Type base,
                                           Invariants invariants, ConstraintPhase phase) {
         for (ClauseEmit clause : invariants.clauses()) {
             if (phase != ConstraintPhase.REFINED) {
                 clause.constraints().forEach(c -> emitConstraint(code, c));
             }
             if (clause.refined() && phase != ConstraintPhase.MAPPED) {
-                code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
+                code.invokedynamic(invariantPredicateCallSite(base, clause.index()));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
                 if (clause.name().isPresent()) {
@@ -1445,7 +1515,7 @@ final class CodecGen {
     /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check$i} — the
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
-    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
+    private DynamicCallSiteDesc invariantPredicateCallSite(Type base, int clause) {
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(decodedValue));
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's

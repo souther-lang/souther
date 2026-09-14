@@ -2,8 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collection;

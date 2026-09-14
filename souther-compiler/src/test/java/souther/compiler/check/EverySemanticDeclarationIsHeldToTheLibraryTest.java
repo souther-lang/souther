@@ -7,7 +7,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -36,12 +36,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySemanticDeclarationIsHeldToTheLibraryTest {
 
-    /** Everything the language declares is visited, and the visiting is over the declarations. */
+    /** Everything the language declares is bound, one bound fact per declaration and in the order
+     *  declared, and the binding is over the declarations. */
     @Test
     void theBindingIsOverTheDeclarations() {
-        assertEquals(OperationFacts.declarations(),
-                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations()),
-                "what the binding visited is what is declared");
+        assertEquals(OperationFacts.declarations().stream()
+                        .map(OperationFacts.Declared::operation).toList(),
+                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations())
+                        .all().stream().map(each -> each.operation().operation()).toList(),
+                "what the binding bound is what is declared, about the operations it is declared"
+                        + " of");
         assertTrue(!OperationFacts.declarations().isEmpty(),
                 "and there is something declared for that to mean anything");
     }
@@ -61,7 +65,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Decimal", "fromInt"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(7)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -91,7 +95,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("List", "get"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -119,8 +123,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("List", "get"),
-                new OperationFact.BoundsItsResult(new ResultBound(null, BigDecimal.ZERO,
-                        Rel.GE, new ResultBound.Provided.Always()))));
+                new OperationFact.BoundsItsResult(new ResultBound<>(null, BigDecimal.ZERO,
+                        Rel.GE, new ResultBound.Provided.Always<>()))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),
@@ -227,6 +231,38 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
     }
 
     /**
+     * Two readings of one number are refused whichever two they are, with no account of a number
+     * taken of one value among them.
+     *
+     * <p>The two above each pair such an account with something, so what they show is that pairs
+     * with that account in them are refused. The claim is about the operation and not about the
+     * account: {@code Int.add} computes its number as the arithmetic it is, and a form declared
+     * beside that is a second reading of the same number — one nothing here has to be told about,
+     * since what is held is how many readings every operation of the library has.
+     */
+    @Test
+    void twoReadingsOfOneNumberAreRefusedWhicheverTwoTheyAre() {
+        List<OperationFacts.Declared> gained =
+                new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(
+                ValueName.Stdlib.operation("Int", "add"),
+                new OperationFact.AnswersAFormOfItsArguments(
+                        souther.compiler.numeric.LinearForm.<ArgumentRef>atom(
+                                new ArgumentRef.At(0)).plus(
+                                souther.compiler.numeric.LinearForm.atom(
+                                        new ArgumentRef.At(1))))));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
+
+        assertTrue(refused.getMessage().contains("Int.add"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("form"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("arithmetic"),
+                "and names both readings, so what was refused was the pair: "
+                        + refused.getMessage());
+    }
+
+    /**
      * And a fact about an operation the library does not declare at all.
      *
      * <p>Beside the above because it fails one question earlier: there is no signature to read the
@@ -239,7 +275,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Decimal", "fromNothingAtAll"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,

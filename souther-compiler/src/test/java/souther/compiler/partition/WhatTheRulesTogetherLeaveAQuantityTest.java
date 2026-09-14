@@ -3,6 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
@@ -103,30 +107,24 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
                         stoppedByTheDomain(Bound.at(at("100"), true))),
                 "the run stops at fifty and says it stops at a hundred");
         assertThrows(IllegalArgumentException.class,
-                () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.BELOW),
-                        List.of(new RegionClaim(RegionBasis.TheRest.INSTANCE,
-                                PointContributions.none()))),
-                "and what a rule leaves outside one value is not a run of the arrangement at all");
-        assertThrows(IllegalArgumentException.class,
                 () -> new QuantityArrangement.Run(values, stoppedByTheOrder(Towards.ABOVE),
                         stoppedByTheDomain(Bound.at(at("50"), true))),
                 "nor is the end of the order the other way round from the end this is");
     }
 
     private static List<RegionClaim> stoppedByTheOrder(Towards towards) {
-        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(towards)),
+        return List.of(new RegionClaim(new FarEnd.AtTheOrderEnd(towards),
                 PointContributions.none()));
     }
 
     private static List<RegionClaim> stoppedByTheDomain(Bound at) {
-        return List.of(new RegionClaim(new RegionBasis.Beside(new FarEnd.AtTheDomain(at)),
-                PointContributions.none()));
+        return List.of(new RegionClaim(new FarEnd.AtTheDomain(at), PointContributions.none()));
     }
 
     /** What stops the first run of {@code arranged} at its high end, without who can move it. */
     private static List<FarEnd> farEndsOf(QuantityArrangement arranged) {
         return arranged.runs().get(0).endsAt(Towards.ABOVE).stream()
-                .map(each -> ((RegionBasis.Beside) each.basis()).farEnd()).toList();
+                .map(RegionClaim::basis).toList();
     }
 
     /** Each place with a line of its own against it, these being tests about where the values part
@@ -141,14 +139,18 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
     /** One clause of one declaration, told from the next by which clause of it this is. */
     static AuthoredLine aLine(int clause) {
-        return new AuthoredLine(new souther.compiler.check.RuleRef.Invariant(
-                new souther.compiler.check.Clause.Ref(
-                        new souther.compiler.check.Clause.Id(
-                                souther.compiler.types.TypeSymbols.declared(
-                                        new souther.compiler.types.TypeKey("example.runs", "N")),
-                                clause),
-                        java.util.Optional.empty())),
-                0, new LineFacts(false, true, false), List.of());
+        return new AuthoredLine(new WhichLine.OfADeclarationsLine(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(new PartId<>(
+                        new souther.compiler.check.RuleRef.Invariant(
+                                new souther.compiler.check.Clause.Ref(
+                                        new souther.compiler.check.Clause.Id(
+                                                souther.compiler.types.TypeSymbols.declared(
+                                                        new souther.compiler.types.TypeKey(
+                                                                "example.runs", "N")),
+                                                clause),
+                                        java.util.Optional.empty())), 0),
+                        0))),
+                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), List.of());
     }
 
     /**

@@ -3,19 +3,17 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -90,9 +88,10 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
-        FillResult filled = fill(Model.of(TWO_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(TWO_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
                 "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
     }
@@ -105,7 +104,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationEveryCandidateMissedSaysTheCandidatesWereNotWitnesses() {
-        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
@@ -126,7 +126,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void candidatesWhoseValuesAlreadyRanDoNotStopTheSearch() {
-        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium")),
@@ -145,17 +146,21 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     void aSetOfValuesIsRunOnceHoweverManyCombinationsWantIt() {
         int[] runs = {0};
 
-        fill(Model.of(ONE_FREE, "shippingFee"), _ -> {
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        fill(model, _ -> {
             runs[0]++;
-            return MISSED;
+            return missed(model);
         });
 
         assertEquals(8, runs[0], "one run per set of values this behavior has");
     }
 
-    /** A run that did nothing at all, which is a run that missed every combination. */
-    private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(Observation.NONE);
+    /** A run that did nothing at all, which is a run that missed every combination. Of the
+     *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
+     *  any place at all and answer. */
+    private static Generator.Watched missed(Model model) {
+        return new Generator.Watched.Ran(souther.compiler.coverage.Runs.nowhere(model.numbering()));
+    }
 
     /** What the search made of the one combination named by {@code classes}. */
     private static Generator.UnresolvedCombination.Reason reasonFor(
@@ -174,42 +179,34 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                 model.read(), trial, Budgets.generation());
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
-        List<Interaction> groups() {
-            return read.interactions();
-        }
-
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.answerEverything();
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared);
             assertNotNull(sigs);
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    Partitions.of(spec.name(), inputs, rules,
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs,
-                            symbols));
+                            checked.plan(), inputs,
+                            rules), checked.plan().numbering());
         }
     }
 }

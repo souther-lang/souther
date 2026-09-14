@@ -96,6 +96,23 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1932)
     record AFakeNamesNoBehavior(String named) implements ExampleMessage, Reported {}
 
+    /**
+     * More than one {@code fake} block names one behavior, so none of them stands in for it.
+     *
+     * <p>Said at every block that names it, in the source that block is written in. The rows of one
+     * block are an ordered table and there is no order between a module's own source and the files
+     * attached to it, so two of them cannot be read as one; which is the one to write differently
+     * is not a question the language answers.
+     */
+    @Code(DiagnosticCode.E1933)
+    record MoreThanOneFakeStandsInForOneBehavior(String behavior) implements ExampleMessage, Reported {}
+
+    /** What to write instead. */
+    record WriteTheRowsAsOneFake(String behavior) implements ExampleMessage, Supporting {}
+
+    /** Where another of the blocks standing in for it is written. */
+    record AnotherFakeStandsInForItHere(String behavior) implements ExampleMessage, Supporting {}
+
     /** A dependency has no fake. */
     @Code(DiagnosticCode.E1908)
     record ADependencyHasNoFake(String behavior, String dependency) implements ExampleMessage, Reported {}
@@ -283,6 +300,39 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Supporting {}
 
     /**
+     * No row takes one of the rules of the decision a body states.
+     *
+     * <p>The behavior and nothing else. A rule is told apart by the distinctions it consulted,
+     * written the one way round that makes a comparison and its denial one column — which is what
+     * an account keys on and is not what an author wrote. Said here, an author would be shown a
+     * comparison they did not write, the wrong way round. Which rule it is, is said underneath: one
+     * note per condition, sending the reader to the construct that drew it.
+     */
+    @Code(DiagnosticCode.E1935)
+    record NoRowTakesADecisionRule(String behavior) implements ExampleMessage, Reported {}
+
+    /**
+     * One condition of that rule: a comparison the author wrote, which the rule takes holding.
+     *
+     * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the
+     * comparison they wrote rather than one this compiler spelled from the proposition its account
+     * keys on — {@code n > 100} in a body is held there as {@code n <= 100} denied.
+     */
+    record TheRuleTakesThisComparisonHolding() implements ExampleMessage, Supporting {}
+
+    /** The same, where the rule takes it failing. Two entries and not one that selects a word: a
+     *  wording that turns on a value is two messages. */
+    record TheRuleTakesThisComparisonFailing() implements ExampleMessage, Supporting {}
+
+    /** One condition of that rule: a fork of the body, and which of its arms the rule goes down. */
+    record TheRuleGoesThroughThisArm(souther.compiler.diag.Localizable arm)
+            implements ExampleMessage, Supporting {}
+
+    /** A condition of the rule with nothing to send a reader to, so that a rule is never described
+     *  by fewer conditions than it turns on. */
+    record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}
+
+    /**
      * No row is at one of the points a border owes, the rule that drew it having a name.
      *
      * <p>{@code point} is which of them, in the word domain testing gives it (ISTQB CTAL-TA v4.0
@@ -303,6 +353,22 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * The same, of a line a body's own rule drew, which is owed once wherever it is read.
+     *
+     * <p>Its own sentence because it names no quantity. A body's comparison has no authored spelling
+     * of what it is on: a guard on a name every case of a sum spreads is read once under each case,
+     * each reading names the position it met the line at, and none of them can stand for the rest.
+     * So this says where on the line the point is — {@code level}, the value the rule cut at, which
+     * every reading writes the same — and what each reading asks is said beside it
+     * ({@link TheLineAsReadAt}).
+     *
+     * <p>{@code rule} is the name the author gave it, where the rule has one ({@code ensures}).
+     */
+    @Code(DiagnosticCode.E1916)
+    record NoRowIsAtThePointOfTheLineARuleDrew(String point, String rule)
+            implements ExampleMessage, Reported {}
+
+    /**
      * The same, where a fork of a body drew the line.
      *
      * <p>A rule of its own because a fork has no name to put in the other one's slot. What went
@@ -319,9 +385,23 @@ public sealed interface ExampleMessage extends Message {
      * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtThePointOfTheBorderAConstructDrew(String point, String at, String value,
-                                                     souther.compiler.diag.Localizable construct)
+    record NoRowIsAtThePointOfTheLineAConstructDrew(String point,
+                                                   souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
+
+    /**
+     * One reading of a line owed once, said under the point it is a reading of.
+     *
+     * <p>The quantity's name lives here and nowhere in the sentence above: {@code at} is the position
+     * this reading met the line at, and {@code asks} is what a row there has to do, in that
+     * position's terms. One of these per reading, in the order the readings' sentences sort, so
+     * that which reading a walk met first is not what a reader sees first.
+     */
+    record TheLineAsReadAt(String at, String asks) implements ExampleMessage, Supporting {}
+
+    /** How many readings were not said, where a line has more than a sentence has room for. A
+     *  count and not a silence: left out unsaid, the readings shown read as all there are. */
+    record MoreReadingsOfTheLine(int more) implements ExampleMessage, Supporting {}
 
     /**
      * The same, for one of the two points away from the line.
@@ -337,10 +417,16 @@ public sealed interface ExampleMessage extends Message {
                                                        String rule)
             implements ExampleMessage, Reported {}
 
+    /** The same, of a line a body's own rule drew and named, which names no quantity for the
+     *  reason {@link NoRowIsAtThePointOfTheLineARuleDrew} does not. */
+    @Code(DiagnosticCode.E1917)
+    record NoRowIsAtThePointAwayFromTheLineARuleDrew(String point, String rule)
+            implements ExampleMessage, Reported {}
+
     /** The same again, where a fork of a body drew the line and there is no name to put in the slot. */
     @Code(DiagnosticCode.E1917)
-    record NoRowIsAtThePointAwayFromTheBorderAConstructDrew(String point, String at, String value,
-                                                            souther.compiler.diag.Localizable construct)
+    record NoRowIsAtThePointAwayFromTheLineAConstructDrew(String point,
+                                                         souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
     /** What a row well inside shows: the border is the only thing keeping the values apart there. */
@@ -386,6 +472,36 @@ public sealed interface ExampleMessage extends Message {
 
     /** Which of the two that is. */
     record EitherARowIsMissingOrNothingReachesIt() implements ExampleMessage, Supporting {}
+
+    /**
+     * A row goes through an arm of the body with its answer still owed.
+     *
+     * <p>Not {@link NoRowGoesThroughThatArm}, which is an arm nothing reaches. A row does reach
+     * this one, and what it is short of is the answer — the same thing the rows reported beside it
+     * are short of, and the same thing to do about it, so it is that rule's code and not the arm
+     * rule's.
+     */
+    @Code(DiagnosticCode.E1934)
+    record ARowAtThatArmAwaitsItsAnswer(souther.compiler.diag.Localizable arm, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** What answering it takes. */
+    record ReplaceTheMarkWithWhatTheSystemAnswers() implements ExampleMessage, Supporting {}
+
+    /**
+     * A row is written and its answer is not.
+     *
+     * <p>Said of the row and at the row, because that is what it is about. What the row goes
+     * through is a separate thing to say and is said of the arm; a behavior with no arms at all has
+     * nothing there to say it, and the row is owed an answer either way.
+     */
+    @Code(DiagnosticCode.E1934)
+    record TheRowsAnswerIsOwed(String behavior) implements ExampleMessage, Reported {}
+
+    /** The same, for a row that names itself. */
+    @Code(DiagnosticCode.E1934)
+    record TheNamedRowsAnswerIsOwed(String row, String behavior)
+            implements ExampleMessage, Reported {}
 
     // --- a stand-in and a row that disagree ---
 

@@ -2,12 +2,11 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.Citation;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
-import souther.compiler.source.SourceId;
 
 import java.util.List;
 
@@ -38,8 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
 
-    private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(
-            Citation.of(new SourcePos(4, 3, new SourceId("m.sou"))),
+    private static final ConditionOccurrence MET = new ConditionOccurrence("b", 0);
+
+    private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(MET,
+            new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),
             new OnTheWay.Why.NoWordsForTheShape());
 
     /** One way to a point, with one condition on it that nothing took in. */
@@ -63,7 +64,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
     @Test
     void aSearchThatSettledNothingOwesWhatTheWayLeftOut() {
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
-                came(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT).unaccountedFor());
+                came(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED).unaccountedFor());
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
                 came(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS).unaccountedFor());
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
@@ -86,7 +87,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
      */
     @Test
     void anAnsweredPointAndAnUnmadeSearchOweNothing() {
-        assertEquals(List.of(), new ItemAssessment.Attempt.Built(
+        assertEquals(List.of(), ItemAssessment.Attempt.Built.certified(
                 new Generator.GeneratedRow(
                         new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), way())
                 .unaccountedFor());

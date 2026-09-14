@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -37,6 +40,10 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
 
     private static final AxisId AT = new AxisId("take", "h.a");
 
+    /** The number that measure is of, which its orders are the orders of. */
+    private static final NumericTerm.ValueOf AT_A =
+            new NumericTerm.ValueOf(TermPath.of("h").then("a"));
+
     /** A reading of one line that drew it, which is what a closed one is. */
     @Test
     void aReadingThatDrewItsLineMayBeClosed() {
@@ -45,7 +52,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of(read.drew(aBorder("cap"))));
 
         MeasureClosure.Both closed =
-                MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read);
+                MeasureClosure.of(List.of(aPosition()), List.of(), read);
 
         assertInstanceOf(MeasureClosure.OfTheBorder.Closed.class, closed.border(),
                 "every question this measure answers was answered");
@@ -65,7 +72,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.found(aLine(), bound("cap"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a line this reading found and did not draw"),
                 refused.getMessage());
@@ -87,7 +94,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.drew(aBorder("cap"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a line drawn more than once"),
                 refused.getMessage());
@@ -102,7 +109,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.drew(aBorder("floor"));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith("a border this reading cannot account for"),
                 refused.getMessage());
@@ -124,7 +131,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of(aBorder("cap"), aBorder("floor")));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith(
                         "a border returned by a reading that did not write it down"),
@@ -142,7 +149,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         read.returning(List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> MeasureClosure.of(List.of(aPosition()), List.of(), List.of(), read));
+                () -> MeasureClosure.of(List.of(aPosition()), List.of(), read));
 
         assertTrue(refused.getMessage().startsWith(
                         "a border this reading drew and did not return"),
@@ -155,16 +162,10 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         return PositionAccount.at("f", TermPath.of("h").then("a"), Type.INT);
     }
 
-    private static Axis anAxis() {
-        return new Axis(AT, new NumericTerm.ValueOf(TermPath.of("h").then("a")), Type.INT,
-                List.of(), List.of(Cut.at(Carrier.WHOLE, Count.of(5), bound("cap"))));
-    }
-
     private static BoundaryTarget aLine() {
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(AT,
-                        new NumericTerm.ValueOf(TermPath.of("h").then("a")),
-                        souther.compiler.inputs.TermOrders.itself(Carrier.WHOLE)),
+                new BorderQuantity.OfACoordinate(AT.behavior(), AT_A,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(AT_A, Carrier.WHOLE)),
                 new Level.OnACarrier(Carrier.WHOLE, Count.of(5)));
     }
 
@@ -174,10 +175,14 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
                         souther.compiler.numeric.Endpoint.inclusive(Count.of(5)), null));
     }
 
-    private static OriginRef bound(String clause) {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
-                java.util.Optional.of(new ClauseName(clause)))), 0,
+    private static LineOrigin bound(String clause) {
+        return new LineOrigin.InvariantOrigin(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.rate", "Amount")), 0),
+                                java.util.Optional.of(new ClauseName(clause)))), 0),
+                        0)),
                 souther.compiler.numeric.EndSide.LOWER, true);
     }
 }

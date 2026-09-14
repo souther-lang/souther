@@ -57,8 +57,8 @@ final class ChosenJvmExampleDeadlines implements JvmExampleDeadlines {
     }
 
     @Override
-    public Deadline forThisCompile(Duration outerTimeout) {
+    public Deadline forThisCompile(Duration compilerTimeout) {
         answeredWith = true;
-        return chosen.forThisCompile(outerTimeout);
+        return chosen.forThisCompile(compilerTimeout);
     }
 }

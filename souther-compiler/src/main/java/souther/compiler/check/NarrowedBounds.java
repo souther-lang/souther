@@ -60,7 +60,7 @@ public abstract sealed class NarrowedBounds {
      */
     static NarrowedBounds of(NumericDomain.Bounds bounds, List<TypeSymbol.AtModule> minBy,
                              List<TypeSymbol.AtModule> maxBy) {
-        return read(bounds, end(bounds, EndSide.LOWER, minBy), end(bounds, EndSide.UPPER, maxBy));
+        return read(end(bounds, EndSide.LOWER, minBy), end(bounds, EndSide.UPPER, maxBy));
     }
 
     /**
@@ -76,7 +76,7 @@ public abstract sealed class NarrowedBounds {
     static NarrowedBounds deferred(NumericDomain.Bounds bounds,
                                    Supplier<List<TypeSymbol.AtModule>> minBy,
                                    Supplier<List<TypeSymbol.AtModule>> maxBy) {
-        return read(bounds, deferredEnd(bounds, EndSide.LOWER, minBy),
+        return read(deferredEnd(bounds, EndSide.LOWER, minBy),
                 deferredEnd(bounds, EndSide.UPPER, maxBy));
     }
 
@@ -133,7 +133,7 @@ public abstract sealed class NarrowedBounds {
         if (met == null) {
             return NOTHING;
         }
-        return read(met, held(met, other, EndSide.LOWER), held(met, other, EndSide.UPPER));
+        return read(held(met, other, EndSide.LOWER), held(met, other, EndSide.UPPER));
     }
 
     /**
@@ -198,8 +198,7 @@ public abstract sealed class NarrowedBounds {
 
     /** One of these where either side has an end, and the coordinate nothing stops where neither
      *  does. */
-    private static NarrowedBounds read(NumericDomain.Bounds bounds, NarrowedEnd lower,
-                                       NarrowedEnd upper) {
+    private static NarrowedBounds read(NarrowedEnd lower, NarrowedEnd upper) {
         return lower == null && upper == null ? NOTHING : new Reading(lower, upper);
     }
 

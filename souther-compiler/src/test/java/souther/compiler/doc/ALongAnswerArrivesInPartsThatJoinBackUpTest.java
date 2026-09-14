@@ -349,7 +349,7 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
                 new PrintStream(listed, true, StandardCharsets.UTF_8), DOCUMENTS);
 
         List<String> cut = new ArrayList<>();
-        for (String line : listed.toString(StandardCharsets.UTF_8).split("\n")) {
+        for (String line : listed.toString(StandardCharsets.UTF_8).lines().toList()) {
             String name = line.substring(0, line.indexOf('\t'));
             List<String> parts = every(name);
             if (parts.size() > 1) {

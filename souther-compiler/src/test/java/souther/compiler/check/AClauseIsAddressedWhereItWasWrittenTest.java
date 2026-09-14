@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.WhereItSits;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Region;
 import souther.compiler.query.Compilation;
@@ -11,9 +12,9 @@ import souther.compiler.types.TypeSymbols;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -53,10 +54,10 @@ class AClauseIsAddressedWhereItWasWrittenTest {
 
     /** The text {@code region} underlines, cut out of {@code source}. */
     private static String underlined(String source, Region region) {
-        String line = source.split("\n", -1)[region.start().line() - 1];
-        int from = region.start().column() - 1;
-        int to = region.end().line() == region.start().line()
-                ? region.end().column() - 1 : line.length();
+        String line = source.split("\n", -1)[WhereItSits.in(source, region).start().line() - 1];
+        int from = WhereItSits.in(source, region).start().column() - 1;
+        int to = WhereItSits.in(source, region).end().line() == WhereItSits.in(source, region).start().line()
+                ? WhereItSits.in(source, region).end().column() - 1 : line.length();
         return line.substring(Math.min(from, line.length()), Math.min(to, line.length()));
     }
 
@@ -72,10 +73,13 @@ class AClauseIsAddressedWhereItWasWrittenTest {
 
     /** {@code Even}'s clauses as the discharge analysis reads them: helpers expanded. */
     private static List<Hir.InvariantClause> asExpanded(Compilation compilation) {
-        Map<TypeSymbol, List<Hir.InvariantClause>> declared = compilation.db()
-                .ask(new Shapes.InvariantsForDischarge(compilation.modules().get(0))).value();
-        assertNotNull(declared);
-        return declared.get(even(compilation));
+        String module = compilation.modules().get(0);
+        TypeSymbol.AtModule even = TypeSymbols.declared(new TypeKey(module, "Even"));
+        ExpandedClauseResult declared =
+                RuleReadings.of(compilation, module).invariants().of(even.key());
+        assertInstanceOf(ExpandedClauseResult.Found.class, declared);
+        return ((ExpandedClauseResult.Found) declared).clauses().clauses().stream()
+                .map(ExpandedClauses.Expanded::clause).toList();
     }
 
     /** {@code Even}'s clauses as the declaration writes them, with no helper expanded into them. */
@@ -84,8 +88,9 @@ class AClauseIsAddressedWhereItWasWrittenTest {
                 .ask(new Shapes.Prepared(compilation.modules().get(0))).value();
         assertNotNull(prepared);
         for (Derived.Def def : prepared.defs()) {
-            if (def.read() instanceof Hir.Data data && data.declares().equals(even(compilation))) {
-                return data.invariants();
+            if (def instanceof Derived.Data derived
+                    && derived.declaration().node().declares().equals(even(compilation))) {
+                return derived.declaration().node().invariants();
             }
         }
         throw new AssertionError("the module is supposed to declare `Even`");

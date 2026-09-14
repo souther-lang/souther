@@ -1,10 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -80,10 +77,23 @@ public final class NewtypeDesugar {
     public static Hir.Def rewriteInvariantsOf(Hir.Def def, Symbols symbols) {
         if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
             return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                    Hir.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                    d.decoder(), d.encoder(), d.pos());
+                    Hir.mapClauses(d.invariants(), inv -> rewriteInvariant(inv, symbols)),
+                    d.pos());
         }
         return def;
+    }
+
+    /**
+     * One rule written in an invariant, rewritten the same way whether it is the whole clause or one
+     * part of it.
+     *
+     * <p>Named rather than reached through a declaration, because a part of a clause is read
+     * alongside the clause it is a part of and the two have to say the same thing about the same
+     * text. Sent through the declaration instead, a part would have to be carried on a declaration
+     * built to hold it, and would then take whatever else rewriting a declaration comes to mean.
+     */
+    public static Hir.Expr rewriteInvariant(Hir.Expr invariant, Symbols symbols) {
+        return go(invariant, symbols);
     }
 
     private static Hir.Expr go(Hir.Expr e, Symbols symbols) {
@@ -97,18 +107,16 @@ public final class NewtypeDesugar {
                 TypeSymbol built = call.answered() != null
                         && call.answered().denotes() instanceof ValueName.OfType named
                         ? named.type() : null;
-                if (built != null && symbols.declarations().declaration(built) instanceof Hir.Data nt && nt.newtype()) {
-                    if (args.size() != 1) {
-                        throw CompileException.of(Diagnostic
-                                        .at(call.appliedAt())
-                                        .say(new DataMessage.ANewtypeWrapsOneValue(call.written(), String.valueOf(args.size()))).build());
-                    }
+                // The type name is the one the author applied, which a construction is named by. A
+                // callee denoting a type is one they wrote, so this holds wherever the branch is
+                // taken; asked of the callee it would be whatever a lowering had put there.
+                if (built != null && call.applied().name() instanceof WrittenName wrote
+                        && symbols.declaredNode(built) instanceof Hir.Data nt
+                        && nt.newtype() && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
-                    yield new Hir.NewData(
-                            new Hir.Name.Denoting(call.name(), built),
-                            List.of(new Hir.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), ConstructionOrigin.own(), call.pos(), call.region());
+                    yield Hir.NewData.fromApply(call, new Hir.Name.Denoting(wrote, built),
+                            List.of(new Hir.FieldInit("value", args.get(0), call.pos())));
                 }
                 yield call.withArgs(args);
             }
@@ -117,8 +125,7 @@ public final class NewtypeDesugar {
                 for (Hir.FieldInit fi : nd.inits()) {
                     inits.add(fi.withValue(go(fi.value(), symbols)));
                 }
-                yield new Hir.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.fields(),
-                        nd.pos(), nd.region());
+                yield nd.with(inits, nd.spreads());
             }
             case Hir.Neg neg -> new Hir.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
             case Hir.Binary bin ->
@@ -126,9 +133,9 @@ public final class NewtypeDesugar {
                             bin.origin(), bin.pos(), bin.region());
             case Hir.FieldAccess fa -> fa.withTarget(go(fa.target(), symbols));
             case Hir.RowCollection row -> new Hir.RowCollection(mapExprs(row.elements(), symbols),
-                    row.pos(), row.region());
-            case Hir.ListLit lit -> new Hir.ListLit(mapExprs(lit.elements(), symbols), lit.pos(),
-                    lit.region());
+                    row.origin(), row.pos(), row.region());
+            case Hir.ListLit lit -> new Hir.ListLit(mapExprs(lit.elements(), symbols), lit.origin(),
+                    lit.pos(), lit.region());
             case Hir.ListComp comp ->
                     new Hir.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols),
                             comp.origin(), comp.pos(),
@@ -144,7 +151,7 @@ public final class NewtypeDesugar {
                 for (Hir.Bound b : ex.bound()) {
                     bound.add(new Hir.Bound(b.binder(), b.declaredType(), go(b.value(), symbols)));
                 }
-                yield new Hir.Expansion(ex.callee(), ex.application(), bound, ex.given(),
+                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                         ex.declaredReturn(), go(ex.body(), symbols), ex.pos(), ex.region());
             }
             case Hir.If iff ->

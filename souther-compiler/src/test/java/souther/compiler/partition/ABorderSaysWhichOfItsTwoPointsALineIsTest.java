@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
@@ -10,10 +11,13 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Towards;
 import souther.compiler.check.Clause;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -82,8 +86,15 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void aClosedBorderIsAtItsOwnOnPoint() {
         String report = report(CLOSED);
 
-        assertTrue(report.contains("no row is at the ON point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the OFF point sized/n = 101"), report);
+        // The role is the point's and the value is the reading's, so the two are two lines and
+        // the pairing is what this test is about: read apart, `= 100` would answer for whichever
+        // role the report happened to print it under.
+        assertTrue(report.contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 100"""), report);
+        assertTrue(report.contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 101"""), report);
     }
 
     /**
@@ -97,8 +108,12 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     void anOpenBorderIsAtItsOwnOffPoint() {
         String report = report(OPENED);
 
-        assertTrue(report.contains("no row is at the OFF point sized/n = 100"), report);
-        assertTrue(report.contains("no row is at the ON point sized/n = 99"), report);
+        assertTrue(report.contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 100"""), report);
+        assertTrue(report.contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 99"""), report);
     }
 
     /**
@@ -110,8 +125,12 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theSameValueIsTheOtherPointUnderTheOtherOperator() {
-        assertTrue(report(CLOSED).contains("the ON point sized/n = 100"), report(CLOSED));
-        assertTrue(report(OPENED).contains("the OFF point sized/n = 100"), report(OPENED));
+        assertTrue(report(CLOSED).contains("""
+                the ON point (comparison@10:10)
+                          · read as sized/n: = 100"""), report(CLOSED));
+        assertTrue(report(OPENED).contains("""
+                the OFF point (comparison@10:10)
+                          · read as sized/n: = 100"""), report(OPENED));
     }
 
     /**
@@ -190,7 +209,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      * that stops short of its own line on a carrier that steps is refused rather than stepped here.
      *
      * <p>A continuous carrier has no step to take, so {@code value > 5.0m} on a {@code Decimal}
-     * reaches {@link OriginRef.InvariantOrigin} as an exclusive 5 — measured at the construction
+     * reaches {@link LineOrigin.InvariantOrigin} as an exclusive 5 — measured at the construction
      * site, where both kinds arrive. Where the rule stops is the line either way, and which value
      * the point against it stands at is the order's answer.
      *
@@ -207,13 +226,15 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     @Test
     void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
         Border kept = borderOf(
-                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                new LineOrigin.InvariantOrigin(
+                        theOnlyStatement(),
                         souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                () -> borderOf(new LineOrigin.InvariantOrigin(
+                        theOnlyStatement(),
                         souther.compiler.numeric.EndSide.LOWER, false)),
                 "a rule parting the values at 6 over a range that stops at 5 is two readings of one"
                         + " model that disagree");
@@ -223,9 +244,9 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */
-    private static Border borderOf(OriginRef origin) {
+    private static Border borderOf(LineOrigin origin) {
         Carrier carrier = new Carrier.Whole();
-        boolean admits = origin instanceof OriginRef.InvariantOrigin bound && bound.holdsAtTheValue();
+        boolean admits = origin instanceof LineOrigin.InvariantOrigin bound && bound.holdsAtTheValue();
         return Border.at(lineAt(new AxisId("take", "h.a"), carrier, Count.of(5)), origin,
                 new NumericDomain.Bounds(new Endpoint(Count.of(5), admits), null));
     }
@@ -247,9 +268,12 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         // the value below the cut is 99 — inside the partition and away from its border, which is
         // the IN point and neither of the two words against the line.
         Carrier carrier = new Carrier.Whole();
-        OriginRef closed = new OriginRef.EnsuresOrigin(
-                new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
-                THE_ONLY_CONJUNCT, true, true, false);
+        LineOrigin closed = new LineOrigin.EnsuresOrigin(
+                new WhichLine.OfAComparisonOfAPart(new ClauseStatementId(
+                        new souther.compiler.check.PartId<>(new RuleRef.Ensures(
+                                new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
+                                THE_ONLY_CONJUNCT), 0)),
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
         Border border = Border.at(lineAt(new AxisId("cap", "n"), carrier, Count.of(100)), closed,
                 new NumericDomain.Bounds(null, null));
 
@@ -262,7 +286,8 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
-        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+        Border bound = borderOf(new LineOrigin.InvariantOrigin(
+                        theOnlyStatement(),
                         souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));
@@ -275,11 +300,18 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     /** A line on one position's own values, at a place of its carrier. */
     private static BoundaryTarget lineAt(AxisId axis, Carrier carrier,
                                          souther.compiler.numeric.Place at) {
-        return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
+        return BoundaryTarget.at(new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, at));
+    }
+
+    /** The one statement of the one conjunct that clause was written in. */
+    private static DeclaredLine theOnlyStatement() {
+        return new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new PartId<>(invariant(), THE_ONLY_CONJUNCT), 0));
     }
 
     /** The clause the bound tests name, which is only an identity here. */
@@ -345,7 +377,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         JsonNode root = JsonMapper.builder().build()
-                .readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
+                .readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         List<String> out = new ArrayList<>();
         root.findValues("boundaries").forEach(each -> each.forEach(
                 b -> b.get("items").forEach(i -> out.add(i.get("point").asString() + ":"
@@ -357,6 +389,6 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

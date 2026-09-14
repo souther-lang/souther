@@ -1,11 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
-import souther.compiler.diag.Citation;
+import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -42,12 +49,12 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
      */
     @Test
     void twoPiecesOfEvidenceUnderOneNameAreRefusedWhereTheyAreHandedOver() {
-        LineEvidence one = dividing("10");
-        LineEvidence other = dividing("20");
+        RuleEvidence one = dividing("10");
+        RuleEvidence other = dividing("20");
         assertEquals(one.id(), other.id(), "the same rule and the same number");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new EvidenceAccount(List.of(one, other)));
+                () -> new EvidenceAccount(List.of(one, other), List.of()));
 
         assertTrue(refused.getMessage().startsWith("two pieces of evidence are called"),
                 refused.getMessage());
@@ -61,13 +68,13 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
      */
     @Test
     void onePieceHandedOverTwiceIsOnePiece() {
-        LineEvidence one = dividing("10");
+        RuleEvidence one = dividing("10");
 
-        EvidenceAccount account = new EvidenceAccount(List.of(one, one));
+        EvidenceAccount account = new EvidenceAccount(List.of(one, one), List.of());
         account.measured(one, new AxisId("f", AT.toString()));
 
         account.everyPieceWasDisposedOf(List.of(new Axis(new AxisId("f", AT.toString()), AT,
-                souther.compiler.types.Type.INT, List.of(),
+                List.of(),
                 List.of(Cut.at(new Carrier.Whole(),
                         new Count(new java.math.BigDecimal("10")), origin())))));
     }
@@ -75,7 +82,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
     /** A piece disposed of under a name belonging to another is refused. */
     @Test
     void aPieceDisposedOfUnderAnothersNameIsRefused() {
-        EvidenceAccount account = new EvidenceAccount(List.of(dividing("10")));
+        EvidenceAccount account = new EvidenceAccount(List.of(dividing("10")), List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> account.measured(dividing("20"), new AxisId("f", AT.toString())));
@@ -83,25 +90,30 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
         assertTrue(refused.getMessage().contains("under the name of"), refused.getMessage());
     }
 
-    private static LineEvidence dividing(String at) {
-        return new LineEvidence.Divides(new Threshold(AT,
+    private static RuleEvidence dividing(String at) {
+        return new RuleEvidence.Divides(new Threshold(AT,
                 Seam.of(LevelSpace.onACarrier(new Carrier.Whole()),
                         new Level.OnACarrier(new Carrier.Whole(),
                                 new Count(new java.math.BigDecimal(at))),
                         Towards.BELOW),
-                true, origin()));
+                Towards.BELOW, origin()));
     }
+
+    /** The numbering this fixture's places are of. One of them, so that two origins built here
+     *  address one place rather than the same number of two numberings. */
+    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
 
     /** One rule, written in one place. Two lines of it are told apart by where they part the
      *  values, which is what the account may not be asked to do by name alone. */
-    private static OriginRef origin() {
-        return new OriginRef.ComparisonOrigin(
-                new RuleRef.Comparison("f", new souther.compiler.types.CoverageOrigin(
-                        "example.one", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence(0),
-                        new RuleCitation.WrittenAt(Citation.of(
-                                new souther.compiler.diag.SourcePos(1, 1)))),
-                true, true, false);
+    private static LineOrigin origin() {
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.one", "f"), 2, 0, SourceConstruct.BINARY);
+        return new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("f", wrote),
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(WHERE)),
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

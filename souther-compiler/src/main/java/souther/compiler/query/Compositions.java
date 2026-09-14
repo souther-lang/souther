@@ -4,9 +4,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Unanswerable;
-import souther.compiler.core.Composition;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -29,7 +28,7 @@ public final class Compositions {
     private Compositions() {}
 
     /** Every composed behavior this module declares, by the name it is reached by. */
-    public record Of(String name) implements Key<Map<ValueName.Behavior, Composition>> {
+    public record Of(String name) implements Key<Map<ValueName.Behavior, souther.compiler.core.Composition>> {
 
         @Override
         public String module() {
@@ -37,21 +36,22 @@ public final class Compositions {
         }
 
         @Override
-        public Answer<Map<ValueName.Behavior, Composition>> compute(Db db) {
+        public Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Map<ValueName.Behavior, Sig>> sigs = db.ask(new Bodies.Reachable(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!lowering.present() || !sigs.present() || !scope.present()) {
                 return Answer.absent();
             }
             Hir.Module module = lowering.value().lowered();
             Map<ValueName.Behavior, List<Hir.Var>> stages = PipelineSigs.pipelineStages(module);
-            Map<ValueName.Behavior, Composition> out = new LinkedHashMap<>();
+            Map<ValueName.Behavior, souther.compiler.core.Composition> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : module.behaviors()) {
                 if (behavior instanceof Hir.PipeBehavior pipe) {
                     try {
                         out.put(new ValueName.Behavior(module.name(), pipe.name()),
-                                PipelineSigs.composition(pipe, sigs.value(), scope.value(), stages));
+                                PipelineSigs.composition(pipe, sigs.value(),
+                                        Shapes.publishedDeclarations(db), stages));
                     } catch (Unanswerable _) {
                         // A stage that names nothing was reported where it was written, and this
                         // composition has nothing to route. Left out for the reason its signature

@@ -1,10 +1,7 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -41,38 +38,40 @@ public sealed interface Position permits ReadPosition {
      *  writes it as. */
     TypeView view();
 
-    /** Which number this position is measured at: what it holds, or what its rules take of it.
-     *  Answered by this position, since that is where the reading found it. */
-    NumericTerm.FromOnePosition term();
-
-    /** What every rule reaching the position leaves its numbers, or null where nothing bounds them.
-     *  Not where it is divided: a cap the record alone imposes stops the values without drawing a
-     *  line through them. */
-    NumericDomain.Bounds numericDomain();
-
-    /** Where the position's own type says its values stop, with the declarations that said so. */
-    DeclaredBounds.Bounds ownEnds();
-
     /**
-     * What the value the position sits in projects onto it, and which declarations hold each end.
+     * What the rules leave each of the position's numbers, one entry per number.
      *
-     * <p>One answer. Which declarations hold an end is worked out against that end by taking their
-     * clauses away, so it is true of that number and of no other — and a position under a case is
-     * read by two values whose ends are met here. Answered apart, the names came back from a reading
-     * whose end lies further out than the one the position stops at.
+     * <p><b>There is no number that stands for the position.</b> A {@code String} has its own order
+     * and the length of it, and a rule about either is a rule about that one — so which of them a
+     * class divides, which of them a line lies on and which of them a range is a range of are
+     * answered by the number, never by the position. Answered with one chosen number, a rule about
+     * the other has to be either mislabelled or thrown away, and both were done here.
+     *
+     * <p>Which numbers there are is the type's answer and not the rules'. What stands at the
+     * position is always one of them; the second is there where the type declares an operation that
+     * counts its values. A rule mentioning some other number of the place — what an absolute value
+     * comes to, say — is a rule about a number the position has not, and it gets no entry here.
+     *
+     * <p>An entry exists wherever a number does, whatever the rules said about it. A number nobody
+     * bounded has an entry saying so, because "no rule wrote about this" and "this position has no
+     * such number" are different answers and only the second is about the model.
      */
-    NarrowedBounds narrowedEnds();
+    List<PositionBounds> bounds();
 
-    /**
-     * Where this position stops once every rule reaching the value it sits in has been taken in.
-     *
-     * <p>Beside {@link #narrowedEnds} and not the same question. That one is what the value this
-     * sits in projects onto it, which a newtype's own value has nobody to be projected onto it by;
-     * this is where the position starts and stops, whatever placed the ends and whatever moved them
-     * afterwards. A caller deciding where a line actually falls wants this, because a clause placing
-     * an end is not a clause that read the ones written beside it.
-     */
-    NumericDomain.Bounds rangeLeft();
+    /** The numbers this position has, which is what {@link #bounds()} is keyed by. */
+    default List<NumericTerm.FromOnePosition> numbers() {
+        return bounds().stream().map(PositionBounds::term).toList();
+    }
+
+    /** What the rules leave {@code term}, or null where the position has no such number. */
+    default PositionBounds boundsFor(NumericTerm.FromOnePosition term) {
+        for (PositionBounds each : bounds()) {
+            if (each.term().equals(term)) {
+                return each;
+            }
+        }
+        return null;
+    }
 
     /** Whether the rules of the value this position sits in contradict, so that no value of it
      *  exists to have positions at all. */
@@ -126,6 +125,22 @@ public sealed interface Position permits ReadPosition {
     Admits admissionOf(TypeSymbol leaf);
 
     /**
+     * The same, of the distinction a narrowing names.
+     *
+     * <p>What a reader holding a {@code match} arm has. An arm is written by a name, and a name is
+     * not a distinction of a position: an optional's carriers name none of them, and a case that is
+     * itself a sum names the leaves under it rather than any one of them. Asked by name, such an
+     * arm is answered {@link Unsettlement.NoSuchDistinction} — which is true, and is a fact about
+     * the key rather than about the model, so a caller reading it as the position falling short
+     * reports a limit of this compiler as an answer about what the rules leave (#1252).
+     *
+     * <p>So the key is the narrowing, which is what both vocabularies agree on
+     * ({@link Refinement}), and what an arm covers is asked of every distinction it reaches
+     * ({@link Refinement#allOf}).
+     */
+    Admits admissionOf(Refinement narrowing);
+
+    /**
      * How much of what the rules say about this position's values one reading took in.
      *
      * <p>That reading's account of itself, and nothing else. Nothing downstream decides anything
@@ -138,8 +153,25 @@ public sealed interface Position permits ReadPosition {
      * <p>Kept because the two are different answers and saying so is what stops them being merged
      * again: a position can carry a partial reading here and no question standing there, and a test
      * that could not state the pair could not hold the difference.
+     *
+     * <p>Read off what the position admits, which carries both: the values its rules leave and how
+     * much of those rules a reading took in are one answer, and a position that kept only the
+     * second could not say what a behavior's rules have left to divide.
      */
-    AdmissibleSet.Completeness completeness();
+    default AdmissibleSet.Completeness completeness() {
+        return admitted().completeness();
+    }
+
+    /**
+     * What the position's own rules leave it, and how much of them was read.
+     *
+     * <p>Kept whole rather than as the completeness alone. What a behavior's rules divide is what
+     * the declarations left standing here — an invariant restricts and a behavior divides what is
+     * left — so a reader composing classes out of the strings rather than out of these would draw a
+     * class the position never holds a value in, and a rule the position rules out would come back
+     * dividing it.
+     */
+    AdmissibleSet admitted();
 
     /**
      * The questions the rules written about this position raise that nothing answered, each naming
@@ -184,17 +216,6 @@ public sealed interface Position permits ReadPosition {
     Set<RulesLeftUnread> rulesLeftUnread();
 
     /**
-     * What stopped the reading of which values this position may hold, or null where nothing did.
-     *
-     * <p>{@link #completeness()} said in the vocabulary a report is projected from. Kept apart from
-     * whatever left a <em>bound</em> unread: a rule stating where the values stop and a rule naming
-     * which values there are are read by different readers of the same clause, and only the second
-     * is what decides whether an absence of classes may be reported as the model stating no
-     * division.
-     */
-    BlockReason.ReadingStopReason valuesUnread();
-
-    /**
      * The rules written about this position that the reading of ends drew no line from.
      *
      * <p>Both ways of there being none. A rule that reading got partway through, and one it read
@@ -216,11 +237,33 @@ public sealed interface Position permits ReadPosition {
     List<RuleWithoutALine> rulesWithoutALine();
 
     /**
+     * The ends of rules written here that the reading of ends did not work out, each under the
+     * choice an author is sent to for it.
+     *
+     * <p>Beside {@link #rulesWithoutALine()} and not read out of it. That list is what a report
+     * says became of a rule at this position, and what it says is the same sentence about a rule
+     * this compiler read to the end and about one it did not — which is why it holds neither
+     * measure open. This is the other question: whether the reading that draws lines here ran out,
+     * which a rule read to the end never leaves it doing.
+     *
+     * <p><b>Every one of them, and not only the ones a choice is answerable for.</b> Whether the
+     * line here was derived and whether there is a clause to send an author to are two questions,
+     * and an end nobody can be sent anywhere about is as underived as one they can. Kept to the
+     * second, an end left open beside an alternative nobody can be in went out as a model that
+     * draws no line.
+     *
+     * <p>One entry per choice, because two of them leaving one end open are two things to lift and
+     * lifting either leaves the end where it was. What they leave short is the one line, and that
+     * is folded where the measure is ({@code ClosureGap.LineNotDerived}).
+     */
+    List<EndLeftOpen> endsLeftOpen();
+
+    /**
      * Whether the values at this position are read from a product this reading cannot show the
      * rules admit.
      *
-     * <p>Beside {@link #valuesUnread()} and answering a different question. That one says what
-     * stopped the reading; this one is true where nothing stopped it — every rule arrived and every
+     * <p>Beside {@link #reading()} and answering a different question. That one says what stopped
+     * the reading; this one is true where nothing stopped it — every rule arrived and every
      * rule was taken in, and what is held is one set per position standing for a relation the two
      * of them cannot state. Read off {@link #completeness()} rather than carried, since it is the
      * same fact said in the vocabulary a caller here already has.

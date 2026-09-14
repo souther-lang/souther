@@ -1,8 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
@@ -30,17 +35,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AFillIsTotalOverThePlanItWasAskedWithTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
-    private static final Generator.ClassOwed A_CLASS =
-            new Generator.ClassOwed(new AxisId("fee", "days"), "days/low");
+    private static final ClassOfAPosition A_CLASS =
+            new ClassOfAPosition(new AxisId("fee", "days"), "days/low");
 
-    private static final Generator.ClassOwed ANOTHER_CLASS =
-            new Generator.ClassOwed(new AxisId("fee", "days"), "days/high");
+    private static final ClassOfAPosition ANOTHER_CLASS =
+            new ClassOfAPosition(new AxisId("fee", "days"), "days/high");
 
-    private static final Generator.ArmOwed AN_ARM = new Generator.ArmOwed(1);
+    /** Two places of one numbering, so that the arms below are addresses of one. */
+    private static final Map<Integer, ArmProbe> PLACES = Numberings.arms(3);
 
-    private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(2);
+    private static final ArmProbe ARM = PLACES.get(1);
+
+    private static final ArmProbe ANOTHER = PLACES.get(2);
+
+    private static final Generator.ArmOwed AN_ARM = new Generator.ArmOwed(ARM);
+
+    private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(ANOTHER);
 
     private static final Generator.UnresolvedCombination NOTHING_CAME_OF_IT =
             new Generator.UnresolvedCombination(List.of("days=low"),
@@ -94,7 +107,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      */
     @Test
     void aClassWithNothingUnderItIsNotAnAnswer() {
-        Map<Generator.ClassOwed, ClassDisposition> nothing = new LinkedHashMap<>();
+        Map<ClassOfAPosition, ClassDisposition> nothing = new LinkedHashMap<>();
         nothing.put(A_CLASS, null);
 
         assertThrows(IllegalArgumentException.class,
@@ -133,7 +146,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void aRowNothingPointsAtIsRefused() {
         LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1))));
+        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
 
         assertThrows(IllegalStateException.class,
                 () -> new FillResult(planOver(List.of(A_CLASS), List.of()), composed, List.of(),
@@ -148,26 +161,31 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void aRunThatAnsweredForEverythingItWasAskedIsBuilt() {
         LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1))));
+        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
 
         FillResult filled = new FillResult(planOver(List.of(A_CLASS), List.of(AN_ARM)), composed,
                 List.of(), List.of(), new Discharge(
                         Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
-                        Map.of(AN_ARM, new ArmDisposition.Built(new RowId(0)))));
+                        Map.of(AN_ARM, new ArmDisposition.Built(new RowId(0), ARM))));
 
         assertEquals(1, filled.rows().size(), "one line, offered for both");
     }
 
-    private static GenerationPlan planOver(List<Generator.ClassOwed> classes,
+    private static GenerationPlan planOver(List<ClassOfAPosition> classes,
                                            List<Generator.ArmOwed> arms) {
-        Axis days = new Axis(new AxisId("fee", "days"),
+        souther.compiler.inputs.NumericTerm.ValueOf atDays =
                 new souther.compiler.inputs.NumericTerm.ValueOf(
-                        souther.compiler.inputs.TermPath.of("days")),
-                Type.INT, List.of(divided("days/low", 1), divided("days/high", 9)), List.of());
-        Generator.Subject subject = new Generator.Subject("fee",
-                new BehaviorInputs(List.of("days"), List.of(Type.INT), SYMBOLS,
-                        ReadAs.THE_COMPILATION_DOES),
-                List.of(days), HeldCounts.NONE);
+                        souther.compiler.inputs.TermPath.of("days"));
+        Axis days = new Axis(new AxisId("fee", "days"), atDays,
+                List.of(divided("days/low", 1).ofTheNumber(atDays),
+                        divided("days/high", 9).ofTheNumber(atDays)),
+                List.of());
+        MeasuredInput subject = MeasuredInput.of("fee",
+                souther.compiler.inputs.InputDomain.of(
+                        List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
+                                Type.INT)),
+                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
+                AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return new GenerationPlan(subject, classes, arms);
     }
 

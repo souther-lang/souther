@@ -1,21 +1,19 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -39,35 +37,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reaches whatever the two of them reach. A key moved to another object is caught wherever it lands,
  * and an object added later is checked without being told about.
  *
- * <p><b>It is not a validator, and it refuses to look like one.</b> What it understands is the set
- * of keywords listed in {@link #UNDERSTOOD}; meeting any other is a failure rather than something
- * skipped, because a walk that steps over what it does not know is a check that stops saying
- * anything the moment the schema grows — which is how the check it replaces came to pass over a
- * document with twenty-seven violations in it.
+ * <p><b>It is not a validator, and it refuses to look like one.</b> The walk is
+ * {@link DocumentShape}, which fails on a keyword it does not understand rather than stepping over
+ * it — a walk that skips what it does not know is a check that stops saying anything the moment the
+ * schema grows, which is how the check it replaces came to pass over a document with twenty-seven
+ * violations in it.
  */
 class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
-
-    /**
-     * The keywords this knows what to do with.
-     *
-     * <p>Two kinds. Some decide which keys an object may have and must have, and are what this is
-     * about; the rest constrain a value and are none of its business — but they are listed all the
-     * same, so that a keyword the schema gains is a decision somebody makes here rather than a
-     * silence.
-     */
-    private static final Set<String> UNDERSTOOD = Set.of(
-            // the shape of an object, which is the whole of what this checks
-            "properties", "required", "additionalProperties", "items", "$ref",
-            // compositions: their branches are read for the keys they allow, never for what they
-            // require, since which branch a value took is not this walk's question
-            "oneOf", "anyOf", "allOf", "if", "then", "else", "not", "dependentRequired",
-            // constraints on a value, which say nothing about keys
-            "type", "enum", "const", "minimum", "pattern", "minItems", "maxItems",
-            "uniqueItems", "contains", "minContains", "maxContains",
-            // prose and plumbing
-            "description", "title", "$schema", "$id", "$defs");
 
     /** A model whose report reaches a measure of every kind, made in full, in part, and not at all. */
     private static final String MODEL = """
@@ -84,17 +62,49 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
             behavior unwritten : (r: R) -> Found | Missing
 
+            behavior named : (r: R) -> Found | Missing
+            let named (r) = if r.a == 7 then Found else Missing
+
+            // Rules about the strings at a position, which a document names the way it names a
+            // comparison. Both places a behavior states one, because the identity a document
+            // carries says which of the two wrote it — and each tells nothing apart, which is what
+            // gets the rule named in the report rather than only measured.
+            behavior sorting : (code: String) -> Found | Missing
+                ensures Found -> String.startsWith("", code)
+            let sorting (code) = if String.startsWith("", code) then Found else Missing
+
             example f
                 | "one" : (R { a = 1 }) -> Missing
+
+            example named
+                | "seven" : (R { a = 7 }) -> Found
             """;
 
     @Test
     void aDocumentThisWritesIsShapedTheWayTheSchemaSays() {
-        Walk walk = new Walk(schema());
-        walk.of(document(), "");
-        assertTrue(walk.objects > 20,
-                () -> "the model reaches the objects of the document: " + walk.objects);
-        assertEquals(List.of(), walk.wrong, "what the schema shipped beside this refuses");
+        DocumentShape.Read read = DocumentShape.of(document());
+        assertTrue(read.objects() > 20,
+                () -> "the model reaches the objects of the document: " + read.objects());
+        // And the conditions the schema states were put to it, which is what tells a document this
+        // walk agrees with from one that holds none of the shapes they are about.
+        assertTrue(read.conditions() > 0,
+                () -> "the model reaches what the schema states conditions about: "
+                        + read.conditions());
+        assertEquals(List.of(), read.wrong(), "what the schema shipped beside this refuses");
+    }
+
+    /**
+     * The same of any document, for a test that can make one this cannot.
+     *
+     * <p>What a measure comes to where it runs out of what it may spend is written in shapes this
+     * model never reaches: every default is set with room over anything in this repository, so
+     * saying what the budget is is the only way there — and that knob is deliberately reachable
+     * only from where the measures live. So the walk is offered rather than the document asked for,
+     * and the check stays one check over one schema.
+     */
+    public static void assertShapedLikeTheSchema(JsonNode document) {
+        assertEquals(List.of(), DocumentShape.of(document).wrong(),
+                "what the schema shipped beside this refuses");
     }
 
     /**
@@ -126,8 +136,9 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 "the branch forbids what it does not name, rather than naming what it forbids");
         Set<String> named = new java.util.LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
-        assertEquals(Set.of("point", "notOwed"), named,
-                "and what it names is which point it is and why no row is owed there");
+        assertEquals(Set.of("point", "location", "notOwed"), named,
+                "and what it names is which point of the border it is, where on the quantity it is,"
+                        + " and why no row is owed there");
     }
 
     /**
@@ -146,9 +157,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         int taken = strip(without, "writableBecause");
         assertTrue(taken > 0, "the document carries the key, or this strips nothing");
 
-        Walk walk = new Walk(schema());
-        walk.of(without, "");
-        assertEquals(List.of(), walk.wrong,
+        assertEquals(List.of(), DocumentShape.of(without).wrong(),
                 "the shipped schema refuses a document written before the key existed");
     }
 
@@ -191,154 +200,15 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         }
         assertTrue(!answers.isEmpty(), "there is an answer checked in");
 
-        JsonNode schema = schema();
         List<String> wrong = new ArrayList<>();
         for (Path each : answers) {
-            Walk walk = new Walk(schema);
-            walk.of(JSON.readTree(read(each)), each.getFileName().toString());
-            wrong.addAll(walk.wrong);
+            wrong.addAll(DocumentShape.of(JSON.readTree(read(each))).wrong());
         }
         assertEquals(List.of(), wrong, "an answer the schema shipped beside it refuses");
     }
 
-    /** The document and the schema, walked together. */
-    private static final class Walk {
-
-        private final JsonNode schema;
-        private final List<String> wrong = new ArrayList<>();
-        private int objects;
-
-        Walk(JsonNode schema) {
-            this.schema = schema;
-        }
-
-        void of(JsonNode node, String at) {
-            of(node, schema, at);
-        }
-
-        private void of(JsonNode node, JsonNode declared, String at) {
-            JsonNode said = resolved(declared);
-            understand(said, at);
-            if (node.isObject()) {
-                objects++;
-                Set<String> may = declaredIn(said);
-                if (closed(said)) {
-                    node.propertyNames().forEach(key -> {
-                        if (!may.contains(key)) {
-                            wrong.add(at + ": the schema declares no `" + key + "` here");
-                        }
-                    });
-                }
-                // Only what the object itself requires. Which branch of a composition a value took
-                // is a question about the value, and answering it here would report a document as
-                // short of a key another branch asks for.
-                if (said.has("required")) {
-                    said.get("required").forEach(key -> {
-                        if (!node.has(key.asString())) {
-                            wrong.add(at + ": the schema requires a `" + key.asString() + "` here");
-                        }
-                    });
-                }
-                node.properties().forEach(entry -> {
-                    JsonNode under = declares(said, entry.getKey());
-                    if (under != null) {
-                        of(entry.getValue(), under, at + "/" + entry.getKey());
-                    }
-                });
-            } else if (node.isArray()) {
-                JsonNode items = itemsOf(said);
-                if (items != null) {
-                    for (int i = 0; i < node.size(); i++) {
-                        of(node.get(i), items, at + "[" + i + "]");
-                    }
-                }
-            }
-        }
-
-        /** Every keyword of this schema object, held to what this walk was taught. */
-        private void understand(JsonNode said, String at) {
-            said.propertyNames().forEach(keyword -> {
-                if (!UNDERSTOOD.contains(keyword)) {
-                    wrong.add(at + ": `" + keyword + "` is a keyword this walk was never taught,"
-                            + " and stepping over one is how a check stops saying anything");
-                }
-            });
-        }
-
-        private JsonNode resolved(JsonNode said) {
-            JsonNode at = said;
-            while (at.has("$ref")) {
-                String name = at.get("$ref").asString();
-                at = schema.get("$defs").get(name.substring(name.lastIndexOf('/') + 1));
-                assertNotNull(at, () -> "the schema refers to " + name + " and does not define it");
-            }
-            return at;
-        }
-
-        /** Whether an undeclared key is a refusal here, which is what makes this worth asking. */
-        private boolean closed(JsonNode said) {
-            JsonNode more = said.get("additionalProperties");
-            return more != null && more.isBoolean() && !more.booleanValue();
-        }
-
-        /** Every key this object may have, over the object itself and every branch beside it. */
-        private Set<String> declaredIn(JsonNode said) {
-            Set<String> out = new LinkedHashSet<>();
-            if (said.has("properties")) {
-                said.get("properties").propertyNames().forEach(out::add);
-            }
-            for (String branch : List.of("oneOf", "anyOf", "allOf")) {
-                if (said.has(branch)) {
-                    said.get(branch).forEach(each -> out.addAll(declaredIn(resolved(each))));
-                }
-            }
-            for (String arm : List.of("if", "then", "else", "not")) {
-                if (said.has(arm)) {
-                    out.addAll(declaredIn(resolved(said.get(arm))));
-                }
-            }
-            return out;
-        }
-
-        /** Where the schema says what is under one key, or null where it says nothing. */
-        private JsonNode declares(JsonNode said, String key) {
-            if (said.has("properties") && said.get("properties").has(key)) {
-                return said.get("properties").get(key);
-            }
-            for (String branch : List.of("oneOf", "anyOf", "allOf")) {
-                if (said.has(branch)) {
-                    for (JsonNode each : said.get(branch)) {
-                        JsonNode under = declares(resolved(each), key);
-                        if (under != null) {
-                            return under;
-                        }
-                    }
-                }
-            }
-            for (String arm : List.of("then", "else")) {
-                if (said.has(arm)) {
-                    JsonNode under = declares(resolved(said.get(arm)), key);
-                    if (under != null) {
-                        return under;
-                    }
-                }
-            }
-            return null;
-        }
-
-        private JsonNode itemsOf(JsonNode said) {
-            return said.has("items") ? said.get("items") : null;
-        }
-    }
-
     private static JsonNode schema() {
-        try (InputStream in =
-                     AdequacyReport.class.getResourceAsStream(AdequacyReport.SCHEMA_RESOURCE)) {
-            assertNotNull(in, AdequacyReport.SCHEMA_RESOURCE + " ships beside the compiler");
-            return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
-        } catch (IOException cannotRead) {
-            throw new UncheckedIOException(cannotRead);
-        }
+        return DocumentShape.schema();
     }
 
     private static String read(Path at) {
@@ -350,9 +220,12 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
     }
 
     private static JsonNode document() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        return reportOf(Compilation.ofSource(MODEL, "Main"));
+    }
+
+    private static JsonNode reportOf(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
+        return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 }

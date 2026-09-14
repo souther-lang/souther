@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -131,6 +132,20 @@ public record SuppliedRules(Map<BindingOwner, Handed> byExpansion) {
                     throw new IllegalArgumentException(
                             "a rule told apart by which block it is was written by some source");
                 }
+            }
+
+            /**
+             * What wrote the block, which is half of what tells this rule from every other — the
+             * other half being the number counted within it.
+             *
+             * <p>Any of them, and nothing here narrows it. A rule handed in at a call site is
+             * whatever expression the caller wrote there, and a caller is whatever wrote the call: a
+             * clause of a {@code data} hands one in as readily as a body does, and so does a value
+             * written in an {@code example} row. What a reader of this can be told about each is a
+             * question for whoever is telling them.
+             */
+            public WrittenOwner writtenBy() {
+                return rule.owner();
             }
         }
     }

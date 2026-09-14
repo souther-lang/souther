@@ -2,12 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.query.Adequacy;
@@ -34,13 +34,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAClauseDrawsALineOnTest {
 
+    /** The number the line below is on, which its orders are the orders of. */
+    private static final souther.compiler.inputs.NumericTerm.ValueOf AT_ID =
+            new souther.compiler.inputs.NumericTerm.ValueOf(
+                    souther.compiler.inputs.TermPath.of("id"));
+
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, StatedContract> stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value();
         InputDomain inputs =
@@ -48,7 +53,7 @@ class WhatAClauseDrawsALineOnTest {
         assertTrue(prepared.behaviors().stream()
                         .anyMatch(b -> b instanceof Hir.SpecBehavior && b.name().equals(behavior)),
                 "the behavior under test is declared");
-        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, symbols);
+        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, rules);
     }
 
     private static List<String> valuesOf(EnsuresThresholds.Clauses clauses) {
@@ -72,9 +77,12 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(1, clauses.thresholds().size(), valuesOf(clauses).toString());
         Threshold line = clauses.thresholds().get(0);
         assertEquals("id", line.path().toString());
-        assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
-        assertTrue(((OriginRef.EnsuresOrigin) line.origin()).valueBelongsBelow(),
-                "`> 0` puts the zero on the low side, so the row beside it is the one above");
+        assertInstanceOf(LineOrigin.EnsuresOrigin.class, line.origin());
+        assertEquals(new souther.compiler.check.ComparisonClaim.Cut(
+                        souther.compiler.numeric.Towards.BELOW, false),
+                ((LineOrigin.EnsuresOrigin) line.origin()).facts().claim(),
+                "`> 0` puts the zero on the low side and is not met there, so the row beside it is"
+                        + " the one above");
     }
 
     /** And the clause is named the way a reader will look for it: by the name its author gave it. */
@@ -91,7 +99,7 @@ class WhatAClauseDrawsALineOnTest {
                     ensures asked = NotFound -> id.value > 0
                 """, "findTodo");
 
-        assertEquals("ensures findTodo (asked)", clauses.thresholds().get(0).origin().named());
+        assertEquals("ensures findTodo (asked)", clauses.thresholds().get(0).origin().saidWithoutAPlace());
     }
 
     /** Where the author named no clause, the case the arm is about is what is left to say. */
@@ -108,7 +116,7 @@ class WhatAClauseDrawsALineOnTest {
                     ensures NotFound -> id.value > 0
                 """, "findTodo");
 
-        assertEquals("ensures findTodo (NotFound)", clauses.thresholds().get(0).origin().named());
+        assertEquals("ensures findTodo (NotFound)", clauses.thresholds().get(0).origin().saidWithoutAPlace());
     }
 
     /**
@@ -213,8 +221,10 @@ class WhatAClauseDrawsALineOnTest {
                 """, "look");
 
         assertEquals(List.of(), valuesOf(clauses));
-        assertEquals(List.of(), clauses.rulesWithoutALine(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; what it draws no line at is a decision and not a limit");
+        assertEquals(List.of(), clauses.noLine().unclassified(),
+                "and nothing about it went unclassified");
         assertEquals(List.of(), clauses.between(),
                 "and it is not a line between two inputs either: what it relates is the answer,"
                         + " which is what the classification says of it");
@@ -249,8 +259,10 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "the line is on the answer, and a row has none");
         assertEquals(List.of(), clauses.between(), "and it is not a line between two inputs");
-        assertEquals(List.of(), clauses.rulesWithoutALine(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; that it draws no line is a decision and not a limit");
+        assertEquals(List.of(), clauses.noLine().unclassified(),
+                "and nothing about it went unclassified");
 
     }
 
@@ -275,19 +287,19 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
-        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE),
-                Border.at(BoundaryTarget.at(
-                                        new BorderQuantity.OfACoordinate(
-                                                new AxisId("findTodo", "id"),
-                                                new souther.compiler.inputs.NumericTerm.ValueOf(
-                                                        souther.compiler.inputs.TermPath.of("id")),
-                                                souther.compiler.inputs.TermOrders.itself(
-                                                        new Carrier.Whole())),
-                                        new Level.OnACarrier(new Carrier.Whole(),
-                                                clauses.singled().get(0).value())),
-                                clauses.singled().get(0).origin(),
-                                null).demand(PointRole.OFF),
-                "a value singled out orders nothing around it, so neither neighbour is the nearer");
+        Border singled = Border.at(BoundaryTarget.at(
+                        new BorderQuantity.OfACoordinate("findTodo", AT_ID,
+                                souther.compiler.inputs.TermOrdersFixtures
+                                        .itself(AT_ID, new Carrier.Whole())),
+                        new Level.OnACarrier(new Carrier.Whole(),
+                                clauses.singled().get(0).value())),
+                clauses.singled().get(0).origin(), null);
+        assertEquals(List.of("ON = 0", "OFF below the line = -1", "OFF above the line = 1"),
+                singled.answers().keySet().stream().filter(DomainPoint::againstTheLine)
+                        .map(point -> singled.named(point) + " = " + singled.against(point))
+                        .toList(),
+                "the value a clause singles out, and the nearest value on each side of it, which"
+                        + " are the two the clause keeps out");
     }
 
     /**
@@ -320,8 +332,12 @@ class WhatAClauseDrawsALineOnTest {
 
             assertEquals(1, clauses.thresholds().size(),
                     () -> measure + " draws a line: " + valuesOf(clauses));
-            assertEquals(List.of(), clauses.rulesWithoutALine(),
-                    () -> measure + " was read, so nothing says otherwise: " + clauses.rulesWithoutALine());
+            assertEquals(List.of(), clauses.noLine().reported(),
+                    () -> measure + " was read, so nothing says otherwise: "
+                            + clauses.noLine().reported());
+            assertEquals(List.of(), clauses.noLine().unclassified(),
+                    () -> measure + " was read, so nothing about it is unclassified: "
+                            + clauses.noLine().unclassified());
             assertTrue(clauses.thresholds().get(0).term() instanceof NumericTerm.TakenOf,
                     () -> measure + " is a line on the measure: "
                             + clauses.thresholds().get(0).term());
@@ -379,7 +395,8 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(List.of("a.n"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList());
+                clauses.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList());
     }
 
     /**
@@ -413,7 +430,7 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals("book/from = to",
                 line.cut().named() + " = " + line.cut().right());
         assertEquals("from = to", line.label());
-        assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
+        assertInstanceOf(LineOrigin.EnsuresOrigin.class, line.origin());
         // The line divides neither position and still has two sides: a row where `from` is under
         // `to` is inside it and one where `from` is over `to` is outside, which is as much a
         // coverage item as the row on the line.
@@ -426,7 +443,7 @@ class WhatAClauseDrawsALineOnTest {
                 line.demand(PointRole.IN).criterion().asked(line.cut().of()));
         assertEquals("in to < from", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
         assertEquals(List.of("from", "to"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList());
+                clauses.noLine().reported().stream().map(each -> each.at().toString()).toList());
     }
 
     /**
@@ -503,8 +520,9 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "nothing here reads a line out of that form");
         assertEquals(List.of("id"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList(),
-                "and the position it is about is named rather than passed over");
+                clauses.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "and the place it was filed at is named rather than passed over");
     }
 
     /** A behavior stating nothing draws nothing, and asking is not an error. */

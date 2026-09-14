@@ -1,11 +1,18 @@
 package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Owed;
+import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.ProjectionEvidence;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
@@ -15,6 +22,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +36,8 @@ import java.util.List;
  * how {@code interval.startsAt < cap} stopped reaching {@code interval.startsAt}.
  */
 record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoReaching,
-                   souther.compiler.values.Allowance<TermPath> sets) {
+                   souther.compiler.values.Allowance<TermPath> sets,
+                   DeclarationReadings machines) {
 
     /**
      * The value this case was narrowed out of, whose rules name some of the same positions.
@@ -45,40 +54,17 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * something has a rule of that name, a clause of a case would answer for the same field of every
      * other.
      *
-     * @param outer  the rules of the value the narrowing was taken from
-     * @param sum    where that value's sum stands, which is where the narrowing was taken
-     * @param branch which case was taken
-     * @param shared the names the cases share, which are the only ones that cross
+     * @param outer    the rules of the value the narrowing was taken from
+     * @param crossing the narrowing, and which of the value above's names reach across it. Held and
+     *                 not spelled out again here: where a name written above stands is one fact,
+     *                 and this reading is one of the two that ask it
      */
-    record Reaching(PlacedRules outer, TermPath sum, Refinement branch, java.util.Set<String> shared) {
+    record Reaching(PlacedRules outer, SharedNames crossing) {
 
-        Reaching {
-            shared = java.util.Set.copyOf(shared);
-        }
-
-        /**
-         * What the value above calls the position at {@code here}, or null where it calls it
-         * nothing.
-         *
-         * <p>The narrowing taken back out, which is what a name written above means down here: a row
-         * at {@code h.q@A.limit} writes the {@code limit} a clause of {@code h} called
-         * {@code q.limit}, and the two differ by the step that says which case the value turned out
-         * to be. Null for the case itself and for anything under a name the cases do not share,
-         * which is every position the value above cannot name.
-         */
+        /** What the value above calls the position at {@code here}, or null where it calls it
+         *  nothing. */
         TermPath outerPathOf(TermPath here) {
-            List<TermPath.Step> steps = here.steps();
-            int narrowing = sum.steps().size();
-            if (steps.size() <= narrowing + 1
-                    || !(steps.get(narrowing) instanceof TermPath.Step.Refine taken)
-                    || !taken.refinement().equals(branch)
-                    || !(steps.get(narrowing + 1) instanceof TermPath.Step.Field field)
-                    || !shared.contains(field.name())) {
-                return null;
-            }
-            List<TermPath.Step> without = new ArrayList<>(steps.subList(0, narrowing));
-            without.addAll(steps.subList(narrowing + 1, steps.size()));
-            return new TermPath(here.head(), without);
+            return crossing.outerPathOf(here);
         }
     }
 
@@ -97,21 +83,52 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
      */
-    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy) {
-        return of(root, type, symbols, policy, null);
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
+                          ReadingPolicy policy) {
+        return of(root, type, source, policy, null, DeclarationReadings.NONE);
+    }
+
+    /** The same, asking {@code machines} for what somebody has already made of the value's string
+     *  rules before building any of it. */
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
+                          ReadingPolicy policy, DeclarationReadings machines) {
+        return of(root, type, source, policy, null, machines);
     }
 
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */
-    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy,
-                          Reaching alsoReaching) {
-        TypeSymbol read = readAs(type, symbols);
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source, ReadingPolicy policy,
+                          Reaching alsoReaching, DeclarationReadings machines) {
+        TypeSymbol read = readAs(type, source.symbols(), source.published());
         // One composer for this reading, made where the reading is. What {@link #admits} builds is
         // the set a position of this value finally admits, met out of the rules here and the rules
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        return new PlacedRules(root, read, Rules.of(read, symbols, policy), alsoReaching,
-                souther.compiler.values.Allowance.ofAdmittedValues());
+        return new PlacedRules(root, read, Rules.of(read, source, policy, machines), alsoReaching,
+                policy.allowanceForAdmittedValues(answersFor(read, machines).lending()),
+                machines);
+    }
+
+    /**
+     * The answers about the string machines of the declaration {@code read} names, or none where it
+     * names no declaration of a module.
+     *
+     * <p>What is lent to an allowance and to the questions {@link #answers()} serves, and not a
+     * reading's own answers — a reading makes those where it is made, and this is asked again each
+     * time because one of them is not a value and this is inside an answer. So the empty case is
+     * {@link StringMachineAnswers#NONE} and not a reading's: there is nothing here for anything to
+     * keep what it builds for.
+     */
+    private static StringMachineAnswers answersFor(TypeSymbol read, DeclarationReadings machines) {
+        return read instanceof TypeSymbol.AtModule at
+                ? machines.of(at.key()) : StringMachineAnswers.NONE;
+    }
+
+    /** The answers about the string machines of the value these rules are read of — the ones a
+     *  question put to {@link #bounds()} is answered from, since that is the declaration whose
+     *  reading made them. */
+    StringMachineAnswers answers() {
+        return answersFor(value, machines);
     }
 
     /**
@@ -139,8 +156,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * a reading of one value has nothing to say about a position in another, and answering with a
      * name would be this value's rules read at somebody else's position.
      */
-    private String keyOf(TermPath path) {
-        return path.fieldKeyUnder(root);
+    private RuleKey keyOf(TermPath path) {
+        return path.ruleKeyUnder(root);
     }
 
     /** What the rules leave the numbers, ends and narrowings of this value. */
@@ -164,9 +181,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Rule by rule, and every question each of them raised. What a reading holds afterwards is
         // what the rules came to together — a field two clauses narrow is one narrowed field — so an
         // account taken from there is one either clause can go missing from with nothing to see.
-        bounds().accounting().forEach((rule, accounting) ->
+        bounds().accounting().values().forEach(accounting ->
                 accounting.answers().keySet().forEach(owed ->
-                        out.add(PlacementSeed.of(root, owed, rule, accounting.cited()))));
+                        out.add(PlacementSeed.of(root, owed, accounting.cited()))));
         return List.copyOf(out);
     }
 
@@ -176,7 +193,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * <p>The value's own paths and not this input's: what a caller out here calls {@code p.x} is
      * {@code x} to the rules of the value {@code p} holds, and the translation is the caller's.
      */
-    FieldDomains.Settled given(java.util.Map<FieldDomains.Coordinate,
+    FieldDomains.Settled given(java.util.Map<NumberAt<RuleKey>,
             souther.compiler.numeric.Count> settled) {
         return bounds().given(settled);
     }
@@ -185,12 +202,12 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
      * <p>Nothing at a position inside a sequence, and nothing at the value's own path. The clauses
-     * read here relate the fields of a record ({@link TermPath#fieldKey}), and neither of those is
-     * one of them.
+     * read here relate the fields of a record ({@link TermPath#ruleKeyUnder}, since the value this
+     * is of need not be the parameter), and neither of those is one of them.
      */
     NarrowedBounds at(TermPath path) {
-        String where = keyOf(path);
-        NarrowedBounds here = where == null || where.isEmpty() ? NarrowedBounds.NOTHING
+        RuleKey where = keyOf(path);
+        NarrowedBounds here = where == null || where.isTheValueItself() ? NarrowedBounds.NOTHING
                 : bounds().at(where);
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -208,8 +225,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * in, which is not the same as what {@link #at} projects onto it.
      */
     NumericDomain.Bounds leftAt(TermPath path,
-                                souther.compiler.check.FieldDomains.CoordinateKind kind) {
-        String where = keyOf(path);
+                                NumberAt.OfWhatNumber kind) {
+        RuleKey where = keyOf(path);
         NumericDomain.Bounds here = where == null ? null : bounds().leftAt(where, kind);
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -225,9 +242,13 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * <p>Asked at every path, the value's own included: what a name wraps is at no path of its own
      * and is the position a reader of a newtype asks about, which is why this is not the empty
      * answer where {@link #at} is.
+     *
+     * @param valuesAt what stands at the position, through whatever names it is written under. What
+     *                 a rule about a number taken of it leaves is a set of those values, so which
+     *                 shape they are is what says whether there is such a set to be written
      */
-    AdmissibleSet admits(TermPath path) {
-        AdmissibleSet here = rules.admits(under(path));
+    AdmissibleSet admits(TermPath path, souther.compiler.types.Type valuesAt) {
+        AdmissibleSet here = narrowedByWhatItCounts(rules.admits(under(path)), path, valuesAt);
         TermPath above = alsoAt(path);
         if (above == null) {
             return here;
@@ -235,12 +256,13 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // What both leave, and short of what either was short of. A value the case admits and the
         // value above refuses stands nowhere, and a rule either of them could not read leaves the
         // set wider than the rules are however completely the other was read.
-        AdmissibleSet outer = alsoReaching.outer().admits(above);
+        AdmissibleSet outer = alsoReaching.outer().admits(above, valuesAt);
         // Spent from this reading's own allowance, which is what every position of it is met out
         // of. The two sides were read from two declarations and each was read in full where it was
         // written; what is being built here is a third set, the one this position finally admits.
-        souther.compiler.values.Allowance.Composed made =
-                sets.meet(path, here.approximation(), outer.approximation());
+        souther.compiler.values.Allowance.Composed made = sets.meet(
+                souther.compiler.values.Sameness.Block.of(path),
+                here.approximation(), outer.approximation());
         AdmissibleSet.Completeness read = bothRead(here.completeness(), outer.completeness());
         // And where it was not built, that is not a rule going unread. Both rules were read; what
         // was not worked out is what they leave between them, and a reader told a rule went unread
@@ -248,6 +270,37 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         return new AdmissibleSet(made.set(), made.gaveUp()
                 ? alsoWidened(read, new AdmissibleSet.Widening.ExactValuesTooCostly())
                 : read);
+    }
+
+    /**
+     * {@code here} with what the rules about a number taken of the position leave met into it.
+     *
+     * <p>Of this reading's own rules and not of what reaches it from above. The value this was
+     * narrowed out of narrows its own set the same way, where its own allowance is spent, and the
+     * two are put together below like everything else — done here for both, the rules of the value
+     * above would be met in twice, and what a run of an automaton costs is not the same twice.
+     *
+     * <p>A run this cannot say the values of leaves them as they stood. Nothing is written down for
+     * it: what the set is short of is what a rule leaves, and a run whose values have no spelling
+     * here is one the reading never took in — which is what the set already says of itself.
+     */
+    private AdmissibleSet narrowedByWhatItCounts(AdmissibleSet here, TermPath path, Type valuesAt) {
+        FieldDomains.CountLeft counted = rules.bounds().countLeftAt(under(path));
+        if (counted == null) {
+            return here;
+        }
+        souther.compiler.values.AdmittedPlan leaves =
+                ProjectionPreimage.of(valuesAt, counted.by(), counted.left());
+        if (leaves == null) {
+            return here;
+        }
+        // Spent from this reading's allowance, which is what every position of it is met out of.
+        souther.compiler.values.Allowance.Composed made = sets.meet(
+                souther.compiler.values.Sameness.Block.of(path), here.approximation(), leaves);
+        return new AdmissibleSet(made.set(), made.gaveUp()
+                ? alsoWidened(here.completeness(),
+                        new AdmissibleSet.Widening.ExactValuesTooCostly())
+                : here.completeness());
     }
 
     /** The same completeness, and one more thing standing between the set and the rules. */
@@ -292,7 +345,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * to it, one position down (#1072).
      */
     boolean handsTheRulesOnAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         return where != null && bounds().handedOn().contains(where);
     }
 
@@ -307,7 +360,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * for a range.
      */
     List<RuleAccounting.Unanswered> unanswered(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         if (where == null) {
             return List.of();
         }
@@ -316,7 +369,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 accounting.unansweredQuestions().stream()
                         .filter(each -> switch (each.owed()) {
                             case Owed.AdmittedValues it -> it.path().equals(where);
-                            case Owed.Boundary it -> it.on().path().equals(where);
+                            case Owed.Boundary it -> it.on().position().equals(where);
                         })
                         .forEach(out::add));
         TermPath above = alsoAt(path);
@@ -325,6 +378,37 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         }
         return List.copyOf(out);
     }
+
+    /**
+     * The rules reaching this value that nothing worked out what they raise at {@code path}, each
+     * with the rule and what stopped there.
+     *
+     * <p>Beside the questions and not among them, for the reason they are told apart at all: a
+     * question names what has to be answered and this names a place where nothing knows what the
+     * question is. Both hold the measures open, and which of the two a reader is being told is
+     * what says whether there is anything to go and answer.
+     */
+    List<RuleUnclassifiedAt> unclassified(TermPath path) {
+        RuleKey where = keyOf(path);
+        if (where == null) {
+            return List.of();
+        }
+        List<RuleUnclassifiedAt> out = new ArrayList<>();
+        bounds().accounting().values().forEach(accounting ->
+                accounting.undetermined().stream()
+                        .filter(each -> each.at().equals(where))
+                        .forEach(each ->
+                                out.add(new RuleUnclassifiedAt(accounting.cited(), each))));
+        TermPath above = alsoAt(path);
+        if (above != null) {
+            out.addAll(alsoReaching.outer().unclassified(above));
+        }
+        return List.copyOf(out);
+    }
+
+    /** How a reader finds the rule, which says which rule it is, and one place its classification
+     *  did not come out. */
+    record RuleUnclassifiedAt(RuleCitation cited, Requirement.BoundaryUndetermined at) {}
 
     /**
      * How much of what the rules say the bounds at {@code path} are able to state.
@@ -426,8 +510,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * reading is opened at it, so a path under this root never steps into one — and a position this
      * reading is not of is not a position it may be asked about.
      */
-    private String under(TermPath path) {
-        String where = keyOf(path);
+    private RuleKey under(TermPath path) {
+        RuleKey where = keyOf(path);
         if (where == null) {
             throw new IllegalArgumentException(
                     path + " is not a position of the value read at " + root);
@@ -438,9 +522,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
      *  a different question from what {@link #at} leaves them. */
     List<FieldDomains.Placed> placedAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         List<FieldDomains.Placed> here =
-                where == null || where.isEmpty() ? List.of() : bounds().placedAt(where);
+                where == null || where.isTheValueItself() ? List.of() : bounds().placedAt(where);
         TermPath above = alsoAt(path);
         if (above == null) {
             return here;
@@ -454,6 +538,61 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The ends a conjunct that placed none moved at the value this reading is opened at.
+     *
+     * <p>What {@link #placedAt} leaves out. The ends of a value's own coordinates are read off the
+     * clauses as they are written, which is a reading that sees no end where no comparison places
+     * one — so an end such a conjunct moved is invisible there, and is here.
+     *
+     * <p>Only the value's own. Everything under it is a position of its own and is answered at that
+     * position, by {@link #placedAt}, which does not leave these out.
+     */
+    List<FieldDomains.Placed> movedAtTheValue() {
+        return bounds().movedEnds().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
+     * The ends the value's own conjuncts state on its own coordinates.
+     *
+     * <p>What {@link #placedAt} leaves out for the same reason it leaves the moved ones out: the
+     * ends of a value's own coordinates are read off the clauses as they are written, and this is
+     * the rest of them. A rule about the strings at a position leaves them running from one place
+     * to another and states no comparison, so that reading sees nothing of it.
+     *
+     * <p>The comparisons are here too and are not left out. An end two readings both saw is one
+     * end drawn by one conjunct of one rule, and putting the two together is what
+     * {@link souther.compiler.check.DeclaredBounds.End#tighter} does with them — a second copy adds
+     * no name and moves nothing.
+     */
+    List<FieldDomains.Placed> statedAtTheValue() {
+        return bounds().stated().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
+     * The same, and the moved ones beside them, for a reader asking about one position.
+     *
+     * <p><b>Whose ends these are is this reading's answer and not the asker's.</b> They are the
+     * ends of the value the reading is opened at, so at any other position they are ends of another
+     * value — and a reader that took them anyway would be holding the root's ends against the
+     * numbers of whatever it happened to be reading. That was a silent nothing while the only thing
+     * done with them was to keep the ones on the position's own number, and stops being one the
+     * moment somebody asks what became of each of them.
+     */
+    List<FieldDomains.Placed> ownEndsAt(TermPath path) {
+        RuleKey where = keyOf(path);
+        if (where == null || !where.isTheValueItself()) {
+            return List.of();
+        }
+        List<FieldDomains.Placed> out = new ArrayList<>(statedAtTheValue());
+        out.addAll(movedAtTheValue());
+        return List.copyOf(out);
+    }
+
+    /**
      * The rules saying where the coordinate at {@code path} stops that no end came out of.
      *
      * <p>At every path the value has, its own included — unlike {@link #placedAt}, whose empty
@@ -461,7 +600,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * not given twice by anybody, and a newtype's own clause is where the question started.
      */
     List<FieldDomains.NoLine> noLineAt(TermPath path) {
-        String where = keyOf(path);
+        RuleKey where = keyOf(path);
         List<FieldDomains.NoLine> here = where == null ? List.of() : bounds().noLineAt(where);
         TermPath above = alsoAt(path);
         if (above == null) {
@@ -473,6 +612,26 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The rules whose end at {@code path} a choice in them left open.
+     *
+     * <p>Asked of every reading that reaches the position, as the rules with no line are: a clause
+     * of the value this position sits in and a clause of its own type are two ways of saying where
+     * its values stop, and a choice in either of them leaves the same end open.
+     */
+    List<FieldDomains.EndLeftOpen> endsLeftOpenAt(TermPath path) {
+        RuleKey where = keyOf(path);
+        List<FieldDomains.EndLeftOpen> here =
+                where == null ? List.of() : bounds().endsLeftOpenAt(where);
+        TermPath above = alsoAt(path);
+        if (above == null) {
+            return here;
+        }
+        List<FieldDomains.EndLeftOpen> out = new ArrayList<>(here);
+        out.addAll(alsoReaching.outer().endsLeftOpenAt(above));
+        return List.copyOf(out);
+    }
+
+    /**
      * The clauses of this value's declarations that no end came out of, once each.
      *
      * <p>For the reading that draws lines rather than places ends. A rule relating two coordinates
@@ -480,27 +639,30 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * part — so it is handed over as a clause, with the path the value it is written about stands
      * at, and read there in the vocabulary a line is drawn in.
      *
-     * <p>Once per conjunct, not once per coordinate. The same conjunct is filed at each coordinate
-     * it names, which is what a reader after a position wants and what a reader after a rule must
-     * not have: taken as they are filed, {@code lo <= hi} would draw its line twice and owe two
-     * rows where the model states one thing.
+     * <p>One per comparison the reading arrived at, which is what it is handed. A conjunct read at
+     * several places of one value is one conjunct and is handed on once; a conjunct stating several
+     * comparisons — which is what a conjunction an author wrote as a denied choice is — states each
+     * of them, and each is a rule this reading has something to do with. Both are settled where the
+     * conjuncts are read and arrive that way, so there is nothing to work out again here: counted
+     * by the rule alone, the second comparison of one conjunct was the first said again and never
+     * reached the reading below.
      *
      * <p>Not what any of them came to. Which of these is a line is the drawing reading's answer,
      * and this reading's word for why it drew none is no part of the question — the two read the
      * same clause with different atoms, and a clause set aside here is one the other may read.
+     *
+     * <p><b>What was handed on, and not what was reported.</b> Read off the findings, this carried
+     * whatever the reading of ends owed an author a sentence about — so a rule that names a value,
+     * which places no end and is nothing anyone has to lift, could not be passed along at all.
      */
     List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
-        java.util.Map<Key, ClauseWithoutAnEnd> once = new java.util.LinkedHashMap<>();
-        for (FieldDomains.NoLine each : bounds().noLines()) {
-            once.putIfAbsent(new Key(each.from(), each.conjunct()),
-                    new ClauseWithoutAnEnd(each.from(), each.conjunct(), each.part(), root,
-                            bounds().named()));
-        }
-        return List.copyOf(once.values());
+        return bounds().withoutAnEnd().stream()
+                .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
+                        each.root(),
+                        root,
+                        bounds().named()))
+                .toList();
     }
-
-    /** What makes two of them one: the clause, and which of its conjuncts. */
-    private record Key(souther.compiler.check.RuleRef.Invariant rule, int conjunct) {}
 
     /**
      * The declaration a value of {@code type} is read under: the name the signature wrote where it
@@ -511,11 +673,12 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
      * declaration that may have no clause about the pair at all.
      */
-    private static TypeSymbol readAs(Type type, Symbols symbols) {
+    private static TypeSymbol readAs(Type type, Symbols symbols,
+                                     PublishedDeclarations published) {
         TypeSymbol written = nameOf(type);
         return written != null
-                && symbols.declarations().declaration(written) instanceof Hir.Data
-                ? written : heldIn(type, symbols);
+                && symbols.declaredNode(written) instanceof Hir.Data
+                ? written : heldIn(type, symbols, published);
     }
 
     /**
@@ -527,16 +690,18 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * refuses from being called writable. So the answer falls back to the name the signature wrote
      * rather than to nothing.
      */
-    private static TypeSymbol heldIn(Type type, Symbols symbols) {
-        TypeSymbol record = recordIn(type, symbols);
+    private static TypeSymbol heldIn(Type type, Symbols symbols,
+                                     PublishedDeclarations published) {
+        TypeSymbol record = recordIn(type, symbols, published);
         return record != null ? record : nameOf(type);
     }
 
     /** The record a position holds, through the names it is written under: a value of
      *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
      *  {@code Slot}'s. */
-    private static TypeSymbol recordIn(Type type, Symbols symbols) {
-        return TypeView.of(type, symbols).shape() instanceof Shape.Product product
+    private static TypeSymbol recordIn(Type type, Symbols symbols,
+                                       PublishedDeclarations published) {
+        return TypeView.asWritten(type, symbols, published).shape() instanceof Shape.Product product
                 ? product.name() : null;
     }
 

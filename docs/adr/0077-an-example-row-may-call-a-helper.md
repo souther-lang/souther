@@ -1,6 +1,6 @@
 # ADR-0077: An example row may call a helper
 
-Status: Accepted. Extends ADR-0072, builds on ADR-0032 and ADR-0075.
+Status: Accepted. Extends ADR-0072, builds on ADR-0032 and ADR-0075. What bounds a row is amended by ADR-0052's counted budget and by #1159.
 
 ## Context
 
@@ -57,6 +57,14 @@ What settles them is the elaboration the operand goes through, which is the one 
 **The budget is the row's.** Running the operands, re-materialising, decoding, applying the behavior and comparing the result are one evaluation under the existing per-row wall-clock budget, so a row cannot buy more time by calling more helpers. A row that does not finish is E1910. It named the helper it was in until #681 and stopped answering there, the register having nothing left to write to it; #743 removed the wording. An operand is compiled code, so where execution has got to inside it is the JVM's and not something this compiler holds. Answering it again would mean instrumenting the operand to publish its own provenance, which is a different thing from anything decided here.
 
 **A row that cannot build its expected value says so.** E1905 is a mismatch between two values, and is reported only when both exist; an expected value that cannot be built is E1903 under its own message, naming the expected position. A `with` value that cannot be built is E1908 under its own message, told apart from the dependency that has no fake at all. Both are wrong answers today independently of anything above, and are corrected first.
+
+### Amended: what bounds a row, and what a row that does not finish is told
+
+The paragraph above says the evaluation is one under a per-row wall-clock budget and that a row which does not finish is `E1910`. Both were true when it was written and neither is now, and what it was deciding — that the whole of a row is one evaluation, so calling more helpers buys no more of anything — is untouched by either change.
+
+What decides a row is counted rather than timed (ADR-0052). A row that passes more counted points than the policy allows, or recurses deeper than it allows, is `E1910`, and that reading is the same on every host. The clock is beside it and is a different question: it bounds the compiler's own time, and a row that spends it is `E1923` — the compiler failing to answer, not the model failing to terminate.
+
+And the clock is over what the compiler owns, not over everything the row's thread passes through. A row driven from a Java binding reaches an implementation supplied from outside, which answers out of the caller's world; what it takes there is bounded by whoever owns that world and is not counted against the row (#1159). So "the budget is the row's" holds for both readings, with the clock's half of it saying: of the row's own time, the part this compiler is spending.
 
 ## Consequences
 

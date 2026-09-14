@@ -1,7 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.SourcePos;
+import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 
@@ -174,6 +177,58 @@ class IncrementalCompilationTest {
         return c.db().ask(new Output.Classes("shop.prices")).value();
     }
 
+    /** A module that writes definitions of its own before the declaration an importer names — one
+     *  the importer reads through and one nothing at all reads. */
+    private static final String PRICES_WITH_HELPERS = """
+            module shop.prices exposing ( Amount )
+
+            let floor = 0
+
+            let describe (n: Int): Int = n
+
+            data Amount = Int
+                invariant value >= floor
+            """;
+
+    /** Names `Amount` and nothing else of it. */
+    private static final String CART_OF_AMOUNT = """
+            module shop.cart exposing ( Total )
+
+            import shop.prices ( Amount )
+
+            data Total = { paid: Amount }
+
+            let ten = Amount(10)
+            """;
+
+    /**
+     * And an edit to a body written <em>before</em> the declaration leaves the importer alone as
+     * well. What a construct was numbered as is part of the declaration the importer builds
+     * against, so a count over the file put every definition of a module into every importer's
+     * dependency: editing a helper no importer can name renumbered the comparison in `Amount`'s
+     * invariant, `Amount` came out different, and every module that imported it was compiled again
+     * to the same class files.
+     */
+    @Test
+    void editingABodyWrittenBeforeADeclarationDoesNotReachAnImporterEither() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("prices.sou", PRICES_WITH_HELPERS);
+        byId.put("cart.sou", CART_OF_AMOUNT);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        Map<String, String> edited = new LinkedHashMap<>();
+        edited.put("prices.sou", PRICES_WITH_HELPERS.replace("Int = n\n", "Int = n + 1\n"));
+        edited.put("cart.sou", CART_OF_AMOUNT);
+        c.update(edited, Set.of());
+        c.answerEverything();
+
+        assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
+                "`describe` is written before `Amount` and is none of shop.cart's business");
+    }
+
     /** Two behaviors and a helper both of them call, in one module. */
     private static final String ORDERS = """
             module shop.orders exposing ( Amount )
@@ -191,6 +246,99 @@ class IncrementalCompilationTest {
                 constructs Amount
             let thrice (n) = Amount(n.value * 3)
             """;
+
+    /**
+     * Where a place is said from decides what an edit reaches, and these are the three shapes that
+     * settle it.
+     *
+     * <p>A place is which meaningful token of which top-level construct it is at. So writing a
+     * token moves the places after it <b>in that construct</b> and no further; writing whitespace,
+     * a line break or a comment moves nothing at all; and writing a construct moves the constructs
+     * after it. Held here because the first of the three was lost once: counted over the whole
+     * text rather than from the construct, a token typed into one body moved every declaration
+     * under it, which is the commonest edit an author makes and the one this is all for.
+     */
+    @Test
+    void aTokenWrittenInOneBodyLeavesThePlacesOfTheNextDeclarationWhereTheyWere() {
+        SourceLayout before = SourceLayout.of(ORDERS, new SourceId("orders.sou"));
+        SourceLayout after = SourceLayout.of(
+                twiceOver("doubled(n.value + 0)").get("orders.sou"), new SourceId("orders.sou"));
+
+        assertEquals(placeOf(before, "n.value * 3"), placeOf(after, "n.value * 3"),
+                "`thrice` is written after the edit and says what it said");
+        assertNotEquals(placeOf(before, "doubled"), placeOf(after, "n.value + 0"),
+                "and the edit did move what follows it inside `twice`");
+    }
+
+    /** A comment or a line break is not a token, so nothing in the file is anywhere else. */
+    @Test
+    void aCommentWrittenInOneBodyLeavesEveryPlaceInTheFileWhereItWas() {
+        SourceLayout before = SourceLayout.of(ORDERS, new SourceId("orders.sou"));
+        SourceLayout after = SourceLayout.of(
+                ORDERS.replace("let twice (n)", "// doubling\n\nlet twice (n)"),
+                new SourceId("orders.sou"));
+
+        assertEquals(placeOf(before, "doubled(n.value)"), placeOf(after, "doubled(n.value)"),
+                "the body the comment was written above");
+        assertEquals(placeOf(before, "n.value * 3"), placeOf(after, "n.value * 3"),
+                "and the declaration after it");
+    }
+
+    /** Writing a construct moves the constructs after it, which is the conservative half. */
+    @Test
+    void aDeclarationWrittenInTheMiddleMovesThePlacesOfTheOnesAfterIt() {
+        SourceLayout before = SourceLayout.of(ORDERS, new SourceId("orders.sou"));
+        SourceLayout after = SourceLayout.of(
+                ORDERS.replace("behavior thrice", "data Other = Int\n\nbehavior thrice"),
+                new SourceId("orders.sou"));
+
+        assertNotEquals(placeOf(before, "n.value * 3"), placeOf(after, "n.value * 3"),
+                "`thrice` is one construct further down than it was");
+        assertEquals(placeOf(before, "doubled(n.value)"), placeOf(after, "doubled(n.value)"),
+                "and what was written above it is where it was");
+    }
+
+    /**
+     * And the tree the front end builds out of it is the same tree, regions and all.
+     *
+     * <p>The three above ask the layout what it answers. This asks what is made of those answers,
+     * because a region has two ends and the checks above compare places a node begins at. The end
+     * is the half that can be got wrong on its own: the offset a token ends at is the offset the
+     * next one starts at wherever nothing separates them, so an end read as an offset belonged to
+     * whichever token came next and moved back onto its own the moment a space was written between
+     * them. Nothing about the module had changed and every region closing on such a token was a
+     * different value.
+     *
+     * <p>Compared as the whole parsed module, so that every place and every region the tree carries
+     * is in the claim rather than the ones a test thought to name.
+     */
+    @Test
+    void aSpaceWrittenBetweenTwoTokensLeavesTheParsedModuleThatSameValue() {
+        String glued = ORDERS;
+        String spaced = ORDERS.replace("let twice (n)", "let twice  ( n )")
+                .replace("Amount(doubled(n.value))", "Amount( doubled(n.value) )");
+        assertNotEquals(glued, spaced, "the two texts differ, or this compares a text to itself");
+
+        assertEquals(parsed(glued), parsed(spaced),
+                "a space between two tokens leaves every place and every region as it was");
+        assertNotEquals(parsed(glued), parsed(glued.replace("n.value * 3", "n.value * 3 + 0")),
+                "and a token written in does move what follows it, which is the conservative half");
+    }
+
+    /** The module the front end reads out of {@code source}, places and regions and all. */
+    private static Ast.Module parsed(String source) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("orders.sou", source);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), () -> "the model parses: " + c.db().allReports());
+        return c.db().ask(new Front.Parsed(new SourceId("orders.sou"))).value().module();
+    }
+
+    /** The place the first character of {@code written} is at in {@code laidOut}'s text. */
+    private static SourcePos placeOf(SourceLayout laidOut, String written) {
+        return laidOut.placeAt(laidOut.text().indexOf(written));
+    }
 
     /** One behavior calling another, both requiring nothing. */
     private static final String CALLS = """
@@ -215,10 +363,19 @@ class IncrementalCompilationTest {
         return c;
     }
 
-    /** The same workspace with {@code thrice}'s body changed — an edit inside one definition, made
-     * at the end of the file so nothing before it moves. */
-    private static Map<String, String> thriceTimes(String factor) {
-        return Map.of("orders.sou", ORDERS.replace("n.value * 3)", "n.value * " + factor + ")"));
+    /**
+     * The same workspace with {@code twice}'s body changed — an edit inside one definition, written
+     * where it moves no line of the definitions after it.
+     *
+     * <p>{@code twice} and not {@code thrice}, and an operation more rather than a different number
+     * written in one. What the two tests below hold is that a body is none of the business of the
+     * one beside it, and the way that used to fail was a count over the whole file: an edit that
+     * wrote one construct more renumbered every construct after it. Both halves are needed to reach
+     * it — an edit to the last definition has nothing after it to renumber, and an edit that leaves
+     * the count where it was renumbers nothing.
+     */
+    private static Map<String, String> twiceOver(String written) {
+        return Map.of("orders.sou", ORDERS.replace("doubled(n.value)", written));
     }
 
     /**
@@ -232,13 +389,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
         Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
-                "the edit is `thrice`'s, so it is expanded again");
-        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
-                "`twice` says what it said, and `thrice` is not part of it");
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
+                "the edit is `twice`'s, so it is expanded again");
+        assertSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
+                "`thrice` says what it said, and `twice` is not part of it");
     }
 
     /**
@@ -251,13 +408,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
         Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
-                "the edit is `thrice`'s, so it is checked again");
-        assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
-                "`twice` is checked against `behavior twice`, which says what it said");
+        assertNotSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "the edit is `twice`'s, so it is checked again");
+        assertSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
+                "`thrice` is checked against `behavior thrice`, which says what it said");
     }
 
     /**

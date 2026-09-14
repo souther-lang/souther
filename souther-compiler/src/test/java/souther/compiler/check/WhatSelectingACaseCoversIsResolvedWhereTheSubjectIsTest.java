@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.Refinement;
@@ -20,7 +22,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * What selecting a case covers, and where that is worked out.
@@ -54,6 +56,10 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     private final Hir.Module module = resolved(MODULE);
     private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
+    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+
+    private final DeclarationKinds forms = ScopedDeclarations.kindsOf(symbols);
+
     @Test
     void aCaseThatIsASumCoversTheLeavesUnderIt() {
         assertEquals(List.of("Station", "Hospital"), covered("VisitKind", "OnceKind"),
@@ -83,7 +89,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     @Test
     void theAtomsOfACaseComeInTheOrderItDeclaresThem() {
         assertEquals(List.of("Station", "Hospital", "Renkei"),
-                CaseSpace.of(type("VisitKind"), symbols).selectors().stream()
+                CaseSpace.of(type("VisitKind"), forms, said).selectors().stream()
                         .flatMap(each -> each.atoms().stream()).map(TypeSymbol::name).toList());
     }
 
@@ -97,11 +103,11 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
      */
     @Test
     void anOptionalsCarrierCoversItselfAndNotWhatItHolds() {
-        CaseSpace space = CaseSpace.of(Type.option(type("VisitKind")), symbols);
+        CaseSpace space = CaseSpace.of(Type.option(type("VisitKind")), forms, said);
         assertInstanceOf(CaseSpace.Optional.class, space);
-        ResolvedCase some = space.selector(TypeSymbol.SOME, symbols);
+        ResolvedCase some = space.selector(TypeSymbol.SOME, said);
         assertEquals(List.of(TypeSymbol.SOME), some.atoms());
-        assertEquals(List.of(TypeSymbol.NONE), space.selector(TypeSymbol.NONE, symbols).atoms());
+        assertEquals(List.of(TypeSymbol.NONE), space.selector(TypeSymbol.NONE, said).atoms());
         assertInstanceOf(Refinement.OptionPresent.class, some.refinement(),
                 "the carrier still binds the element; only what it covers is its own name");
         assertEquals(type("VisitKind"), some.bound());
@@ -110,25 +116,91 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     /** A subject with no cases hands out none, so there is nothing to resolve. */
     @Test
     void aSubjectWithNoCasesHasNothingToCover() {
-        assertEquals(List.of(), CaseSpace.of(type("Station"), symbols).selectors());
+        assertEquals(List.of(), CaseSpace.of(type("Station"), forms, said).selectors());
     }
 
     /**
-     * What is handed downstream is the selector.
+     * What a selector is, and what it therefore cannot answer on its own.
      *
-     * <p>{@code Core} carries what tests and reads a value and nothing about the program around it.
-     * That is what keeps the atoms in this package: a reader of {@code Core} that wanted them would
-     * have to go back to the declarations, which is the second reading being removed.
+     * <p>A name and a refinement, and nothing about the program the case was written in. That is
+     * what makes it sayable wherever it is written — and it is also the whole of why the atoms are
+     * a second value rather than a third component: an invariant that needs {@link Symbols} to
+     * state was never an invariant of a selector.
      */
     @Test
-    void whatGoesDownstreamIsTheSelectorAlone() {
+    void aSelectorIsANameAndARefinementAndSaysNothingAboutTheProgram() {
         ResolvedCase once = resolvedCase("VisitKind", "OnceKind");
         assertEquals(once.name(), once.selector().name());
         assertEquals(once.refinement(), once.selector().refinement());
-        assertTrue(java.util.Arrays.stream(once.selector().getClass().getRecordComponents())
-                        .map(java.lang.reflect.RecordComponent::getName).toList()
-                        .equals(List.of("name", "refinement")),
+        assertEquals(List.of("name", "refinement"),
+                java.util.Arrays.stream(once.selector().getClass().getRecordComponents())
+                        .map(java.lang.reflect.RecordComponent::getName).toList(),
                 "a selector is a name and a refinement; what it covers is not one of its parts");
+    }
+
+    /**
+     * And what goes downstream is the resolution, not the selector alone.
+     *
+     * <p><b>The boundary the other way round from where it began.</b> {@code Core} used to carry the
+     * selector, on the ground that a backend tests and reads a value and wants nothing about the
+     * program around it. That is true of a backend and false of every other reader: which case of a
+     * subject an arm picked is a question about the leaves, and below the checker there are no
+     * declarations left to work them out from. Handed the selector alone, such a reader answered
+     * from the name — and {@code OnceKind} is one name over two leaves, so the answer was a place
+     * the reading of a position never holds (#1252).
+     *
+     * <p>Asked of a compiled body rather than of the shape of the types, because the claim is that
+     * the atoms actually survive the checker. Nothing here holds {@link Symbols}: if what an arm
+     * covers could only be had by asking the declarations again, this could not be written.
+     */
+    @Test
+    void whatGoesDownstreamIsTheResolutionAndNotTheSelectorAlone() {
+        Core.Case arm = armSelecting(inner());
+
+        assertEquals(List.of("Station", "Hospital"),
+                arm.selectedCase().orElseThrow().atoms().stream().map(TypeSymbol::name).toList(),
+                "a reader of Core says what the arm covers without a declaration in hand");
+        assertEquals(named("OnceKind"), arm.selectedCase().orElseThrow().selector().name(),
+                "and the selector a backend emits is still there, as a projection of it");
+    }
+
+    /** The model an arm over the inner sum is written in. */
+    private static String inner() {
+        return MODULE + """
+
+                data Ack = { at: String }
+
+                behavior visit : (k: VisitKind) -> Ack
+                let visit (k) =
+                    match k with
+                        | OnceKind as x -> Ack { at = "once" }
+                        | Renkei as r -> Ack { at = "renkei" }
+                """;
+    }
+
+    /** The first arm of the first {@code match} of {@code visit}, as the checker built it. */
+    private static Core.Case armSelecting(String source) {
+        Compilation compilation =
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Core body = compilation.db().ask(new Bodies.Checked(module)).value()
+                .behaviorBodies().get("visit");
+        assertNotNull(body, "the model under test compiles");
+        return firstMatch(body).cases().get(0);
+    }
+
+    private static Core.Match firstMatch(Core at) {
+        if (at instanceof Core.Match match) {
+            return match;
+        }
+        Core.Match[] found = new Core.Match[1];
+        Core.forEachChild(at, each -> {
+            if (found[0] == null) {
+                found[0] = firstMatch(each);
+            }
+        });
+        return found[0];
     }
 
     /** Kept in what a declaration comes to, so it compares as a value and not as an object. */
@@ -147,7 +219,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     }
 
     private ResolvedCase resolvedCase(String subject, String caseName) {
-        return CaseSpace.of(type(subject), symbols).selector(named(caseName), symbols);
+        return CaseSpace.of(type(subject), forms, said).selector(named(caseName), said);
     }
 
     private Type type(String name) {

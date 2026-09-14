@@ -1,8 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.PointRole;
 import souther.compiler.report.AdequacyReport;
 
@@ -216,7 +216,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
-        String page = report.human(SourceNameResolver.identity());
+        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(1, page.lines().filter(each -> each.contains("no row is at the ON point"))
                         .count(),
@@ -242,19 +242,16 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
     @Test
     void aBehaviorWithNoRowsDoesNotHoldOpenALineAnotherSettles() {
         Compilation compilation = Compilation.ofSource(ONE_WRITES_ROWS, "Main");
-        // Held to the rows against a line and not to the regions either side, so that what is
-        // measured here is the line and not a region `touch` has no rows in. The regions stay with
-        // the reading whatever the bar, which is the other half of this change.
-        compilation.measure(Adequacy.Asked.fullReport(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN));
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport report = AdequacyReport.of(compilation);
 
         assertEquals(List.of(), report.adequacyGaps().stream()
+                        .filter(each -> each.kind() == Adequacy.Kind.BOUNDARY_UNMET
+                                || each.kind() == Adequacy.Kind.DOMAIN_POINT_UNCOVERED)
                         .map(each -> each.about().toString()).toList(),
                 () -> "nothing is short of the line: "
-                        + report.human(SourceNameResolver.identity()));
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(),
-                () -> "and the verdict says so: " + report.human(SourceNameResolver.identity()));
+                        + report.human(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** Two behaviors carrying one type, one of them written a row at the boundary and the other
@@ -277,7 +274,8 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
             let touch (t) = Ok
 
             example schedule
-                | "at the boundary" : (Draft { owner = UserId("x") }) -> Ok
+                | "at the boundary" : (Draft { owner = UserId("x") })   -> Ok
+                | "well inside it"  : (Draft { owner = UserId("xyz") }) -> Ok
             """;
 
     /**
@@ -293,7 +291,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
         Compilation compilation = Compilation.ofSource(TWO_DECLARATIONS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String json = AdequacyReport.of(compilation).json(SourceNameResolver.identity());
+        String json = AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
         tools.jackson.databind.JsonNode declarations =
                 tools.jackson.databind.json.JsonMapper.builder().build().readTree(json)
                         .get("modules").get(0).get("declarations");

@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -84,10 +84,9 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         PositionAccount at = new PositionAccount("f", TermPath.of("r").then("cost"), Type.BOOL,
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
-                null, null);
+                souther.compiler.values.ValueSet.ANY, null, List.of(), List.of());
 
-        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
-                new LinesRead());
+        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), new LinesRead());
 
         assertEquals(List.of(new ClosureGap.PositionNotReachedInto("f", at.id(),
                         new BlockReason.ValueRulesNotReached())),
@@ -115,9 +114,8 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 Type.BOOL,
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
-                null, null);
-        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
-                new LinesRead());
+                souther.compiler.values.ValueSet.ANY, null, List.of(), List.of());
+        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), new LinesRead());
         return souther.compiler.query.WeakeningSet.of(
                 ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
                         .map(souther.compiler.query.Weakening.ModelReadingIncomplete::new)
@@ -133,17 +131,9 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      */
     @Test
     void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
-        Symbols symbols = symbolsOf();
-        Axis hour = new Axis(new AxisId("f", "Time.hour(a)"),
-                new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
-                List.of(number("early", 1)), List.of());
-        Axis minute = new Axis(new AxisId("f", "Time.minute(a)"),
-                new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
-                List.of(number("late", 40)), List.of());
-        Generator.Subject subject = new Generator.Subject("f",
-                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                List.of(hour, minute), HeldCounts.NONE);
+        Partitions.Partitioning read = partitioningOf();
+        MeasuredInput subject =
+                MeasuredInput.of("gate", readingOf(), read);
 
         FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,
                 Budgets.generation());
@@ -154,16 +144,16 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 filled.unresolved().toString());
     }
 
-    private static PartitionClass number(String id, long candidate) {
-        return PartitionClass.of(id, id, new Recognition.Nothing(),
-                RepresentativeSource.of(FixtureTemplate.integer(candidate)));
-    }
 
-    private static Symbols symbolsOf() {
+    /** What the reading of that input says about its numbers, which is what a subject is asked
+     *  through. */
+    private static souther.compiler.inputs.InputReading readingOf() {
         Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
         compilation.answerEverything();
-        return souther.compiler.query.Scopes.derived(compilation.db(),
-                compilation.modules().get(0)).value();
+        String module = compilation.modules().get(0);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
+                .reading(rules);
     }
 
     private static Partitions.Partitioning partitioningOf() {

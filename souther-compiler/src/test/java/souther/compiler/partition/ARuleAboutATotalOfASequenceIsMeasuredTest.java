@@ -2,11 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Map;
@@ -112,13 +110,9 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
      */
     @Test
     void aNameBetweenTheWalkAndTheTotalChangesNothing() {
-        String report = report();
-        for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point throughALocalName/"
-                            + "List.sum(lines[*].amount)"),
-                    () -> "the same " + point + " point is owed whether or not the mapped list was"
-                            + " given a name: " + report);
-        }
+        assertEquals(pointsOn("overAProjection"), pointsOn("throughALocalName"),
+                "the same points are owed against the same total whether or not the mapped list was"
+                        + " given a name");
     }
 
     /**
@@ -140,19 +134,37 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
         }
     }
 
-    /** The line is on the total, with the four points a border owes standing against it. */
+    /**
+     * The line is on the total, with the four points a border owes standing against it.
+     *
+     * <p>Read off what was measured and not out of the report's text. What a point is owed is one
+     * question and what became of the search for a row at it is another, and the sentence a report
+     * prints is about the second: a point a row was composed for is no longer written down as one
+     * nothing was, so a test reading the text would say the point had gone.
+     */
     @Test
     void theLineIsOnTheTotalAndItsPointsAreOwed() {
-        String report = report();
-        for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point overAProjection/"
-                            + "List.sum(lines[*].amount)"),
-                    () -> "a " + point + " point is owed against the total: " + report);
+        assertEquals(List.of("List.sum(lines[*].amount) = 100000 ON",
+                        "List.sum(lines[*].amount) = 100000 OFF",
+                        "List.sum(lines[*].amount) = 100000 IN",
+                        "List.sum(lines[*].amount) = 100000 OUT"),
+                pointsOn("overAProjection"),
+                "a border on a total owes the four points every border owes");
+    }
+
+    /** The points of the total's own line, in the order a border names them. */
+    private static List<String> pointsOn(String behavior) {
+        Compilation compilation = measured();
+        List<String> out = new java.util.ArrayList<>();
+        for (souther.compiler.query.BorderAssessment border
+                : souther.compiler.query.Adequacy.readingsOf(compilation.db(), MODULE)
+                        .get(behavior)) {
+            if (border.label().contains("List.sum")) {
+                border.items().forEach(
+                        (role, _) -> out.add(border.label() + " " + border.border().named(role)));
+            }
         }
-        assertTrue(report.contains("nothing here could build a representative for"
-                        + " List.sum(lines[*].amount) = 100000"),
-                () -> "and nothing composes a row for it, which is said rather than left to look"
-                        + " like a measure nobody asked for: " + report);
+        return out;
     }
 
     /**
@@ -207,11 +219,6 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     private static Map<String, PartitionEvidence> evidence() {
         Compilation compilation = measured();
         return compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
-    }
-
-    private static String report() {
-        Compilation compilation = measured();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
     private static Compilation measured() {

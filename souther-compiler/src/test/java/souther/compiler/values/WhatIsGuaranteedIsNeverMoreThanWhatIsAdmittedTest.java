@@ -40,18 +40,33 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
      * set here is values written out, so nothing is built and no allowance is spent — a composer
      * shared between two of these is spending nothing either of them would have wanted.
      */
-    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+    private static final Allowance<String> SETS = AsACompilationAllows.forAdmittedValues();
 
     private static AdmissibleValues<String> says(String atom, Value value) {
-        return AdmissibleValues.at(atom, ValueSet.just(value));
+        return built(plans(atom, value));
     }
 
     private static AdmissibleValues<String> unreadable(Set<String> named) {
-        return AdmissibleValues.unreadable(named, UnreadReason.FORM_NOT_READ);
+        return built(plansUnreadable(named));
     }
 
     private static Arguments made(String how, AdmissibleValues<String> state) {
         return Arguments.of(Named.of(how, state));
+    }
+
+    /** The same rule while it is still a description, which is where a choice between two of them
+     *  is taken. */
+    private static PlannedValues<String> plans(String atom, Value value) {
+        return PlannedValues.at(atom, AdmittedPlan.of(ValueSet.just(value)));
+    }
+
+    private static PlannedValues<String> plansUnreadable(Set<String> named) {
+        return PlannedValues.unreadable(named, UnreadReason.FORM_NOT_READ);
+    }
+
+    /** A description worked out, which is the only way a reading holding alternatives is made. */
+    private static AdmissibleValues<String> built(PlannedValues<String> planned) {
+        return planned.resolve(SETS).values();
     }
 
     static Stream<Arguments> states() {
@@ -60,31 +75,41 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 made("at", says(VALUE, A)),
                 made("unreadable naming a position", unreadable(Set.of(VALUE))),
                 made("unreadable naming none", unreadable(Set.of())),
-                made("leavingNothing", says(VALUE, A).leavingNothing()),
                 made("meet of two read", says(VALUE, A).meet(says(OTHER, B), SETS)),
                 made("meet with an unread", says(VALUE, A).meet(unreadable(Set.of(OTHER)), SETS)),
                 made("meet leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
-                made("join of two read", says(VALUE, A).join(says(VALUE, B), SETS)),
-                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS)),
+                made("join of two read", built(plans(VALUE, A).joinLive(plans(VALUE, B)))),
+                made("join with an unread",
+                        built(plans(VALUE, A).joinLive(plansUnreadable(Set.of(VALUE))))
+                                .alsoOpenedAt(Set.of(VALUE))),
                 made("join covering the position",
-                        AdmissibleValues.at(VALUE, ValueSet.just(A))
-                                .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)), SETS)),
-                made("join of two that leave nothing",
-                        says(VALUE, A).meet(says(VALUE, B), SETS)
-                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)),
+                        built(plans(VALUE, A).joinLive(PlannedValues.at(VALUE,
+                                AdmittedPlan.of(ValueSet.allBut(A)))))),
+                // Neither alternative of this one is a branch anybody can be in, which is a
+                // settlement and not a join — the operation is the one a caller reaches for once
+                // both branches are known dead.
+                made("a choice neither branch of which stands",
+                        built(plans(VALUE, A).meet(plans(VALUE, B))
+                                .bothDead(plans(OTHER, A).meet(plans(OTHER, B))))),
                 made("join of a meet and an unread",
-                        says(VALUE, A).meet(unreadable(Set.of()), SETS)
-                                .join(says(VALUE, B), SETS)),
+                        built(plans(VALUE, A).meet(plansUnreadable(Set.of()))
+                                .joinLive(plans(VALUE, B))).alsoOpenedAt(Set.of(VALUE))),
                 made("choice over two positions",
-                        says(VALUE, A).meet(says(OTHER, A), SETS)
-                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)),
+                        built(plans(VALUE, A).meet(plans(OTHER, A))
+                                .joinLive(plans(VALUE, B).meet(plans(OTHER, B))))),
                 made("choice over two positions, met",
-                        says(VALUE, A).meet(says(OTHER, A), SETS)
-                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)
+                        built(plans(VALUE, A).meet(plans(OTHER, A))
+                                .joinLive(plans(VALUE, B).meet(plans(OTHER, B))))
                                 .meet(says(VALUE, A), SETS)),
+                made("heldApart", built(PlannedValues.heldApart(VALUE, OTHER))),
+                made("meet with heldApart",
+                        says(VALUE, A).meet(built(PlannedValues.heldApart(VALUE, OTHER)), SETS)),
+                made("join with heldApart",
+                        built(plans(VALUE, A).joinLive(PlannedValues.heldApart(VALUE, OTHER)))),
                 made("join nested under a join",
-                        says(VALUE, A).join(
-                                says(VALUE, B).join(unreadable(Set.of(VALUE)), SETS), SETS)));
+                        built(plans(VALUE, A).joinLive(plans(VALUE, B)
+                                .joinLive(plansUnreadable(Set.of(VALUE)))))
+                                .alsoOpenedAt(Set.of(VALUE))));
     }
 
     /**
@@ -105,16 +130,47 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
         }
     }
 
+    /**
+     * A position held apart from another is guaranteed nothing, and one beside it keeps what it had.
+     *
+     * <p>A guarantee is a lower approximation: these values stand there whatever else is read. No
+     * value can be shown to stand at one of two positions held apart without an assignment for the
+     * other — over a carrier of one value a denial admits nothing at all — so the honest guarantee
+     * at both of them is none. What the rules leave them is still every value, which is the upper
+     * approximation and a different question.
+     *
+     * <p>Said where the rule is read rather than wherever a denial is met with something. Meeting a
+     * guarantee with nothing leaves nothing, so every conjunction the rule reaches has it without a
+     * second rule saying so — and a choice beside it keeps what its other branch guarantees, which
+     * is right, because a value satisfying that branch is under no denial.
+     */
+    @Test
+    void aPositionHeldApartFromAnotherIsGuaranteedNothing() {
+        AdmissibleValues<String> apart = built(PlannedValues.heldApart(VALUE, OTHER));
+
+        assertEquals(ValueSet.NONE, apart.guaranteedAt(VALUE));
+        assertEquals(ValueSet.NONE, apart.guaranteedAt(OTHER));
+        assertEquals(ValueSet.ANY, apart.at(VALUE), "and the rules leave it every value");
+
+        assertEquals(ValueSet.NONE,
+                says(VALUE, A).meet(apart, SETS).guaranteedAt(VALUE),
+                "a conjunction the rule reaches guarantees nothing there");
+        assertEquals(ValueSet.just(A),
+                built(plans(VALUE, A).joinLive(PlannedValues.heldApart(VALUE, OTHER)))
+                        .guaranteedAt(VALUE),
+                "and a branch beside it keeps what it guarantees on its own");
+    }
+
     static Stream<Arguments> admittingNothing() {
         return Stream.of(
-                made("a position left no value", AdmissibleValues.at(VALUE, ValueSet.NONE)),
+                made("a position left no value",
+                        built(PlannedValues.at(VALUE, AdmittedPlan.of(ValueSet.NONE)))),
                 made("two rules leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
-                made("shown impossible from outside", says(VALUE, A).leavingNothing()),
                 made("a meet under a wider one",
                         says(OTHER, A).meet(says(VALUE, A), SETS).meet(says(VALUE, B), SETS)),
                 made("two alternatives neither of which can be taken",
-                        says(VALUE, A).meet(says(VALUE, B), SETS)
-                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)));
+                        built(plans(VALUE, A).meet(plans(VALUE, B))
+                                .bothDead(plans(OTHER, A).meet(plans(OTHER, B))))));
     }
 
     /**
@@ -133,12 +189,12 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
      */
     @Test
     void aChoiceOverTwoPositionsLeavesNoGuaranteeForAConjunctionToRestOn() {
-        AdmissibleValues<String> together = says(VALUE, A).meet(says(OTHER, A), SETS);
-        AdmissibleValues<String> apart = says(VALUE, B).meet(says(OTHER, B), SETS);
-        AdmissibleValues<String> otherB = says(VALUE, B).meet(says(OTHER, A), SETS);
+        PlannedValues<String> together = plans(VALUE, A).meet(plans(OTHER, A));
+        PlannedValues<String> apart = plans(VALUE, B).meet(plans(OTHER, B));
+        PlannedValues<String> otherB = plans(VALUE, B).meet(plans(OTHER, A));
 
-        AdmissibleValues<String> one = together.join(apart, SETS);
-        AdmissibleValues<String> two = together.join(otherB, SETS);
+        AdmissibleValues<String> one = built(together.joinLive(apart));
+        AdmissibleValues<String> two = built(together.joinLive(otherB));
         AdmissibleValues<String> both = one.meet(two, SETS);
 
         assertEquals(ValueSet.oneOf(Set.of(A, B)), both.at(VALUE),
@@ -162,8 +218,7 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
         assertTrue(state.meet(says(OTHER, B), SETS).guaranteedTogether(),
                 "met with a rule about one position");
         assertTrue(state.meet(state, SETS).guaranteedTogether(), "and met with itself");
-        assertTrue(state.meet(AdmissibleValues.<String>unreadable(Set.of(VALUE),
-                UnreadReason.FORM_NOT_READ), SETS).guaranteedTogether(),
+        assertTrue(state.meet(unreadable(Set.of(VALUE)), SETS).guaranteedTogether(),
                 "and met with a rule nothing could read");
     }
 
@@ -173,7 +228,8 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     void whatIsGuaranteedIsAdmitted(AdmissibleValues<String> state) {
         for (String atom : List.of(VALUE, OTHER, NEITHER)) {
             ValueSet guaranteed = state.guaranteedAt(atom);
-            assertEquals(guaranteed, SETS.meet(atom, guaranteed, state.at(atom)).set(),
+            assertEquals(guaranteed,
+                    SETS.meet(state.blockOf(atom), guaranteed, state.at(atom)).set(),
                     () -> "at " + atom + ": guaranteed " + guaranteed
                             + " is not within admitted " + state.at(atom));
         }

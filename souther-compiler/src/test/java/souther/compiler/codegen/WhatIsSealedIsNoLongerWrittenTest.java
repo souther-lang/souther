@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.Emitted;
 import souther.compiler.EmittedBytes;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.TypeKey;
@@ -41,7 +42,7 @@ class WhatIsSealedIsNoLongerWrittenTest {
     private static final GeneratedClass.Lambda LAMBDA = new GeneratedClass.Lambda("demo", 0);
 
     private static Emissions written() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE, EmittedBytes.of(QUOTE, "first"));
         return out;
     }
@@ -77,8 +78,15 @@ class WhatIsSealedIsNoLongerWrittenTest {
         return ways;
     }
 
-    /** What this holds beside writing: what it was written for, and the sealing itself. */
-    private static final Set<String> WHICH_DO_NOT_WRITE = Set.of("implemented", "seal");
+    /**
+     * What this holds beside writing: what it was written for, whose numbers a run through it
+     * leaves, and the sealing itself.
+     *
+     * <p>{@code probes} is settled when the classes are first asked for and never afterwards — it is
+     * what the generation numbered, and a generation numbers once. So there is no write for the
+     * sealing to refuse, and no order of calls under which two readers are told different things.
+     */
+    private static final Set<String> WHICH_DO_NOT_WRITE = Set.of("implemented", "probes", "seal");
 
     @TestFactory
     Stream<DynamicTest> everyWayOfWritingIsRefusedAfterwards() {

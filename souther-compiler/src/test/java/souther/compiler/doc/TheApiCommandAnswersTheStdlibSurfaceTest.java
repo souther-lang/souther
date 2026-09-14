@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,6 +38,23 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
                 new PrintStream(out, true, StandardCharsets.UTF_8),
                 new PrintStream(err, true, StandardCharsets.UTF_8));
         return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * A result of more than one case is answered in the order its declaration writes it.
+     *
+     * <p>Asked of the command rather than of what orders the cases, because what is published is
+     * what this prints. A union is a set and the members reach the printing through one — so what
+     * comes out here is the order the library was written in, or it is one nobody chose and the
+     * reader is being told the reason there is no value before the value.
+     */
+    @Test
+    void aResultOfSeveralCasesIsAnsweredAsItsDeclarationWritesIt() {
+        Answer answer = run("Int.divide");
+
+        assertEquals(0, answer.code());
+        assertEquals("Int.divide(dividend: Int, divisor: Int) : Int | DivisionByZero",
+                answer.out().strip());
     }
 
     @Test
@@ -104,7 +122,7 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
 
         assertEquals(0, answer.code());
         assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("List.fold(")), answer.out());
-        assertTrue(answer.out().lines().allMatch(l -> l.toLowerCase().contains("fold")),
+        assertTrue(answer.out().lines().allMatch(l -> l.toLowerCase(Locale.ROOT).contains("fold")),
                 "every line answers the term:\n" + answer.out());
     }
 

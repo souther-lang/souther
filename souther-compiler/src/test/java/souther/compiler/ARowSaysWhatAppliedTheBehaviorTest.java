@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Applied;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
@@ -152,7 +153,9 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
         Counting.Read counted = assertInstanceOf(Counting.Read.class, held.run().counting());
         assertTrue(counted.steps() >= 0, "the count is this compile's own reading");
-        assertFalse(counted.observation().taken().isEmpty(),
+        RunRecord.Recorded recorded = assertInstanceOf(RunRecord.Recorded.class, counted.recorded(),
+                "this compile emitted what records where a row goes, so a run of one was recorded");
+        assertFalse(recorded.seen().arms().isEmpty(),
                 "and so are the arms it went through, this compile having emitted what counts them");
     }
 
@@ -180,20 +183,23 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                 .findFirst().orElseThrow();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),
+                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
+                        ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), Run.nothing()),
+                        ran.inputCases(), ran.inputs(), ran.statement(), Run.nothing()),
                 "a row that applied the behavior says what applied it");
         assertThrows(IllegalArgumentException.class,
-                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), Stage.FIXTURES_VALIDATED,
+                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
+                        Stage.FIXTURES_VALIDATED,
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(),
-                        new Run(new Applied.GeneratedHere(), new Counting.Read(1L, souther.compiler.coverage.Observation.NONE))),
+                        ran.inputCases(), ran.inputs(), ran.statement(),
+                        new Run(new Applied.GeneratedHere(), new Counting.Read(1L, new RunRecord.NoAccount()))),
                 "and one that did not has nothing to say applied it");
         assertThrows(NullPointerException.class,
-                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),
+                () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
+                        ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), null),
+                        ran.inputCases(), ran.inputs(), ran.statement(), null),
                 "and every row says what became of its evaluation");
     }
 }

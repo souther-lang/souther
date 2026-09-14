@@ -1,20 +1,19 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -81,13 +80,13 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     @Test
     void anArmOnePositionSettlesIsOfferedTheRowThatPositionsClassIs() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        List<Axis> axes = model.subject().axes();
+        List<Axis> axes = model.subject().axes().axes();
         int asked = 0;
-        for (int probe : model.read().arms().keySet()) {
+        for (ArmProbe probe : model.read().arms().keySet()) {
             for (Map.Entry<Integer, Integer> pin : onePinWaysInto(probe, model, axes)) {
                 Axis axis = axes.get(pin.getKey());
                 assertEquals(
-                        rowsOf(model, List.of(new Generator.ClassOwed(axis.id(),
+                        rowsOf(model, List.of(new ClassOfAPosition(axis.id(),
                                 axis.classes().get(pin.getValue()).id())), List.of()),
                         rowsOf(model, List.of(), List.of(probe)),
                         "the class of " + axis.path() + " and the arm it is the way into");
@@ -99,7 +98,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
 
     /** The ways into {@code probe} that settle exactly one position, as that position and its
      *  class. */
-    private static List<Map.Entry<Integer, Integer>> onePinWaysInto(int probe, Model model,
+    private static List<Map.Entry<Integer, Integer>> onePinWaysInto(ArmProbe probe, Model model,
                                                                     List<Axis> axes) {
         List<Map.Entry<Integer, Integer>> out = new ArrayList<>();
         if (!(model.read().armAt(probe) instanceof souther.compiler.reading.PathAccess.Ways ways)) {
@@ -123,8 +122,8 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     }
 
     /** What one run of the search offered, by the values each row carries. */
-    private static List<List<String>> rowsOf(Model model, List<Generator.ClassOwed> classes,
-                                             List<Integer> arms) {
+    private static List<List<String>> rowsOf(Model model, List<ClassOfAPosition> classes,
+                                             List<ArmProbe> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes, arms,
                         Budgets.generation())
@@ -133,42 +132,33 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 .toList();
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
-        List<Interaction> groups() {
-            return read.interactions();
-        }
-
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.answerEverything();
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared);
             assertNotNull(sigs);
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    Partitions.of(spec.name(), inputs, rules,
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs,
-                            symbols));
+                            checked.plan(), inputs,
+                            rules));
         }
     }
 }

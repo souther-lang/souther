@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -42,8 +41,8 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
                 .toList(), "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
-        return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(name, RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** An equality and a denial of the same value between them admit every value there is, so the
@@ -66,13 +65,13 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
     /** The position holds every value, and that is the whole of what the rules leave it. */
     @Test
     void thePositionIsSpokenForWhateverTheThirdAlternativeSays() {
-        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(LEFT_ASSOCIATED).admits("n"));
+        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(LEFT_ASSOCIATED).admits(RuleKey.of("n")));
     }
 
     /** However the alternatives are bracketed. {@code ||} is one connective and not a tree. */
     @Test
     void andHoweverTheAlternativesAreBracketed() {
-        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(RIGHT_ASSOCIATED).admits("n"));
+        assertEquals(AdmissibleSet.complete(ValueSet.ANY), read(RIGHT_ASSOCIATED).admits(RuleKey.of("n")));
     }
 
     /** And the rule is still one nothing read, which is what the accounting is for. */
@@ -110,10 +109,10 @@ class ARuleNoAlternativeNeededIsStillOneNobodyReadTest {
     @Test
     void theAccountingIsNotReadOffTheCompleteness() {
         FieldDomains read = read(LEFT_ASSOCIATED);
-        Map<RuleRef, RuleAccounting> accounting = read.accounting();
+        Map<RuleRef.Invariant, RuleAccounting> accounting = read.accounting();
 
         assertEquals(1, accounting.size(), "one clause, so one rule to account for");
-        assertEquals(AdmissibleSet.READ_IN_FULL, read.admits("n").completeness());
+        assertEquals(AdmissibleSet.READ_IN_FULL, read.admits(RuleKey.of("n")).completeness());
         assertTrue(accounting.values().stream().anyMatch(each -> !each.unaccounted().isEmpty()),
                 "the values being spoken for did not answer the rule's question");
     }

@@ -6,11 +6,13 @@ import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.ConstructionOrigin;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -168,6 +170,11 @@ public interface Hir {
             this.owner = owner;
         }
 
+        /** What the bindings this mints belong to. */
+        public BindingOwner owner() {
+            return owner;
+        }
+
         /** A binding nothing else has, under this pass's owner. A pass writes its own names, so
          * none of them is a name the author wrote. */
         public Binder binder(String name, SourcePos pos) {
@@ -183,7 +190,7 @@ public interface Hir {
      * runs; every name-bearing position in this tree carries one of these, so no later pass decides
      * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
      *
-     * <p>A check reads {@link #denotes()}, which every name the pass answered carries. A name
+     * <p>A check reads {@link Denoting#type()}, which every name the pass answered carries. A name
      * nothing declares is reported where it is written and is {@link Unanswered} from there on,
      * which the check over its declaration is what settles ({@code Names.Unbuilt}): the pass does
      * not stop, so an author is told about every unknown name at once and the definitions beside it
@@ -204,7 +211,7 @@ public interface Hir {
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
         static Name resolved(TypeSymbol denotes, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
+            return new Name.Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
         /**
@@ -215,7 +222,7 @@ public interface Hir {
          * write. What it denotes is the same either way.
          */
         static Name reached(TypeReachName.Written type, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
+            return new Name.Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -224,6 +231,7 @@ public interface Hir {
         }
 
         /** Where the name is written, or where a synthesized one is anchored. */
+        @Override
         default SourcePos pos() {
             return name().pos();
         }
@@ -236,13 +244,13 @@ public interface Hir {
          * narrowing to the two forms, and says what it does with an {@link Unanswered} name where it
          * makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Name.Denoting answered() {
+            return this instanceof Name.Denoting denoting ? denoting : null;
         }
 
         /** The same name, read and found to name nothing. */
         default Name unanswered() {
-            return new Unanswered(name());
+            return new Name.Unanswered(name());
         }
 
         /**
@@ -416,9 +424,46 @@ public interface Hir {
         }
     }
 
-    /** One fake row: input argument expressions mapped to an output, or the default ({@code inputs}
-     * null / {@code isDefault} true). */
-    record FakeRow(List<Expr> inputs, Expr output, boolean isDefault, SourcePos pos) implements Hir {}
+    /** One fake row: what it answers for, and what it answers with. */
+    record FakeRow(Matched matched, Expr output, SourcePos pos) implements Hir {}
+
+    /**
+     * What a fake's row answers for.
+     *
+     * <p>Two states and the source says which. A row written {@code (a, b) -> out} answers for those
+     * arguments and for no others; a row written {@code _ -> out} answers for anything, and there are
+     * no arguments written in it to read.
+     *
+     * <p>Not a list of arguments that may be absent. A walk over what the source writes has to be
+     * told which of the two a row is before it can ask for arguments, and an absence it is free to
+     * walk into is one a walk reads as a row that names none — which is a different row, and one no
+     * author can write.
+     */
+    sealed interface Matched permits Matched.Arguments, Matched.Anything {
+
+        /**
+         * The same, with the arguments rewritten where there are any to rewrite.
+         *
+         * <p>For a pass that rewrites what a row answers for without changing whether it names
+         * anything. A caller taking the list out and building a {@code Matched} back around it would
+         * be deciding a second time which of the two this is.
+         */
+        default Matched map(UnaryOperator<Expr> rewrite) {
+            return this instanceof Arguments(List<Expr> written)
+                    ? new Arguments(written.stream().map(rewrite).toList()) : this;
+        }
+
+        /** The row names the arguments it answers for, and these are they. */
+        record Arguments(List<Expr> inputs) implements Matched {
+
+            public Arguments {
+                inputs = List.copyOf(inputs);
+            }
+        }
+
+        /** The row answers for anything: {@code _ -> out}. */
+        record Anything() implements Matched {}
+    }
 
     /** {@code with <dep> = <value>} on an example row — a value fake for an injected dependency
      * (a zero-argument behavior whose faked result is a constant). The dependency is named as a
@@ -448,11 +493,61 @@ public interface Hir {
     record Example(String target, List<ExampleRow> rows, SourcePos pos) implements Hir {}
 
     /**
-     * One example row: what it names itself, the input argument expressions, and the expected result.
-     * A bare {@link Var} expected asserts only the result arm (the case); a {@link NewData}, a
-     * {@link Call} (a newtype constructor), or a literal asserts the whole value.
+     * What stands where a row's answer goes.
+     *
+     * <p>Three states and the source says which. A row that asserts something carries the expression
+     * it asserts; a row written {@code <?>} says its answer is owed and is a row all the same; and a
+     * row whose answer could not be read is neither, because nothing was written there to be read.
+     *
+     * <p>The last two are not one state. {@link Unanswered} is what an author wrote — the row is
+     * well formed, and what it says is that the answer is still to come. {@link Unwritten} is this
+     * compiler's recovery: the text after the arrow was not an expression, a diagnostic says so, and
+     * what the row would have asserted is not known. Held as one, a module full of syntax errors
+     * would read as a module full of work an author had deliberately left.
      */
-    record ExampleRow(RowIdentity identity, List<Expr> inputs, List<With> withs, Expr expected,
+    sealed interface Expected permits Expected.Asserted, Expected.Unanswered, Expected.Unwritten {
+
+        /** Where the answer stands, which is where a reader is pointed whatever is there. */
+        SourcePos pos();
+
+        /**
+         * The same, with the answer rewritten where there is one to rewrite.
+         *
+         * <p>For a pass that rewrites what a row says without changing whether it says anything. A
+         * caller taking the expression out and building an {@code Expected} back around it would be
+         * deciding a second time which of the three this is, and a row whose answer is owed would
+         * come back from such a pass as one whose answer nothing could read.
+         */
+        default Expected map(UnaryOperator<Expr> rewrite) {
+            return this instanceof Asserted(Expr e) ? new Asserted(rewrite.apply(e)) : this;
+        }
+
+        /** The row states its answer, and this is what it states. */
+        record Asserted(Expr expression) implements Expected {
+
+            public Asserted {
+                Objects.requireNonNull(expression, "an asserted answer is an expression");
+            }
+
+            @Override
+            public SourcePos pos() {
+                return expression.pos();
+            }
+        }
+
+        /** The row is written {@code <?>}: its answer is owed and nobody has written it. */
+        record Unanswered(SourcePos pos) implements Expected {}
+
+        /** No answer was read here. The row is malformed and a parse diagnostic says how. */
+        record Unwritten(SourcePos pos) implements Expected {}
+    }
+
+    /**
+     * One example row: what it names itself, the input argument expressions, and what stands where
+     * its answer goes. A bare {@link Var} asserted asserts only the result arm (the case); a
+     * {@link NewData}, a {@link Call} (a newtype constructor), or a literal asserts the whole value.
+     */
+    record ExampleRow(RowIdentity identity, List<Expr> inputs, List<With> withs, Expected expected,
                       SourcePos pos) implements Hir {}
 
     /**
@@ -497,6 +592,7 @@ public interface Hir {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -518,6 +614,7 @@ public interface Hir {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -541,6 +638,24 @@ public interface Hir {
         public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
                             List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
             this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
+        }
+
+        /**
+         * Which behaviors the clause names, which is what a row stands in for.
+         *
+         * <p>The behaviors and not the names written: an entry that resolved to nothing names none
+         * and is reported where it is written. Read the way a {@code with} reads its own target, so
+         * that what a row answers and what a declaration requires are one set of names.
+         */
+        public java.util.Set<ValueName.Behavior> dependsOnBehaviors() {
+            java.util.Set<ValueName.Behavior> out = new java.util.LinkedHashSet<>();
+            for (Var named : dependsOn) {
+                ValueName.Behavior behavior = behaviorOf(named);
+                if (behavior != null) {
+                    out.add(behavior);
+                }
+            }
+            return java.util.Collections.unmodifiableSet(out);
         }
     }
 
@@ -569,6 +684,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -897,6 +1013,7 @@ public interface Hir {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -915,8 +1032,6 @@ public interface Hir {
                 List<Name> includes,
                 List<Field> fields,
                 List<InvariantClause> invariants,
-                Optional<DecoderDef> decoder,
-                Optional<EncoderDef> encoder,
                 SourcePos pos) implements Def {}
 
     /**
@@ -988,6 +1103,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1159,7 +1275,19 @@ public interface Hir {
      * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
      * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
      */
-    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Hir {}
+    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Hir {
+
+        /**
+         * Never: a decoder gives one value per field, so a field left out is a field with no value.
+         *
+         * <p>Held here rather than at the check that asks it, so that both kinds of construction
+         * answer the same question and neither reader decides for the node in front of it. This one
+         * needs nothing kept to answer it — what a decoder writes is what this node is.
+         */
+        public boolean mayOmitOptionalFields() {
+            return false;
+        }
+    }
 
     /** {@code field: expr}, or the shorthand {@code field}, in a construction. */
     record FieldInit(WrittenName written, Expr value) implements Hir {
@@ -1175,6 +1303,7 @@ public interface Hir {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1350,11 +1479,12 @@ public interface Hir {
             return binder.name();
         }
 
-        /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
-         * ordinary type (a function type belongs only in a helper's parameter), so this is the one
-         * place that narrows {@code declaredType}, and a carrier from inlining never reads as one. */
+        /** The type the source wrote on this binding, or null when it wrote none. What the source
+         * wrote and what a later pass put there are both held in {@code declaredType}, and
+         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
+         * and is not answered here. */
         public RetType annotation() {
-            return annotated && declaredType instanceof RetType rt ? rt : null;
+            return annotated ? declaredType : null;
         }
     }
 
@@ -1377,9 +1507,15 @@ public interface Hir {
      * <p>{@code body} is the callee's, with each parameter read as the binding or the function it was
      * given. It is the only slot holding code that runs: what {@code given} holds is already inside
      * it wherever the callee applies it, and is kept here so the signature can be read against it.
+     *
+     * <p>{@code at} is where this copy is, and it is here rather than read off {@code application}.
+     * What a binding belongs to is a chain the passes wrote and count within; where a copy is is the
+     * call the source settles, and a reader that took the second from the first would be reading an
+     * identity out of a value that says how the compiler ran. The two answer about one call and are
+     * not the same answer to give.
      */
-    record Expansion(ValueName callee, BindingOwner application, List<Bound> bound,
-                     List<Given> given, RetType declaredReturn, Expr body,
+    record Expansion(ValueName callee, BindingOwner application, ExpansionSite at,
+                     List<Bound> bound, List<Given> given, RetType declaredReturn, Expr body,
                      SourcePos pos, Region region) implements Expr {
 
         /**
@@ -1430,8 +1566,14 @@ public interface Hir {
      */
     record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
 
-    /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
-    record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
+    /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
+     *
+     * <p>{@code origin} is the collection the author wrote, carried from where the source was read.
+     * The operations a body ends up holding for it are references derived from that construct, and
+     * a helper holding one is expanded at each of its calls — so the identity is the source's and
+     * not the place's. */
+    record ListLit(List<Expr> elements, SourceConstructOrigin origin, SourcePos pos, Region region)
+            implements Expr {}
 
     /**
      * {@code [ … ]} written in an {@code example} or {@code fake} row, where the brackets are the
@@ -1448,16 +1590,43 @@ public interface Hir {
      * are is the notation's question; whether the value that comes out belongs at the position is a
      * separate one, asked of an input and not of an expectation ({@link RowPosition}).
      */
-    record RowCollection(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
+    record RowCollection(List<Expr> elements, SourceConstructOrigin origin, SourcePos pos,
+                         Region region) implements Expr {}
 
     /** A guard-only comprehension {@code [element | guard, ...]}: the element is included when
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
      *
      * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
-     * ({@link CoverageOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
+     * ({@link #forkOfGuard}) rather than minted where the lowering runs — so a comprehension
      * inside a helper answers the same whichever call site expanded it. */
-    record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
-                    Region region) implements Expr {}
+    record ListComp(Expr element, List<Expr> guards, SourceConstructOrigin origin, SourcePos pos,
+                    Region region) implements Expr {
+
+        /**
+         * The fork the guard at {@code at} lowers to — asked of the comprehension, which is what
+         * holds the construct they are forks of.
+         *
+         * <p>Two readers want it and they see the comprehension at different times: the lowering
+         * builds the forks, and the reading that decides what a coverage obligation is about runs
+         * before the lowering, where a rule is still a parameter. Written once here so that the two
+         * cannot come to number the guards differently — the numbering is what makes an obligation
+         * name a fork that exists, and it held only while both spelled the same arithmetic.
+         *
+         * @throws IndexOutOfBoundsException where {@code at} is not a guard of this comprehension.
+         *                                   A fork is one of the guards and nothing else is one:
+         *                                   the fork before the first would be the comprehension's
+         *                                   own origin, which is a different obligation and would
+         *                                   pass for this one, and the fork after the last is a
+         *                                   branch the lowering does not build
+         */
+        public SourceConstructOrigin forkOfGuard(int at) {
+            if (at < 0 || at >= guards.size()) {
+                throw new IndexOutOfBoundsException(
+                        "a fork is one of the guards written: " + at + " of " + guards.size());
+            }
+            return origin.lowered(at);
+        }
+    }
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
      * that never crosses the data/behavior boundary. Opened with a {@code let (x, y) = t} destructure. */
@@ -1472,8 +1641,8 @@ public interface Hir {
      *
      * <p>{@code origin} is the fork the author wrote, kept through every rewrite and every copy an
      * expansion makes, so the arms of one {@code if} are one obligation however many times a helper
-     * holding it is called ({@link CoverageOrigin}). */
-    record If(Expr cond, Expr then, Expr els, CoverageOrigin origin, SourcePos pos, Region region)
+     * holding it is called ({@link SourceConstructOrigin}). */
+    record If(Expr cond, Expr then, Expr els, SourceConstructOrigin origin, SourcePos pos, Region region)
             implements Expr {}
 
     /**
@@ -1495,11 +1664,11 @@ public interface Hir {
      * are resolved.
      */
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
-                         CoverageOrigin origin, SourcePos pos, Region region) implements Expr {
+                         SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
         public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             CoverageOrigin origin, SourcePos pos, Region region) {
+                             SourceConstructOrigin origin, SourcePos pos, Region region) {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
@@ -1538,7 +1707,7 @@ public interface Hir {
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
      * fork the author wrote; see {@link If}. */
-    record Match(Expr scrutinee, List<Case> cases, CoverageOrigin origin, SourcePos pos,
+    record Match(Expr scrutinee, List<Case> cases, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {}
 
     /**
@@ -1573,46 +1742,133 @@ public interface Hir {
      * not go back to matching the spelling against the module's own definitions.
      *
      * <p>{@code origin} says where the construction came from: written here, or carried in by a
-     * published body or by a value this body named.
+     * published body or by a value this body named. {@code fields} says whether every field of it
+     * had to be written, which is what the reading it was read under settled ({@link Reading}).
      *
-     * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
-     * node the reader's own would be, and the permission check reading that body would ask the
-     * reader to answer for it. So the construction says where it came from. Every rebuild of this
-     * node carries it — the component has no default, which is what stops a pass from quietly
-     * dropping it and turning a carried construction back into the reader's own.
+     * <p>Both are answered when the source is read, and no later place answers them again. Expansion
+     * is why: a construction spliced in from another body is the same node the reader's own would be,
+     * and a construction a row spreads in was read as the model's own however it stands now — so the
+     * position a node is found at says neither, and asking the node is what is left.
+     *
+     * <p>So a pass has no way to make one that says what it was not read as: the components are of
+     * types only this package can name, and every place in this package that settles one is written
+     * out and held against the compiled classes. A construction is either
+     * read from the source that spells it ({@link #read}), translated from the form that already
+     * answered for it ({@link #fromApply}), rebuilt from one that has the answers ({@link #with}),
+     * moved across a crossing that changes where it came from ({@link #publishedBy},
+     * {@link #carriedByValue}), or built by a pass out of no source at all
+     * ({@link #syntheticWithEveryFieldWritten}) — which is the one of these that answers for itself,
+     * and is named for the answer it gives.
      */
     record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
                    ConstructionOrigin origin, Fields fields, SourcePos pos, Region region)
             implements Expr {
 
-        /** A construction written where every field of it is written out. */
-        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
-                       ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(typeName, inits, spreads, origin, Fields.EVERY_ONE_WRITTEN, pos, region);
+        /**
+         * The construction {@code surface} spells, read under {@code reading} — the one way a
+         * construction is made from a source that writes one.
+         *
+         * <p>{@code surface} is the run of characters this is the reading of, and what it answers is
+         * where the construction stands. A pass rewriting a body holds no surface node, so nothing
+         * it has is a reading — but that is what the passes are like and not something the language
+         * refuses, a parsed node being a record anyone can build. What holds the answer down is that
+         * every place one is settled is written out and checked against the compiled classes.
+         */
+        public static NewData read(Ast.NewData surface, Name typeName, List<FieldInit> inits,
+                                   List<Var> spreads, Reading reading) {
+            return new NewData(typeName, inits, spreads, Origins.Own.IT_IS,
+                    switch (reading) {
+                        case A_FIXTURE -> Fields.OPTIONALS_MAY_BE_OMITTED;
+                        case THE_MODELS_OWN -> Fields.EVERY_ONE_WRITTEN;
+                    },
+                    surface.pos(), surface.region());
+        }
+
+        /**
+         * The construction {@code application} means — {@code T(v)} at a newtype, which the author
+         * wrote as an application and a desugaring reads as what it constructs.
+         *
+         * <p>The application is the argument because it is what already answered: where the
+         * construction came from is the application's answer and is carried, not asked again of the
+         * pass rewriting it. A newtype construction writes the one field the newtype declares, so
+         * every field of it is written — which this says, rather than a caller.
+         */
+        public static NewData fromApply(Apply application, Name typeName, List<FieldInit> inits) {
+            return new NewData(typeName, inits, List.of(), application.origin(),
+                    Fields.EVERY_ONE_WRITTEN, application.pos(), application.region());
+        }
+
+        /**
+         * A construction a pass composed, which no source spells and which gives every field of the
+         * type a value — written out or spread in, as {@link Fields#EVERY_ONE_WRITTEN} is.
+         *
+         * <p>The one construction that is nobody's reading. It says what it is in its name because
+         * there is no source to have said it: a pass building one is stating that it left no field
+         * to be filled in for it, and a pass that cannot state that has no construction to build.
+         */
+        public static NewData syntheticWithEveryFieldWritten(Name typeName, List<FieldInit> inits,
+                                                             List<Var> spreads, SourcePos pos,
+                                                             Region region) {
+            return new NewData(typeName, inits, spreads, Origins.Own.IT_IS,
+                    Fields.EVERY_ONE_WRITTEN, pos, region);
+        }
+
+        /**
+         * Whether a field this construction leaves out is the absent value its declaration holds —
+         * asked of the node, which is what was there when the source was read.
+         */
+        public boolean mayOmitOptionalFields() {
+            return fields == Fields.OPTIONALS_MAY_BE_OMITTED;
         }
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
         public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, origin.publishedIn(module), fields, pos,
-                    region);
+            return new NewData(typeName, inits, spreads, Origins.publishedIn(origin, module),
+                    fields, pos, region);
         }
 
         /** The same construction, carried into a body by a value that body named. */
         public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, origin.carriedByValue(), fields, pos,
+            return new NewData(typeName, inits, spreads, Origins.carriedByValue(origin), fields, pos,
                     region);
+        }
+
+        /** The same construction over rewritten fields and spreads, which is a rebuild and carries
+         *  where the construction came from and which fields it writes out. */
+        public NewData with(List<FieldInit> inits, List<Var> spreads) {
+            return with(inits, spreads, pos, region);
+        }
+
+        /** The same construction rewritten and stamped where the copy of it stands — what a pass
+         *  that copies a body into another one writes. */
+        public NewData with(List<FieldInit> inits, List<Var> spreads, SourcePos pos, Region region) {
+            return new NewData(typeName, inits, spreads, origin, fields, pos, region);
+        }
+
+        /**
+         * Whether the body holding this was handed the construction rather than making it, and so
+         * answers for none of it — asked of the node, which is what holds the answer.
+         */
+        public boolean wasCarried(TypeSymbol.AtModule built) {
+            return Origins.carried(origin, built);
         }
     }
 
     /**
      * Whether a construction has to write out every field it has.
      *
-     * <p>One rule reads this, and it is the one that reports a field with no value. A row writes a
-     * value the way it is read back rather than the way a body builds one, and there an unwritten
-     * optional field is the absent value it would otherwise spell out (spec §example-evaluable);
-     * everywhere else a construction says what each of its fields is, which is the rule a body is
-     * held to. Named for what it permits rather than for where it came from, so nothing else can
-     * come to rest on "this was written in a row".
+     * <p>One rule turns on this, and it is the one that reports a field with no value. A fixture
+     * writes a value the way it is read back rather than the way a body builds one, and there an
+     * unwritten optional field is the absent value it would otherwise spell out (spec
+     * §example-evaluable); everywhere else a construction says what each of its fields is, which is
+     * the rule a body is held to. Named for what it permits rather than for where it came from, so
+     * nothing else can come to rest on "this was written in a fixture".
+     *
+     * <p>Nothing outside this package names it. The rule that turns on it asks the construction
+     * ({@link NewData#mayOmitOptionalFields}, {@link Construct#mayOmitOptionalFields}), so a reader
+     * gets the answer from the node that holds it rather than from whichever value it had in hand,
+     * and a pass has nothing to spell that would make a construction say what it was not read as.
+     * What {@link Reading} settles is which of these a construction gets, and it settles it once.
      */
     enum Fields {
         /** Every field of the construction is written or spread — what a body writes. */
@@ -1663,6 +1919,31 @@ public interface Hir {
         /** The name, and the occurrence of it that was read. */
         WrittenName written();
 
+        /**
+         * Which reference this is, or null where the name reaches no declaration and there is none
+         * to be.
+         *
+         * <p>Not the name and not the place. A pass may respell a reference — a helper written bare
+         * becomes qualified in a body carried out of its module — so what the name is spelled as
+         * says nothing about which occurrence it is; two occurrences of one name reach the same
+         * declaration, so what it reaches says nothing either; and where the characters are is
+         * where a complaint belongs. So a reader that has to tell one occurrence from another reads
+         * this ({@link ReferenceOrigin}).
+         *
+         * <p>Whoever wrote it. An author's is one this source counted; a pass writing a name of its
+         * own — the operation an empty collection stands for — wrote a reference too, and it is
+         * said by what made the pass write it. A pass's given the number of one an author wrote
+         * would be this compiler's work passing for the model's, so the two are told apart by which
+         * they are rather than by one of them being absent.
+         *
+         * <p>Null only where the name reaches no declaration: a read of a binding, a namespace, a
+         * name that denotes nothing. What such a name is, is what it reaches — a binding is already
+         * a thing this compiler tells from every other — so there is no occurrence to number and
+         * none is wanted. A name that does reach a declaration carries one, which
+         * {@link Denoting} refuses to be built without.
+         */
+        ReferenceOrigin origin();
+
         /** The stretch of source the expression was written over. */
         @Override
         Region region();
@@ -1686,21 +1967,30 @@ public interface Hir {
         }
 
         /**
-         * A name a pass already knows the meaning of, written where the source writes it.
+         * A name a pass already knows the meaning of, reaching something that is not a declaration:
+         * a case of a sum, a value the language names, a binding.
          *
          * <p>The reach name is given rather than worked out here. A pass writing a name into a body
          * either has one in hand — it is rewriting a name that already carried it — or knows which
          * module's body it is writing into, and neither is something this factory can see. Worked
          * out from the spelling it would be the very derivation the carried value exists to remove.
+         *
+         * <p>Not for a name that reaches a declaration. Such a name is some reference of it, and
+         * which one is the writer's to say ({@link #respelled}); nothing here could work it out, so
+         * this hands over none and {@link Denoting} refuses the pairing.
          */
         static Var denoting(String spelling, ReachName reachedAs, SourcePos pos) {
             return denoting(WrittenName.of(spelling, pos), reachedAs);
         }
 
         /** The same, off an occurrence already read: a name standing as an expression over exactly
-         * the characters that spell it — every one but a name the author parenthesized. */
+         * the characters that spell it — every one but a name the author parenthesized.
+         *
+         * <p>What such a name is, is what it reaches — a binding is already a thing this compiler
+         * tells from every other — so there is no occurrence of it to number and none is handed
+         * over. A name reaching a declaration is the other case and is not written here. */
         static Var denoting(WrittenName written, ReachName reachedAs) {
-            return new Denoting(written, reachedAs, written.region());
+            return new Var.Denoting(written, reachedAs, null, written.region());
         }
 
         /**
@@ -1711,9 +2001,28 @@ public interface Hir {
          * characters at {@code pos} spell what the author put there, which is not this, so the name
          * is written nowhere and only the expression has a place: the region is the one the name it
          * replaced was read over.
+         *
+         * <p><b>The reference is the one it replaced.</b> Respelling changes how a name is written
+         * and what route it takes to what it names; which occurrence of the source it is has not
+         * moved, and a reader telling two occurrences apart would be told they are two different
+         * ones. So {@code origin} is carried in from the name being replaced — see
+         * {@link #respelledAs}, which is the way in for a caller that has that name.
          */
-        static Var respelled(String spelling, ReachName reachedAs, SourcePos pos, Region region) {
-            return new Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
+        static Var respelled(String spelling, ReachName reachedAs, ReferenceOrigin origin,
+                             SourcePos pos, Region region) {
+            return new Var.Denoting(WrittenName.synthetic(spelling, pos), reachedAs, origin, region);
+        }
+
+        /**
+         * This name written and reached another way, which is the same reference of the source.
+         *
+         * <p>To a declaration, which is what respelling a name is for: a helper qualified by the
+         * module that declares it goes on reaching that declaration from a body carried out of it.
+         * A name that reaches a binding is read where the binding is and is not respelled to reach
+         * it another way, so the route this takes is narrower than a route in general.
+         */
+        default Var respelledAs(String spelling, ReachName.Declaration reachedAs) {
+            return respelled(spelling, reachedAs, origin(), pos(), region());
         }
 
         /**
@@ -1726,7 +2035,8 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Denoting(written, new ReachName.InScope(local), written.region());
+            // No source wrote it: what a pass reads here is a binding that pass put there.
+            return new Var.Denoting(written, new ReachName.InScope(local), null, written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1735,6 +2045,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         default SourcePos pos() {
             return written().pos();
         }
@@ -1752,8 +2063,8 @@ public interface Hir {
          * so a reader arrives at it through this projection or through narrowing to the two forms,
          * and says what it does with an {@link Unanswered} name where it makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Var.Denoting answered() {
+            return this instanceof Var.Denoting denoting ? denoting : null;
         }
 
         /** Whether this name denotes nothing — read by resolution, and reported where it was
@@ -1773,20 +2084,21 @@ public interface Hir {
          * {@link Unanswered}.
          */
         default Var denoting(ReachName reachedAs) {
-            return new Denoting(written(), reachedAs, region());
+            return new Var.Denoting(written(), reachedAs, origin(), region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
         default Var over(Region region) {
             return switch (this) {
-                case Denoting d -> new Denoting(d.written(), d.reachedAs(), region);
-                case Unanswered u -> new Unanswered(u.written(), region);
+                case Var.Denoting d ->
+                        new Var.Denoting(d.written(), d.reachedAs(), d.origin(), region);
+                case Var.Unanswered u -> new Var.Unanswered(u.written(), u.origin(), region);
             };
         }
 
         /** The same name, read and found to name nothing. */
         default Var unanswered() {
-            return new Unanswered(written(), region());
+            return new Var.Unanswered(written(), origin(), region());
         }
 
         /**
@@ -1797,15 +2109,32 @@ public interface Hir {
          * Held as two, a pass could put one name's denotation next to another's route and nothing
          * would say so — and three passes did, replacing what a name meant and leaving the route it
          * was reached by. A denotation is changed by replacing the reference, which is
-         * {@link #withReachedAs}.
+         * {@link #denoting(WrittenName, ReachName)}.
          */
-        record Denoting(WrittenName written, ReachName reachedAs, Region region) implements Var {
+        record Denoting(WrittenName written, ReachName reachedAs, ReferenceOrigin origin,
+                        Region region) implements Var {
 
             public Denoting {
                 if (reachedAs == null) {
                     throw new IllegalArgumentException("`" + written.canonical()
                             + "` is answered by what it reaches and how it reaches it;"
                             + " nothing here says either");
+                }
+                // A name that reaches a declaration says which reference of it this is. Two
+                // occurrences of one name reach one declaration and are two references, and a
+                // reader telling them apart — the block each of them expands to is its own — has
+                // nothing else to do it by: the spelling is a pass's to change and the place is
+                // shared by every copy of a helper that was expanded. Whoever wrote the name owes
+                // one, so a pass writing its own says what made it write one rather than leaving
+                // the slot empty for a reader to find.
+                //
+                // Asked of what it reaches and not of who spelled it. A pass respelling an
+                // author's name carries the author's reference through, and a name reaching a
+                // binding or a namespace has nothing to number — what such a name is, is what it
+                // reaches.
+                if (reachedAs instanceof ReachName.Declaration && origin == null) {
+                    throw new IllegalArgumentException("`" + written.canonical()
+                            + "` reaches a declaration, so it is some reference of it");
                 }
                 heldBy(written, region);
             }
@@ -1844,18 +2173,6 @@ public interface Hir {
                 return reachedAs().rendered();
             }
 
-            /**
-             * The same name, standing where it stood, as {@code reference} reaches it.
-             *
-             * <p>The one way what a name means is changed. A pass with a different declaration in
-             * hand — a construction's origin restated, a binding copied into an expansion — works
-             * out how this module reaches that declaration and replaces the whole reference, so
-             * there is no operation here that puts a new denotation beside the old route.
-             */
-            public Var withReachedAs(ReachName reference) {
-                return new Denoting(written(), reference, region());
-            }
-
             @Override
             public String toString() {
                 return name();
@@ -1876,7 +2193,8 @@ public interface Hir {
          * makes it so. The order the passes run in makes nothing so: a compilation goes on
          * answering after an error, so only a producer that leaves them out can be named.
          */
-        record Unanswered(WrittenName written, Region region) implements Var {
+        record Unanswered(WrittenName written, ReferenceOrigin origin, Region region)
+                implements Var {
 
             public Unanswered {
                 heldBy(written, region);
@@ -1943,6 +2261,79 @@ public interface Hir {
     }
 
     /**
+     * What an application applies, as a report says it: the name the author applied, and the
+     * characters they applied it over.
+     *
+     * <p>Settled where the application is read and carried from there. A lowering replaces what is
+     * in the callee position — a field read is bound to a name of its own before it is applied, a
+     * sugared library name becomes the operation it stands for, a helper of another module is
+     * written qualified — and a reader that asked the callee what the author applied would be told
+     * whatever the last pass put there. So no reader asks it: the answer is read off the source
+     * once, and every rewrite of the application hands it on.
+     *
+     * <p>Both halves, because they are two answers and the second cannot be worked out from the
+     * first. A name the author parenthesized is written over five characters and applied over
+     * seven, and a report about what is applied underlines the seven. The pair is what the reading
+     * already holds, so keeping it is keeping what was read rather than working anything out.
+     *
+     * <p>{@code name} is null where what the author applied is not a name: the result of a call, a
+     * lambda, a conditional. That is one of the three states this has, the others being a name the
+     * author wrote ({@link WrittenName#authored()}) and one a pass reached for, and none of them is
+     * an empty spelling.
+     *
+     * <p>{@code at} is never null. An application stands somewhere — where a source wrote it, or
+     * where the pass composing it put it — and a report about what it applies points there. There
+     * is no application with nowhere to point at what it applies.
+     */
+    record AppliedCallee(WrittenName name, Region at) {
+
+        public AppliedCallee {
+            Objects.requireNonNull(at, "an application is applied somewhere, and a report about"
+                    + " what it applies points there");
+        }
+
+        /** Whether what the author applied is a name — which is not whether a name is what stands
+         *  in the callee position now, a lowering having been free to put a binding of its own
+         *  there. */
+        public boolean isAName() {
+            return name != null;
+        }
+
+        /** The name as a report quotes it, or the empty spelling where what is applied is not a
+         *  name. */
+        public String quoted() {
+            return name == null ? "" : name.canonical();
+        }
+
+        /**
+         * Where a report about the name this applies points: the occurrence of the name, or the
+         * characters applied where the author applied no name.
+         *
+         * <p>The choice between two answers already held. A report about what is applied has
+         * somewhere to point either way, and where there is no name the place is the expression
+         * that stood in the callee position — which is what the author applied, being not a name.
+         */
+        public Region reportedAt() {
+            return name == null ? at : name.reportedAt();
+        }
+
+        /**
+         * The same applied callee in a file this copy is not read against — the name it was, written
+         * nowhere here, applied over {@code over} and complained about at {@code at}.
+         *
+         * <p>What the author applied travels with the copy; where they wrote it does not. A body
+         * spliced in from a source this compile cannot show carries no coordinate of that source, so
+         * the occurrence goes and the places are the ones the copy stands at — the same answer a
+         * field read taken off a copied value gives, and for the same reason.
+         */
+        public AppliedCallee restamped(SourcePos at, Region over) {
+            return new AppliedCallee(name == null ? null
+                    : WrittenName.synthetic(name.canonical(), at),
+                    over != null ? over : Region.point(at));
+        }
+    }
+
+    /**
      * A function applied to arguments. {@code function} is the thing being applied, and it is an
      * expression like any other: what is applied is what it answers, not how the application was
      * written.
@@ -1951,14 +2342,83 @@ public interface Hir {
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
-                 SourcePos pos, Region region) implements Expr {
+    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, AppliedCallee applied,
+                 ApplicationOrigin application, SourcePos pos, Region region) implements Expr {
 
-        /** Applying whatever {@code function} is, with nothing standing in for what the source
-         * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos,
-                     Region region) {
-            this(function, args, origin, null, pos, region);
+        // `application` and not `origin`, because the slot beside it is already an answer to a
+        // different question: that one says how the construction this application stands for
+        // reached the body, and this one says why this application is here at all. A pass
+        // rewriting the first has nothing to say about the second, and one name for both would be
+        // two facts a reader could take for one.
+        //
+        // Said by whoever writes the application and never read back off its shape. An application
+        // no source wrote looks the same whether a name was expanded into it, a library operation
+        // was reached for, or a row was composed — so a reader working it out from the shape gets
+        // the common case right and answers the rest with what the common case says.
+
+        public Apply {
+            // Every application in this tree answers it, which is what lets a reader below take the
+            // answer rather than work one out. Held by the factories alone, the rule would be one
+            // the record itself did not keep, and a pass reaching for the constructor could leave a
+            // reader nothing — which is the state this exists to remove.
+            if (application == null) {
+                throw new IllegalArgumentException(
+                        "an application is here for some reason: " + function);
+            }
+        }
+
+        /**
+         * The application {@code surface} spells, of whatever {@code function} is — the one way an
+         * application is made from a source that writes one.
+         *
+         * <p>Where it came from is the body's own, because a source spells an application in the
+         * body it is written in. What the author applied is {@code applied}, read off the surface
+         * callee by the reading that has it: which name a chain of field reads spells is a question
+         * about the source, and the answer is settled once here rather than worked out again from
+         * whatever the passes leave in the callee position.
+         */
+        public static Apply read(Ast.Apply surface, AppliedCallee applied, Expr function,
+                                 List<Expr> args) {
+            return new Apply(function, args, Origins.Own.IT_IS, applied,
+                    new ApplicationOrigin.Written(surface.origin()), surface.pos(),
+                    surface.region());
+        }
+
+        /**
+         * An application a pass composed, standing where it puts it — a call that stands for a name
+         * used as a value, a library operation a fixture reached for.
+         *
+         * <p>Nobody's reading, so it says what it is in its name. Where it came from is the body it
+         * is written into: a pass composing an application is writing one there, and a pass
+         * rewriting one that was already written carries what it was handed instead
+         * ({@link #replacedBy}, {@link #with}, {@link #withArgs}).
+         *
+         * <p>What the author applied is whatever the callee already answers, and no more than that.
+         * A synthetic application may apply a name occurrence somebody wrote — {@code etaExpand}
+         * composes the block a bare {@code List.map} stands for, and the application is this pass's
+         * while the occurrence is the author's — so the two are not one question and this settles
+         * only the first. Where the callee is a name, its own is taken; where it is not, there is no
+         * name to answer with and nothing is invented. A chain of field reads is not read back into
+         * a name here either: which of those spells one is the source reading's answer, and a pass
+         * holding a resolved expression is not reading a source.
+         *
+         * <p>{@code application} is why this one is here, which the composer says because only the
+         * composer knows. An application no source wrote looks the same whichever pass wrote it and
+         * for whatever reason, so there is nothing here to work it out from — and giving it the
+         * number of a construct somebody wrote would be this pass's work passing for the model's.
+         */
+        public static Apply synthetic(Expr function, List<Expr> args,
+                                      ApplicationOrigin application, SourcePos pos, Region region) {
+            return new Apply(function, args, Origins.Own.IT_IS, appliedCallee(function, pos),
+                    application, pos, region);
+        }
+
+        /** What {@code function} answers as the applied callee, anchored at {@code where} it stands
+         *  when the callee is written nowhere at all. */
+        private static AppliedCallee appliedCallee(Expr function, SourcePos where) {
+            Region at = function.reportedAt();
+            return new AppliedCallee(function instanceof Var v ? v.written() : null,
+                    at != null ? at : Region.point(where));
         }
 
         /**
@@ -1982,11 +2442,20 @@ public interface Hir {
          * covers is its own — a rewrite that puts another name in a call leaves the arguments where
          * they are, so a report about what is applied would otherwise underline them too. A caller
          * that has the callee's extent builds the {@link Var} itself and passes it.
+         *
+         * <p>{@code origin} is which reference the name is, which the caller says because only the
+         * caller knows: a name reaching a declaration is some reference of it, and what made this
+         * pass write one is the caller's business and not a thing to be worked out from the
+         * spelling. Null where the name reaches no declaration — a namespace, a case of a sum —
+         * and {@link Var.Denoting} refuses it where it does.
          */
-        public Apply(String fn, ReachName reachedAs, List<Expr> args,
-                     ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
-                    args, origin, pos, region);
+        public static Apply synthetic(String fn, ReachName reachedAs, ReferenceOrigin origin,
+                                      ApplicationOrigin application, List<Expr> args, SourcePos pos,
+                                      Region region) {
+            return synthetic(
+                    Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), origin, pos,
+                            null),
+                    args, application, pos, region);
         }
 
         /** Why a pass may not apply a name it has not answered for. */
@@ -1995,55 +2464,43 @@ public interface Hir {
                     + " reaches, and the spelling would be resolved again wherever this is read";
         }
 
-        /** Whether what this applies is a name. A reader that wants the name itself matches on
-         * {@link #function()}, which is where it is. */
-        public boolean appliesAName() {
+        /**
+         * Whether a name is what stands in the callee position now.
+         *
+         * <p>Not whether the author applied one, which is {@link AppliedCallee#isAName()}. The two
+         * differ wherever a lowering has been: {@code deps.count(x)} binds the field read to a name
+         * of its own and applies the binding, so a name is what is applied here and a field read is
+         * what the author applied. A reader wanting the name itself matches on {@link #function()},
+         * which is where it is.
+         */
+        public boolean calleeIsAName() {
             return function instanceof Var;
         }
 
         /**
          * The name this applies as the source writes it, or the empty spelling where what it
-         * applies is not a name. What a report quotes and underlines.
+         * applies is not a name. What a report quotes.
          *
          * <p><b>Never a lookup key.</b> An import lets a library name be written without its
          * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
          * because a miss is what a table keyed by names does with one it has not got. Every
-         * question of the form "which declaration is this" asks {@link #reaches()}.
-         *
-         * <p>{@link #appliedAs} answers where a lowering replaced what was written with a binding
-         * it introduced: applying something other than a name binds it first, and the binding is
-         * named nothing an author could have typed. The two are separate for that reason — this
-         * one is read by reports and nothing else.
+         * question of the form "which declaration is this" asks {@link #answered()}.
          */
         public String written() {
-            return name().canonical();
+            return applied.quoted();
         }
 
         /**
-         * The name this applies, with the occurrence of it a report underlines.
+         * Where a report about what this applies points: the characters the author applied it over.
          *
-         * <p>Where a lowering replaced what was written with a binding it introduced
-         * ({@link #appliedAs}), that binding is written nowhere: the characters at {@link #pos()}
-         * spell whatever the author applied, which is no longer this.
-         */
-        public WrittenName name() {
-            if (appliedAs != null) {
-                return WrittenName.synthetic(appliedAs, pos);
-            }
-            return function instanceof Var v ? v.written() : WrittenName.synthetic("", pos);
-        }
-
-        /**
-         * Where a report about what this applies points: the characters the callee was written over.
-         *
-         * <p>Not {@link #name()}'s. The name is what a report quotes, and where a lowering replaced
-         * what was written with a binding it introduced ({@link #appliedAs}) that name is written
-         * nowhere — while the characters the binding stands for are still there, being whatever the
-         * author applied. Asking the callee gets those; asking the name gets a point at best.
+         * <p>Read off {@link #applied} and not off the callee. A lowering is free to replace what is
+         * in the callee position — with a binding it introduced, with the operation a sugared name
+         * stands for, with a helper's qualified spelling — and the characters those stand for are
+         * still whatever the author wrote. Asking the callee gets the answer only until a pass has
+         * been through.
          */
         public Region appliedAt() {
-            Region written = function.reportedAt();
-            return written != null ? written : name().reportedAt();
+            return applied.at();
         }
 
         /**
@@ -2070,22 +2527,69 @@ public interface Hir {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos, region);
+            return new Apply(function, args, Origins.carriedByValue(origin), applied, application,
+                    pos, region);
         }
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
-         *  says so here rather than listing the slots it is not changing, which is how
-         *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
+         *  says so here rather than listing the slots it is not changing, which is how what the
+         *  author applied would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
+            return new Apply(function, args, origin, applied, application, pos, region);
+        }
+
+        /**
+         * The same application, of something else — the one rewrite that puts another thing in the
+         * callee position of an application a source already wrote.
+         *
+         * <p>What is applied is the pass's; where the application stands, where it came from and
+         * what the author applied there are not. A sugared library name becomes the operation it
+         * stands for, a field read applied is bound to a name of its own and the binding applied,
+         * a helper of another module is written qualified — each replaces what is applied and none
+         * of them replaces what was written over those characters.
+         *
+         * <p>Taking no place to stand is what makes it that rewrite rather than {@link #with}. A
+         * replacement stands where the thing it replaces stood, so a caller choosing somewhere for
+         * it would be choosing whether this is a replacement at all.
+         */
+        public Apply replacedBy(Expr function) {
+            return replacedBy(function, args);
+        }
+
+        /** The same application, of something else and over rewritten arguments — the rewrite above,
+         *  where what is supplied to the new callee is not what was supplied to the old one. */
+        public Apply replacedBy(Expr function, List<Expr> args) {
+            return new Apply(function, args, origin, applied, application, pos, region);
+        }
+
+        /**
+         * The same application rewritten and stamped where the copy of it stands — what a pass that
+         * copies a body into another one writes. Where the construction came from it carries.
+         *
+         * <p>What the author applied it takes, because a copy is where that answer stops being one
+         * place. The name travels: a call the copy holds applies what it applied wherever the copy
+         * is read. Where they wrote it does not, and a copy read against another file carrying a
+         * coordinate of the first is a report pointing at a line its reader is not looking at.
+         * Which of the two this copy is, the pass making it knows and this does not
+         * ({@link AppliedCallee#restamped}).
+         */
+        public Apply with(AppliedCallee applied, Expr function, List<Expr> args, SourcePos pos,
+                          Region region) {
+            return new Apply(function, args, origin, applied, application, pos, region);
+        }
+
+        /** Whether a value this body named is what carried the construction this stands for in —
+         *  asked of the node, which is what holds the answer. */
+        public boolean wasCarriedByValue() {
+            return Origins.viaValueReference(origin);
         }
     }
 
     /** {@code origin} is where the comparison was written, which is not always where the fork
      * testing it was: a condition can be an application of a function parameter, and the predicate
      * handed to it is the caller's. Carried so that two predicates written separately stay two lines
-     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
-    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+     * and one predicate applied twice stays one ({@link SourceConstructOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
 
 
@@ -2112,19 +2616,20 @@ public interface Hir {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
-                    region);
+            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.applied(),
+                    x.application(), x.pos(), region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
                     new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),
                             region);
             case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
                     x.opens(), x.body(), x.pos(), region);
-            case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
+            case Expansion x -> new Expansion(x.callee(), x.application(), x.at(), x.bound(),
+                    x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
-            case ListLit x -> new ListLit(x.elements(), x.pos(), region);
-            case RowCollection x -> new RowCollection(x.elements(), x.pos(), region);
+            case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
+            case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
             case Tuple x -> new Tuple(x.elements(), x.pos(), region);
             case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
@@ -2176,7 +2681,8 @@ public interface Hir {
                 Expr function = atExpr.apply(a.function());
                 List<Expr> args = each(a.args(), atExpr);
                 yield function == a.function() && args == a.args() ? a
-                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos(), a.region());
+                        : new Apply(function, args, a.origin(), a.applied(), a.application(), a.pos(),
+                                a.region());
             }
             case If iff -> {
                 Expr cond = atExpr.apply(iff.cond());
@@ -2215,7 +2721,7 @@ public interface Hir {
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex
-                        : new Expansion(ex.callee(), ex.application(), bound, ex.given(),
+                        : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                                 ex.declaredReturn(), body, ex.pos(), ex.region());
             }
             case Block bl -> {
@@ -2225,12 +2731,13 @@ public interface Hir {
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
-                yield elements == l.elements() ? l : new ListLit(elements, l.pos(), l.region());
+                yield elements == l.elements() ? l
+                        : new ListLit(elements, l.origin(), l.pos(), l.region());
             }
             case RowCollection l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
                 yield elements == l.elements() ? l
-                        : new RowCollection(elements, l.pos(), l.region());
+                        : new RowCollection(elements, l.origin(), l.pos(), l.region());
             }
             case ListComp comp -> {
                 Expr element = atExpr.apply(comp.element());
@@ -2256,7 +2763,7 @@ public interface Hir {
                     return i.withValue(value);
                 });
                 yield spreads == nd.spreads() && inits == nd.inits() ? nd
-                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos(), nd.region());
+                        : nd.with(inits, spreads);
             }
             case Match m -> {
                 Expr scrutinee = atExpr.apply(m.scrutinee());

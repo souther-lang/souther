@@ -4,9 +4,13 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.Type;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -29,18 +33,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
+
+    /** The lists here are this test's own: no source spells the brackets. */
+    private static final SourceConstructOrigin COMPOSED = SourceConstructOrigin.unwritten();
+
+    /** This test stands in for a body, so the names it applies are that body's references. */
+    private static final SourceReferenceOrigin REF =
+            new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0);
+
+    /** And the applications are that body's too: this test stands where an author's call stands. */
+    private static final ApplicationOrigin WROTE = new ApplicationOrigin.Written(
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0, SourceConstruct.CALL));
     private static final Preserved KEPT = Preserved.byTheLanguagesOwnOperations();
 
     @Test
     void aPolymorphicOperationSettlesItsVariablesFromItsArguments() {
         // List.length : (List<'a>) -> Int — the argument decides 'a, and the result is not a variable
-        Hir.Expr call = new Hir.Apply("List.length",
-                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "length")),
-                List.of(new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null)),
-                ConstructionOrigin.own(), POS, null);
+        Hir.Expr call = Hir.Apply.synthetic("List.length",
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "length")), REF, WROTE,
+                List.of(new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), COMPOSED, POS, null)),
+                POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
+                CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                DeclarationKinds.NONE).preserving(KEPT));
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         assertEquals(ValueName.Stdlib.operation("List", "length"), kept.operation());
@@ -56,14 +72,15 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // answered.
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block step = new Hir.Block(List.of(binders.binder("x", POS)),
-                new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
-        Hir.Expr call = new Hir.Apply("List.flatMap",
-                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
-                List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), POS, null)),
-                ConstructionOrigin.own(), POS, null);
+                new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), COMPOSED, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
+        Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
+                new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")), REF, WROTE,
+                List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), COMPOSED, POS, null)),
+                POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT));
+                CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                DeclarationKinds.NONE).preserving(KEPT));
 
         assertEquals(Type.list(Type.INT), typed.type());
     }
@@ -91,11 +108,12 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // nothing could be derived from leaving it standing, so it is expanded — and a tree that
         // still holds one is this compiler having failed to do that
         ValueName.Helper half = new ValueName.Helper("demo", "half");
-        Hir.Expr call = new Hir.Apply("half",
-                new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)),
-                ConstructionOrigin.own(), POS, null);
+        Hir.Expr call = Hir.Apply.synthetic("half",
+                new ReachName.Own(half), REF, WROTE, List.of(new Hir.IntLit(1, POS, null)), POS,
+                null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
-                CheckContext.of(Symbols.none(DefaultStdlib.get())).preserving(KEPT)));
+                CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                DeclarationKinds.NONE).preserving(KEPT)));
     }
 }

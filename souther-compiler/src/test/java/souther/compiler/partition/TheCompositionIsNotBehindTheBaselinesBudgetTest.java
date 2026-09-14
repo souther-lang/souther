@@ -26,9 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * a line.
  *
  * <p>The bound still says what it says. A walk that ran out of assignments and one that ran out of
- * budget are different facts about the search, and the second is what {@code SEARCH_LIMIT} is for —
- * it decides the class's answer where nothing else could be written for it, rather than in front of
- * the composition.
+ * budget are different facts about the search, and the second is one of the things
+ * {@code THE_SEARCH_LEFT_SOMETHING_UNTRIED} is for — it decides the class's answer where nothing
+ * else could be written for it, rather than in front of the composition. What the word says is that
+ * something was left, and which of the two ways it was left is what travels beside it.
  */
 class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
@@ -86,7 +87,7 @@ class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
         ClassDisposition at = attemptAtTheLowerHi(filling);
         assertEquals(List.of("Request { lo = Amount(0), hi = Amount(0) }"),
-                filling.composed().rowFor(((ClassDisposition.Built) at).row()).inputs().stream()
+                filling.composed().rowFor(((ClassDisposition.Built) at).rowId()).inputs().stream()
                         .map(FixtureTemplate::text).toList(),
                 "composed from the classes, which is what a row is where none of the values the "
                         + "model states can be written for it: " + at);
@@ -94,7 +95,7 @@ class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
     /** What the search made of the class {@code hi} takes below the line the body draws. */
     private static ClassDisposition attemptAtTheLowerHi(Adequacy.Filling filling) {
-        for (Map.Entry<Generator.ClassOwed, ClassDisposition> each
+        for (Map.Entry<ClassOfAPosition, ClassDisposition> each
                 : filling.composed().discharge().classes().entrySet()) {
             if (each.getKey().at().term().endsWith("hi")
                     && each.getKey().classId().contains("0")) {

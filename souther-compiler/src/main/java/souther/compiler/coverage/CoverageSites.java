@@ -4,13 +4,16 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.Optional;
 import java.util.Map;
 
 /**
@@ -35,7 +38,7 @@ import java.util.Map;
  * <p>A {@code guard … else} and a comprehension's condition are both an {@code if} by the time they
  * get here, so the walk has one case for the three of them — and what they are is not read off that
  * case. Which construct the author wrote is carried from where the source was read
- * ({@link souther.compiler.types.CoverageConstruct}), and what one way through it means is a
+ * ({@link souther.compiler.types.SourceConstruct}), and what one way through it means is a
  * {@link SourceOutcome} beside it. Deciding either from the shape of the lowered node is answering a
  * question about the source out of the tree that runs, which is how a comprehension came to be
  * reported as a {@code guard} with a {@code then} arm.
@@ -61,7 +64,7 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(CoverageOrigin fork, List<BindingOwner> within,
+    private static DecidedBy decidedAt(SourceConstructOrigin fork, List<BindingOwner> within,
                                        DecisionSources decisions, SuppliedRules supplied) {
         if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
@@ -129,8 +132,43 @@ public final class CoverageSites {
      *             comparison, whose origin is its own rather than the fork's: a comparison is one
      *             construct, and what a fork holds several of is arms
      */
-    public record Obligation(String behavior, CoverageOrigin origin, int part,
-                             DecidedBy decided) {}
+    public record Obligation(String behavior, SourceConstructOrigin origin, int part,
+                             DecidedBy decided) {
+
+        /**
+         * A row is owed for what a definition's body wrote, which is asked where the value is made
+         * rather than where one is published.
+         *
+         * <p>Here rather than at the numbering, which is where it stood: the numbering refused an
+         * origin no source wrote as it handed out a number, and a fork read back through
+         * {@link GuardRef} is made without going that way, so the refusal covered one of the two
+         * places an obligation comes from. Stated of the value, there is no such place.
+         */
+        public Obligation {
+            WrittenOwner.theBodyThatWrote(origin.owner());
+        }
+
+        /** The definition whose body wrote the construct. */
+        public WrittenOwner.Body writtenIn() {
+            return WrittenOwner.theBodyThatWrote(origin.owner());
+        }
+
+        /** The arm as the author wrote it, which is less than this and is what some readers have. */
+        public AsWritten asWritten() {
+            return new AsWritten(origin, part);
+        }
+    }
+
+    /**
+     * One arm of one fork of the source, which is less than an {@link Obligation}.
+     *
+     * <p>What a reader has where it is reading the model's own text rather than the account: a
+     * condition of a decision rule names the fork the author wrote and which of its arms the way
+     * went down, and nothing about a rule says which rule a caller supplied to that fork. So one of
+     * these can name more than one obligation — a fork the caller decides is one obligation per rule
+     * handed in — and anything read off it holds of the arm only where it holds of all of them.
+     */
+    public record AsWritten(SourceConstructOrigin origin, int part) { }
 
     /**
      * One outcome of one construct, as it stands in the tree that runs.
@@ -142,42 +180,97 @@ public final class CoverageSites {
      * rest of the block under a {@code guard}, and both of those are said in a language, by whoever
      * has a reader in front of them.
      *
-     * @param outcome     what this way through the construct means, in the source's terms
-     * @param at          where the arm is written, as a report may say it. A {@link Citation} and
-     *                    not a place, because an arm of a body spliced in from out of sight is at a
-     *                    call in the caller's file and is not written there — a report handed the
-     *                    coordinate said it was, in both of its renderings
-     * @param index       what identifies it in this run — the probe number, and what a hit set holds.
-     *                    One per occurrence: the emitter lights this one, and the reachability
-     *                    analysis proves things about this one
-     * @param ordinal     where it comes in its behavior, for display
-     * @param obligation  what a row would be owed for, which several occurrences share
      */
-    public record Site(String behavior, SourceOutcome outcome, Citation at,
-                       int index, int ordinal, Obligation obligation) {
+    public sealed interface Site permits ArmSite, ComparisonSite {
 
-        public Site {
+        String behavior();
+
+        /** What this way through the construct means, in the source's terms. */
+        SourceOutcome outcome();
+
+        /** Where a run through this is recorded, of whichever family it was issued to. What
+         *  identifies it in this run — the probe number, and what a hit set holds. One per
+         *  occurrence: the emitter lights this one, and the reachability analysis proves things
+         *  about this one. */
+        RunSite index();
+
+        /** Where it comes in its behavior, for display. */
+        int ordinal();
+
+        /** What a row would be owed for, which several occurrences share. */
+        Obligation obligation();
+
+        /** What the author wrote this an outcome of. */
+        default SourceConstruct construct() {
+            return obligation().origin().kind();
+        }
+
+        /** What a reader is told this is, which the two halves settle together. */
+        default OutcomeName name() {
+            return OutcomeName.of(construct(), outcome());
+        }
+    }
+
+    /**
+     * One arm of one fork, as it stands in the tree that runs.
+     *
+     * <p>The way through a fork a branch measure counts, and what it is is said by its type rather
+     * than asked of it. A reader that only ever has arms — a denominator, a row owed at one, the
+     * words a report writes for one — takes one of these, and a comparison cannot be handed where
+     * one is wanted.
+     */
+    public record ArmSite(String behavior, SourceOutcome.Arm outcome,
+                          ControlPlace.Arm place, int ordinal,
+                          Obligation obligation) implements Site {
+
+        public ArmSite {
             // The pair is what carries the meaning, so the pair is what is checked. Not every
             // combination is a construct of the language — a comprehension attempts no construction,
             // a `match` settles no condition — and a walk that put an outcome on the wrong construct
             // is the defect this whole value exists to make impossible.
             OutcomeName.of(obligation.origin().kind(), outcome);
+            if (place == null) {
+                throw new IllegalArgumentException("a site of an arm is the arm's own place, and"
+                        + " this one is being made without it");
+            }
+            if (place.probe().isEmpty()) {
+                throw new IllegalArgumentException("a site is a place a run is recorded at, and "
+                        + place + " is a place nothing records one at");
+            }
         }
 
-        /** What the author wrote this an outcome of. */
-        public CoverageConstruct construct() {
-            return obligation.origin().kind();
+        /**
+         * Where a run through this arm is recorded.
+         *
+         * <p>The place's, because an address is what the numbering gave the place. Held here as
+         * well it would be the same fact written twice, and a site whose two halves addressed
+         * different arms would be a value nothing could refuse.
+         */
+        @Override
+        public ArmProbe index() {
+            return place.probe().orElseThrow();
         }
 
-
-        /** What a reader is told this is, which the two halves settle together. */
-        public OutcomeName name() {
-            return OutcomeName.of(construct(), outcome);
+        /** What a report about this arm points at, as the place has it — which of the two places,
+         *  and not which place. */
+        public ArmReportAnchor anchor() {
+            return place.anchor();
         }
+    }
 
-        /** Whether this is one of the arms a branch measure counts. */
-        public boolean isArm() {
-            return outcome.isArm();
+    /**
+     * One comparison, as a place a run through it is recorded.
+     *
+     * <p>Not an arm and counted as one nowhere. A condition stops as soon as it is settled, so which
+     * arm a row landed in does not say which comparison ran — and a measure over arms that took one
+     * of these would be counting a place its denominator was never about.
+     */
+    public record ComparisonSite(String behavior, SourceOutcome.Compared outcome, Citation at,
+                                 ComparisonEmissionSite index, int ordinal, Obligation obligation)
+            implements Site {
+
+        public ComparisonSite {
+            OutcomeName.of(obligation.origin().kind(), outcome);
         }
     }
 
@@ -200,8 +293,9 @@ public final class CoverageSites {
      *           the pair, and a value that can hold two answers about one place is one a reader
      *           can pick the wrong half of.
      */
-    public record GuardRef(String behavior, CoverageOrigin origin, DecidedBy decided,
-                           int siteIndexThen, int siteIndexElse, SourcePos at) {
+    public record GuardRef(String behavior, SourceConstructOrigin origin, DecidedBy decided,
+                           java.util.Optional<ArmProbe> whereThen,
+                           java.util.Optional<ArmProbe> whereElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
@@ -216,55 +310,159 @@ public final class CoverageSites {
      * <p>{@code byNode} is keyed by identity. Core nodes are records, so two arms that look the same
      * are equal, and a value-keyed map would hand the emitter the wrong arm's probe. The instances
      * here must be the ones the emitter is walking — the same answer, not an equal one.
+     *
+     * <p>Which is why this is not a value and says nothing of itself. A plan of one graph and a
+     * plan of another built from the same source hold everything alike and answer for different
+     * objects, so there is no equality to write that would be true of both: two of these are one
+     * where they are one object. What is a value is {@link NumberingIdentity} — the same places
+     * under the same numbers over the same executable — and that is what two builds of a module are
+     * held against each other by, and what an answer holding a plan is compared by.
      */
-    public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-                       IdentityHashMap<Core, Integer> byComparison,
-                       IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
-                       IdentityHashMap<Core, Integer> controlByComparison,
-                       java.util.Set<Core> mayRepeat,
-                       IdentityHashMap<Core, ForkOccurrence> forkByNode,
-                       ComparisonCatalog comparisons) {
+    public static final class Plan {
 
-        public Plan {
-            // Every number is of a comparison this plan's catalog holds. Two things go wrong
-            // without it and they are not the same thing.
+        private final List<Site> sites;
+        private final List<GuardRef> guards;
+        private final IdentityHashMap<Core, int[]> byNode;
+        private final Map<ConstructOccurrence, ComparisonEmissionSite> byComparison;
+        private final IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode;
+        private final java.util.Set<Core> mayRepeat;
+        private final Map<Integer, Citation> reachedAt;
+        private final ComparisonCatalog comparisons;
+        private final SiteNumbering numbering;
+
+        /**
+         * Made where the bodies are walked, and nowhere a caller can reach.
+         *
+         * <p>Not public, and that is the whole of what keeps a module to one plan. A plan is filed
+         * by which {@code Core} objects were put in it, so one built by a caller out of parts is an
+         * index into a graph that caller does not own — and nothing downstream can see the
+         * difference, because a lookup that misses and a place that is not numbered come back
+         * alike.
+         *
+         * <p>Which also settles what the checks below are for. They answer {@link #asPlan}, which
+         * puts one together field by field out of what one walk found and can put a numbering
+         * beside a catalog it does not go with — and they answer a test assembling a plan of these
+         * bodies that no source produces, which is the only other caller the package allows.
+         */
+        Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
+             Map<ConstructOccurrence, ComparisonEmissionSite> byComparison,
+             IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode,
+             java.util.Set<Core> mayRepeat,
+             Map<Integer, Citation> reachedAt,
+             ComparisonCatalog comparisons,
+             SiteNumbering numbering) {
+            // Half of what a numbering could get wrong is the key's own answer now: an occurrence
+            // names a comparison and nothing else, so there is no number to put on an `&&` or on
+            // arithmetic, which is what would have had the emitter copy half a `long` off the
+            // stack.
             //
-            // What a number means to the emitter is "copy the value this node left on the stack",
-            // so a number on anything but a comparison is a copy of something else — half a `long`
-            // where the node was arithmetic, or the whole condition where it was an `&&`. That much
-            // the node's own operator answers.
-            //
-            // The catalog is the other half, and it is the one this PR is about. A plan numbering a
-            // comparison the catalog does not hold is a plan with two answers about what a
-            // comparison is: the emitter and the reachability read the numbering, the partition
-            // reads the catalog, and each is complete on its own terms while they describe
-            // different bodies. Nothing downstream can notice — a partition over an empty catalog
-            // draws no line and reports no unread rule, which reads exactly like a model that
-            // states none.
-            for (Core numbered : byComparison.keySet()) {
-                requireIsACatalogued(numbered, comparisons, "numbered");
+            // The other half is not. An occurrence is a module, a behavior and a number — ordinary
+            // values — so one issued by another module's catalog is a key like any other, and a
+            // plan assembled out of parts can be numbering comparisons its own catalog never held.
+            // Every reader below joins on the catalog to tell a comparison this plan does not
+            // instrument from one that was never this plan's, and that only answers while the
+            // numbering is of the catalog beside it.
+            for (ConstructOccurrence numbered : byComparison.keySet()) {
+                requireHeld(numbered, comparisons, "numbered");
             }
-            for (Core numbered : controlByComparison.keySet()) {
-                requireIsACatalogued(numbered, comparisons, "given a control point");
+            // And the numbering says what each number it handed out addresses, so there is one
+            // address per site and it is at the site's own number. A plan is put together field by
+            // field, so the two can be handed over out of step — and a reader asking what a hit
+            // means would be told about a place the number was never issued to, or about none.
+            if (numbering.identity().byNumber().size() != sites.size()) {
+                throw new IllegalArgumentException("this plan numbered " + sites.size()
+                        + " places and says what " + numbering.identity().byNumber().size()
+                        + " of them are; the sites and the addresses are one answer or they are"
+                        + " two");
             }
+            this.sites = sites;
+            this.guards = guards;
+            this.byNode = byNode;
+            this.byComparison = byComparison;
+            this.armsByNode = armsByNode;
+            this.mayRepeat = mayRepeat;
+            this.reachedAt = reachedAt;
+            this.comparisons = comparisons;
+            this.numbering = numbering;
         }
 
-        private static void requireIsACatalogued(Core node, ComparisonCatalog comparisons,
-                                                 String what) {
-            if (!(node instanceof Core.Binary comparison) || !comparison.op().compares()) {
-                throw new IllegalArgumentException(
-                        "something that is not a comparison was " + what + ": " + node);
-            }
-            if (comparisons.at(comparison).isEmpty()) {
+        /** Every place of this module, in the order they were numbered. */
+        public List<Site> sites() {
+            return sites;
+        }
+
+        /** Which comparisons these bodies hold, under the names this plan numbers them by. */
+        public ComparisonCatalog comparisons() {
+            return comparisons;
+        }
+
+        /** The numbering these addresses are of. */
+        public SiteNumbering numbering() {
+            return numbering;
+        }
+
+        /** What a run was recorded on the way out of, by the condition it stood on. */
+        List<GuardRef> guards() {
+            return guards;
+        }
+
+        /** The nodes this plan numbered arms for, and their probes. */
+        IdentityHashMap<Core, int[]> byNode() {
+            return byNode;
+        }
+
+        /**
+         * Where each place this plan reached is, by the number the plan handed it.
+         *
+         * <p>The one thing a number this walk handed out is for. An arm of a fork no source here
+         * wrote is reported at the way in this compilation came through, and that way in is a place
+         * of this plan and of nothing else — so a report asks for it by the number, and the number
+         * addresses nothing outside the module it was counted in.
+         *
+         * <p>The fork's own place and not the arm's: an arm's body is what lowering rewrites, and
+         * carries whatever position it was built from rather than the one the author would be
+         * shown.
+         *
+         * <p>Answered here because the question is about places and the answer to it is a value. A
+         * reader given the nodes instead would be holding this plan's index into trees it does not
+         * own, to take a position off each of them — which is the same projection made somewhere it
+         * cannot be told from the graph it walks over.
+         */
+        public Map<Integer, Citation> whereEachArmsForkIsWritten() {
+            return reachedAt;
+        }
+
+        Map<ConstructOccurrence, ComparisonEmissionSite> byComparison() {
+            return byComparison;
+        }
+
+        IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode() {
+            return armsByNode;
+        }
+
+        java.util.Set<Core> mayRepeat() {
+            return mayRepeat;
+        }
+
+        /** What this plan is a numbering of, as two builds can be held against each other by. */
+        public NumberingIdentity identity() {
+            return numbering.identity();
+        }
+
+        private static void requireHeld(ConstructOccurrence which, ComparisonCatalog comparisons,
+                                        String what) {
+            if (!comparisons.holds(which)) {
                 throw new IllegalArgumentException("a comparison this plan's catalog does not hold "
-                        + "was " + what + " at " + comparison.pos()
+                        + "was " + what + ": " + which
                         + "; the numbering and the catalog are one answer or they are two");
             }
         }
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
-                java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
+                new LinkedHashMap<>(), new IdentityHashMap<>(),
+                java.util.Set.of(), new LinkedHashMap<>(),
+                ComparisonCatalog.of(ModuleBodies.none()),
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()));
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -290,46 +488,22 @@ public final class CoverageSites {
          * owed wants the probed ones and can ask each; a reader judging what an arm declares wants
          * the arm, which is the one this has and the other does not.
          */
-        public ControlPointId.ArmOccurrence[] armsOf(Core node) {
+        public ControlPlace.Arm[] armsOf(Core node) {
             return armsByNode.get(node);
         }
 
-        /** Which fork {@code node} is, or null where this plan made no arms for it. */
-        public ForkOccurrence forkAt(Core node) {
-            return forkByNode.get(node);
-        }
-
-        /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
-         *  numbered no comparison there. */
-        public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(Core comparison,
-                                                                           boolean result) {
-            Integer control = controlByComparison.get(comparison);
-            return control == null ? java.util.Optional.empty()
-                    : comparisonAt(comparison).map(at -> new ControlPointId.ComparisonPoint(
-                            control, new ComparisonOutcome(at, result)));
-        }
-
         /**
-         * Which comparison of this plan {@code comparison} is, or empty where it numbered none there.
+         * Which way {@code which} coming out {@code result} is, or empty where this plan numbered
+         * no comparison there.
          *
-         * <p>What a reading of the model joins on, and what it is given instead of the number. Empty
-         * is an ordinary answer for the same reason {@link #comparisonSiteOf} has one.
+         * <p>The only maker of one of these, and what pairs the comparison with the address a run
+         * through it is recorded at. The two are separate questions and one plan answers both, so a
+         * caller never holds an outcome whose site was issued for some other comparison.
          */
-        public java.util.Optional<ComparisonOccurrence> comparisonAt(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            return site == null ? java.util.Optional.empty()
-                    : java.util.Optional.of(new ComparisonOccurrence(site));
-        }
-
-        /**
-         * The same, where the caller's own construction says there is one.
-         *
-         * <p>Absent here is not a comparison that cannot be measured — it is this plan and the reader
-         * that found the comparison disagreeing about what a condition is made of, which no
-         * measurement should paper over.
-         */
-        public ComparisonOccurrence requireComparisonAt(Core comparison) {
-            return new ComparisonOccurrence(requireComparisonSiteOf(comparison));
+        public java.util.Optional<ControlPlace.Outcome> outcomeOf(
+                ConstructOccurrence which, boolean result) {
+            return emissionSiteOf(which)
+                    .map(site -> new ControlPlace.Outcome(which, site, result));
         }
 
         /**
@@ -362,9 +536,41 @@ public final class CoverageSites {
          * later and from more: a comparison the partition reads nothing off keeps its site and nobody
          * asks about it. The emitter walks comparisons in both cases and asks this of each.
          */
-        public java.util.OptionalInt comparisonSiteOf(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            return site == null ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(site);
+        public java.util.Optional<ComparisonEmissionSite> emissionSiteOf(
+                ConstructOccurrence which) {
+            return java.util.Optional.ofNullable(byComparison.get(ofThisPlan(which)));
+        }
+
+        /**
+         * {@code which}, where it is a comparison this plan is about.
+         *
+         * <p>The one place a name from outside is turned away, because it is the one thing every
+         * question below cannot tell for itself. A comparison this plan numbers no site for and one
+         * belonging to another module both come back with no site, and they are not the same thing:
+         * the first is an answer about this module and the second is a question that was never
+         * about it. Answered alike, a reading of one module joins to another module's comparison
+         * and says nothing about either — which is what naming an occurrence was for.
+         */
+        private ConstructOccurrence ofThisPlan(ConstructOccurrence which) {
+            if (!comparisons.holds(which)) {
+                throw new IllegalArgumentException(
+                        "this plan is not about " + which + "; it holds "
+                                + comparisons.all().size() + " comparisons of its own");
+            }
+            return which;
+        }
+
+        /**
+         * Whether this plan instruments {@code which}, which is what a reader asking about runs
+         * wants to know before it asks anything else.
+         *
+         * <p>Named here rather than spelled as "it has a site" wherever it is wanted. Every reader
+         * that files something under a comparison a run could be observed at asks this, and four of
+         * them working it out from the site each time are four places that can come to ask it
+         * differently — which is the shape this whole reading was written against.
+         */
+        public boolean instruments(ConstructOccurrence which) {
+            return byComparison.containsKey(ofThisPlan(which));
         }
 
         /**
@@ -372,58 +578,222 @@ public final class CoverageSites {
          *
          * <p>A boundary is read off a comparison this plan numbers, so the site was planned before
          * the line was. Absent here is not a boundary that cannot be measured — it is this plan and
-         * the reader that found the comparison disagreeing about what a comparison is, which no
-         * measurement should paper over.
+         * the reader that found the comparison disagreeing about which comparisons are instrumented,
+         * which no measurement should paper over.
          */
-        public int requireComparisonSiteOf(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            if (site == null) {
-                throw new IllegalStateException(
-                        "no comparison site was planned at " + comparison.pos()
-                                + "; a line is read off a comparison this plan does not hold");
-            }
-            return site;
+        public ComparisonEmissionSite requireEmissionSiteOf(ConstructOccurrence which) {
+            return emissionSiteOf(which).orElseThrow(() -> new IllegalStateException(
+                    "no comparison site was planned for " + which
+                            + "; a line is read off a comparison this plan does not instrument"));
         }
 
         /** The arms of one behavior, which is what a branch measure counts. */
-        public List<Site> arms(String behavior) {
+        public List<ArmSite> arms(String behavior) {
             return sites.stream()
-                    .filter(site -> site.behavior().equals(behavior) && site.isArm())
+                    .filter(site -> site.behavior().equals(behavior))
+                    .filter(ArmSite.class::isInstance).map(ArmSite.class::cast)
                     .toList();
         }
 
-        public Site site(int index) {
-            return sites.get(index);
+        /**
+         * The comparisons of one behavior, which is what a reader sending somebody to one asks for.
+         *
+         * <p>Beside {@link #arms} and not among it. A comparison stops as soon as its answer is
+         * settled, so which arm a row landed in does not say which comparison ran — a measure over
+         * arms that took one of these would be counting a place its denominator was never about.
+         */
+        public List<ComparisonSite> comparisons(String behavior) {
+            return sites.stream()
+                    .filter(site -> site.behavior().equals(behavior))
+                    .filter(ComparisonSite.class::isInstance).map(ComparisonSite.class::cast)
+                    .toList();
         }
     }
 
-    /** The sites of every behavior body in one module, numbered in the order the bodies are declared
-     * and, within one, in the order the arms are written. */
-    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions,
-                          SuppliedRules supplied) {
+    /**
+     * The sites of every behavior body in one module, numbered in the order the bodies are declared
+     * and, within one, in the order the arms are written — the numbering being decided here.
+     *
+     * <p>The only way to a plan of a module, and asked in one place: the check that holds the
+     * bodies asks it, keeps what comes back, and hands that to every reader. There is no second way
+     * in that takes a numbering already issued and walks the bodies again to meet it — a plan is
+     * filed by which {@code Core} objects were put in it, so one made anywhere but where those
+     * objects are held is an index into a graph its holder is not the owner of.
+     */
+    public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied) {
+        Walked walked = walked(of, decisions, supplied);
+        return asPlan(walked,
+                walked.walk().numbering.finish(of.module(), walked.executable()));
+    }
+
+    /**
+     * What one walk of a module's bodies found, before its numbers mean places.
+     *
+     * <p>Held apart from the plan because the two ways in differ in one step and share the rest.
+     * Which step is the whole of what this change is about: whether the numbers this walk handed
+     * out are what decides the numbering, or are held against a numbering already decided. Written
+     * as a walk that takes what to do next, the step would be a call nothing reading the compiled
+     * classes could see, and who may decide a numbering is held by reading them.
+     */
+    private record Walked(ComparisonCatalog comparisons, Walk walk,
+                          Map<String, ExecutableIdentity> executable) { }
+
+    private static Walked walked(ModuleBodies of, DecisionSources decisions,
+                                 SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
-        ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
-        Walk walk = new Walk(comparisons, decisions, supplied);
-        for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
+        ComparisonCatalog comparisons = ComparisonCatalog.of(of);
+        Walk walk = new Walk(of.module(), comparisons, decisions, supplied);
+        Map<String, ExecutableIdentity> executable = new LinkedHashMap<>();
+        for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
+            // What the body does, beside where its places are. A numbering is two numberings when
+            // the numbers address different places, and it is two when the code at those places
+            // does different things; neither half says the other.
+            //
+            // Off the addresses the walk just took, rather than taking them again: where a body's
+            // places are is one answer, and a second descent for it would be a second.
+            executable.put(body.getKey(), ExecutableIdentity.of(body.getValue(),
+                    Binders.of(of.module(), walk.places)));
         }
-        return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
-                walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
-                walk.forkByNode, comparisons);
+        return new Walked(comparisons, walk, executable);
     }
+
+    /**
+     * What the walk found, with its numbers read back as places of {@code numbering}.
+     *
+     * <p>One direction and one moment: nothing before this could have made an address, and nothing
+     * after it sees a number.
+     */
+    private static Plan asPlan(Walked found, SiteNumbering numbering) {
+        ComparisonCatalog comparisons = found.comparisons();
+        Walk walk = found.walk();
+        // One occurrence per arm the walk made, whoever asks for it. A site of an arm and the arms
+        // of its fork are the same place, and they are the same value: made twice, the two would be
+        // two answers about one arm, and every reader below would be free to have either.
+        IdentityHashMap<DraftArm, ControlPlace.Arm> issued = new IdentityHashMap<>();
+        List<Site> sites = new ArrayList<>();
+        for (DraftSite draft : walk.sites) {
+            sites.add(switch (draft) {
+                case DraftArmSite arm -> new ArmSite(arm.behavior(), arm.outcome(),
+                        placeOf(arm.arm(), numbering, issued), arm.ordinal(),
+                        arm.obligation());
+                case DraftComparisonSite compared -> new ComparisonSite(compared.behavior(),
+                        compared.outcome(), compared.at(),
+                        numbering.comparison(compared.raw()), compared.ordinal(),
+                        compared.obligation());
+            });
+        }
+        List<GuardRef> guards = new ArrayList<>();
+        for (DraftGuard draft : walk.guards) {
+            guards.add(new GuardRef(draft.behavior(), draft.origin(), draft.decided(),
+                    armAt(numbering, draft.whereThen()), armAt(numbering, draft.whereElse()),
+                    draft.at()));
+        }
+        Map<ConstructOccurrence, ComparisonEmissionSite> byComparison = new LinkedHashMap<>();
+        walk.byComparison.forEach((which, raw) ->
+                byComparison.put(which, numbering.comparison(raw)));
+        IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode = new IdentityHashMap<>();
+        walk.armsByNode.forEach((node, arms) -> {
+            ControlPlace.Arm[] here = new ControlPlace.Arm[arms.length];
+            for (int i = 0; i < arms.length; i++) {
+                here[i] = placeOf(arms[i], numbering, issued);
+            }
+            armsByNode.put(node, here);
+        });
+        return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
+                byComparison, armsByNode, walk.mayRepeat, Map.copyOf(walk.reachedAt),
+                comparisons, numbering);
+    }
+
+    /** The arm {@code raw} addresses, where an arm was numbered at all. */
+    private static Optional<ArmProbe> armAt(SiteNumbering numbering, java.util.OptionalInt raw) {
+        return raw.isPresent() ? Optional.of(numbering.arm(raw.getAsInt())) : Optional.empty();
+    }
+
+    /**
+     * The place {@code draft} is, made once however many readers of it there are.
+     *
+     * <p>Kept by the draft's identity and not by what it holds. Two arms of one shape are two
+     * places, and what is wanted here is the occurrence this draft became rather than the one some
+     * draft equal to it did.
+     */
+    private static ControlPlace.Arm placeOf(
+            DraftArm draft, SiteNumbering numbering,
+            IdentityHashMap<DraftArm, ControlPlace.Arm> issued) {
+        return issued.computeIfAbsent(draft, each -> new ControlPlace.Arm(
+                each.arm(), armAt(numbering, each.raw()), each.anchor()));
+    }
+
+    /**
+     * One site as the walk has it, before there is a numbering for its number to be a place of.
+     *
+     * <p>The walk carries numbers because it is what makes the numbering: what a number means is
+     * fixed by every place still to be reached and by what the bodies do, so no address of it can
+     * exist until the walk is over. The numbers become places once, at {@link #of}, and the
+     * places are what everything downstream is handed.
+     *
+     * <p>Two kinds and not one with the arm's half left optional. What a site of an arm has that a
+     * site of a comparison has not is the arm, and a draft carrying one only sometimes would be a
+     * draft whose readers ask whether it is there.
+     *
+     * <p>Nothing is declared here for the two to share. What is made of a draft is made in a switch
+     * over which kind it is, so a name held in common would be a way of reading one without knowing
+     * that — and the parts that go into a site are not the same parts.
+     */
+    private sealed interface DraftSite {
+    }
+
+    /**
+     * A site of one arm, and the arm it is a site of.
+     *
+     * <p>The two are made in one act, where the arm is, and the arm is carried from it rather
+     * than paired up afterwards by the number they share. A number is what the emitter records at,
+     * and reading it back to find the place a site is about would be that correspondence worked out
+     * again by whoever needed it.
+     */
+    private record DraftArmSite(DraftArm arm, String behavior, SourceOutcome.Arm outcome,
+                                int ordinal, Obligation obligation) implements DraftSite {}
+
+    /** A site of one comparison, which no arm stands at. */
+    private record DraftComparisonSite(String behavior, SourceOutcome.Compared outcome, Citation at,
+                                       int raw, int ordinal, Obligation obligation)
+            implements DraftSite {}
+
+    /** One arm as the walk has it: which arm it is, and the number its place was given where the
+     *  emitter records one. */
+    private record DraftArm(ArmOccurrence arm, java.util.OptionalInt raw,
+                            ArmReportAnchor anchor) {
+
+        boolean isMeasured() {
+            return raw.isPresent();
+        }
+    }
+
+    /** The two arms of one {@code if} as the walk has them. */
+    private record DraftGuard(String behavior, SourceConstructOrigin origin, DecidedBy decided,
+                              java.util.OptionalInt whereThen, java.util.OptionalInt whereElse,
+                              SourcePos at) {}
 
     private static final class Walk {
 
-        private final List<Site> sites = new ArrayList<>();
-        private final List<GuardRef> guards = new ArrayList<>();
+        private final List<DraftSite> sites = new ArrayList<>();
+        /** What hands the numbers out, and says what each addresses in the same act. */
+        private final SiteNumbering.Building numbering = SiteNumbering.begin();
+        /** Where the places of the body being walked are. Made per body, since a path is a way down
+         *  from one body's root and means a different place in every other. */
+        private NodeAddresses places;
+        private final List<DraftGuard> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode =
-                new IdentityHashMap<>();
-        private final IdentityHashMap<Core, ForkOccurrence> forkByNode = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
+        private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
+        private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
+        /** Which node each fork of these bodies is, so that the one place forks are recognised is
+         *  the one place two of them being one can be refused. */
+        private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();
+        /** Where the fork of each place this walk numbered is, by that number. What a report about
+         *  an arm of a fork nobody here wrote asks for, and the only thing the numbers are for. */
+        private final Map<Integer, Citation> reachedAt = new LinkedHashMap<>();
         /** The reading of the body being walked, which every question about a node in it is asked
          *  of. Rooted at the body because what a name reads is settled by what bound it. */
         private NormalReturn answering = NormalReturn.ofBody(null);
@@ -437,24 +807,42 @@ public final class CoverageSites {
         private boolean repeating;
         /** The outcomes that carry nothing of their own. What each of them means is settled with
          *  the construct beside it, so one instance stands for every occurrence. */
-        private static final SourceOutcome HELD =
+        private static final SourceOutcome.Arm HELD =
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition());
-        private static final SourceOutcome FAILED =
+        private static final SourceOutcome.Arm FAILED =
                 new SourceOutcome.Failed(new SourceOutcome.FailedBy.Condition());
-        private static final SourceOutcome BUILT =
+        private static final SourceOutcome.Arm BUILT =
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Construction());
         /** Which nodes are comparisons, which this walk asks rather than reads off their shape. */
         private final ComparisonCatalog comparisons;
         private String behavior;
         private int ordinal;
-        /** Numbered across the whole plan and never reused, so that one number names one place
-         *  whichever behavior it is in — the same rule the probe numbers are under. */
+        /**
+         * What the places this walk reaches are addressed by in a report, counted across the whole
+         * plan and never reused.
+         *
+         * <p>An address and not an identity. Which arm an arm is is {@link ArmOccurrence}, which
+         * the tree answers; this is what a report about an arm of a fork no source here wrote has
+         * instead of a file to point at, and it means a place only together with whose plan
+         * counted it.
+         *
+         * <p>Counted over the places that get one, which are the arms whose fork no reader can
+         * open. An arm reported at the file its fork is written in is reported at a construct, so
+         * a number for it would be one nothing can ask about and a table entry nothing can reach.
+         */
         private int controls;
 
         private final DecisionSources decisions;
         private final SuppliedRules supplied;
 
-        Walk(ComparisonCatalog comparisons, DecisionSources decisions, SuppliedRules supplied) {
+        /** Whose plan this is. Carried because an arm of a fork nobody here wrote is reported at
+         *  the place this compilation reached it, and a number counted within one plan addresses
+         *  nothing without the module it was counted in. */
+        private final String module;
+
+        Walk(String module, ComparisonCatalog comparisons, DecisionSources decisions,
+             SuppliedRules supplied) {
+            this.module = module;
             this.comparisons = comparisons;
             this.decisions = decisions;
             this.supplied = supplied;
@@ -464,6 +852,10 @@ public final class CoverageSites {
             this.behavior = name;
             this.ordinal = 0;
             this.answering = NormalReturn.ofBody(body);
+            // Where each place of this body is, worked out before anything is numbered: a number is
+            // handed out for a place, and this is what says which place that is in something a
+            // second walk of the same body also arrives at.
+            this.places = NodeAddresses.of(name, body);
             walk(body, true);
         }
 
@@ -478,43 +870,112 @@ public final class CoverageSites {
          * gets as far as an {@code unreachable} is E1911 and states nothing, so an arm only such a
          * row could go through is an arm no row will ever be recorded in.
          */
-        private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
-                                                   CoverageOrigin origin, int part, Core arm,
-                                                   boolean reachable,
-                                                   DecidedBy decided) {
+        // The `unreachable` above is the language's own word, not this method's `reachable`.
+        @SuppressWarnings("InvalidParam")
+        private DraftArm armOf(SourceOutcome.Arm outcome, Core owner,
+                               ConstructOccurrence fork, int part, Core arm,
+                               boolean reachable,
+                               DecidedBy decided) {
+            SourceConstructOrigin origin = fork.origin();
+            ArmOccurrence which = new ArmOccurrence(fork, part);
+            // What a report about this arm points at, settled here for the reason ArmReportAnchor
+            // gives. The fork's own coordinate is what says which of the two it is — an arm's body
+            // is what lowering rewrites and carries whatever position it was built from, so it is
+            // the fork that is asked and not the arm.
+            ArmReportAnchor anchor = anchorOf(owner, origin);
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
-            int probe = reachable && answers(arm) && answering.mayEnter(owner, part)
-                    ? site(outcome, owner, origin, part, decided) : NO_SITE;
-            return new ControlPointId.ArmOccurrence(controls++,
-                    probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
-                    // The fork's own coordinate, as a site takes it: an arm's body is what lowering
-                    // rewrites and carries whatever position it was built from, so quoting it sends
-                    // an author somewhere else in the file.
-                    Citation.of(owner.pos()), origin);
+            if (!(reachable && answers(arm) && answering.mayEnter(owner, part))) {
+                return new DraftArm(which, java.util.OptionalInt.empty(), anchor);
+            }
+            // Asked before the place is numbered, so that a tree nothing wrote is refused for being
+            // that rather than for whatever the numbering noticed about it first.
+            written(origin, owner);
+            DraftArm draft = new DraftArm(which,
+                    java.util.OptionalInt.of(
+                            numbering.number(new SiteAddress.Arm(places.of(owner), part))),
+                    anchor);
+            // The site of the arm, holding the arm rather than the number they share. One act, so
+            // there is no moment at which a site exists and which place it is about is still to be
+            // worked out.
+            sites.add(new DraftArmSite(draft, behavior, outcome, ordinal++,
+                    new Obligation(behavior, origin, part, decided)));
+            return draft;
         }
 
         /**
-         * The arms of one fork, and the fork they are arms of.
+         * What a report about an arm of {@code fork} points at.
          *
-         * <p>Both written here, in one act. What names the fork is the first of its arms, and it is
-         * a name rather than a lookup for exactly that reason: made apart, the fork's identity would
-         * be something each reader worked out again from whatever component it had to hand.
+         * <p>Asked of the position and answered without keeping it. Whether the code is written
+         * somewhere a reader holds is what a position already says, and it is the one question
+         * about it that survives the code moving: a fork written in a file this compilation holds
+         * goes on being one wherever in the file it ends up. So this is the last thing read off the
+         * position, and what comes out says which of the two questions a report asks later.
+         *
+         * <p>Where the answer is an address of this plan, the address is issued here and the place
+         * it addresses is written down in the same act. So there is one number per place a report
+         * can ask about and none for the arms whose fork a reader can go and open, and the position
+         * is read off the fork once — a second reading of it to fill the table would be the same
+         * question asked again for an answer that was already in hand.
          */
-        private void arms(Core fork, ControlPointId.ArmOccurrence[] arms) {
-            armsByNode.put(fork, arms);
-            if (arms.length > 0) {
-                forkByNode.put(fork, new ForkOccurrence(arms[0].controlId()));
+        private ArmReportAnchor anchorOf(Core fork, SourceConstructOrigin origin) {
+            Citation where = Citation.of(fork.pos());
+            if (where instanceof Citation.Written && origin.isWritten()) {
+                return new ArmReportAnchor.WhereItIsWritten(origin);
             }
+            int address = controls++;
+            reachedAt.put(address, where);
+            return new ArmReportAnchor.WhereItWasReached(module, address);
+        }
+
+        /**
+         * The arms of one fork, and the one place a fork of these bodies is recognised.
+         *
+         * <p>Which is why the refusal is here. Everything below tells one decision from another by
+         * which fork it is of, and takes that off the node it is standing at — so two nodes
+         * answering with one fork is two decisions read as one, and a path that goes one way in the
+         * first and the other way in the second is dropped for settling a condition twice. Nothing
+         * further down can notice: the path is gone rather than refused, and every reader is joining
+         * on a name that came back the same.
+         *
+         * <p>Asked of every fork and not of the ones with arms a run could be recorded in. What the
+         * copies of a fork have to be is told apart, and whether anything instruments them is a
+         * later question about each.
+         */
+        private void arms(Core fork, ConstructOccurrence which, DraftArm[] arms) {
+            Core already = forks.putIfAbsent(which, fork);
+            // A node the walk arrives at twice is one fork, and says the same thing the second
+            // time. Two nodes are two.
+            if (already != null && already != fork) {
+                throw new IllegalStateException("two forks of one body stand at " + which
+                        + ": " + already.pos() + " and " + fork.pos()
+                        + "; a copy of a fork is told from the fork it copies or the two are"
+                        + " one decision");
+            }
+            // And that each arm says it is the arm it stands at. Which arm an arm is is where it
+            // stands in its fork, and what is filed here is read back by position — the emitter
+            // takes an arm's probe by its place among its siblings, and every reader that names an
+            // arm takes the name off the same array. Said in two places and held in neither, the
+            // two would be free to come apart under an edit to this walk, and an arm would go on
+            // being reported and reasoned about under the name of its neighbour.
+            for (int part = 0; part < arms.length; part++) {
+                ArmOccurrence says = arms[part].arm();
+                if (!says.equals(new ArmOccurrence(which, part))) {
+                    throw new IllegalStateException("the arm standing at part " + part + " of "
+                            + which + " says it is " + says
+                            + "; an arm is named by where it stands in its fork");
+                }
+            }
+            armsByNode.put(fork, arms);
         }
 
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
          *  none. What the emitter indexes and what the branch measure counts. */
-        private static int[] probesOf(ControlPointId.ArmOccurrence... arms) {
+        private static int[] probesOf(DraftArm... arms) {
             int[] out = new int[arms.length];
             for (int i = 0; i < arms.length; i++) {
-                out[i] = arms[i].probe().orElse(NO_SITE);
+                out[i] = arms[i].raw().orElse(NO_SITE);
             }
             return out;
         }
@@ -530,20 +991,16 @@ public final class CoverageSites {
             return answering.at(e);
         }
 
-        /**
-         * One arm, quoted at the fork it belongs to rather than at its own body.
-         *
-         * <p>The fork is written by the author and survives lowering; an arm's body is what lowering
-         * rewrites, and a rewritten node carries whatever position it was built from — which for a
-         * body assembled out of comprehensions and accumulated failures is somewhere else in the file
-         * entirely. An arm quoted at a comment sends the author to the wrong place, and there is
-         * nothing in the position itself to notice that by.
-         *
-         * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
-         * @param arm   the arm's body, which says what the arm is made of and not where it is
-         */
-        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part,
-                         DecidedBy decided) {
+        private int comparisonSite(SourceOutcome.Compared outcome, Core owner,
+                                   SourceConstructOrigin origin, DecidedBy decided) {
+            written(origin, owner);
+            int raw = numbering.number(new SiteAddress.Comparison(places.of(owner)));
+            sites.add(new DraftComparisonSite(behavior, outcome, Citation.of(owner.pos()), raw,
+                    ordinal++, new Obligation(behavior, origin, 0, decided)));
+            return raw;
+        }
+
+        private void written(SourceConstructOrigin origin, Core owner) {
             // Said here because this is where anything is numbered, and the rule is about numbering
             // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
             // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms
@@ -554,14 +1011,6 @@ public final class CoverageSites {
                         + "numbered at " + owner.pos()
                         + "; a tree rebuilt for an analysis is not the tree that runs");
             }
-            int index = sites.size();
-            // Of the node's own coordinate. This walk is over one module and an arm of a
-            // helper another module of this compile wrote is in that module's file, so a
-            // source carried here beside the position would be the wrong half of two
-            // answers about one place. The walk holds none for that reason.
-            sites.add(new Site(behavior, outcome, Citation.of(owner.pos()),
-                    index, ordinal++, new Obligation(behavior, origin, part, decided)));
-            return index;
         }
 
         /**
@@ -587,28 +1036,49 @@ public final class CoverageSites {
             if (repeating) {
                 mayRepeat.add(e);
             }
+            // The slots this node has, taken one at a time below. The walk decides something at
+            // each of them and so descends them itself; what it may not also do is be a second
+            // answer to which slots there are.
+            CoreStructure.Children structural = CoreStructure.Children.of(e);
             switch (e) {
                 case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                      Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }
-                case Core.Neg n -> walk(n.operand(), inside);
-                case Core.FieldAccess fa -> walk(fa.target(), inside);
+                case Core.Neg n ->
+                        walk(structural.take(new CoreStructure.Edge.NegOperand(), n.operand()),
+                                inside);
+                case Core.FieldAccess fa ->
+                        walk(structural.take(new CoreStructure.Edge.FieldTarget(), fa.target()),
+                                inside);
                 case Core.Binary b -> {
                     number(b, inside);
-                    walk(b.left(), inside);
-                    walk(b.right(), inside);
+                    walk(structural.take(new CoreStructure.Edge.BinaryLeft(), b.left()), inside);
+                    walk(structural.take(new CoreStructure.Edge.BinaryRight(), b.right()), inside);
                 }
-                case Core.Call c -> c.args().forEach(arg -> walk(arg, inside));
+                case Core.Call c -> {
+                    for (int i = 0; i < c.args().size(); i++) {
+                        walk(structural.take(new CoreStructure.Edge.CallArgument(i),
+                                c.args().get(i)), inside);
+                    }
+                }
                 // What a representation kept standing for an analysis to read. Coverage is measured
                 // over the tree that runs, which keeps none of these, so reaching one would mean this
                 // count was taken over a tree nothing executes.
                 case Core.PreservedCall p -> throw p.unexpectedIn("coverage numbering");
-                case Core.Apply a -> a.args().forEach(arg -> walk(arg, inside));
+                case Core.Apply a -> {
+                    // The binding what is applied is loaded from. Taken and not gone into: it is a
+                    // name, so it numbers nothing and has nothing under it to number.
+                    structural.take(new CoreStructure.Edge.AppliedFunction(), a.fn());
+                    for (int i = 0; i < a.args().size(); i++) {
+                        walk(structural.take(new CoreStructure.Edge.ApplyArgument(i),
+                                a.args().get(i)), inside);
+                    }
+                }
                 case Core.LetIn li -> {
-                    walk(li.value(), inside);
-                    walk(li.body(), inside);
+                    walk(structural.take(new CoreStructure.Edge.LetValue(), li.value()), inside);
+                    walk(structural.take(new CoreStructure.Edge.LetBody(), li.body()), inside);
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever
                 // this is handed to applies it, and the rows that make that happen go through them.
@@ -620,72 +1090,110 @@ public final class CoverageSites {
                 case Core.Block b -> {
                     boolean outside = repeating;
                     repeating = true;
-                    walk(b.body(), inside);
+                    walk(structural.take(new CoreStructure.Edge.BlockBody(), b.body()), inside);
                     repeating = outside;
                 }
-                case Core.ListLit lit -> lit.elements().forEach(el -> walk(el, inside));
-                case Core.OptionSome s -> walk(s.value(), inside);
-                case Core.Tuple t -> t.elements().forEach(el -> walk(el, inside));
-                case Core.TupleGet tg -> walk(tg.tuple(), inside);
-                case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
+                case Core.ListLit lit -> {
+                    for (int i = 0; i < lit.elements().size(); i++) {
+                        walk(structural.take(new CoreStructure.Edge.ListElement(i),
+                                lit.elements().get(i)), inside);
+                    }
+                }
+                case Core.OptionSome s ->
+                        walk(structural.take(new CoreStructure.Edge.SomeValue(), s.value()),
+                                inside);
+                case Core.Tuple t -> {
+                    for (int i = 0; i < t.elements().size(); i++) {
+                        walk(structural.take(new CoreStructure.Edge.TupleElement(i),
+                                t.elements().get(i)), inside);
+                    }
+                }
+                case Core.TupleGet tg ->
+                        walk(structural.take(new CoreStructure.Edge.TupleSource(), tg.tuple()),
+                                inside);
+                case Core.Construct nd -> {
+                    for (int i = 0; i < nd.values().size(); i++) {
+                        walk(structural.take(new CoreStructure.Edge.FieldValue(i),
+                                nd.values().get(i).value()), inside);
+                    }
+                }
                 case Core.If iff -> {
-                    walk(iff.cond(), inside);
+                    walk(structural.take(new CoreStructure.Edge.IfCondition(), iff.cond()),
+                            inside);
                     // Which rule this fork decides by, taken before its arms are numbered: two
                     // calls of one library combinator are one fork inlined twice and are not one
                     // thing to cover, and what tells them apart is the rule each was handed.
                     DecidedBy decided =
                             decidedAt(iff.origin(), iff.expansion(), decisions, supplied);
-                    ControlPointId.ArmOccurrence then =
-                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside, decided);
-                    walk(iff.then(), inside);
-                    ControlPointId.ArmOccurrence els =
-                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside, decided);
-                    walk(iff.els(), inside);
+                    DraftArm then =
+                            armOf(HELD, iff, iff.occurrence(), 0, iff.then(), inside, decided);
+                    walk(structural.take(new CoreStructure.Edge.IfThen(), iff.then()), inside);
+                    DraftArm els =
+                            armOf(FAILED, iff, iff.occurrence(), 1, iff.els(), inside, decided);
+                    walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
                     byNode.put(iff, probesOf(then, els));
-                    arms(iff, new ControlPointId.ArmOccurrence[] {then, els});
+                    arms(iff, iff.occurrence(), new DraftArm[] {then, els});
                     if (then.isMeasured() || els.isMeasured()) {
-                        guards.add(new GuardRef(behavior, iff.origin(), decided,
-                                then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
-                                iff.pos()));
+                        guards.add(new DraftGuard(behavior, iff.origin(), decided,
+                                then.raw(), els.raw(), iff.pos()));
                     }
                 }
                 case Core.Match m -> {
-                    walk(m.scrutinee(), inside);
+                    walk(structural.take(new CoreStructure.Edge.MatchScrutinee(), m.scrutinee()),
+                            inside);
                     // What a `match` decides by is its subject, as an `if` decides by its condition.
                     // A subject the caller's rule answered is a decision the caller made, and its
                     // arms are one obligation per rule handed in.
                     DecidedBy decided =
                             decidedAt(m.origin(), m.expansion(), decisions, supplied);
-                    ControlPointId.ArmOccurrence[] arms =
-                            new ControlPointId.ArmOccurrence[m.cases().size()];
+                    DraftArm[] arms = new DraftArm[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside,
+                        arms[i] = armOf(matched(arm), m, m.occurrence(), i, arm.body(), inside,
                                 decided);
-                        walk(arm.body(), inside);
+                        walk(structural.take(new CoreStructure.Edge.MatchCase(i), arm.body()),
+                                inside);
                     }
                     byNode.put(m, probesOf(arms));
-                    arms(m, arms);
+                    arms(m, m.occurrence(), arms);
                 }
                 case Core.IfConstructed ic -> {
-                    ic.construct().values().forEach(given -> walk(given.value(), inside));
+                    // The construction the attempt tests. Taken as the one slot it is, and gone
+                    // into a field at a time: what is numbered is inside the fields, and the
+                    // construction itself is where the attempt's own arms are made below.
+                    structural.take(new CoreStructure.Edge.ConstructedAttempt(), ic.construct());
+                    // And the construction's own slots, taken from the same place: this is where
+                    // the walk goes two levels at once, so it is where the slots of the level it
+                    // passes through would go unvisited with nothing to say so.
+                    CoreStructure.Children built =
+                            CoreStructure.Children.of(ic.construct());
+                    for (int i = 0; i < ic.construct().values().size(); i++) {
+                        walk(built.take(new CoreStructure.Edge.FieldValue(i),
+                                ic.construct().values().get(i).value()), inside);
+                    }
+                    built.requireExhausted();
                     // And what an attempted construction decides by is the value it is given.
                     DecidedBy decided =
                             decidedAt(ic.origin(), ic.expansion(), decisions, supplied);
-                    ControlPointId.ArmOccurrence[] arms =
-                            new ControlPointId.ArmOccurrence[1 + ic.els().size()];
-                    arms[0] = armOf(BUILT, ic, ic.origin(), 0, ic.then(), inside, decided);
-                    walk(ic.then(), inside);
+                    DraftArm[] arms = new DraftArm[1 + ic.els().size()];
+                    arms[0] = armOf(BUILT, ic, ic.occurrence(), 0, ic.then(), inside, decided);
+                    walk(structural.take(new CoreStructure.Edge.ConstructedThen(), ic.then()),
+                            inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
+                        arms[i + 1] = armOf(refused(arm), ic, ic.occurrence(), i + 1,
                                 arm.body(), inside, decided);
-                        walk(arm.body(), inside);
+                        walk(structural.take(new CoreStructure.Edge.ConstructedElse(i),
+                                arm.body()), inside);
                     }
                     byNode.put(ic, probesOf(arms));
-                    arms(ic, arms);
+                    arms(ic, ic.occurrence(), arms);
                 }
             }
+            // That the walk went to every slot the node has. A node kind that grows a child stops
+            // the switch above from compiling; a case here that forgot to descend one stops nothing,
+            // and what it leaves is a place the numbering never reaches and nothing to say so.
+            structural.requireExhausted();
         }
 
         /**
@@ -709,28 +1217,28 @@ public final class CoverageSites {
          *               site for it would be one the emitter lights on no run
          */
         private void number(Core.Binary comparison, boolean inside) {
+            // Which comparison this node is, asked of the catalog, which is where that is decided.
             // Numbered once. A node reached twice is one comparison written once, and a second number
             // for it would be a site the emitter never lights — which is the shape of a real omission
             // and would be reported as one.
-            if (!inside || comparisons.at(comparison).isEmpty()
-                    || byComparison.containsKey(comparison)) {
+            ConstructOccurrence which = comparisons.occurrenceAt(comparison).orElse(null);
+            if (!inside || which == null || byComparison.containsKey(which)) {
                 return;
             }
-            // Keyed on where the comparison was written and not on what tests it. A condition can be
-            // an application of a function parameter, and then the comparison is the caller's: two
+            // Keyed on which comparison it is and not on what tests it. A condition can be an
+            // application of a function parameter, and then the comparison is the caller's: two
             // predicates written separately are two lines, and one predicate handed to two calls is
             // one, neither of which a fork can say.
-            byComparison.put(comparison,
-                    site(new SourceOutcome.Compared(comparison.op()), comparison,
-                            comparison.origin(), 0, DecidedBy.THE_DECLARATION));
-            controlByComparison.put(comparison, controls++);
+            byComparison.put(which,
+                    comparisonSite(new SourceOutcome.Compared(comparison.op()), comparison,
+                            comparison.origin(), DecidedBy.THE_DECLARATION));
         }
 
-        private static SourceOutcome matched(Core.Case arm) {
+        private static SourceOutcome.Arm matched(Core.Case arm) {
             return new SourceOutcome.Matched(arm.caseTypes());
         }
 
-        private static SourceOutcome refused(Core.ElseArm arm) {
+        private static SourceOutcome.Arm refused(Core.ElseArm arm) {
             return new SourceOutcome.Failed(
                     new SourceOutcome.FailedBy.Construction(arm.clause()));
         }

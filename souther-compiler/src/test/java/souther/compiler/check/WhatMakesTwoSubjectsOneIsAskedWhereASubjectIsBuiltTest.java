@@ -1,11 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +41,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      * one writing of a name a guard on the next. */
     @Test
     void twoWritingsOfAPlaceAreOneSubject() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId n = binding(0);
         Denotations at = Denotations.none().location(n, AsPlaces.of(n), AsPlaces.term(n));
 
@@ -60,7 +62,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void twoOccurrencesOfAnUnnameableEvaluationAreTwoSubjects() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core one = unnameable();
         Core other = unnameable();
@@ -84,7 +86,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void onePureApplicationToOneEvaluationHasOneSubject() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core answer = unnameable();
 
@@ -97,7 +99,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      * lumped together. */
     @Test
     void onePureApplicationToTwoEvaluationsHasTwoSubjects() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
 
         assertNotEquals(terms.subjectOf(length(unnameable()), at),
@@ -114,7 +116,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void aFieldReadOffAnEvaluationComposesWithIt() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core answer = unnameable();
 
@@ -140,7 +142,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void anAnswerFromOutsideTheLanguageHasASubjectAndEachAskHasItsOwn() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
 
         assertNotNull(terms.subjectOf(unnameable(), at),
@@ -161,7 +163,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void aSizeOverAPartOfAnEvaluationComposesWithIt() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core answer = unnameable();
 
@@ -185,7 +187,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      * be about nothing by the second. */
     @Test
     void oneOccurrenceAskedTwiceIsOneSubject() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core once = unnameable();
 
@@ -208,7 +210,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void rebuildingAnOccurrenceDoesNotMakeASecondEvaluation() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core written = unnameable();
         FactSubject before = terms.subjectOf(written, at);
@@ -231,7 +233,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void anEvaluationNoRewriteAccountsForIsASecondEvaluation() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
 
         assertNotEquals(terms.subjectOf(unnameable(), at), terms.subjectOf(unnameable(), at),
@@ -254,7 +256,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void aSizeAndTheSizeOfWhatItWasBuiltFromAreOneSubject() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId ns = binding(2);
         Denotations at = Denotations.none().location(ns, AsPlaces.of(ns), AsPlaces.term(ns));
         Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
@@ -268,7 +270,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     /** And an operation the same table says may answer fewer is not identified with its source. */
     @Test
     void aSizeOfABuildThatMayAnswerFewerIsItsOwnSubject() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId ns = binding(3);
         Denotations at = Denotations.none().location(ns, AsPlaces.of(ns), AsPlaces.term(ns));
         Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
@@ -288,7 +290,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      */
     @Test
     void aFieldReadOffAnEvaluationIsAPartOfIt() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core answer = unnameable();
 
@@ -304,17 +306,17 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     }
 
     private static Core length(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "length"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "length"),
                 java.util.List.of(of), Type.INT, POS);
     }
 
     private static Core reverse(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "reverse"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "reverse"),
                 java.util.List.of(of), of.type(), POS);
     }
 
     private static Core distinct(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "distinct"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "distinct"),
                 java.util.List.of(of), of.type(), POS);
     }
 

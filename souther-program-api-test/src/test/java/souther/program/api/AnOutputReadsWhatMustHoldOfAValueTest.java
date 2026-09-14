@@ -77,10 +77,17 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
         return CheckedProgram.of(List.of(DECLARING, INCLUDING));
     }
 
-    private static CheckedData.Product product(CheckedModule module, String name) {
+    /**
+     * What must hold of a value of {@code name}, whichever of the two forms it was declared in.
+     *
+     * <p>A newtype is held to its clauses as a product is — {@code Amount} states one here — so the
+     * question is asked of what answers it. Asked as {@code Product}, the data this module states
+     * the clause on would not have been reached at all.
+     */
+    private static CheckedData.WithFields built(CheckedModule module, String name) {
         for (CheckedData each : module.data()) {
             if (each.name().name().equals(name)) {
-                return assertInstanceOf(CheckedData.Product.class, each, name);
+                return assertInstanceOf(CheckedData.WithFields.class, each, name);
             }
         }
         throw new AssertionError(name + " is not among this module's data");
@@ -96,8 +103,8 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
     }
 
     @Test
-    void aProductSaysWhatMustHoldOfAValueOfIt() {
-        CheckedData.Product amount = product(program().module("up"), "Amount");
+    void aDataSaysWhatMustHoldOfAValueOfIt() {
+        CheckedData.WithFields amount = built(program().module("up"), "Amount");
 
         assertEquals(1, amount.invariants().size(), "one clause is declared of it");
         assertEquals("positive", amount.invariants().get(0).name().orElse(null),
@@ -109,7 +116,7 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
     /** A data nothing is stated of says so by stating nothing, which is not a data with no fields. */
     @Test
     void aProductWithNoClauseStatesNothing() {
-        CheckedData.Product common = product(program().module("up"), "Common");
+        CheckedData.WithFields common = built(program().module("up"), "Common");
 
         assertEquals(List.of("identified"),
                 common.invariants().stream().map(each -> each.name().orElse("")).toList());
@@ -119,24 +126,28 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
      * A clause reads its fields through the bindings the same answer names.
      *
      * <p>The half that makes a clause runnable. An output puts each field's value under the binding
-     * {@link CheckedData.Product#fields()} gives it and emits the condition; a binding the condition
-     * reads and the fields do not name is a value nothing put anywhere, and the check would run over
-     * whatever happened to be in that slot.
+     * {@link CheckedData.WithFields#fields()} gives it and emits the condition; a binding the
+     * condition reads and the fields do not name is a value nothing put anywhere, and the check
+     * would run over whatever happened to be in that slot.
+     *
+     * <p>Over every data a clause can be stated of, which is both forms built field by field. A
+     * walk that took only the products would pass over the newtype this module states a clause on
+     * and hold nothing about it.
      */
     @Test
     void everyBindingAClauseReadsIsAFieldOfWhatItIsAbout() {
         for (CheckedModule module : program().modules()) {
             for (CheckedData declared : module.data()) {
-                if (!(declared instanceof CheckedData.Product product)) {
+                if (!(declared instanceof CheckedData.WithFields built)) {
                     continue;
                 }
                 Set<BindingId> bound = new LinkedHashSet<>();
-                for (ValueShape.Field field : product.fields()) {
+                for (ValueShape.Field field : built.fields()) {
                     bound.add(field.binding());
                 }
-                for (ValueShape.Invariant clause : product.invariants()) {
+                for (ValueShape.Invariant clause : built.invariants()) {
                     assertTrue(bound.containsAll(read(clause.condition())),
-                            () -> "`" + product.name() + "` states " + clause.name()
+                            () -> "`" + built.name() + "` states " + clause.name()
                                     + " over " + read(clause.condition())
                                     + ", and holds " + bound);
                 }
@@ -155,7 +166,7 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
      */
     @Test
     void aClauseAnIncludeBroughtInIsStatedOfTheDataBeingBuilt() {
-        CheckedData.Product wide = product(program().module("down"), "Wide");
+        CheckedData.WithFields wide = built(program().module("down"), "Wide");
 
         assertEquals(List.of("identified", "wide"),
                 wide.invariants().stream().map(each -> each.name().orElse("")).toList(),

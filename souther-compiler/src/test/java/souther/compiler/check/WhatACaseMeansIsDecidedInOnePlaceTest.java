@@ -24,9 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * primitive, each time it wrote an arm, and a third reader in the checker asked the same questions
  * its own way. Three readings of one thing agree until the day one of them is extended.
  *
- * <p>So {@code CaseSpace} answers it once, a {@code CaseSelector} carries the answer, and everything
- * downstream reads the selector. This is asked of the sources: a tripwire and not a proof — a helper
- * in between defeats it — but the line that would have to be added first is the one it fails on.
+ * <p>So {@code CaseSpace} answers it once and a {@code ResolvedCase} carries the answer: the
+ * selector for a reader that tests and reads a value, and the atoms beside it for one that asks
+ * which case of a subject an arm picked. Everything downstream reads that value rather than the
+ * subject. This is asked of the sources: a tripwire and not a proof — a helper in between defeats
+ * it — but the line that would have to be added first is the one it fails on.
  */
 class WhatACaseMeansIsDecidedInOnePlaceTest {
 

@@ -1,16 +1,18 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.ForkOccurrence;
 import souther.compiler.flow.Naming;
-import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.ComparedNumber;
+import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -43,12 +45,22 @@ final class CoverageNaming implements Naming<Outcome> {
 
     private final CoverageSites.Plan plan;
     private final Symbols symbols;
+
+    /** Which declarations wear one value, which is what says whether reading a field reaches
+     *  somewhere else ({@link souther.compiler.check.Location#isStep}). */
+    private final DeclarationNewtypes newtypes;
     private final InputReads reads;
 
-    CoverageNaming(CoverageSites.Plan plan, Symbols symbols, InputReads reads) {
+    /** What each comparison of this body is about, read once and shared with whatever else asks. */
+    private final ComparedNumbers numbers;
+
+    CoverageNaming(CoverageSites.Plan plan, Symbols symbols, DeclarationNewtypes newtypes,
+                   InputReads reads, ComparedNumbers numbers) {
         this.plan = plan;
         this.symbols = symbols;
+        this.newtypes = newtypes;
         this.reads = reads;
+        this.numbers = numbers;
     }
 
     /** What a name reads here, which a caller walking the body needs for its own naming. */
@@ -67,9 +79,17 @@ final class CoverageNaming implements Naming<Outcome> {
         return both == null ? null : new Outcome(both);
     }
 
+    // The environment moves and the reading of the comparisons does not: what a name reads here is
+    // this naming's own, and what each comparison came to is one answer for the whole body.
     @Override
     public CoverageNaming under(Core.Binder binder, Core value) {
-        return new CoverageNaming(plan, symbols, reads.and(binder, value));
+        return new CoverageNaming(plan, symbols, newtypes, reads.and(binder, value), numbers);
+    }
+
+    @Override
+    public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
+        return new CoverageNaming(plan, symbols, newtypes,
+                reads.insideArm(match, arm, symbols, newtypes), numbers);
     }
 
     /**
@@ -88,14 +108,27 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
-        ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
-        NumericTerm at = InputNumber.compared(comparison, reads, symbols);
-        if (site == null || at == null) {
+        ConstructOccurrence site = plan.comparisons().occurrenceAt(comparison)
+                .filter(plan::instruments).orElse(null);
+        // The one reading of this comparison, which is the reading whatever admitted the way used.
+        // Read again here, the decision would be said of a number the admission never saw.
+        ComparedNumber drawn = numbers.of(comparison, reads);
+        if (site == null || drawn == null) {
             return null;
         }
-        return plan.outcomeOf(comparison, held)
-                .flatMap(ControlClaim::of)
-                .map(claim -> one(new Decision(new Condition.Side(at, site, held), claim)))
+        NumericTerm at = drawn.term();
+        ControlPlace.Outcome outcome = plan.outcomeOf(site, held).orElse(null);
+        if (outcome == null) {
+            return null;
+        }
+        // The condition and the claim are about one comparison, so they are read off one value. The
+        // place the claim is made at says which comparison it is a way out of; asked of the node
+        // instead, the two halves of this decision would be two answers, and a decision whose
+        // condition named one comparison and whose claim was recorded at another is one nothing
+        // here reads both halves of to notice.
+        return ControlClaim.of(outcome)
+                .map(claim -> one(new Decision(
+                        new Condition.Side(at, outcome.comparison(), held), claim)))
                 .orElse(null);
     }
 
@@ -103,14 +136,22 @@ final class CoverageNaming implements Naming<Outcome> {
      *  null where no run through the arm could be recorded. */
     @Override
     public Outcome matchCase(Core.Match match, int part) {
-        ControlClaim claim = armClaim(match, part);
+        ControlPlace.Arm place = armPoint(match, part);
+        ControlClaim claim = claimAt(place);
         if (claim == null) {
             return null;
         }
-        TermPath at = reads.pathOf(match.scrutinee(), symbols);
+        // What a fork is named by is the position it is on, and a scrutinee at none names nothing —
+        // which is also what a scrutinee this reading did not follow leaves to name it with.
+        TermPath at = switch (reads.pathOf(match.scrutinee(), newtypes)) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _ -> null;
+            // A name that only may stand at a position names no one position for a fork to be on,
+            // and a name built out of the ones it may be would be a place no reader could look up.
+            case PathResolution.MayStandAt _ -> null;
+        };
         if (at == null) {
-            Condition fork = forkOf(match, part);
-            return fork == null ? null : one(new Decision(fork, claim));
+            return one(new Decision(new Condition.Arm(place.arm()), claim));
         }
         List<String> names = match.cases().get(part).pattern().selectors().stream()
                 .map(selector -> selector.name().name()).toList();
@@ -129,18 +170,22 @@ final class CoverageNaming implements Naming<Outcome> {
      */
     @Override
     public Outcome forkArm(Core fork, int part) {
-        ControlClaim claim = armClaim(fork, part);
+        ControlPlace.Arm place = armPoint(fork, part);
+        ControlClaim claim = claimAt(place);
         if (claim == null) {
             return null;
         }
         if (fork instanceof Core.If iff) {
-            TermPath read = reads.pathOf(iff.cond(), symbols);
-            Condition what = read == null ? forkOf(fork, part)
+            TermPath read = switch (reads.pathOf(iff.cond(), newtypes)) {
+                case PathResolution.At(var stands) -> stands;
+                case PathResolution.NotAPosition _ -> null;
+                case PathResolution.MayStandAt _ -> null;
+            };
+            Condition what = read == null ? new Condition.Arm(place.arm())
                     : new Condition.Case(read, part == 0 ? "true" : "false");
-            return what == null ? null : one(new Decision(what, claim));
+            return one(new Decision(what, claim));
         }
-        Condition what = forkOf(fork, part);
-        return what == null ? null : one(new Decision(what, claim));
+        return one(new Decision(new Condition.Arm(place.arm()), claim));
     }
 
     @Override
@@ -148,20 +193,21 @@ final class CoverageNaming implements Naming<Outcome> {
         return MOST_OUTCOMES;
     }
 
-    /** One arm of a fork, where a run through it can be recorded, and null where it cannot. */
-    private ControlClaim armClaim(Core fork, int part) {
-        ControlPointId.ArmOccurrence[] arms = plan.armsOf(fork);
-        if (arms == null || part >= arms.length) {
-            return null;
-        }
-        return ControlClaim.of(arms[part]).orElse(null);
+    /**
+     * The place arm {@code part} of {@code fork} is, or null where the plan numbered no such arm.
+     *
+     * <p>Which arm it is comes back with it, so a reading that has to name the decision without a
+     * position names it off the place it has already asked for. Asked again of the fork, the answer
+     * would be this plan's arms read a second time to say what the first read already said.
+     */
+    private ControlPlace.Arm armPoint(Core fork, int part) {
+        ControlPlace.Arm[] arms = plan.armsOf(fork);
+        return arms == null || part >= arms.length ? null : arms[part];
     }
 
-    /** The fork itself, for a decision this cannot name a position for, or null where the plan named
-     *  no fork here. */
-    private Condition forkOf(Core fork, int part) {
-        ForkOccurrence named = plan.forkAt(fork);
-        return named == null ? null : new Condition.Arm(named, part);
+    /** What a run through {@code place} would be seen doing, and null where nothing records one. */
+    private static ControlClaim claimAt(ControlPlace.Arm place) {
+        return place == null ? null : ControlClaim.of(place).orElse(null);
     }
 
     private static Outcome one(Decision decision) {
@@ -210,7 +256,8 @@ final class CoverageNaming implements Naming<Outcome> {
                 case Condition.Side one -> each instanceof Condition.Side other
                         && other.comparison().equals(one.comparison()) && other.held() != one.held();
                 case Condition.Arm one -> each instanceof Condition.Arm other
-                        && other.fork().equals(one.fork()) && other.part() != one.part();
+                        && other.arm().fork().equals(one.arm().fork())
+                        && other.arm().part() != one.arm().part();
             };
             if (otherWay) {
                 return true;

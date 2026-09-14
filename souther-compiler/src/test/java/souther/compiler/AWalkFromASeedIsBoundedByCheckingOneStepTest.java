@@ -780,7 +780,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
      * from either side. The walk's own tests pass with a bound in place, since they say what a bound
      * does; the recipe's tests pass, since a rule a position or two down is inside any of them. This
      * is the case that fails the moment
-     * {@link souther.compiler.check.GuaranteeWalk.Scope#everyPosition} here becomes a number.
+     * {@link souther.compiler.check.GuaranteeWalk.Scope#everyName} here becomes a number.
      */
     @Test
     void whatAnArmBoundGuaranteesIsReadHoweverDeepTheRuleIsWritten() {

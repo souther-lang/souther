@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -73,7 +73,7 @@ class ARowAtAFormsPointIsSearchedForWhereTheRulesLeaveOneTest {
     void aPointTheRulesLeaveAPairAtIsNotReportedAsRefused() {
         String report = report(APART);
 
-        assertTrue(report.contains("p.x + p.y = 4"), report);
+        assertTrue(report.contains("read as f/p.x + p.y: = 4"), report);
         assertFalse(report.contains("every value tried at p.x + p.y = 4 was refused"), report);
     }
 
@@ -88,6 +88,6 @@ class ARowAtAFormsPointIsSearchedForWhereTheRulesLeaveOneTest {
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

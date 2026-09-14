@@ -19,7 +19,7 @@ import java.util.Set;
  * said nothing else.
  *
  * <p>Everywhere else a type is referred to, not introduced: a parameter type, a field's type,
- * {@code constructs}, {@code depends on}, a match arm, a decoder variant. A name unknown there is
+ * {@code constructs}, {@code depends on}, a match arm. A name unknown there is
  * still unknown, and reported as before.
  *
  * <p>Whether a name is declared is answered inside the module: its own definitions and the names its

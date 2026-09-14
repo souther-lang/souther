@@ -136,11 +136,6 @@ public final class Deviations {
      * <p>Only that. A family throwing anything else is a defect in the formatter or in the rule,
      * and swallowing it here would report it as this source being unusual.
      */
-    private static List<Witness> all(String source, Formatter.CanonicalForm canonical) {
-        return all(source, canonical, new Witnesses.Pairing(source, canonical));
-    }
-
-    /** The same, for a caller that has already read the two texts' tokens. */
     private static List<Witness> all(String source, Formatter.CanonicalForm canonical,
             Witnesses.Pairing pairing) {
         List<Witness> out = new ArrayList<>();

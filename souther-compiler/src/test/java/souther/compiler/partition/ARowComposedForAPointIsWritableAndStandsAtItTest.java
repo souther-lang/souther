@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
@@ -117,8 +116,9 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
             for (BorderAssessment border : lines(model)) {
                 border.items().forEach((role, item) -> {
                     if (item instanceof ItemAssessment.Owed owed
-                            && owed.attempt() instanceof ItemAssessment.Attempt.Built built) {
-                        held.check(model, border.label() + " " + role, written(built.row()));
+                            && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
+                        held.check(model, border.label() + " " + border.border().named(role),
+                                written(built.row()));
                     }
                 });
             }
@@ -138,8 +138,9 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
     /** Whether the point is met, read off the item rather than out of a report's text. */
     private static boolean met(List<BorderAssessment> lines, String point) {
         for (BorderAssessment border : lines) {
-            for (Map.Entry<PointRole, ItemAssessment> each : border.items().entrySet()) {
-                if (!point.equals(border.label() + " " + each.getKey())) {
+            for (Map.Entry<DomainPoint, ItemAssessment> each : border.items().entrySet()) {
+                if (!point.equals(border.label() + " "
+                        + border.border().named(each.getKey()))) {
                     continue;
                 }
                 return each.getValue() instanceof ItemAssessment.Owed owed
@@ -177,15 +178,4 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
         return lines;
     }
 
-    private static PartitionEvidence measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage =
-                compilation.db().ask(new Adequacy.Coverage("demo")).value();
-        assertNotNull(coverage, () -> "the model under test compiles: " + source);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + source);
-        return measured;
-    }
 }

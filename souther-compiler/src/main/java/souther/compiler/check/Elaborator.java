@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -14,8 +15,14 @@ import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ApplicationDerivationCause;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.DerivedReferenceOrigin;
+import souther.compiler.types.ReferenceDerivationCause;
+import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -157,7 +164,7 @@ public final class Elaborator {
                     // the applications — which is what a function passed on rather than applied has
                     // none of, and what a function applied only inside a lambda cannot give
                     value = elaborateFunctionValue(li.value(), declared.params(), env, ctx);
-                    checkLetAnnotation(li, declared, value.type(), ctx.symbols());
+                    checkLetAnnotation(li, declared, value.type(), ctx.published());
                     bindType = declared;
                 } else if (isFunctionSelection(li.value())) {
                     // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
@@ -173,11 +180,11 @@ public final class Elaborator {
                     // the written type is the value's expected type, so an empty collection bound here
                     // takes its element/value type from the annotation rather than staying a bottom
                     value = elaborate(li.value(), env, ctx, annotation);
-                    checkLetAnnotation(li, annotation, value.type(), ctx.symbols());
+                    checkLetAnnotation(li, annotation, value.type(), ctx.published());
                     bindType = annotation;
                 } else {
                     value = elaborate(li.value(), env, ctx);
-                    bindType = carriedType(li, value.type(), ctx.symbols());
+                    bindType = carriedType(li, value.type(), ctx.kinds(), ctx.published());
                 }
                 if (li.opens() != null) {
                     checkOpens(li, bindType, ctx.symbols());
@@ -209,7 +216,7 @@ public final class Elaborator {
                 case ValueName.Local local when env.typeOf(local.id()) != null ->
                         new Core.Read(v.name(), local.id(), env.typeOf(local.id()), v.pos());
                 case ValueName.OfType named
-                        when ctx.symbols().declarations().declaration(named.type()) instanceof Hir.UnitData ->
+                        when ctx.symbols().declaredNode(named.type()) instanceof Hir.UnitData ->
                         new Core.UnitValue(named.type(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec §algebraic-types).
                 // What puts it here is the field, which the context says (ADR-0011) — not the expected
@@ -227,25 +234,24 @@ public final class Elaborator {
                     }
                     yield value;
                 }
-                // A value this representation kept standing, read as the type its own check
+                // A value this representation kept standing, read under the signature its own check
                 // settled. What the value is a constant of is not asked here: that is folded into
                 // the reference where the reference is written, so nothing downstream of this has
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
-                        new Core.PreservedCall(v.denotes(), List.of(),
-                                ctx.preserved().valueKept(v.denotes()), v.pos());
+                        keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(), v.pos());
                 default -> throw notAValue(v, env);
             };
             case Hir.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
             case Hir.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Hir.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Hir.NewData nd -> {
-                if (!(nd.typeName().answered() instanceof Hir.Name.Denoting built)) {
+                if (!(nd.typeName() instanceof Hir.Name.Denoting built)) {
                     // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
                 if (!(built.type() instanceof TypeSymbol.AtModule constructed)
-                        || !(ctx.symbols().declarations().declaration(constructed)
+                        || !(ctx.symbols().declaredNode(constructed)
                                 instanceof Hir.Data owner)) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
@@ -258,7 +264,7 @@ public final class Elaborator {
                 // fields, so it is refused the way the name would be anywhere else a value goes.
                 List<Core.Read> spreads = new ArrayList<>();
                 for (Hir.Var s : nd.spreads()) {
-                    if (!(s.answered() instanceof Hir.Var.Denoting named
+                    if (!(s instanceof Hir.Var.Denoting named
                             && named.denotes() instanceof ValueName.Local local)) {
                         throw notAValue(s, env);
                     }
@@ -267,7 +273,8 @@ public final class Elaborator {
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
-                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx, nd.fields());
+                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx,
+                        nd.mayOmitOptionalFields());
                 yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
@@ -276,9 +283,9 @@ public final class Elaborator {
                 // Each branch is lifted before the join, so a field taking `T?` can be given a value
                 // on one side and `None` on the other and still have one type (spec §algebraic-types).
                 Core then = liftIntoOption(elaborate(iff.then(), env, ctx, expected), expected,
-                        ctx.symbols());
+                        ctx.published());
                 Core els = liftIntoOption(elaborate(iff.els(), env, ctx, expected), expected,
-                        ctx.symbols());
+                        ctx.published());
                 Type tt = then.type();
                 Type et = els.type();
                 Type joined = TypeOps.join(tt, et);
@@ -286,8 +293,9 @@ public final class Elaborator {
                     joined = TypeOps.joinAt(expected, tt, et);
                 }
                 if (joined != null) {
-                    yield new Core.If(cond, then, els, iff.origin(), joined, iff.pos(),
-                            ctx.within());
+                    yield new Core.If(cond, then, els,
+                            new Core.ForkPlace(ctx.occurrenceOf(iff.origin()), ctx.within()),
+                            joined, iff.pos());
                 }
                 throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
@@ -322,12 +330,12 @@ public final class Elaborator {
                 // type — with the invariant established, which is why the discharge check may seed it.
                 Scope inner = env.with(ic.binder(), construct.type());
                 Core then = liftIntoOption(elaborate(ic.then(), inner, ctx, expected), expected,
-                        ctx.symbols());
+                        ctx.published());
                 List<Core.ElseArm> arms = new ArrayList<>();
                 Type joined = then.type();
                 for (Hir.ElseArm arm : ic.els()) {
                     Core body = liftIntoOption(elaborate(arm.body(), env, ctx, expected), expected,
-                            ctx.symbols());
+                            ctx.published());
                     arms.add(new Core.ElseArm(arm.clause(), body));
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
@@ -343,8 +351,9 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, CoreBinders.of(ic.binder()), then, arms, ic.origin(),
-                        joined, ic.pos(), ctx.within());
+                yield new Core.IfConstructed(construct, CoreBinders.of(ic.binder()), then, arms,
+                        new Core.ForkPlace(ctx.occurrenceOf(ic.origin()), ctx.within()), joined,
+                        ic.pos());
             }
             case Hir.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -390,7 +399,10 @@ public final class Elaborator {
             // Whether the value belongs at the position is a different question, and one an input is
             // held to while an expectation is not ({@link RowPosition}), so it is not asked here.
             case Hir.RowCollection row -> {
-                Hir.Expr written = new Hir.ListLit(row.elements(), row.pos(), row.region());
+                // The same brackets the author wrote, read as the list they are: one collection of
+                // the source and not a second one made here.
+                Hir.Expr written = new Hir.ListLit(row.elements(), row.origin(), row.pos(),
+                        row.region());
                 Brackets brackets = contextualCollection(expected);
                 // `[ ]` at a set or a map is the empty one, which is the value a body names rather
                 // than a conversion of an empty list: what it holds has no element to say, and the
@@ -444,9 +456,17 @@ public final class Elaborator {
     private static Hir.Expr fromList(String collection, Hir.Expr written, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib.Operation fromList =
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "fromList");
-        return new Hir.Apply(collection + ".fromList",
-                new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
-                souther.compiler.types.ConstructionOrigin.own(), row.pos(), row.region());
+        // The operation is this pass's and the collection is the author's, so which reference of it
+        // this is comes from the brackets they wrote. A row writes one collection and the value it
+        // stands for is one operation, so it is the first thing that collection derived — and the
+        // empty one below is the same first thing, the two being the two ways one row is read.
+        return Hir.Apply.synthetic(collection + ".fromList",
+                new souther.compiler.types.ReachName.OfLibrary(fromList),
+                new DerivedReferenceOrigin(
+                        new ReferenceDerivationCause.CollectionLiteral(row.origin()), 0),
+                new ApplicationOrigin.Derived(
+                        new ApplicationDerivationCause.CollectionLiteral(row.origin()), 0),
+                List.of(written), row.pos(), row.region());
     }
 
     /** {@code <collection>.empty} — the value a body names for the empty collection a row writes
@@ -454,15 +474,21 @@ public final class Elaborator {
     private static Hir.Expr empty(String collection, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib.Operation empty =
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "empty");
+        // No source wrote this reference: the author wrote an empty collection, and the operation
+        // it stands for is this pass's. Which reference it is comes from the brackets they did
+        // write — the first thing that collection derived, as the filled one is.
         return Hir.Var.respelled(collection + ".empty",
-                new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
+                new souther.compiler.types.ReachName.OfLibrary(empty),
+                new DerivedReferenceOrigin(
+                        new ReferenceDerivationCause.CollectionLiteral(row.origin()), 0),
+                row.pos(), row.region());
     }
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
      * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
     static Core requireTyped(Hir.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
         Core c = elaborate(e, env, ctx);
-        requireType(e, c.type(), expected, ctx.symbols(), what);
+        requireType(e, c.type(), expected, ctx.published(), what);
         return c;
     }
 
@@ -470,38 +496,27 @@ public final class Elaborator {
     static Core elaborateFieldAccess(Hir.FieldAccess fa, Scope env, CheckContext ctx) {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
-        if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data owner) {
-            Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
-            if (ft != null) {
-                return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
-            }
+        // What a `.` may name here, asked of the one reader of it: a record's own fields, a name
+        // every case of a sum spreads, and a newtype's `value` and nothing of what it wraps. Which
+        // of those this position is, and how far the names it wears come off, are answered there —
+        // an elaboration deciding either for itself is a second reading of a field access, and the
+        // reading a text is typed by and the reading an editor is told would then be two.
+        Type read = fieldRead(ctx).of(target, fa.field());
+        if (read != null) {
+            return new Core.FieldAccess(targetCore, fa.field(), read, fa.pos());
         }
-        // Asked of a sum only. What a type is made of answers for anything — a data that is no sum
-        // is the one atom it is — and the question here is whether there are cases to read at all,
-        // which a type that is its own single leaf is not.
-        if (TypeOps.isSumType(target, ctx.symbols())) {
-            List<TypeSymbol> cases = AtomSpace.subjectAtoms(target, ctx.symbols());
-            // A field every case spreads is the sum's own: the sharing is nominal, and the generated
-            // sealed interface declares the accessor its cases already carry (issue #160). Only a
-            // named sum, whose interface this compile emits — an anonymous union's cases are not
-            // written together, so nothing declares their shared part.
-            // Asked of the type as written and not through the names it wears: how far a read looks
-            // through a newtype is this elaboration's policy, and a `data X = S` over a sum is a
-            // value of X, whose fields are X's. `TypeView` keeps both directions available for that
-            // reason, and this reader takes the one it has always taken.
-            TypeView view = TypeView.of(target, ctx.symbols());
-            if (!view.isWrapped() && view.shape() instanceof Shape.Sum shape
-                    && shape.common() instanceof Shape.CommonProduct.Shared shared
-                    && shared.fields().get(fa.field()) != null) {
-                return new Core.FieldAccess(targetCore, fa.field(),
-                        shared.fields().get(fa.field()), fa.pos());
-            }
+        // Nothing is readable, and what is left here is saying so. Asked of a sum only: what a type
+        // is made of answers for anything — a data that is no sum is the one atom it is — and the
+        // question is whether there are cases the author could open, which a type that is its own
+        // single leaf has not.
+        if (TypeOps.isSumType(target, ctx.kinds())) {
+            List<TypeSymbol> cases = AtomSpace.subjectAtoms(target, ctx.published());
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
             for (TypeSymbol c : cases) {
-                if (!(ctx.symbols().declarations().declaration(c) instanceof Hir.Data cd)
+                if (!(ctx.symbols().declaredNode(c) instanceof Hir.Data cd)
                         || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
                     without.add(c.name());
                 }
@@ -520,6 +535,15 @@ public final class Elaborator {
         }
         throw CompileException.of(Diagnostic
                         .at(fa.name().reportedAt()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
+    }
+
+    /** What a {@code .} may name, in the world an elaboration reads: the declarations as this text
+     *  has resolved them, which is what a check settling them has to go on — and refusing where one
+     *  of them does not read, which a check is what reports. */
+    private static FieldRead fieldRead(CheckContext ctx) {
+        return new FieldRead(ctx.symbols(), ctx.published(), ctx.kinds(), ctx.inners(),
+                new ResolvedFieldTypes(ctx.symbols(), ctx.inners()),
+                FieldRead.Unreadable.REFUSED);
     }
 
     /**
@@ -548,7 +572,7 @@ public final class Elaborator {
         if (narrowGot != null) {
             BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
             Type want = TypeOps.substitute(declaredStep.result(), bind);
-            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, ctx.symbols())) {
+            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, ctx.published())) {
                 return narrowCore;   // the narrow accumulator is a fixpoint
             }
         }
@@ -561,7 +585,7 @@ public final class Elaborator {
                 Core widenedCore = elaborateBlockArg(fnName, stepArg,
                         ((Type.FnOf) TypeOps.substitute(declaredStep, widened)).params(), env, ctx);
                 Type got = ((Type.FnOf) widenedCore.type()).result();
-                if (TypeOps.assignable(got, sum, ctx.symbols())) {
+                if (TypeOps.assignable(got, sum, ctx.published())) {
                     bind.put(accVar.name(), sum);
                     return widenedCore;   // the step is emitted at the widened accumulator
                 }
@@ -601,7 +625,8 @@ public final class Elaborator {
                             .build());
                 }
                 for (int i = 0; i < paramTypes.size(); i++) {
-                    if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
+                    if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i),
+                            ctx.published())) {
                         throw CompileException.of(Diagnostic.at(arg.pos())
                                 .say(new HelperMessage.TheFunctionTakesAnotherType(fnName,
                                         Type.show(paramTypes.get(i)),
@@ -659,7 +684,7 @@ public final class Elaborator {
         // question about it: what the binding opens has no type, so the body under it would be
         // checked against a shape nothing states. Abandoned as a name standing anywhere else in a
         // body is, rather than passed on as an absent type for the reading below to take for one.
-        if (!(li.opens().answered() instanceof Hir.Name.Denoting opens)) {
+        if (!(li.opens() instanceof Hir.Name.Denoting opens)) {
             throw new Unanswerable(li.opens().pos());
         }
         TypeSymbol layer = opens.type();
@@ -692,8 +717,8 @@ public final class Elaborator {
      * helper's declared return type follows.
      */
     static void checkLetAnnotation(Hir.LetIn li, Type declared, Type valueType,
-                                           Symbols symbols) {
-        if (TypeOps.assignable(valueType, declared, symbols)) {
+                                           PublishedDeclarations published) {
+        if (TypeOps.assignable(valueType, declared, published)) {
             return;
         }
         throw CompileException.of(Diagnostic
@@ -708,20 +733,27 @@ public final class Elaborator {
      * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
      * the argument's own type, which monomorphisation and the call-site check already handle.
      */
-    static Type carriedType(Hir.LetIn li, Type valueType, Symbols symbols) {
-        return carriedType(li.declaredType(), valueType, symbols);
+    static Type carriedType(Hir.LetIn li, Type valueType, DeclarationKinds kinds,
+                            PublishedDeclarations published) {
+        return carriedType(li.declaredType(), valueType, kinds, published);
     }
 
-    static Type carriedType(Hir.RetType declared, Type valueType, Symbols symbols) {
+    static Type carriedType(Hir.RetType declared, Type valueType, DeclarationKinds kinds,
+                            PublishedDeclarations published) {
         return declared == null ? valueType
-                : carriedType(TypeOps.resolveParamType(declared), valueType, symbols);
+                : carriedType(TypeOps.resolveParamType(declared), valueType, kinds, published);
     }
 
-    private static Type carriedType(Type declared, Type valueType, Symbols symbols) {
+    /** The same, for a caller holding the declared type as this application settled it rather than
+     *  as it was written — which is what a reader of an expansion has once it has decided the
+     *  application's variables. */
+    static Type carriedType(Type declared, Type valueType, DeclarationKinds kinds,
+                            PublishedDeclarations published) {
         if (Type.mentions(declared, x -> x instanceof Type.MetaVar)) {
             return valueType;   // it stands for what this application decides, and is not a sum
         }
-        if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
+        if (TypeOps.isSumType(declared, kinds)
+                && TypeOps.assignable(valueType, declared, published)) {
             return declared;
         }
         return valueType;
@@ -751,7 +783,7 @@ public final class Elaborator {
         Substitution decided = applied.decided();
         List<Core> values = applied.values();
         Scope inner = applied.inner();
-        Type declaredResult = declaredResult(ex, ctx);
+        Type declaredResult = declaredResult(ex);
         // The declaration is what an empty collection inside the body has to go on: at a call site
         // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
         // application has settled it — before that it names variables, and a variable states no type.
@@ -759,23 +791,23 @@ public final class Elaborator {
                 ? decided.zonk(declaredResult) : expected;
         // Everything the copy holds stands in this expansion, which is what a fork inside it needs
         // in order to say which copy it is — the call site is here and nowhere below.
-        Core body = elaborate(ex.body(), inner.deciding(decided), ctx.inside(ex.application()), want);
+        Core body = elaborate(ex.body(), inner.deciding(decided), ctx.inside(ex.application(), ex.callee(), ex.at()), want);
         Type type = body.type();
         if (declaredResult != null) {
             // What the body answers decides a variable the arguments left open — a result the
             // signature relates to a function parameter rather than to a value one.
-            decide(decided, declaredResult, ex.body(), body.type(), ctx.symbols(),
+            decide(decided, declaredResult, ex.body(), body.type(), ctx.published(),
                     "the result of `" + shown(ex) + "`");
             if (ex.callee() instanceof ValueName.Local) {
                 // A function the caller supplied, expanded where the callee applies it. What it was
                 // declared to answer is what the caller was held to when it handed the function
                 // over, so a body answering something else is the caller's error and is reported
                 // here — a helper's own declared return is its promise, and is reported against it.
-                hold(decided, declaredResult, ex.body(), body.type(), ctx.symbols(),
+                hold(decided, declaredResult, ex.body(), body.type(), ctx.published(),
                         "what `" + shown(ex) + "` was given to answer");
             }
             type = decided.settle(declaredResult);
-            if (!TypeOps.assignable(body.type(), type, ctx.symbols())) {
+            if (!TypeOps.assignable(body.type(), type, ctx.published())) {
                 type = body.type();   // the declaration is wrong, and is reported against the helper
             }
         }
@@ -823,11 +855,11 @@ public final class Elaborator {
                 Type declared = TypeOps.resolveParamType(b.declaredType());
                 // The argument is held to everything the declaration states, whether or not the
                 // callee's body ever reads it, and however many variables stand inside it.
-                constrain(decided, declared, b.value(), value.type(), ctx.symbols(),
+                constrain(decided, declared, b.value(), value.type(), ctx.published(),
                         argument(ex, b.binder().name()));
                 Type required = decided.zonk(declared);
                 if (states(required)) {
-                    bindType = carriedType(required, value.type(), ctx.symbols());
+                    bindType = carriedType(required, value.type(), ctx.kinds(), ctx.published());
                 }
             }
             values.add(value);
@@ -859,7 +891,7 @@ public final class Elaborator {
                             instanceof Type.FnOf declared)) {
                 continue;
             }
-            Type arrives = arrivesAs(g, ex, env, ctx);
+            Type arrives = arrivesAs(g, ex, env);
             if (arrives != null) {
                 // Both sides are one statement each, so both are read as one. Each was instantiated
                 // once — the receiving declaration when this call was expanded, the arriving one
@@ -871,7 +903,7 @@ public final class Elaborator {
                 // relates a function parameter to the rest of what it wrote — `(f: ('a) -> Bool):
                 // List<'a>` answers a list of what the function takes — so what the function says
                 // about a variable is what that variable is at every other position of the call.
-                constrain(decided, declared, g.value(), arrives, ctx.symbols(),
+                constrain(decided, declared, g.value(), arrives, ctx.published(),
                         argument(ex, "a function"));
                 continue;
             }
@@ -883,7 +915,7 @@ public final class Elaborator {
                 continue;   // nothing says what it takes, and its own body does not either
             }
             constrain(decided, declared, g.value(),
-                    elaborateFunctionValue(g.value(), takes, env, ctx).type(), ctx.symbols(),
+                    elaborateFunctionValue(g.value(), takes, env, ctx).type(), ctx.published(),
                     argument(ex, "a function"));
         }
     }
@@ -896,7 +928,7 @@ public final class Elaborator {
      * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
      * call has no declaration of its own, and it is read at the application that decides it.
      */
-    private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env, CheckContext ctx) {
+    private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env) {
         Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs())
                 : g.value() instanceof Hir.Var.Denoting v
                         && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
@@ -975,7 +1007,7 @@ public final class Elaborator {
      * where it is applied and not here. Where it is not, it is left to the body that applies it.
      */
     private static boolean reads(Hir.Expr e, Scope env) {
-        if (e instanceof Hir.Apply call && call.answered() instanceof Hir.Var.Denoting callee
+        if (e instanceof Hir.Apply call && call.function() instanceof Hir.Var.Denoting callee
                 && callee.denotes() instanceof ValueName.Helper
                 && env.of(callee.denotes(), callee.reaches()) == null) {
             return false;
@@ -1025,7 +1057,7 @@ public final class Elaborator {
     /** The one type the callee's declaration gives its result, or null where it declared none or
      * declared a union — a union names one type where the body may answer several, so there is
      * nothing single to hold the body to. */
-    private static Type declaredResult(Hir.Expansion ex, CheckContext ctx) {
+    private static Type declaredResult(Hir.Expansion ex) {
         return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
                 : TypeOps.resolveParamType(ex.declaredReturn());
     }
@@ -1205,8 +1237,8 @@ public final class Elaborator {
                 // The same settling the call itself does — this walk is reading that call's own
                 // question one position early, and an answer that differed from the one the call
                 // reaches would be a parameter type nothing later agrees with.
-                bind = CallElaborator.settledByValues(call, kept.params(), kept.result(), null,
-                        j -> typeOf(call.args().get(j), env, ctx), ctx);
+                bind = SignatureApplication.settledByValues(kept.params(), kept.result(), null,
+                        j -> typeOf(call.args().get(j), env, ctx), ctx.published());
             } catch (CompileException _) {
                 return;   // this call decides nothing here; what is wrong with it is reported there
             }
@@ -1313,7 +1345,9 @@ public final class Elaborator {
                                     Type.show(t), Type.show(f)))
                             .build());
                 }
-                yield new Core.If(cond, then, els, iff.origin(), t, iff.pos(), ctx.within());
+                yield new Core.If(cond, then, els,
+                        new Core.ForkPlace(ctx.occurrenceOf(iff.origin()), ctx.within()), t,
+                        iff.pos());
             }
             // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
             // its arguments became, and what those captured is what the lambda closes over
@@ -1379,15 +1413,16 @@ public final class Elaborator {
     }
 
     static void requireType(Hir.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
-        requireType(e, typeOf(e, env, ctx), expected, ctx.symbols(), what);
+        requireType(e, typeOf(e, env, ctx), expected, ctx.published(), what);
     }
 
-    /** As {@link #requireType(Hir.Expr, Type, Map, Hir.Data, Map, Map, String)}, but with the
+    /** As {@link #requireType}, but with the
      * operand's type already computed — a caller that has typed {@code e} does not re-type its
      * subtree. */
     static void requireType(Hir.Expr e, Type actual, Type expected,
-                                    Symbols symbols, String what) {
-        if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec §sum-data)
+                                    PublishedDeclarations published, String what) {
+        // a case widens to its sum (spec §sum-data)
+        if (!TypeOps.assignable(actual, expected, published)) {
             throw doesNotFit(e, actual, expected, what);
         }
     }
@@ -1434,16 +1469,16 @@ public final class Elaborator {
      * disagree. Reported here rather than inside it because this is what still has {@code operand}.
      */
     static void constrain(Substitution decided, Type declared, Hir.Expr operand, Type actual,
-                          Symbols symbols, String what) {
-        decide(decided, declared, operand, actual, symbols, what);
-        hold(decided, declared, operand, actual, symbols, what);
+                          PublishedDeclarations published, String what) {
+        decide(decided, declared, operand, actual, published, what);
+        hold(decided, declared, operand, actual, published, what);
     }
 
     /** What {@code actual} says about the variables {@code declared} carries, refusing a variable
      * this application has already read at a type that does not go with this one. */
     static void decide(Substitution decided, Type declared, Hir.Expr operand, Type actual,
-                       Symbols symbols, String what) {
-        if (decided.decide(declared, actual, symbols) instanceof Fit.Disagrees d) {
+                       PublishedDeclarations published, String what) {
+        if (decided.decide(declared, actual, published) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
                             .at(operand.reportedAt())
                             .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
@@ -1455,8 +1490,8 @@ public final class Elaborator {
 
     /** {@code actual} held to what {@code declared} states, recording nothing about its variables. */
     static void hold(Substitution decided, Type declared, Hir.Expr operand, Type actual,
-                     Symbols symbols, String what) {
-        if (decided.hold(declared, actual, symbols) instanceof Fit.Disagrees d) {
+                     PublishedDeclarations published, String what) {
+        if (decided.hold(declared, actual, published) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
                             .at(operand.reportedAt())
                             .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
@@ -1479,13 +1514,38 @@ public final class Elaborator {
      * returned untouched, and so is one whose type has nothing to do with the field, which the
      * caller then reports as the mismatch it is.
      */
-    static Core liftIntoOption(Core value, Type expected, Symbols symbols) {
+    static Core liftIntoOption(Core value, Type expected, PublishedDeclarations published) {
         if (!(expected instanceof Type.OptionOf opt)
-                || TypeOps.assignable(value.type(), expected, symbols)
-                || !TypeOps.assignable(value.type(), opt.element(), symbols)) {
+                || TypeOps.assignable(value.type(), expected, published)
+                || !TypeOps.assignable(value.type(), opt.element(), published)) {
             return value;
         }
         return new Core.OptionSome(value, expected, value.pos());
+    }
+
+    /**
+     * A reference to a value the representation keeps standing, as the node one becomes.
+     *
+     * <p>An application of no arguments, which is what a reference to a value is: reading a value's
+     * name is running its body (ADR-0072), and a representation that did not substitute it kept
+     * that. So it is built the way a kept call is — from the signature the name was settled with —
+     * and is held to it the same way. Nothing about this node says it came from a name rather than
+     * from a call, because nothing downstream asks.
+     */
+    private static Core keptValue(CompleteSignature settled, ReferenceOrigin reference,
+                                  SourcePos pos) {
+        // A name read where a value goes, and no application was written over it. What it is built
+        // as is a call, and that call is this reading's: nobody applied anything there, so it is
+        // derived from the name that was written rather than being an application of a source. The
+        // reference is that name's and is carried, not made again.
+        return new Core.PreservedCall(settled.declaring(), List.of(),
+                // In no copy, because there is nothing it is a copy of: the application is this
+                // reading's and no author wrote it, so there is no construct of theirs to stand in
+                // one — the same answer {@code ConstructOccurrence.unwritten} gives.
+                new Core.KeptCallPlace(reference, new ApplicationOrigin.Derived(
+                        new ApplicationDerivationCause.NameReadAsAValue(reference), 0),
+                        ExpansionLineage.ORIGINAL),
+                settled.result(), pos);
     }
 
     /**
@@ -1516,8 +1576,7 @@ public final class Elaborator {
         }
         return CompileException.of(Diagnostic
                         .at(v.written().reportedAt())
-                        
-                        .suggestion(Suggest.candidate(v.name(), env.spellings()))
+                        .repair(v.written().reportedAt(), Suggest.candidate(v.name(), env.spellings()))
                         .say(new NameMessage.NoValueOfThatNameInScope(v.name())).build());
     }
 
@@ -1551,15 +1610,14 @@ public final class Elaborator {
      *
      * <p>Nothing is checked for the {@code else e} form: it already answers any failure.
      */
-    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeSymbol typeName, Symbols symbols) {
+    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeSymbol.AtModule typeName,
+                                               Symbols symbols) {
         if (!ic.mapsClauses()) {
             return;
         }
-        List<Hir.InvariantClause> clauses = symbols.declarations().declaration(typeName) instanceof Hir.Data data
-                ? TypeOps.effectiveInvariants(data, symbols) : List.of();
         LinkedHashSet<String> named = new LinkedHashSet<>();
         boolean unnamed = false;
-        for (Hir.InvariantClause clause : clauses) {
+        for (InvariantHeader clause : TypeOps.invariantHeadersGoverning(typeName, symbols)) {
             if (clause.name().isPresent()) {
                 named.add(clause.name().get());
             } else {

@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.PositionId;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.observe.RunSensitivity;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -24,35 +27,110 @@ import souther.compiler.inputs.RuleWithoutALine;
 public sealed interface ClosureGap {
 
     /**
-     * A rule of the model a reader stopped on. The rule says which measures that costs
-     * ({@link BlockReason.RuleWithoutLineReason#leavesShort}).
+     * Whether a run of this compiler that allows more could come to a different answer here.
      *
-     * <p>Only a rule this compiler got partway through. A rule read from end to end that draws no
-     * line leaves no measure short of anything — that is what its half of the reasons answers, for
-     * every one of them and not case by case — so it is not a gap in what was measured and there is
-     * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
-     * these, and this refuses what that question would have had to let through.
+     * <p>Delegated and never decided. Three of the four hold what stopped them, so they ask it; the
+     * fourth holds no reason on purpose and answers from what can reach it, which
+     * {@code WhatEachClosureGapSaysAboutAWiderRunTest} holds to the reasons that do.
      */
-    record RuleUnread(RuleWithoutALine rule) implements ClosureGap {
+    RunSensitivity runSensitivity();
 
-        public RuleUnread {
-            if (!(rule.why() instanceof BlockReason.RuleReadingStopped)) {
-                throw new IllegalArgumentException(
-                        "a rule read to the end leaves no measure short: " + rule.why());
-            }
+    /**
+     * What tells one of these from another.
+     *
+     * <p>The value itself, wherever everything the arm holds is what a reader is told. Where the
+     * arm holds what evidenced the fact as well — the handle a reader is sent to, what a reading
+     * was short of — the fact alone, so that one thing that went wrong, found twice, is one thing.
+     *
+     * <p>Asked of the arm and not written down by whoever gathers these. Two places put these
+     * together — what one measure's reading came to, and what a measurement went without — and a
+     * quotient written at each would be two answers to the question of what one gap is.
+     */
+    Object fact();
+
+    /**
+     * Two of these under one fact, as one.
+     *
+     * <p>What each arm does with what it holds beside the fact is that arm's own: a handle joins,
+     * because two of them are two ways to one place; what an author wrote is held to, because two
+     * accounts of it that differ are two accounts one of which is wrong.
+     *
+     * <p>Commutative, so which of the two a walk met first decides nothing about the result. A
+     * {@code switch} with no {@code default}, so an arm added later has to say whether it carries
+     * anything to accumulate before anything can put two of them together.
+     */
+    static ClosureGap merged(ClosureGap had, ClosureGap also) {
+        if (!had.fact().equals(also.fact())) {
+            throw new IllegalArgumentException("two gaps put together are two of one fact: "
+                    + had.fact() + " and " + also.fact());
         }
+        return switch (had) {
+            case QuestionUnanswered it -> it.mergedWith(it.andAlso(also));
+            // Equal under the fact and holding nothing else, so both are the same value.
+            case RulesNotReached _, PositionNotReachedInto _, LineNotDerived _ -> had;
+        };
     }
 
     /**
-     * A question the rules written about one position raise that nothing answered.
+     * A rule of the model that leaves a measure of coverage open.
      *
-     * <p>A clause's, and never a comparison's. A comparison raises a question exactly where the
-     * reading of it reached a line, and that line is the answer — so a comparison either yields
-     * both or yields neither and records what stopped its reading. Which is why a comparison's
-     * incompleteness reaches this only as {@link RuleUnread}.
+     * <p>Either kind, because a measure is held open by either and the difference between them is
+     * about what a reader is told rather than about whether anything is missing. A rule whose
+     * reading finished raises a question about a subject and nothing answered it; a rule whose
+     * reading did not is one nothing worked out the questions of. Which measures each of them holds
+     * open is {@link MeasureClosure}'s to answer, and it asks the question rather than the reason it
+     * stands for.
      */
-    record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
-            implements ClosureGap {}
+    record QuestionUnanswered(StandingQuestion question) implements ClosureGap {
+
+        /** What a reading found, whole. Taken apart into the rule and the handles, this would hold
+         *  a second answer to what makes two of these one and a second way of putting two together
+         *  — and the type that has those is the one the readers produced. */
+        public static QuestionUnanswered of(StandingQuestion asked) {
+            return new QuestionUnanswered(asked);
+        }
+
+        /** The question's own, which is the rule that raised it and what it asks. */
+        @Override
+        public Object fact() {
+            return question.fact();
+        }
+
+        /** The other one, where it really is one of these. Two gaps filed under one fact and not
+         *  of one kind is a fact two arms answer with, which nothing here can put together. */
+        QuestionUnanswered andAlso(ClosureGap other) {
+            if (other instanceof QuestionUnanswered it) {
+                return it;
+            }
+            throw new IllegalArgumentException("a question that stands and " + other
+                    + " are filed under one fact");
+        }
+
+        /** Both readings' accounts, as one, which the question itself says how to do. */
+        public QuestionUnanswered mergedWith(QuestionUnanswered other) {
+            return new QuestionUnanswered(question.mergedWith(other.question));
+        }
+
+        /**
+         * What the reasons the question is short for come to, and it takes all of them.
+         *
+         * <p>A question stands until every reason it stands for is gone, so a run that allows more
+         * answers it only where every one of those is a stop such a run gets past. Read as "one of
+         * them was", a question short for a figure and for a form nothing reads would send a person
+         * to allow more and leave the form exactly as unread.
+         *
+         * <p>Empty is {@link RunSensitivity#UNAFFECTED} for the same
+         * reason it is not {@code MAY_CHANGE}: nothing here is a figure a run may allow more of.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return question.stopped().all().stream()
+                    .allMatch(each -> each.runSensitivity()
+                            == RunSensitivity.MAY_CHANGE)
+                    ? RunSensitivity.MAY_CHANGE
+                    : RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * A position whose rules nothing enumerated. It raises no question, so it cannot be short of
@@ -80,7 +158,32 @@ public sealed interface ClosureGap {
      * would be the first said again.
      */
     record RulesNotReached(String behavior, souther.compiler.inputs.PositionId at)
-            implements ClosureGap {}
+            implements ClosureGap {
+
+        /**
+         * The one arm that answers rather than asks, because it holds no reason to ask.
+         *
+         * <p>What reaches it is a {@link souther.compiler.inputs.RulesLeftUnread}: a clause this
+         * reading lost, and a handing over nobody took over. Neither is a figure this compiler
+         * compared anything against, so a run that allows more meets both again — and the reason
+         * stays inside for the reason given above, which is that a document naming it would make a
+         * change to how this compiler traverses a model into a change to what its documents carry.
+         *
+         * <p>Said here and held elsewhere. A third way of leaving rules unread that a wider run
+         * does get past would make this answer wrong with nothing in this file to say so, so
+         * {@code WhatEachClosureGapSaysAboutAWiderRunTest} asks every arm of that type.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        /** Everything it holds is what a reader is told: whose position, and which. */
+        @Override
+        public Object fact() {
+            return this;
+        }
+    }
 
     /**
      * A position the walk could not reach into, with what the structural reading found instead.
@@ -107,5 +210,61 @@ public sealed interface ClosureGap {
      * entered.
      */
     record PositionNotReachedInto(String behavior, souther.compiler.inputs.PositionId at,
-                                  BlockReason.AboutThePosition why) implements ClosureGap {}
+                                  BlockReason.AboutThePosition why) implements ClosureGap {
+
+        /** The stop's own answer. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why.runSensitivity();
+        }
+
+        /** Everything it holds is what a reader is told: whose position, which, and what the walk
+         *  met there. */
+        @Override
+        public Object fact() {
+            return this;
+        }
+    }
+
+    /**
+     * A rule saying where the values at a position stop, one end of which a choice in it left open.
+     *
+     * <p><b>The one arm that is the border's alone.</b> Everything else here is a rule or a
+     * position the reading did not get to, which leaves both measures short. This one leaves the
+     * classes either side of the line exactly as they were read: what a choice offering an
+     * alternative nothing reads takes back is where the values stop, and the values themselves are
+     * what each alternative admits — which the reading of values answered.
+     *
+     * <p><b>A rule and a position, and not the choice.</b> One rule may hold two choices that each
+     * leave one position's end open, and lifting one of them leaves the line as underivable as it
+     * was — so what went wrong is that the end at this position was not derived, once, however many
+     * choices are behind it. Which choices those are is what the findings beside this name, and a
+     * reader is sent to the rule.
+     *
+     * <p>Not folded into the question a rule leaves standing. That question is raised where the
+     * walk over the written clause reaches a comparison, and the walk stops at a choice — so a
+     * position carrying both is carrying two rules' worth of trouble, and lifting the one the
+     * question is about leaves this where it was.
+     */
+    record LineNotDerived(String behavior, PositionId at, RuleRef rule) implements ClosureGap {
+
+        /**
+         * What an author lifts here is a form this compiler does not enter, which a run allowed
+         * more of everything meets again.
+         *
+         * <p>The same answer {@link BlockReason.EndLeftOpenByAChoice} gives, and for the same
+         * reason: the reading of ends stops on a shape rather than at a figure, so there is nothing
+         * for a wider run to allow more of.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        /** Everything it holds is what a reader is told: whose position, which, and which rule. */
+        @Override
+        public Object fact() {
+            return this;
+        }
+    }
 }

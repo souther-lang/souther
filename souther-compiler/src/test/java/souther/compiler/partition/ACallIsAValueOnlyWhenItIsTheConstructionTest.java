@@ -2,17 +2,17 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 
 import java.util.List;
 
@@ -59,16 +59,15 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + primitive);
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        return GuardThresholds.of("pick", body, plan, compilation.db()
-                .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
+        CoverageSites.Plan plan = checked.plan();
+        return GuardThresholds.of("pick", checked.analysisBodies().get("pick"), body, plan,
+                compilation.db()
+                .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), rules);
     }
 
     /** The one this branch could have introduced, and the two it would have introduced it beside. */
@@ -83,11 +82,11 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
             assertEquals(List.of(), guards.thresholds(),
                     each[0] + ": an implementation nothing here has read draws no line");
-            assertEquals(1, guards.rulesWithoutALine().size(),
+            assertEquals(1, guards.noLine().unclassified().size(),
                     each[0] + ": and the position says a rule about it went unread");
-            RuleWithoutALine said = guards.rulesWithoutALine().getFirst();
-            assertEquals(souther.compiler.inputs.FilingCoordinate.of(
-                            new souther.compiler.inputs.NumericTerm.ValueOf(TermPath.of("t"))),
+            StandingQuestion.Unclassified said =
+                    guards.noLine().unclassified().getFirst();
+            assertEquals(FilingCoordinate.of(new NumericTerm.ValueOf(TermPath.of("t"))),
                     said.at(),
                     each[0] + ": at the position's own values, which is what the rule bounds and"
                             + " what the side naming it came to");

@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0</version>
+        <version>0.1.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-test-support</artifactId>
@@ -18,9 +18,33 @@
         is, which modules the reactor owns, where each of them keeps its sources, and which files
         git holds. Every module depends on this at test scope. It depends on nothing, so it is the
         first thing the reactor builds and a check in any module can ask it.
+
+        It also carries the models this repository is checked and measured against, and the manifest
+        saying which corpus each file belongs to. They are here for the same reason: held by the
+        module that first needed them, which side of the compiler a module sits on would decide what
+        may be asked of them, and every crossing of that boundary would write the membership out
+        again. The measurement jar carries them without depending on this module — it copies the
+        resources into its own artifact at build time, so a replayed measurement needs nothing here.
     </description>
 
     <dependencies>
+        <!-- The listener interface `CoverageByClass` implements. The launcher is on every test
+             run's classpath already, brought by surefire's provider; naming it here is what lets
+             the listener compile. -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+        </dependency>
+        <!-- The coverage agent's runtime, for the one call that takes its data. Provided: a run
+             under `-Pcoverage-by-class` has it on the system classpath through `-javaagent`, and a
+             plain run never reaches the class that names it. -->
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

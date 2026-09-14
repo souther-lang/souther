@@ -84,6 +84,84 @@ public sealed interface Emptiness {
     record EmptyOrderedInterval() implements Emptiness {}
 
     /**
+     * The values a position is allowed and the range its order is left share none.
+     *
+     * <p>Three things are true and they are not the same fact: the set admits something, the range
+     * holds something, and nothing is in both. So this is not {@link EmptyOrderedInterval}, which is
+     * the range holding nothing whatever the values say, and not a reading that admits nothing
+     * either — it is what neither of them could say alone.
+     *
+     * <p>Written without a place where the alternatives are refused at different positions.
+     * {@code (x = "A", y = "B")} beside {@code (x = "C", y = "D")}, met with a rule allowing
+     * {@code x} up to {@code "A"} and {@code y} from {@code "D"}, leaves each position holding
+     * values some alternative stands at — so what was shown is about the whole product, and naming
+     * a position would name one the rules are fine with.
+     */
+    record NoAllowedValueInRange() implements Emptiness {}
+
+    /**
+     * The values a position is allowed and the bounds the rules require it to be within share none.
+     *
+     * <p>What no reading of the position showed on its own. Its values are a set some rule left it,
+     * its order is a range some rule left it, and the bounds here are what follows from the rules
+     * once every reading of them has said where the position may be — {@code x} between one and
+     * two, and {@code x} three or more because it is one past a {@code y} that is at least two.
+     * Each of those is satisfiable and no two of them were ever asked together.
+     *
+     * <p>Which is why this says the bounds are required and not where they come from. Any reading
+     * of the state that can say where one position lies may require it, and a proof naming which of
+     * them did would be a new proof for each — an author acts on the same fact whichever it was,
+     * and a rule about the position alone can put a bound on it as readily as a rule relating it to
+     * another.
+     *
+     * <p>Not {@link NoAllowedValueInRange}, which is the same shape between the two readings a
+     * declaration's own clauses are read into. The difference is worth keeping: that one is
+     * answered by those two, and this one is not answered until what every other reading requires
+     * of the position is asked with them.
+     */
+    record NoAllowedValueWithinRequiredBounds() implements Emptiness {}
+
+    /**
+     * Positions the rules hold as one value are left no value they can all hold.
+     *
+     * <p>Not a position's own lack. Each of them on its own is left something — {@code p} may be
+     * {@code Done} and {@code r} may be {@code Ready} — and what has nothing is the one value the
+     * rules say the two of them are. So the place this is said at is the positions together, and
+     * a sentence naming one of them would send an author after a rule that place is fine with.
+     *
+     * <p>And not {@link ConflictingRules} either, which is what it read as for as long as an
+     * equality between two positions reached no reading: the rules do contradict, and this says
+     * which two facts about which places cannot both hold.
+     */
+    record NoCommonValueForEqualPositions() implements Emptiness {}
+
+    /**
+     * Positions the rules state to hold different values are left no way of differing.
+     *
+     * <p>The other half of what a rule between two positions can say, and the same shape of lack:
+     * each of them is left values of its own, and what has nothing is an assignment to all of them
+     * at once. So it is said of the positions together, and a sentence naming one would send an
+     * author after a rule that place is fine with.
+     *
+     * <p><b>Not {@link NoCommonValueForEqualPositions} with the rule turned round.</b> That one is
+     * a lack at one place — the value several positions are — and this one is a lack at no place.
+     * A reader shown the first is shown where to look; a reader shown this is shown which rules
+     * cannot hold between them.
+     */
+    record NoDistinctValuesForPositionsHeldApart() implements Emptiness {}
+
+    /**
+     * Positions the rules hold as one value are also stated to differ.
+     *
+     * <p>Refused by reading the two rules and against no value: whatever those positions may hold,
+     * one value is not two. Beside {@link NoDistinctValuesForPositionsHeldApart} rather than said
+     * as it, because that one is about how many values there are and this one is about nothing of
+     * the kind — an author told there were too few would go looking for more, and there is no
+     * number of them that would do.
+     */
+    record PositionsHeldAsOneAreHeldApart() implements Emptiness {}
+
+    /**
      * A set is asked to hold more values that differ than there are of what it holds.
      *
      * <p>One number and not two. What was compared is whether the rules admit any size this small,
@@ -139,9 +217,87 @@ public sealed interface Emptiness {
      * is here rather than on the proofs below it so that one place in a value is written down once —
      * a proof carrying a path of its own beside this one would be the same fact in two spellings.
      *
-     * @param path where the position sits, {@link FieldDomains#THE_VALUE} for what a newtype wraps
+     * <p><b>Which place, and never the text of one.</b> Two readings make these and each writes the
+     * place in its own words — a declaration's rules call it {@code cap}, an input's reading calls
+     * it {@code p.cap} — and the one thing they agree on is whether the lack is at the value the
+     * reading is of or somewhere in it. That is the question a reader asks, so it is a case here
+     * rather than a spelling to be compared: read back off the text, what a value says about itself
+     * is whatever the two vocabularies happen to write it as.
+     *
+     * @param where where the lack is
      */
-    record AtAField(String path, Emptiness under) implements Emptiness {}
+    record AtAField(Where where, Emptiness under) implements Emptiness {
+
+        /** Where a lack is, in the words of whichever reading found it. */
+        public sealed interface Where {
+
+            /** The value the reading is of: what a newtype wraps, or a parameter. */
+            record TheValueItself() implements Where {}
+
+            /**
+             * Somewhere in it, written out.
+             *
+             * @param spelled what the reading that found it calls the place, for a reader
+             */
+            record In(String spelled) implements Where {
+
+                public In {
+                    if (spelled == null || spelled.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "somewhere in a value is somewhere, and the value itself is the "
+                                        + "case beside this one");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Several positions of the declaration hold one value, and that value has none.
+     *
+     * <p>{@link AtAField} where the place is more than one place. A step and not a proof, the same
+     * way: what is proven is {@link #under}, and this says where — and where is all of them at
+     * once, because the lack is the one value they share and no one of them is answerable for it.
+     *
+     * <p>Beside {@link AtAField} rather than a widening of it. That one names a place, and a
+     * reader of it is shown a place; two of them would make a reader work out from the count of
+     * names whether it was being shown a position or a set of them, and the singleton case would
+     * read as both.
+     *
+     * @param where the places, in the order the value declares them
+     */
+    record AtEqualPositions(List<AtAField.Where> where, Emptiness under) implements Emptiness {
+
+        public AtEqualPositions {
+            where = List.copyOf(where);
+            if (where.size() < 2) {
+                throw new IllegalArgumentException(
+                        "one place is a place, and is said as being at a field");
+            }
+        }
+    }
+
+    /**
+     * Several positions of the declaration are stated to differ, and cannot all be told apart.
+     *
+     * <p>{@link AtEqualPositions} for the rule the other way round, and a different sentence rather
+     * than the same one about different places. Those positions hold one value between them and
+     * this value has none; these positions hold a value each and there are not enough values to go
+     * round. A reader shown the first goes to the value they share, and there is nowhere for a
+     * reader of this to go but to the rules between them.
+     *
+     * @param where the places, in the order the value declares them
+     */
+    record AtPositionsHeldApart(List<AtAField.Where> where, Emptiness under) implements Emptiness {
+
+        public AtPositionsHeldApart {
+            where = List.copyOf(where);
+            if (where.size() < 2) {
+                throw new IllegalArgumentException(
+                        "positions stated to differ are more than one position");
+            }
+        }
+    }
 
     /**
      * Every case of a sum, or every member of a union, has no value.
@@ -207,11 +363,17 @@ public sealed interface Emptiness {
         return switch (this) {
             // The declaration's own rules. An empty interval is one of these and not a shape: it is
             // the rules contradicting, with the place and the reason filled in.
-            case ConflictingRules _, EmptyOrderedInterval _ -> Nearness.DIRECT;
+            case ConflictingRules _, EmptyOrderedInterval _, NoAllowedValueInRange _,
+                 NoAllowedValueWithinRequiredBounds _,
+                 NoCommonValueForEqualPositions _,
+                 NoDistinctValuesForPositionsHeldApart _,
+                 PositionsHeldAsOneAreHeldApart _ -> Nearness.DIRECT;
             case EmptyNumericInterval _, SetRequiresTooManyDistinctValues _,
                  NoAllowedCollectionSize _ -> Nearness.STRUCTURAL;
             case TheNameHasNone _, NoBaseInComponent _ -> Nearness.PROPAGATED;
             case AtAField at -> at.under().category();
+            case AtEqualPositions at -> at.under().category();
+            case AtPositionsHeldApart at -> at.under().category();
             case NonEmptyCollectionWithNoElement held -> held.element().category();
             // As far off as its furthest case: the sum has none because all of them have none, so a
             // proof reaching another declaration is a proof this one reaches it too.

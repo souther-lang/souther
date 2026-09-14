@@ -2,18 +2,16 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +36,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * out wrong for another reason.
  */
 class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
+
+    /** The rules asking a collection to hold one and capping it in no way. */
+    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
+            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+
 
     /** A case of a sum that is a newtype over an optional: the name is uncovered by the case and
      *  taken off again by the presence. */
@@ -100,7 +103,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     private static List<String> wornAt(String source, String path, String classId) {
         Read read = read(source);
         Partitions.Partitioning partitioning =
-                Partitions.of("look", read.domain(), read.symbols(), ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("look", read.domain(), read.rules(), ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals(path)).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path + ": "
@@ -110,9 +113,11 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                 .orElseThrow(() -> new AssertionError("no class " + classId + " at " + path));
 
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class,
-                ConstructionPlan.of(read.sig().inputTypes().get(0),
-                        TermPath.of(read.parameter()), read.symbols(), Set.of(),
-                        axis.requiring(cls), (_, _) -> 1),
+                ConstructionPlan.of(read.sig().inputs().get(0).type(),
+                        TermPath.of(read.parameter()), read.rules().inners(),
+                        read.rules().symbols(),
+                        read.rules().published(), Set.of(),
+                        axis.requiring(cls), ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
 
         return names(under(plan.root(), axis.path().refine(cls.selects())));
@@ -131,26 +136,27 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     }
 
     private static List<String> names(ConstructionPlan.Node node) {
-        List<TypeOps.Layer> worn = switch (node) {
+        List<TypeSymbol> worn = switch (node) {
             case ConstructionPlan.Slot slot -> slot.worn();
             case ConstructionPlan.Exact exact -> exact.worn();
             case null -> throw new AssertionError("the plan builds nothing at that position");
             default -> throw new AssertionError("not a position a value is put at: " + node);
         };
-        return worn.stream().map(each -> each.named().name()).toList();
+        return worn.stream().map(TypeSymbol::name).toList();
     }
 
-    private record Read(String parameter, Sig sig, Symbols symbols, InputDomain domain) {}
+    private record Read(String parameter, DeclaredSig sig, RuleReadingSource rules,
+                        InputDomain domain) {}
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
-        return new Read(spec.params().get(0).name(), sigs.get("look"), symbols,
-                InputDomain.of(spec, sigs.get("look"), symbols, ReadAs.THE_COMPILATION_DOES));
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        DeclaredSig declared = sigs.get("look");
+        return new Read(declared.inputs().get(0).name(), declared, rules,
+                InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES));
     }
 }

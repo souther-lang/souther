@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Placement;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.source.SourceId;
 
@@ -10,8 +11,12 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -37,8 +42,15 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
      *  is which of two lines the caret lands on, and a position naming no source would leave that
      *  to whichever text the caller said it was reading. */
     private static final SourceId SOURCE = new SourceId("0");
-    private static final SourcePos CALL = new SourcePos(1, 1, SOURCE);
-    private static final SourcePos ARGUMENT = new SourcePos(3, 5, SOURCE);
+    private static final SourcePos CALL = Placement.aFileOfThisCompile(SOURCE).at(1, 1);
+
+    /** The list here is this test's own: no source spells the brackets. */
+    private static final SourceConstructOrigin COMPOSED = SourceConstructOrigin.unwritten();
+
+    /** The applications are a body's: this test stands where an author's call stands. */
+    private static final ApplicationOrigin WROTE = new ApplicationOrigin.Written(
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0, SourceConstruct.CALL));
+    private static final SourcePos ARGUMENT = Placement.aFileOfThisCompile(SOURCE).at(3, 5);
 
     /**
      * {@code List.flatMap : (('a) -> List<'b>, List<'a>) -> List<'b>} — the function argument is
@@ -51,18 +63,20 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
                 new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
-        Hir.Expr call = new Hir.Apply("List.flatMap",
+        Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
-                List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
-                ConstructionOrigin.own(), CALL, null);
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), COMPOSED, CALL, null)),
+                CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
-                () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()))
+                () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                        DeclarationKinds.NONE)
                         .preserving(Preserved.byTheLanguagesOwnOperations())));
 
-        assertEquals(ARGUMENT.line(), ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
-                "the block is on line " + ARGUMENT.line() + " and the callee on line "
-                        + CALL.line());
+        assertEquals(ARGUMENT,
+                ((Primary.InSource) e.diagnostic().primary()).place().region().start(),
+                "the block is written at " + ARGUMENT + " and the callee at " + CALL);
     }
 
     /**
@@ -74,13 +88,15 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
                 new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
-        Hir.Expr call = new Hir.Apply("List.flatMap",
+        Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
-                List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
-                ConstructionOrigin.own(), CALL, null);
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), COMPOSED, CALL, null)),
+                CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
-                () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()))
+                () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()), PublishedDeclarations.NONE,
+                        DeclarationKinds.NONE)
                         .preserving(Preserved.byTheLanguagesOwnOperations())));
 
         TypeMessage.ItDoesNotHaveTheTypeItNeedsHere said = assertInstanceOf(

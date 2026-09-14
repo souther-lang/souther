@@ -7,7 +7,9 @@ import net.unit8.raoh.decode.Decoder;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
+import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.Position;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -16,7 +18,6 @@ import souther.compiler.types.TypeSymbols;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The envelope a value wears is the one the position reads it through, not one its case is owed
@@ -65,7 +66,11 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
 
     private final Compilation compilation = compiled(MODULE);
     private final Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-    private final NeutralForm neutral = new NeutralForm(symbols);
+    private final NeutralForm neutral =
+            new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+                    ScopedDeclarations.kindsOf(symbols),
+                    souther.compiler.query.ExampleExecutions.of(compilation.db(), "demo")
+                            .fieldTypes());
 
     private static Compilation compiled(String module) {
         Compilation c = Compilation.ofSource(module, "Main");
@@ -190,7 +195,9 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     void anotherSumListingTheCaseDoesNotMoveWhatAPlaceNothingReadsWrites() throws Exception {
         Compilation with = compiled(AND_ANOTHER_SUM);
         Symbols theirs = Scopes.derived(with.db(), "demo").value();
-        NeutralForm and = new NeutralForm(theirs);
+        NeutralForm and = new NeutralForm(theirs, ScopedDeclarations.of(theirs),
+                ScopedDeclarations.kindsOf(theirs),
+                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes());
         assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
         assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));
         // and each sum that does read it there still writes what it reads it under
@@ -199,30 +206,4 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
                 and.of(value(with, "Filed", Map.of()), at(theirs, "Revision"), "h"));
     }
 
-    /**
-     * A value moving to a place nothing reads keeps the form it is in. What a position adds is what
-     * it asks to be written beside the case; a place that reads nothing asks for nothing, and does
-     * not ask for what is already there to come off. Rendering the case's own form here would lose
-     * which case it is — {@code "Draft"} says, the {@code {}} it would become does not, and nothing
-     * is left to put it back from.
-     */
-    @Test
-    void aValueRereadWhereNothingReadsItKeepsTheFormItIsIn() {
-        assertEquals("Draft", neutral.reread("Draft", at("Stage"), Position.UNREAD));
-        assertEquals(Map.of("id", 1L, "type", "Approved"),
-                neutral.reread(Map.of("id", 1L, "type", "Approved"), at("Decision"), Position.UNREAD));
-    }
-
-    /**
-     * The other direction is not a reading and says so. A value nothing read is in the case's own
-     * form, which does not say which case it is — every unit case is {@code {}} there — so no
-     * discriminator could be written from it. Nothing asks for it today: a projection whose target
-     * declares nothing is refused before a value reaches this. Held so that a call site added later
-     * is told, rather than being handed the value back unchanged and reading it as an answer.
-     */
-    @Test
-    void aValueNothingReadIsNotRereadAtAPosition() {
-        assertThrows(IllegalStateException.class,
-                () -> neutral.reread(Map.of(), Position.UNREAD, at("Step")));
-    }
 }

@@ -1,8 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -67,14 +67,14 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
         Compilation compilation = Compilation.ofSource(model(above), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The line about one point, which is where what a search came to is written. */
     private static String about(String point, String above) {
         String human = report(above);
         return human.lines()
-                .filter(each -> each.contains("not known to be writable: the " + point))
+                .filter(each -> each.contains("read as " + point))
                 .findFirst().orElseThrow(() -> new AssertionError(human));
     }
 
@@ -88,7 +88,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aConditionTheRegionDoesNotAccountForIsSaid() {
-        String line = about("ON point check/p.low = 11", NOTHING_READS_IT);
+        String line = about("check/p.low: = 11", NOTHING_READS_IT);
 
         assertTrue(line.contains("not every condition on the way to the line is one the row was"
                 + " composed against"), line);
@@ -97,8 +97,14 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
                 "named for the shape this reading stopped at, and where it is written: " + line);
         // Beside what the search came to and not instead of it. The two answer different questions
         // — what happened, and what the search was looking over — and a reader acts on both.
+        //
+        // What the search came to is not that every value there was was refused: `p.tag` carries a
+        // back reference, which is outside what this compiler reads, so no value of that position
+        // was composed from it and the ones tried came from the rest. Which rule it was is not
+        // repeated here — this section already lists the rules a position went unread on, and the
+        // block is the surface that has nowhere else to say it.
         assertTrue(line.contains("nothing composed one: every value tried at p.low = 11 was"
-                + " refused"), line);
+                + " refused, and what was tried was not everything the rules leave"), line);
     }
 
     /**
@@ -109,7 +115,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aRegionThatAccountsForTheWholeWayIsNotRemarkedOn() {
-        String line = about("ON point check/p.low = 11", READ);
+        String line = about("check/p.low: = 11", READ);
 
         assertFalse(line.contains("not every condition on the way"), line);
     }
@@ -122,10 +128,15 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
      */
     @Test
     void aLineNothingStandsOnTheWayToIsNotRemarkedOn() {
-        String line = about("ON point check/p.low = 0", NOTHING_READS_IT);
-
-        assertTrue(line.contains("invariant Amount (range)"), line);
-        assertFalse(line.contains("not every condition on the way"), line);
+        // The rule is on the point and what the search came to is on the reading under it, so the
+        // two are two lines: a line is owed once wherever it is read, and only the reading has a
+        // position to name.
+        assertTrue(report(NOTHING_READS_IT).contains(
+                        "the ON point value = 0 (invariant Amount (range))"),
+                () -> report(NOTHING_READS_IT));
+        assertFalse(about("check/p.low: = 0", NOTHING_READS_IT)
+                        .contains("not every condition on the way"),
+                () -> about("check/p.low: = 0", NOTHING_READS_IT));
     }
 
 }

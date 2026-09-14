@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -67,8 +68,6 @@ final class Term {
         CHOICE(Payload.none()),
         /** A closure, over the number of parameters it binds and its body. */
         CLOSURE(Payload.of(Integer.class)),
-        /** A value bound and a body read under it. */
-        LET(Payload.none()),
         /** A construction, over the values its fields are given in declaration order. */
         BUILT(Payload.of(Built.class)),
         /** A call, over its arguments. */
@@ -255,7 +254,7 @@ final class Term {
         ITS_ELEMENTS,
         /** Each of its elements, in no order — what a set's own equality reads. */
         ITS_UNORDERED_ELEMENTS,
-        /** The parts it says stand for it ({@link #STANDS_FOR}). */
+        /** The value it says stands for it ({@link SaysWhatStandsForIt}). */
         THE_PARTS_IT_NAMES,
         /** Nothing here takes a value of this class. */
         NONE_HERE
@@ -279,24 +278,6 @@ final class Term {
         return RULES.get(type);
     }
 
-    /**
-     * What stands for a value of a class that is neither a scalar nor a record given its equality.
-     *
-     * <p>Named parts and not a hash. A class answering "here is my hash" is a place the walk that
-     * proves a term is hashed from values has to stop, and what such a hash reads is then the one
-     * thing nothing checks — which is how a set of type symbols came to be hashed by the identity of
-     * an enum two levels under it. A class answering "here is what stands for me" is one the walk
-     * goes through, so what it reads is proved like everything else.
-     *
-     * <p>Both of these are told apart by less than what they hold. A type symbol is its address, and
-     * an evaluation is told apart from every other by which object it is — so what is named here is
-     * what may be hashed without giving two equal values two hashes, which for the second is
-     * anything that is a function of the value.
-     */
-    private static final Map<Class<?>, List<String>> STANDS_FOR = Map.of(
-            TypeSymbol.AtModule.class, List.of("key"),
-            EvaluationId.class, List.of("what", "occurrence"));
-
     private static Rule ruleOf(Class<?> type) {
         if (Enum.class.isAssignableFrom(type)) {
             return Rule.AN_ENUM_BY_NAME;
@@ -310,7 +291,11 @@ final class Term {
         if (java.util.Set.class.isAssignableFrom(type)) {
             return Rule.ITS_UNORDERED_ELEMENTS;
         }
-        if (STANDS_FOR.containsKey(type)) {
+        // Asked before the question about records, because a value that keeps the number it is
+        // asked for is a class here and may hold its parts in a record all the same: what it says
+        // stands for it is the answer either way, and its own components are the field it keeps
+        // them in and the number it worked out.
+        if (SaysWhatStandsForIt.class.isAssignableFrom(type)) {
             return Rule.THE_PARTS_IT_NAMES;
         }
         // A record given its equality holds it over everything it carries, so its components are
@@ -328,14 +313,16 @@ final class Term {
      * value is made of or to which object it is.
      *
      * <p>Read off the modifier, since the hash a record is given is final and one written by hand is
-     * not. What it decides is who is taken at their word. A record stating none is what it holds, and
-     * following its components is following its hash; a record stating one states it over some of
-     * what it holds, so following the rest would give two equal values two hashes.
+     * not. What it decides is what is left of a record that has not said what stands for it: one
+     * stating no hash is what it holds, and following its components is following its hash; one
+     * stating a hash states it over some of what it holds, so following the rest would give two
+     * equal values two hashes, and nothing here takes it.
      *
-     * <p>Taken at their word and no further: what such a hash is itself taken from is not walked, so
-     * a type saying what it hashes to answers for the whole of what it reads. Which is why what is
-     * said here is about the hash and not about the equality — {@link EvaluationId} tells two apart
-     * by which object each is and still says what it hashes to, and it is the hash this asks about.
+     * <p>Which is why a value that keeps the number it is asked for says what stands for it. A hash
+     * is not walked into — what such a number is taken from would be the one thing nothing here
+     * reads — and naming the value it is over puts that back inside the walk. Asked about the hash
+     * and not about the equality: {@link EvaluationId} tells two apart by which object each is, and
+     * it is the number a term is built from that this is about.
      */
     private static boolean statesAHashOfItsOwn(Class<?> type) {
         for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
@@ -371,16 +358,19 @@ final class Term {
         }
     };
 
-    /** How each of what stands for a value of {@code type} is read: the parts it names, or its
-     *  record components where it names none. */
+    /**
+     * How each of what stands for a value of {@code type} is read: the one value it says stands for
+     * it, or its record components where it says nothing.
+     *
+     * <p>A value that names one is read through that one and not through what it holds beside it.
+     * Which is what the naming is for: a value keeping the number it is asked for holds that number
+     * too, and a number is the one thing a walk proving where numbers come from must not read.
+     */
     static List<java.lang.reflect.Method> readersOf(Class<?> type) {
-        List<String> named = STANDS_FOR.get(type);
         List<java.lang.reflect.Method> read = new ArrayList<>();
         try {
-            if (named != null) {
-                for (String part : named) {
-                    read.add(type.getDeclaredMethod(part));
-                }
+            if (SaysWhatStandsForIt.class.isAssignableFrom(type)) {
+                read.add(type.getMethod("standsFor"));
                 return read;
             }
             for (java.lang.reflect.RecordComponent component : type.getRecordComponents()) {
@@ -542,7 +532,6 @@ final class Term {
             case PART -> sb.append(parts.get(0).rendered()).append('.').append(of);
             case CHOICE -> joined(sb.append("if("), ", ").append(')');
             case CLOSURE -> joined(sb.append("\\").append(of).append('('), ", ").append(')');
-            case LET -> joined(sb.append("let("), ", ").append(')');
             case BUILT -> {
                 Built built = (Built) of;
                 sb.append(built.type()).append('{');
@@ -711,24 +700,58 @@ final class Term {
         }
 
         /**
-         * The operator over its two operands.
+         * The operator over its two operands, in the order written.
          *
-         * <p>Six comparisons are three: {@code >} is {@code <} the other way round, and {@code >=}
-         * and {@code <=} are the denials of the other two. So two clauses comparing the same two
-         * terms are one term however the author reached for it, which matters wherever the
-         * comparison is not the whole condition — only there can the denial not be carried by the
-         * polarity instead.
+         * <p>Knows nothing about comparisons and refuses one. What a comparison of two values comes
+         * to is decided from what it placed and reaches here as a statement
+         * ({@link #comparison}); an operator arriving here is what is left, which is arithmetic,
+         * a join of two conditions, or a concatenation. Answered here as well, the six ways to
+         * compare two values would be read a second time out of the operator, below the point where
+         * what they state was already settled.
          */
         Term operator(BinOp op, Term left, Term right) {
-            return switch (op) {
-                case EQ -> of(Shape.EQ, null, List.of(left, right));
-                case NE -> not(of(Shape.EQ, null, List.of(left, right)));
-                case LT -> of(Shape.OP, BinOp.LT, List.of(left, right));
-                case GT -> of(Shape.OP, BinOp.LT, List.of(right, left));
-                case GE -> not(of(Shape.OP, BinOp.LT, List.of(left, right)));
-                case LE -> not(of(Shape.OP, BinOp.LT, List.of(right, left)));
-                default -> of(Shape.OP, op, List.of(left, right));
-            };
+            if (op.compares()) {
+                throw new IllegalArgumentException(
+                        "what a comparison names is decided from what it placed: " + op);
+            }
+            return of(Shape.OP, op, List.of(left, right));
+        }
+
+        /**
+         * The term {@code canonical} names.
+         *
+         * <p>Two clauses comparing the same two terms are one term however the author reached for
+         * the comparison, which matters wherever the comparison is not the whole condition — only
+         * there can the denial not be carried by the polarity instead. What each spelling states is
+         * the claim's answer, and this says which term states it.
+         */
+        Term comparison(CanonicalComparison<Term> canonical) {
+            return canonical.expressedAs(asTerms);
+        }
+
+        private final AsTerms asTerms = new AsTerms();
+
+        /** Which term a canonical statement is written as. */
+        private final class AsTerms implements CanonicalComparison.Expression<Term, Term> {
+
+            /** Whose two parts are unordered, because which side of an equality a value was written
+             *  on says nothing about it ({@link Shape#EQ}). */
+            @Override
+            public Term theSameValue(Term left, Term right) {
+                return of(Shape.EQ, null, List.of(left, right));
+            }
+
+            /** The one order the terms are written in, so a comparison written the other way round
+             *  is the same term with its two operands exchanged. */
+            @Override
+            public Term below(Term left, Term right) {
+                return of(Shape.OP, BinOp.LT, List.of(left, right));
+            }
+
+            @Override
+            public Term denied(Term statement) {
+                return not(statement);
+            }
         }
 
         Term list(List<Term> elements) {
@@ -749,10 +772,6 @@ final class Term {
 
         Term closure(int params, Term body) {
             return of(Shape.CLOSURE, params, List.of(body));
-        }
-
-        Term let(Term value, Term body) {
-            return of(Shape.LET, null, List.of(value, body));
         }
 
         /** A construction, over what each field is given in declaration order. */

@@ -156,6 +156,19 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
     }
 
     /**
+     * Where the parts before the last are written — the {@code up} of {@code up.Amount} — or null
+     * where the name has no qualifier or nobody wrote it.
+     *
+     * <p>One stretch, dots and all, because a qualifier of several parts is one answer to one
+     * question: which module. Whatever separates its parts is under it for the same reason
+     * {@link #region()} is continuous.
+     */
+    public Region qualifier() {
+        return segments.size() < 2 ? null
+                : new Region(segments.get(0).start(), segments.get(segments.size() - 2).end());
+    }
+
+    /**
      * Whether a cursor at {@code at} is on this name.
      *
      * <p>Inside a part, plainly. And at the end of the last part, because that is where a caret
@@ -225,12 +238,12 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
     /** Whether the character at {@code at} is in {@code region}: from its start, up to but not
      *  including its end, in the file it begins in. */
     private static boolean containsCharacter(Region region, SourcePos at) {
-        return placed(region, at) && before(at, region.end());
+        return placed(region, at) && at.isBefore(region.end());
     }
 
     /** The same, and the boundary at the end — where a caret rests after the last character. */
     private static boolean containsCharacterOrEnd(Region region, SourcePos at) {
-        return placed(region, at) && !before(region.end(), at);
+        return placed(region, at) && !region.end().isBefore(at);
     }
 
     /** Whether {@code at} is a place in {@code region}'s file, at or after its start. */
@@ -238,7 +251,7 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
         SourcePos start = region.start();
         return start != null && region.end() != null && at != null
                 && at.isInTheSameTextAs(start)
-                && !before(at, start);
+                && !at.isBefore(start);
     }
 
     /** Whether {@code inner} lies within {@code outer}, ends allowed to meet. */
@@ -247,12 +260,7 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
                 || !inner.start().isInTheSameTextAs(outer.start())) {
             return false;
         }
-        return !before(inner.start(), outer.start()) && !before(outer.end(), inner.end());
-    }
-
-    /** Whether {@code a} comes before {@code b} in the file they share. */
-    private static boolean before(SourcePos a, SourcePos b) {
-        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
+        return !inner.start().isBefore(outer.start()) && !outer.end().isBefore(inner.end());
     }
 
     /**

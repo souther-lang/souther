@@ -2,15 +2,12 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -62,12 +59,12 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
         InputDomain record = reading(THROUGH_A_RECORD);
 
         String underTheRecord = String.valueOf(
-                record.at(TermPath.of("h").then("q").then("limit")).ownEnds());
+                valuesAt(record.at(TermPath.of("h").then("q").then("limit"))).ownEnds());
         for (String each : List.of("A", "B")) {
             Position at = sum.at(TermPath.of("h").then("q").refine(caseNamed(sum,each)).then("limit"));
             assertNotNull(at, "the shared field is a position under the case");
             assertEquals(underTheRecord.replace("h.q.limit", "h.q@" + each + ".limit"),
-                    String.valueOf(at.ownEnds()),
+                    String.valueOf(valuesAt(at).ownEnds()),
                     "the clause draws the end it draws, wherever the reading came through");
         }
     }
@@ -144,7 +141,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
 
         Position underA = sum.at(TermPath.of("h").then("q")
                 .refine(caseNamed(sum, "A")).then("limit"));
-        assertEquals("3", String.valueOf(underA.narrowedEnds().bounds().max().at()),
+        assertEquals("3", String.valueOf(valuesAt(underA).narrowedEnds().bounds().max().at()),
                 "`A` stops the field at three and `Holder` at ten");
         assertEquals(List.of("A"), holdingTheCeiling(underA),
                 "so `A` is holding it, and `Holder` moved this end nowhere");
@@ -158,7 +155,8 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     /** The declarations whose clauses are holding this position's ceiling, named. */
     private static List<String> holdingTheCeiling(Position at) {
         return souther.compiler.check.AReadingOfAPosition
-                .holding(at.narrowedEnds(), souther.compiler.numeric.EndSide.UPPER).stream()
+                .holding(valuesAt(at).narrowedEnds(), souther.compiler.numeric.EndSide.UPPER)
+                .stream()
                 .map(TypeSymbol::name).toList();
     }
 
@@ -175,7 +173,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
         Position own = sum.at(TermPath.of("h").then("q").refine(caseNamed(sum,"A")).then("x"));
 
         assertNotNull(own, "the case's own field is a position");
-        assertNull(own.ownEnds() == null ? null : own.ownEnds().min(),
+        assertNull(valuesAt(own).ownEnds() == null ? null : valuesAt(own).ownEnds().min(),
                 "and nothing above bounds it");
     }
 
@@ -446,16 +444,23 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     private static Refinement caseNamedAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return Refinement.sumCase(one.leaf());
+                return Refinement.of(one);
             }
         }
         throw new IllegalStateException("no case named " + name);
     }
 
+    /** What the rules leave the value standing at {@code at}, which is the number the clauses
+     *  read here place their ends on. */
+    private static PositionBounds valuesAt(Position at) {
+        return at.boundsFor(new NumericTerm.ValueOf(at.path()));
+    }
+
     /** Every position something puts a ceiling on, spelled the way a report names it. */
     private static List<String> boundedIn(InputDomain read) {
         return read.positions().stream()
-                .filter(each -> each.ownEnds() != null && each.ownEnds().max() != null)
+                .filter(each -> valuesAt(each).ownEnds() != null
+                        && valuesAt(each).ownEnds().max() != null)
                 .map(each -> each.path().toString()).toList();
     }
 
@@ -463,7 +468,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     private static Refinement caseNamed(InputDomain read, String name) {
         for (Case each : read.at(TermPath.of("h").then("q")).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return Refinement.sumCase(one.leaf());
+                return Refinement.of(one);
             }
         }
         throw new IllegalStateException("no case named " + name);
@@ -478,11 +483,9 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 }

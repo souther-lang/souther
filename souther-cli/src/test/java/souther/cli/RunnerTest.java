@@ -497,7 +497,7 @@ class RunnerTest {
     /** That a parameter of this type never reaches the runner's decoder: the compile refuses it,
      *  naming the code that owns the rule. */
     private void assertInputRefused(String type, String what, String code) throws Exception {
-        Path file = write("inref" + Math.abs(type.hashCode()) + ".sou", """
+        Path file = write("inref" + Integer.toUnsignedString(type.hashCode()) + ".sou", """
                 data A = { a: Int }
                 data B = { b: Int }
                 data Out = { n: Int }
@@ -512,7 +512,7 @@ class RunnerTest {
     /** That an output of this type never reaches the runner's encoder. */
     private void assertOutputRefused(String type, String body, String what, String code)
             throws Exception {
-        Path file = write("outref" + Math.abs(type.hashCode()) + ".sou", """
+        Path file = write("outref" + Integer.toUnsignedString(type.hashCode()) + ".sou", """
                 data A = { a: Int }
                 data B = { b: Int }
                 behavior f : (n: Int) -> %s

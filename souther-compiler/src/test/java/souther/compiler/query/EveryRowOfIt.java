@@ -18,7 +18,7 @@ public final class EveryRowOfIt {
      *  what not having asked means. */
     public static Offering offered(Composition composed) {
         return composed.keeping(
-                composed.rows().values().stream().flatMap(java.util.List::stream)
+                composed.rowsByBehavior().values().stream().flatMap(java.util.List::stream)
                         .map(OfferedRow::key)
                         .collect(java.util.stream.Collectors.toCollection(
                                 java.util.LinkedHashSet::new)),

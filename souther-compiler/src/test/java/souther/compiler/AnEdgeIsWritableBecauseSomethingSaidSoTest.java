@@ -1,9 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
@@ -11,13 +11,11 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,8 +42,10 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
      * this position has is the one at 1 — a line at 0 is a line at no value of {@code N}, and asking
      * whether a row can be written there asks about a value the model excludes.
      *
-     * <p>Which rule the line belongs to does not move with it. {@code within} placed it and holds it
-     * still; {@code nonzero} did not draw a new line at 1.
+     * <p>And both of them are owed a row there. Taking {@code nonzero} away leaves the values from
+     * 0 and taking the floor away leaves them stopping nowhere, so each holds the line at 1 and
+     * each is a clause an author could rewrite to move it. Owed to the clause that wrote a bound
+     * alone, the rule that put the line where it is would owe nothing for it.
      */
     private static final String HOLED = """
             module example.holed
@@ -66,8 +66,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     @Test
     void anEndTakenAwayByAClauseBesideItIsALineAtTheValueTheRulesLeave() {
-        assertEquals(List.of("1", "10"), valuesAt(HOLED, "example.holed", "f"),
-                "the position starts at 1, so that is where the line is and 0 is no line of it");
+        assertEquals(List.of("1", "1", "10"), valuesAt(HOLED, "example.holed", "f"),
+                "the position starts at 1, so that is where the line is and 0 is no line of it —"
+                        + " and the two clauses holding it there are each owed a row");
 
         ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "1");
         ItemAssessment.WritabilityEvidence evidence = at.writabilityEvidence();
@@ -84,7 +85,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertTrue(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
                 "a value at 10 went through the decoder");
-        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.searches().only(),
                 "and the value it built is kept, because it is also the row an author is offered");
     }
 
@@ -126,11 +127,11 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
 at.coverage().made().orElseThrow());
-        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
-                at.writabilityEvidence().grounds(),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                at.writabilityEvidence().grounds().written(),
                 "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
                         + " of what showed it");
-        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.searches().only(),
                 "and the search still came back with nothing, which takes nothing away from that");
     }
 
@@ -148,14 +149,18 @@ at.coverage().made().orElseThrow());
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.proven", "place", true, SourceNameResolver.identity()).text();
+                compilation, "example.proven", "place", SourceRendering.namedByIdentity(compilation.texts())).text();
 
         // In the behavior, because that is what this says. Every value tried at the point was
         // refused where a `Yen` is constructed, which is a fact about that reading and not about
         // the line — another reading of it may compose a row. The declaration's own name is
         // reserved for the sentence a walk over every reading licenses (issue #1076).
         assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
-        assertTrue(block.contains("every value tried was refused"), block);
+        // And what the search came to, which is not that the refusals were of everything there was:
+        // the rule on `code` is a lookahead, so no value of that position was composed from it and
+        // the ones tried came from the rest. The point of this test is that the block says
+        // something at all, and what it says is the sentence the search can stand behind.
+        assertTrue(block.contains("invariant Code #1 at `code` gave none of them"), block);
     }
 
     /**
@@ -219,8 +224,8 @@ at.coverage().made().orElseThrow());
                 "the row is the witness");
         assertFalse(at.worthSearching(),
                 "and a value that is already there is not worth building one for");
-        assertNull(at.attempt(),
-                "so nothing was searched for, which is said by there being no attempt");
+        assertFalse(at.searches().ran(),
+                "so nothing was searched for, which is said by there being no search");
     }
 
     /**
@@ -260,7 +265,7 @@ at.coverage().made().orElseThrow());
                 "nobody wrote a row, which says nothing about whether one could be written");
         assertFalse(at.writabilityEvidence().has(ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT),
                 "and a measurement nobody made puts no row at the point");
-        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.attempt(),
+        assertInstanceOf(ItemAssessment.Attempt.Built.class, at.searches().only(),
                 "a value was built here, and what it settles is the writability and not the rows");
     }
 
@@ -306,7 +311,7 @@ at.coverage().made().orElseThrow());
                     assertInstanceOf(Measurement.NotMeasured.class,
                             at.owed().coverage()).why(), at.label());
             assertFalse(at.owed().worthSearching(), at.label());
-            assertNull(at.owed().attempt(), at.label());
+            assertFalse(at.owed().searches().ran(), at.label());
         }
     }
 
@@ -362,14 +367,14 @@ at.coverage().made().orElseThrow());
 
         ItemAssessment.Owed unbuilt = assessmentAt(HOLED, "example.holed", "f", "1",
                 Adequacy.Level.WITNESS);
-        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
-                unbuilt.writabilityEvidence().grounds(),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                unbuilt.writabilityEvidence().grounds().written(),
                 "and the rules prove it whether or not anything was built, which is the one ground"
                         + " left when nothing was");
         assertTrue(unbuilt.worthSearching(),
                 "a value here would have settled something, so the point is worth searching");
-        assertNull(unbuilt.attempt(),
-                "and nobody asked for one: said by there being no attempt, not by an attempt that"
+        assertFalse(unbuilt.searches().ran(),
+                "and nobody asked for one: said by there being no search, not by a search that"
                         + " reports not having been asked for");
         assertInstanceOf(Measurement.Complete.class, unbuilt.coverage(),
                 "the rows were read all the same: what is missing is the value, not the reading");
@@ -434,13 +439,18 @@ at.coverage().made().orElseThrow());
                 | "some" : (Moment(DateTime("2026-06-01T00:00:00"))) -> Ok
             """;
 
-    /** The line stands where the rules leave the values, one count along from the value refused. */
+    /**
+     * The line stands where the rules leave the values, one count along from the value refused.
+     *
+     * <p>Once per conjunct holding it there, which is both of them: the bound alone leaves the
+     * value it names and the denial alone leaves the values stopping nowhere.
+     */
     @Test
     void aTemporalEdgeTakenAwayIsALineAtTheValueTheRulesLeave() {
-        assertEquals(List.of("2026-01-02"),
+        assertEquals(List.of("2026-01-02", "2026-01-02"),
                 valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onADate"),
                 "a day is a count with a next one, so the line steps to it");
-        assertEquals(List.of("2026-01-01T00:00:01"),
+        assertEquals(List.of("2026-01-01T00:00:01", "2026-01-01T00:00:01"),
                 valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onAMoment"),
                 "and a moment steps by its second");
     }
@@ -455,8 +465,8 @@ at.coverage().made().orElseThrow());
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.temporal", each[0], true,
-                    SourceNameResolver.identity()).text();
+                    compilation, "example.temporal", each[0],
+                    SourceRendering.namedByIdentity(compilation.texts())).text();
 
             assertTrue(block.contains(each[1]),
                     each[0] + ": a row is composed at the line: " + block);

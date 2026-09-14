@@ -2,19 +2,17 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -73,7 +71,7 @@ class TheInputsEmptinessHasOneOwnerTest {
      */
     @Test
     void aContradictionInTheOrderingOfOneParameterNamesItsPosition() {
-        assertEquals(new Emptiness.AtAField("p.when",
+        assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.when"),
                         new Emptiness.EmptyOrderedInterval()), why("""
                 module example.ordered
 
@@ -132,7 +130,7 @@ class TheInputsEmptinessHasOneOwnerTest {
 
                 behavior take : (p: P, q: Q) -> Taken
                 """, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
 
         // Neither parameter's rules leave nothing, and neither can be told about the other.
         assertTrue(asked.emptiness().isEmpty());
@@ -143,7 +141,7 @@ class TheInputsEmptinessHasOneOwnerTest {
         coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), BigDecimal.ONE);
         coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), BigDecimal.ONE);
         SearchRegion crossed = asked.region().assuming(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs), NumericDomain.Rel.LE);
+                new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE);
 
         assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
                 crossed.emptiness());
@@ -179,7 +177,7 @@ class TheInputsEmptinessHasOneOwnerTest {
         source.append(") -> Taken\n");
 
         Read read = read(source.toString(), "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         assertTrue(asked.emptiness().isEmpty(), "nothing here contradicts");
 
         List<?> factors = factorsOf(asked);
@@ -201,9 +199,13 @@ class TheInputsEmptinessHasOneOwnerTest {
      */
     private static List<?> factorsOf(Quantities asked) {
         try {
-            java.lang.reflect.Method held = asked.getClass().getDeclaredMethod("constraints");
+            java.lang.reflect.Method held = asked.getClass()
+                    .getDeclaredMethod("constraints", StructuralContext.class);
             held.setAccessible(true);
-            Object values = ((souther.compiler.check.ConstraintState<?>) held.invoke(asked)).values();
+            // Asked assuming nothing, which is every parameter: what is being measured is that the
+            // readings of thirteen of them are held apart, and no narrowing is involved in it.
+            Object values = ((souther.compiler.check.ConstraintState<?>)
+                    held.invoke(asked, StructuralContext.NONE)).values();
             java.lang.reflect.Method factors = values.getClass().getDeclaredMethod("factors");
             factors.setAccessible(true);
             return (List<?>) factors.invoke(values);
@@ -242,22 +244,20 @@ class TheInputsEmptinessHasOneOwnerTest {
     /** What proves the input holds nothing, read off the one thing that answers. */
     private static Emptiness why(String source) {
         Read read = read(source, "take");
-        EmptyInput held = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
+        EmptyInput held = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
         return ((EmptyInput.ProvedByTheRules) held).why();
     }
 
-    private record Read(InputDomain inputs, Symbols symbols) {}
+    private record Read(InputDomain inputs, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new Read(InputDomain.of(spec, sigs.get(behavior), symbols,
-                ReadAs.THE_COMPILATION_DOES), symbols);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(InputDomain.of(sigs.get(behavior), rules,
+                ReadAs.THE_COMPILATION_DOES), rules);
     }
 }

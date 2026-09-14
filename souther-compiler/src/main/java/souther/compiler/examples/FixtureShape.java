@@ -225,7 +225,7 @@ public sealed interface FixtureShape {
         if (name.isPrimitive()) {
             return scalar(primitive(name));
         }
-        if (!symbols.declarations().declaredByCompilation(name)) {
+        if (!symbols.declaredByCompilation(name)) {
             throw new FixtureException("`" + name.name() + "` is declared by the language rather"
                     + " than by a module here, so no codec was derived for it and a fixture has"
                     + " nothing to build one through");

@@ -1,13 +1,14 @@
 package souther.lsp.analysis;
 
+import souther.compiler.cst.SourceLayout;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.GreenToken;
-import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Abandonment;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 
@@ -70,12 +71,33 @@ final class SemanticProbe {
     record Repair(String text, int firstInserted) {}
 
     /**
-     * A probe that answered: the compile the repaired source is in, and how far into it may be read.
+     * A probe that answered: the compile the repaired source is in, how that source is laid out,
+     * and how far into it may be read.
      *
      * <p>{@code firstInserted} is a place rather than an offset because what is compared against it
      * is an extent, and an extent is two places.
+     *
+     * <p>The layout is handed over rather than left to be worked out. The text this reading is of
+     * is the repaired one and not the buffer the author left, and every place a caller makes has to
+     * be counted against the same text the compile read — so laying it out is done once, here,
+     * where which text that is is known. Left to the callers, three of them laid out the buffer
+     * instead, and an editor was answered about whichever token stood that far along in a text
+     * nothing was compiled from.
      */
-    record Reading(Compilation compilation, String uri, String repaired, SourcePos firstInserted) {
+    record Reading(Compilation compilation, String uri, SourceLayout laidOut,
+                   SourcePos firstInserted) {
+
+        /** The source this reading is of, which is the buffer with what the cursor was in the
+         *  middle of finished off. */
+        String repaired() {
+            return laidOut.text();
+        }
+
+        /** Where {@code offset} of that source is, as a place. The one way a caller holding an
+         *  offset into the buffer gets a place this reading's answers can be asked about. */
+        SourcePos placeAt(int offset) {
+            return laidOut.placeAt(offset);
+        }
 
         /**
          * Whether what is written over {@code extent} is the author's rather than the probe's.
@@ -235,7 +257,7 @@ final class SemanticProbe {
      * reading of it here would be a second answer free to differ.
      */
     Reading of(Map<String, String> joining, Set<String> broken, ModulePath path, String uri,
-               String text, int cursor) {
+               String text, int cursor, Abandonment abandonment) {
         Repair repair = repair(text, cursor);
         if (repair == null) {
             return null;
@@ -248,11 +270,16 @@ final class SemanticProbe {
         } else {
             compile.update(sources, broken);
         }
+        compile.abandonWhen(abandonment);
         // In the document it was inserted into, and said so: a place that names no text is in the
         // same text as nothing, and every extent would compare as being somewhere else — which
         // reads as "the author wrote this" about all of them.
-        return new Reading(compile, uri, repair.text(),
-                new LineIndex(text, new SourceId(uri)).posOf(repair.firstInserted()));
+        //
+        // Laid out as repaired, because the extents it is compared against are places in the text
+        // that was compiled. Laid out as the author left it, the count would be of a text that does
+        // not parse and the two would be counting different things.
+        SourceLayout laidOut = SourceLayout.of(repair.text(), new SourceId(uri));
+        return new Reading(compile, uri, laidOut, laidOut.placeAt(repair.firstInserted()));
     }
 
     private static boolean parses(String text) {

@@ -9,18 +9,193 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+  # Nothing else runs on Windows, so a change to what is packaged there would otherwise first be
+  # run at release time. The job below that packages runs on such a change; the one that publishes
+  # has nothing to publish and does not.
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'bin/package-windows.ps1'
+      - 'install.ps1'
+      - 'souther-cli/src/main/launcher/**'
 
+# Writing is the publishing job's alone, and it asks for it there. A job that builds from a pull
+# request's own code runs with a token that can only read.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  # jpackage builds an image for the platform it runs on, so the Windows distributions are built on
+  # a Windows runner and handed to the job that publishes. The tests are the CI workflow's and the
+  # publishing job's; what this job checks is that the images it wrote run.
+  windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Package the distributions
+        run: |
+          mvn -B --no-transfer-progress -DskipTests package
+          bin/package-windows.ps1
+
+      # Both launchers, over the commands that need most of the runtime the image was built with: a
+      # compile writes bytecode, and `japi` reads javadoc out of a library's sources through a
+      # compiler. A module the image was built short of is answered for here and nowhere earlier,
+      # because nothing before this point runs on Windows at all.
+      - name: Run what was packaged
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = 'souther-cli/target/dist'
+          Expand-Archive (Get-ChildItem "$dist/*-windows-x64.zip").FullName -DestinationPath "$dist/bundled-run"
+          Expand-Archive (Get-ChildItem "$dist/*-windows-x64-nojdk.zip").FullName -DestinationPath "$dist/nojdk-run"
+          $model = 'souther-test-support/src/main/resources/souther/corpus/catalog/catalog.sou'
+          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojdk-run/souther/souther.cmd")
+          foreach ($souther in $launchers) {
+              & $souther compile $model -d "$dist/classes"
+              if ($LASTEXITCODE -ne 0) { throw "$souther could not compile $model" }
+              & $souther japi net.unit8.raoh.Result > $null
+              if ($LASTEXITCODE -ne 0) { throw "$souther could not read a library's javadoc" }
+          }
+
+      # The launcher refuses a Java older than the classes in the jar, and the runner's Java is not
+      # old, so the refusal is reached with an image that only states a version, which is enough
+      # because the check reads the `release` file rather than starting anything.
+      #
+      # The rest are the readings that must not be refused, and they are what the refusal is worth
+      # knowing against: a version that is not a run of digits, a release that says nothing about a
+      # version, and no release at all. Each of those leaves the launcher with nothing to compare,
+      # which is where a comparison written without somewhere to go has neither a left side nor a
+      # reason to be reached. What such a run does instead is run the java it found, and the java it
+      # found here is an empty file, so it fails — at the java, not at the reading.
+      - name: Refuse an old Java, and run on one whose version it cannot read
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $souther = 'souther-cli/target/dist/nojdk-run/souther/souther.cmd'
+          foreach ($image in @(
+              @{ states = 'JAVA_VERSION="21.0.1"'; refused = $true },
+              @{ states = 'JAVA_VERSION="ea"'; refused = $false },
+              @{ states = 'IMPLEMENTOR="nobody"'; refused = $false },
+              @{ states = $null; refused = $false })) {
+              $fake = Join-Path $env:RUNNER_TEMP ("java-" + [Guid]::NewGuid())
+              New-Item -ItemType Directory -Force -Path (Join-Path $fake 'bin') | Out-Null
+              if ($null -ne $image.states) { Set-Content (Join-Path $fake 'release') $image.states }
+              Set-Content (Join-Path $fake 'bin/java.exe') ''
+              $env:JAVA_HOME = $fake
+
+              # Native stderr is being read here, so the preference that turns a write to it into a
+              # terminating error is put down for the length of the call.
+              $prior = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              $said = (& $souther help 2>&1 | Out-String)
+              $ended = $LASTEXITCODE
+              $ErrorActionPreference = $prior
+
+              # A launcher that died reading the line would also not have refused, so the reading
+              # that cannot be told from the deciding is named and refused here.
+              if ($said -match 'syntax of the command is incorrect') {
+                  throw "the launcher did not parse against an image stating $($image.states): $said"
+              }
+              if ($image.refused) {
+                  if ($said -notmatch 'souther needs Java 25') {
+                      throw "the launcher did not refuse an image stating $($image.states): $said"
+                  }
+                  if ($ended -ne 1) { throw "a refusal ended with $ended rather than 1" }
+              } elseif ($said -match 'souther needs Java 25') {
+                  throw "the launcher refused an image whose version it could not read: $said"
+              }
+          }
+          $env:JAVA_HOME = $env:JAVA_HOME_25_X64
+
+          # Every reading above that is not a refusal ends by running a java that is an empty file,
+          # so the last thing run here is meant to fail and leaves its code behind for the step to be
+          # judged by. What this step found is said by what it threw, and it threw nothing.
+          exit 0
+
+      # The installer writes the user's path, points a link and removes a directory recursively, and
+      # nothing else in this repository does any of that. It is run against the archives just
+      # packaged rather than a release, so what is checked is this commit's installer rather than the
+      # last one published — and an entry of the user's own is put on the path first, because what
+      # the installer must not do is as much of the subject as what it must.
+      - name: Install what was packaged, and uninstall it
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = "$PWD/souther-cli/target/dist"
+          Get-ChildItem "$dist/*.zip" | ForEach-Object {
+              "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content "$dist/SHA256SUMS"
+          $version = (Get-ChildItem "$dist/*-windows-x64.zip").BaseName -replace '^souther-' -replace '-windows-x64$'
+
+          $control = 'C:\an-entry-of-the-users-own'
+          [Environment]::SetEnvironmentVariable('Path', $control, 'User')
+          function Get-Entries {
+              @(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | Where-Object { $_ })
+          }
+
+          $owned = Join-Path $env:LOCALAPPDATA 'Programs\souther'
+          $link = Join-Path $owned 'current'
+
+          # Both distributions, second over first, so what is checked is an install and then an
+          # install onto one already there.
+          foreach ($nojdk in @($true, $false)) {
+              ./install.ps1 -Version $version -From $dist -Nojdk:$nojdk
+              $launcher = @(Get-ChildItem "$link/souther.exe", "$link/souther.cmd" -ErrorAction SilentlyContinue)[0]
+              if (-not $launcher) { throw "no launcher under $link after installing (nojdk=$nojdk)" }
+              # Asked what it is rather than asked for anything, which is the one question whose
+              # answer runs the whole chain this step installed: the version directory, the link
+              # pointing at it, the launcher under it, the jar the launcher runs, and the manifest
+              # inside the jar. Answered with a version other than the one packaged, some link in
+              # that chain is pointing somewhere else.
+              #
+              # Both spellings, because the reader this is for types the one with the dashes and
+              # this is the only place a dashed argument reaches these launchers at all. The jpackage
+              # image's is a native executable of its own, and whether what a reader writes arrives
+              # at the jar is a fact about that executable rather than about the command line.
+              foreach ($asking in @('version', '--version')) {
+                  $said = (& $launcher.FullName $asking | Out-String).Trim()
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "the installed launcher could not answer '$asking' (nojdk=$nojdk)"
+                  }
+                  if ($said -ne "souther $version") {
+                      throw "the installed launcher answers '$asking' with '$said' rather than 'souther $version' (nojdk=$nojdk)"
+                  }
+              }
+              $entries = Get-Entries
+              if (@($entries | Where-Object { $_ -eq $link }).Count -ne 1) {
+                  throw "PATH holds $link other than once: $($entries -join ';')"
+              }
+              if ($entries -notcontains $control) { throw "the installer took $control off PATH" }
+          }
+
+          ./install.ps1 -Uninstall
+          if (Test-Path $owned) { throw "$owned is still there after an uninstall" }
+          $entries = Get-Entries
+          if ($entries -contains $link) { throw "PATH still holds $link after an uninstall" }
+          if ($entries -notcontains $control) { throw "the uninstall took $control off PATH" }
+
+      - name: Upload the distributions to the workflow run
+        uses: actions/upload-artifact@v7
+        with:
+          name: souther-windows
+          path: souther-cli/target/dist/*.zip
+
+  release:
+    needs: windows
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
@@ -42,7 +217,15 @@ jobs:
           cp souther-lsp/target/souther-lsp-all.jar artifacts/souther-lsp.jar
           cp souther-compiler/src/main/resources/souther/compiler/highlight/souther.tmLanguage.json artifacts/
 
-      # Over whatever the step above collected, rather than a second list of the same four names, and
+      # The Windows distributions are built on a runner of their own, and the checksums below cover
+      # whatever this directory holds, so they are fetched into it before those are written.
+      - name: Collect the Windows distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: souther-windows
+          path: artifacts/
+
+      # Over whatever the steps above collected, rather than a second list of the same names, and
       # under the names the release publishes, so `sha256sum -c SHA256SUMS` works in a directory the
       # assets were downloaded into. The file is written outside artifacts/ and moved in, so it
       # cannot turn up in its own listing.

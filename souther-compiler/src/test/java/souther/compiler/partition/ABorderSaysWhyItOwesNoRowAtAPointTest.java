@@ -1,21 +1,24 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.ItemAssessment;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -105,64 +108,258 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
-     * An equality names a value and orders nothing around it, so neither neighbour is the nearer.
+     * A rule that names a value owes a row at it and at the nearest value on each side of it.
      *
-     * <p>Against an ordering at the same value, where the neighbour is exactly what the rule places.
-     * What the equality does divide is the value from every other value, and that is what its
-     * {@code OUT} point is for — reported as one thing the border owes rather than as a class of the
-     * partition beside it.
+     * <p>Both neighbours are in the class such a rule keeps out. What it distinguishes is the one
+     * value from every other one, so each of the two crosses the line and each is a point of its
+     * own — and a row at one of them says nothing about the other, which is what makes them two.
+     *
+     * <p>Against an ordering at the same value, where one neighbour crosses and the other does not.
+     * That is the whole of the difference between the two shapes of line: the value below
+     * {@code <= 100} is in the partition the border bounds, and a row there answers for the point
+     * away from the line rather than for a point against it.
+     *
+     * <p>Both spellings of the naming rule, because the roles reverse and the values do not.
+     * {@code == 100} is met at the value and not beside it and {@code /= 100} is the other way
+     * about, and the three places a row is asked for are the same three.
      */
     @Test
-    void aRuleThatNamesAValueOwesNoPointBesideIt() {
-        BorderAssessment singled = bordersOf(model("Int", ">= 0", "== 100", "50")).get("h.a = 100");
-        assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_RULE_NAMES_A_VALUE_NOT_A_SIDE), singled.at(PointRole.OFF));
-        assertEquals("/= 100",
-                singled.operator(PointRole.OUT) + " " + singled.against(PointRole.OUT),
-                "what it divides is the value from every other value");
+    void aRuleThatNamesAValueOwesAPointOnEachSideOfIt() {
+        assertEquals(java.util.Set.of("h.a = 99", "h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "== 100", "50")),
+                "the value the rule names, and the nearest value on each side of it");
 
-        assertEquals("101",
-                bordersOf(model("Int", ">= 0", "<= 100", "50")).get("h.a = 100")
-                        .against(PointRole.OFF),
-                "an ordering at the same value places the neighbour the equality does not");
+        assertEquals(java.util.Set.of("h.a = 99", "h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "/= 100", "50")),
+                "the same three places, whichever of the two classes the rule selects");
+
+        assertEquals(java.util.Set.of("h.a = 100", "h.a = 101"),
+                atALevel(model("Int", ">= 0", "<= 100", "50")),
+                "an ordering leaves the value below its line in the partition it bounds, so that"
+                        + " one is no point against the line");
+    }
+
+    /**
+     * A rule that names a value draws a line exactly where the rules leave that value.
+     *
+     * <p>Such a rule parts the value it names from every other one, so what says whether it divides
+     * anything is whether the position holds the value — and not whether it holds anything one step
+     * either side of it. A rule naming a value the rules refuse divides nothing: every value left
+     * is in one class, and there is no line for a row to be beside.
+     *
+     * <p>Every spelling at every place, because the question is about the value and the two
+     * operators and the three places must not be able to answer it differently. A rule satisfied at
+     * the value and one refusing it name the same value, and a value at the end of the range is as
+     * much a value the rules leave as one in the middle.
+     */
+    @Test
+    void aRuleThatNamesAValueDrawsWhereverTheRulesLeaveThatValue() {
+        assertEquals(List.of("/= 0 -> [h.a = 0]", "== 0 -> [h.a = 0]",
+                        "/= 50 -> [h.a = 50]", "== 50 -> [h.a = 50]",
+                        "/= 100 -> [h.a = 100]", "== 100 -> [h.a = 100]",
+                        "/= 200 -> []", "== 200 -> []"),
+                linesDrawnBy("/= 0", "== 0", "/= 50", "== 50", "/= 100", "== 100",
+                        "/= 200", "== 200"),
+                "a value the rules leave is a line wherever in the range it falls, and a value they"
+                        + " refuse is no line at all");
+    }
+
+    /**
+     * At an end of the range one of the two values beside the line is a value the rules leave and
+     * the other is not, and the two are answered apart.
+     *
+     * <p>The edge case the whole of this identity is for. A rule naming the value the rules stop at
+     * has a point on each side of it, and only one of them is a value a row can hold — so a border
+     * that had one place for the two would have to answer for both at once, and whichever answer it
+     * gave would be wrong about the other.
+     *
+     * <p>Both operators against one table, because the place and what the rules leave there are the
+     * same for the two and only the role turns over. That is the whole of what putting the identity
+     * in the place and the classification in the rule buys, said as one measurement.
+     */
+    @Test
+    void atAnEndOfTheRangeTheTwoValuesBesideTheLineAreAnsweredApart() {
+        assertEquals(List.of(
+                        "== 100: beside below = 99 (OFF), beside above = THE_RULES_REFUSE_IT",
+                        "/= 100: beside below = 99 (ON), beside above = THE_RULES_REFUSE_IT",
+                        "== 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (OFF)",
+                        "/= 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (ON)",
+                        "== 50: beside below = 49 (OFF), beside above = 51 (OFF)",
+                        "/= 50: beside below = 49 (ON), beside above = 51 (ON)"),
+                besideTheLineOf("== 100", "/= 100", "== 0", "/= 0", "== 50", "/= 50"),
+                "the value beside the line on each side is asked for on its own, and the rules"
+                        + " refusing one of them says nothing about the other");
+    }
+
+    /**
+     * A rule that names a value has no point in one of the four roles, and says which and why.
+     *
+     * <p>The class its own value is in holds that value and nothing else, so there is nowhere in it
+     * away from the line: {@code == 50} has no {@code IN} point and {@code /= 50} no {@code OUT}
+     * one. That is not a point the rules refuse — it is a word the technique has for something such
+     * a line does not have — and a reader told nothing about it cannot tell the two apart from the
+     * four words being four.
+     *
+     * <p>An order beside them, where every word is played and none of this arises.
+     */
+    @Test
+    void aRuleThatNamesAValueHasNoPointInOneOfTheFourRoles() {
+        assertEquals(List.of("ON x1", "OFF x2", "IN none", "OUT x2"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "== 50", "50"))),
+                "what a rule naming a value keeps out is two runs and two values, and what it keeps"
+                        + " is the value alone");
+        assertEquals(List.of("ON x2", "OFF x1", "IN x2", "OUT none"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "/= 50", "50"))),
+                "and the same places one class over");
+        assertEquals(List.of("ON x1", "OFF x1", "IN x1", "OUT x1"),
+                rolesOf(onlyLineOf(model("Int", ">= 0 && value <= 100", "<= 50", "50"))),
+                "an order plays every one of the four once");
+
+        assertEquals(RoleAnswer.Reason.THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE,
+                ((RoleAnswer.NoPoint) onlyLineOf(model("Int", ">= 0 && value <= 100", "== 50", "50"))
+                        .inEachRole().get(PointRole.IN)).why(),
+                "and what settles the absence is the class at the line holding one value");
+    }
+
+    /** How many points of one line play each of the four roles, every role answered. */
+    private static List<String> rolesOf(Border line) {
+        List<String> said = new ArrayList<>();
+        line.inEachRole().forEach((role, answer) -> said.add(role + " " + switch (answer) {
+            case RoleAnswer.Played played -> "x" + played.at().size();
+            case RoleAnswer.NoPoint _ -> "none";
+        }));
+        return said;
+    }
+
+    /** What each guard's line asks at the value beside it on each side, over a position the rules
+     *  leave {@code 0..100}. */
+    private static List<String> besideTheLineOf(String... guards) {
+        List<String> said = new ArrayList<>();
+        for (String guard : guards) {
+            Border line = onlyLineOf(model("Int", ">= 0 && value <= 100", guard, "50"));
+            said.add(guard + ": " + beside(line, Towards.BELOW)
+                    + ", " + beside(line, Towards.ABOVE));
+        }
+        return said;
+    }
+
+    /** What one line asks at the value beside it on one side, with which of the four that point is
+     *  where a row is owed there. */
+    private static String beside(Border line, Towards side) {
+        DomainPoint at = new DomainPoint.BesideTheLine(side);
+        String where = "beside " + (side == Towards.BELOW ? "below" : "above") + " = ";
+        return switch (line.answer(at)) {
+            case PointAnswer.NotOwed not -> where + not.reason();
+            case PointAnswer.AtLine _ -> where + line.against(at) + " (" + line.roleOf(at) + ")";
+            case PointAnswer.InRegion in -> where + in;
+        };
+    }
+
+    /** The one line a guard of this model draws, without the two the bounds of the range draw. */
+    private static Border onlyLineOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<Border> drawn = Adequacy.boundariesOf(compilation.db(), "example.owed").values()
+                .stream().flatMap(List::stream).map(BorderAssessment::border)
+                .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin)).toList();
+        assertEquals(1, drawn.size(), () -> "this model draws one line of its own: " + drawn);
+        return drawn.get(0);
+    }
+
+    /** The lines each guard draws over a position the rules leave {@code 0..100}, without the two
+     *  the bounds of that range draw themselves. */
+    private static List<String> linesDrawnBy(String... guards) {
+        List<String> drawn = new java.util.ArrayList<>();
+        for (String guard : guards) {
+            Compilation compilation = Compilation.ofSource(
+                    model("Int", ">= 0 && value <= 100", guard, "50"), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            drawn.add(guard + " -> " + Adequacy.boundariesOf(compilation.db(), "example.owed")
+                    .values().stream().flatMap(List::stream)
+                    .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin))
+                    .map(BorderAssessment::label).toList());
+        }
+        return drawn;
+    }
+
+    /** Every value of the quantity this model's line asks a row at, as a report writes it. Asked of
+     *  the answers themselves rather than of the four roles, because what is being counted is how
+     *  many places the line asks for and a role is what one of them is. */
+    private static java.util.Set<String> atALevel(String model) {
+        BorderAssessment line = bordersOf(model).get("h.a = 100");
+        assertNotNull(line, bordersOf(model).keySet().toString());
+        return line.border().answers().values().stream()
+                .map(PointAnswer::criterion)
+                .filter(each -> each instanceof Criterion.AtTheLevel)
+                .map(line.border()::label)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     /**
      * A row on the line is not a row at a point past it, whatever the search had to start from.
      *
-     * <p>An order with no numbers has one level — where the two are equal — and every value past it
-     * is a run with no first value. So a search for a row in that run has nowhere to start but the
-     * line, and the line is the one place in reach the run does not hold. Read as a level the item
-     * accepts, a pair standing equal came back for a point that lies strictly past them, and the
-     * report went on saying no row was at it.
+     * <p>An order with no numbers has one level — where the two are equal — and a point past it is a
+     * run the level is not in. Read as a level the item accepts, a pair standing equal came back for
+     * a point that lies strictly past them.
+     *
+     * <p><b>Of every row offered at such a point, and not of one pair.</b> Which pair a search
+     * happens to compose is its own answer and moves when it learns to reach further; that a row
+     * offered for a strict side stands on the line is wrong whichever pair it is. Written as one
+     * literal, the check went on passing the day the search composed a different equal pair.
+     *
+     * <p>And nothing here says a row has to be found. Whether the search reaches one is a question
+     * about how far it can look, and a point it reaches none at is reported as such — so what is
+     * counted below is the points examined, which is what keeps this from passing because there was
+     * nothing to look at.
      */
     @Test
     void aRowOnTheLineIsNotOfferedForAPointPastIt() {
-        String rows = souther.compiler.report.GeneratedRows.of(
-                compiled("""
-                        module example.strings
+        Compilation compiled = compiled("""
+                module example.strings
 
-                        data No = { why: Int }
-                        data Yes = { v: Int }
-                        data Result = No | Yes
+                data No = { why: Int }
+                data Yes = { v: Int }
+                data Result = No | Yes
 
-                        behavior cmp : (a: String, b: String) -> Result
-                            constructs Yes, No
+                behavior cmp : (a: String, b: String) -> Result
+                    constructs Yes, No
 
-                        let cmp (a, b) = {
-                            guard a > b else No { why = 0 }
-                            Yes { v = 1 }
-                        }
+                let cmp (a, b) = {
+                    guard a > b else No { why = 0 }
+                    Yes { v = 1 }
+                }
 
-                        example cmp
-                            | "same" : ("b", "b") -> No { why = 0 }
-                        """),
-                "example.strings", "cmp", true, souther.compiler.diag.SourceNameResolver.identity()).text();
+                example cmp
+                    | "same" : ("b", "b") -> No { why = 0 }
+                """);
+        Map<String, List<BorderAssessment>> lines =
+                Adequacy.searchedBoundariesOf(compiled.db(), "example.strings");
+        assertNotNull(lines, "the model under test compiles");
 
-        assertFalse(rows.contains("cmp(\"\", \"\")"),
-                "a pair standing equal is the line itself and is at neither side of it:\n" + rows);
-        assertTrue(rows.contains("no row for `b < a`"),
-                "and what there is to say is that nothing could build one:\n" + rows);
+        List<String> sides = new ArrayList<>();
+        lines.values().forEach(each -> each.forEach(line -> {
+            for (BorderAssessment.Point point : line.points()) {
+                if (point.role().againstTheLine() || point.owed() == null) {
+                    continue;   // the line itself, and the points nothing is owed at
+                }
+                sides.add(point.role() + " " + point.against());
+                for (ItemAssessment.Attempt attempt : point.owed().searches().each()) {
+                    if (!(attempt instanceof ItemAssessment.Attempt.Built built)) {
+                        continue;
+                    }
+                    List<String> wrote = built.row().inputs().stream()
+                            .map(FixtureTemplate::text).toList();
+                    assertNotEquals(wrote.get(0), wrote.get(1),
+                            () -> "a pair standing equal is the line itself and is at neither side"
+                                    + " of it, and this one is offered for " + point.against()
+                                    + ": " + wrote);
+                }
+            }
+        }));
+        assertFalse(sides.isEmpty(),
+                "the sides of the line this reads, which are what the rows above are offered for");
     }
 
     /**
@@ -356,12 +553,12 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertTrue(line.owedAt(PointRole.OUT).hasRowWitness(), "and one is well over it");
         for (PointRole role : List.of(PointRole.IN, PointRole.OUT)) {
             assertFalse(line.owedAt(role).worthSearching(), role.toString());
-            assertNull(line.owedAt(role).attempt(), role.toString());
+            assertFalse(line.owedAt(role).searches().ran(), role.toString());
         }
 
         // And the block an author reads says nothing about them, because nothing is owed there.
         String block = souther.compiler.report.GeneratedRows.of(
-                compiled(BOTH_SIDES), "example.owed", "cmp", true, SourceNameResolver.identity()).text();
+                compiled(BOTH_SIDES), "example.owed", "cmp", SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
         assertFalse(block.contains("p.a < p.b"), block);
         assertFalse(block.contains("p.a > p.b"), block);
     }
@@ -401,10 +598,6 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));
         return out;
-    }
-
-    private static String report(String model) {
-        return AdequacyReport.of(compiled(model)).human(SourceNameResolver.identity());
     }
 
     private static Compilation compiled(String model) {

@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
@@ -13,12 +14,23 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.ValueOrder;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.Meter;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Admits;
+import souther.compiler.values.StringMachineAnswers;
+import souther.compiler.values.TextExtents;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An order a rule is read against and a value is written back at, and the only place either
@@ -54,7 +66,7 @@ import java.util.List;
  * <p><b>Which types have one</b> is {@link #ofValue}, and it is the one table. Deciding twice is
  * what left a {@code Date} a carrier to one reader and not to another.
  */
-public sealed interface Carrier {
+public sealed interface Carrier extends ValueOrder {
 
     /** A whole number: an {@code Int}, and every size. */
     record Whole() implements Carrier {}
@@ -153,7 +165,9 @@ public sealed interface Carrier {
      * that answers. None of them falls out of range on this account.
      */
     static Carrier ofPrimitive(Type type) {
-        return type instanceof Type.Prim ? ofValue(type, null) : null;
+        return type instanceof Type.Prim
+                ? ofValue(type, NewtypeInners.NONE, null, DeclarationKinds.NONE, null)
+                : null;
     }
 
     /**
@@ -182,16 +196,18 @@ public sealed interface Carrier {
      * makes {@code data Cutoff = Date} the same carrier as a bare {@code Date}, and
      * {@code data StageN = Stage} the same carrier as a bare {@code Stage}.
      */
-    static Carrier ofValue(Type type, Symbols symbols) {
+    static Carrier ofValue(Type type, NewtypeInners inners, Symbols symbols,
+                           DeclarationKinds kinds,
+                           PublishedDeclarations published) {
         // Which order a value of this type is compared on is {@link Ordering}'s, and this asks it
         // rather than deciding what an enumeration is a second time. Every one of its answers is
         // answered for here, so an order added there is one this has to place or say it has no
         // count for — the direction #856 went silent in was a reader measuring what another refused.
-        Ordering how = Ordering.of(type, symbols);
+        Ordering how = Ordering.of(type, inners, symbols, kinds, published);
         if (how == null) {
             return null;
         }
-        Type base = TypeOps.base(type, symbols);
+        Type base = TypeOps.base(type, inners);
         return switch (how.opened()) {
             // Being ordered is not being counted: two dates order alike whatever a line on one is
             // counted in, and which count that is belongs here and is asked of the type.
@@ -201,7 +217,8 @@ public sealed interface Carrier {
             // comparable on their sum's order without ranging over it, and a position declared as
             // one case, given the sum's counts, was asked for a row at a value it cannot hold.
             case Ordering.Places places -> base instanceof Type.Ref ref
-                    && ref.name().equals(places.enumeration()) ? ordinalOf(places, symbols) : null;
+                    && ref.name().equals(places.enumeration())
+                    ? ordinalOf(places, published) : null;
             // `opened` answers for the value with the names off, which is never one still wearing
             // them.
             case Ordering.Wrapped _ ->
@@ -230,11 +247,12 @@ public sealed interface Carrier {
 
     /** The cases in the order they are declared, which is the order itself and not a set. The
      *  declaration is read for that list alone: whether this is an enumeration is already answered. */
-    private static Carrier ordinalOf(Ordering.Places places, Symbols symbols) {
-        if (!(symbols.declarations().declaration(places.enumeration()) instanceof Hir.SumData sum)) {
+    private static Carrier ordinalOf(Ordering.Places places, PublishedDeclarations published) {
+        if (!(places.enumeration() instanceof TypeSymbol.AtModule at)
+                || !(published.of(at.key()) instanceof DeclarationMeaning.Sum)) {
             return null;
         }
-        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols);
+        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(places.enumeration()), published);
         return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 
@@ -335,21 +353,45 @@ public sealed interface Carrier {
      * the order does not reach: {@code value < ""} leaves a range open below, and what is below the
      * empty string is nothing.
      */
+    @Override
     default OrderedInterval extent() {
         return switch (this) {
-            case Whole _ -> between(Count.of(Long.MIN_VALUE), Count.of(Long.MAX_VALUE));
+            case Whole _ -> Extents.WHOLE;
             // Every number, so no end either way.
             case Dense _ -> OrderedInterval.OPEN;
-            case Days _ -> between(Count.of(java.time.LocalDate.MIN.toEpochDay()),
-                    Count.of(java.time.LocalDate.MAX.toEpochDay()));
-            case Seconds _ -> between(DateTimes.MIN, DateTimes.MAX);
-            case SecondsOfDay _ -> between(Times.MIN, Times.MAX);
-            case Nanos _ -> between(Instants.MIN, Instants.MAX);
+            case Days _ -> Extents.DAYS;
+            case Seconds _ -> Extents.SECONDS;
+            case SecondsOfDay _ -> Extents.SECONDS_OF_DAY;
+            case Nanos _ -> Extents.NANOS;
             // Every string is at or above the empty one, and there is no longest string.
-            case Text _ -> new OrderedInterval(
-                    Endpoint.inclusive(souther.compiler.numeric.Text.of("")), null);
+            case Text _ -> Extents.TEXT;
             case Ordinal ordinal -> between(Count.of(0), Count.of(ordinal.cases().size() - 1L));
         };
+    }
+
+    /**
+     * The ends of the orders that have the same ends every time they are asked.
+     *
+     * <p>Where a reading starts is asked of every leaf of every clause, and of every position of
+     * every choice — so the answer for an {@code Int} was two counts and two ends built afresh at
+     * each of them. An enumeration is not here: its ends come from how many cases were declared,
+     * and there is one of these for each declaration rather than one for the language.
+     */
+    final class Extents {
+
+        private Extents() {
+        }
+
+        private static final OrderedInterval WHOLE =
+                between(Count.of(Long.MIN_VALUE), Count.of(Long.MAX_VALUE));
+        private static final OrderedInterval DAYS =
+                between(Count.of(java.time.LocalDate.MIN.toEpochDay()),
+                        Count.of(java.time.LocalDate.MAX.toEpochDay()));
+        private static final OrderedInterval SECONDS = between(DateTimes.MIN, DateTimes.MAX);
+        private static final OrderedInterval SECONDS_OF_DAY = between(Times.MIN, Times.MAX);
+        private static final OrderedInterval NANOS = between(Instants.MIN, Instants.MAX);
+        private static final OrderedInterval TEXT = new OrderedInterval(
+                Endpoint.inclusive(souther.compiler.numeric.Text.of("")), null);
     }
 
     private static OrderedInterval between(Place low, Place high) {
@@ -449,8 +491,8 @@ public sealed interface Carrier {
      */
     default Place literalOf(Hir.Expr e) {
         return switch (this) {
-            case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
-            case Dense _ -> Count.of(InvariantBound.literalOf(e));
+            case Whole _ -> Count.of(NumericLiterals.wholeLiteralOf(e));
+            case Dense _ -> Count.of(NumericLiterals.literalOf(e));
             case Days _ -> temporal(e, Dates::dayOf);
             case Seconds _ -> temporal(e, DateTimes::secondOf);
             case SecondsOfDay _ -> temporal(e, Times::secondOf);
@@ -721,16 +763,36 @@ public sealed interface Carrier {
      *
      * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
      * range, so what a caller may say about an empty answer is that it composed nothing.
+     *
+     * <p><b>Both vocabularies a position is read in.</b> {@code within} is where the rules leave the
+     * number this order counts, and {@code admits} is which values the declarations leave standing
+     * — a rule about how many a value holds lands in the second and says nothing in the first. So
+     * every candidate is put to both: asked of the range alone, a string bounded below by its
+     * length is offered the empty string, which the declarations refuse.
+     *
+     * <p><b>What the set offers is asked of the set the class holds, and not of the position's.</b>
+     * The values singled out are taken away first, and the value is looked for in what is left.
+     * Asked the other way round — a value out of what the position admits, refused afterwards
+     * where it is one of the singled ones — the answer would be no value at all whenever the set's
+     * own first answer happened to be a value the class exists to exclude, and a class the
+     * declarations leave inhabited would say nothing stands for it.
+     *
+     * @param admits which values the position holds, through whatever names they are written under
+     * @param meter  what taking the singled values out of a language of them may cost. Handed in
+     *               rather than made here: whose allowance a machine is built out of is the
+     *               caller's to say, and an order that named one would be spending at every
+     *               position without anything having granted it
      */
-    default Place somethingOtherThan(java.util.List<Place> singled, NumericDomain.Bounds within) {
-        java.util.List<Place> stepped = new java.util.ArrayList<>();
-        for (Place from : singled) {
+    default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
+                                     ValueSet admits, Meter meter) {
+        java.util.List<Place> stepped = new ArrayList<>();
+        for (Place from : singled.places()) {
             if (from instanceof Count count) {
                 stepped.add(count.plus(1));
                 stepped.add(count.minus(1));
             }
         }
-        java.util.List<Place> inside = new java.util.ArrayList<>();
+        java.util.List<Place> inside = new ArrayList<>();
         if (within != null) {
             for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                 if (end != null && end.inclusive()) {
@@ -740,7 +802,7 @@ public sealed interface Carrier {
             inside.add(somethingInside(within.min(), within.max()));
             // Between the place singled out and each end, which is where a range with no step still
             // has room once the ends themselves are singled out too.
-            for (Place from : singled) {
+            for (Place from : singled.places()) {
                 for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                     if (end != null) {
                         inside.add(somethingInside(Endpoint.exclusive(from), end));
@@ -749,7 +811,7 @@ public sealed interface Carrier {
                 }
             }
         }
-        java.util.List<Place> tried = new java.util.ArrayList<>();
+        java.util.List<Place> tried = new ArrayList<>();
         if (spacing() == Granularity.DENSE) {
             tried.addAll(inside);
             tried.addAll(stepped);
@@ -757,23 +819,621 @@ public sealed interface Carrier {
             tried.addAll(stepped);
             tried.addAll(inside);
         }
-        // A string has a least value and nothing beside one, so what stands for "none of these" is
-        // the empty string wherever that is not one of them. Last, so a domain that names its own
-        // ends is asked first — and refused by the filter below where it is itself singled out.
-        if (this instanceof Text) {
-            tried.add(souther.compiler.numeric.Text.of(""));
-        }
         for (Place candidate : tried) {
-            // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
-            // is neither of them as a number and is one of them once written, so a class of
-            // everything else was offered one of the values it exists to exclude.
-            Place each = onTheGrid(candidate);
-            if (each != null && (within == null || within.admits(each))
-                    && singled.stream().noneMatch(each::sameAs)) {
+            Place each = taken(candidate, singled, within, admits);
+            if (each != null) {
                 return each;
             }
         }
+        // And the class's own values, once the order has nothing left to offer. What the loop above
+        // does is prefer: the value beside the one singled out and the ends of the range read
+        // better in a row than anything worked out of a set, and each of them is put to all three
+        // ways of being refused. What it is not is exhaustive — so where every one of them is
+        // refused, the question is asked of the values themselves and answered exactly.
+        //
+        // Asked here and not among them, because this builds a machine over strings. A position
+        // whose rules say nothing about its values is the common case and the order answers it with
+        // the first candidate it has, so the machine would be built at every position for an answer
+        // already in hand.
+        return somewhereIn(admits, rangeOf(within), singled, meter);
+    }
+
+    /** The run of this order {@code bounds} names, which is the whole of it where nothing bounds
+     *  the position. */
+    private static OrderedInterval rangeOf(NumericDomain.Bounds bounds) {
+        return bounds == null ? new OrderedInterval(null, null)
+                : new OrderedInterval(bounds.min(), bounds.max());
+    }
+
+    /**
+     * {@code candidate} where the position holds it and the class it is wanted for does, or null.
+     *
+     * <p>One place the answer is decided, and every candidate goes through it. The two vocabularies
+     * and the values singled out are three ways to be refused, and a candidate source that checked
+     * two of them would be a value offered for a class by whichever route composed it.
+     */
+    private Place taken(Place candidate, PlacesApart singled,
+                        NumericDomain.Bounds within, ValueSet admits) {
+        // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
+        // is neither of them as a number and is one of them once written, so a class of everything
+        // else was offered one of the values it exists to exclude.
+        Place at = candidate == null ? null : onTheGrid(candidate);
+        return at != null && (within == null || within.admits(at))
+                && admitted(admits, at)
+                && !singled.has(at) ? at : null;
+    }
+
+    /**
+     * Whether the position's values take {@code at} in.
+     *
+     * <p>A place this order has no written value for is left in. What the set says is which values
+     * the declarations leave, and a carrier that writes none of them back has nothing to put to it
+     * — refused here, every class of a date would lose the representative the order composed.
+     *
+     * <p><b>For a candidate already in hand, and never for finding one.</b> A caller choosing a value
+     * out of a run and asking this afterwards is the search stopping at the first thing it reached:
+     * where the answer is no, the run may hold another value the set admits and this says nothing
+     * about it, and a class the declarations leave inhabited comes back with no representative. What
+     * finding one is is {@link #somewhereIn}, which narrows the search by the set instead of judging
+     * what came back. This is asked where a candidate comes from a policy the set does not encode —
+     * the end of a run a boundary is named for is one — and a caller that gets no for every such
+     * candidate goes on to ask that one.
+     */
+    default boolean admitted(ValueSet admits, Place at) {
+        Value wrote = valueAt(at);
+        return wrote == null || admits.has(wrote);
+    }
+
+    /**
+     * A place this order holds inside {@code range} that {@code set} admits and none of
+     * {@code apart} stands at, or null where this composed none.
+     *
+     * <p><b>One question over the three at once, and never a value chosen out of one of them and
+     * put to the others.</b> A value picked out of the set and refused afterwards for lying outside
+     * the range is the search stopping at the first thing it happened to reach: the set may hold a
+     * value inside the range and never be asked for it, and what a reader is told is that a class
+     * the declarations leave inhabited has nothing to stand for it. The same the other way round
+     * for the values held apart. So each of the three narrows what is looked through rather than
+     * judging what came back.
+     *
+     * <p>Here because it is a crossing and this is where both directions of one are made. A set
+     * knows which values it holds and nothing about what counts them: {@link ValueSet.Cofinite} is
+     * every value of the carrier but a few, and which values those are is a question only an order
+     * has an answer to.
+     *
+     * <p>What a source can carry, which is not the same as what the set holds: a set of control
+     * characters has a value to offer and none to write, and a row nobody can paste is not a row.
+     *
+     * @param apart places whose values are not wanted, which is what a class away from the ones a
+     *              body singled out is
+     * @param meter what building the machine a set of strings needs may cost
+     */
+    default Place somewhereIn(ValueSet set, OrderedInterval range, PlacesApart apart, Meter meter) {
+        OrderedInterval held = extent().meet(range);
+        if (held.holdsNothing()) {
+            return null;
+        }
+        return switch (set) {
+            // Named outright, so the first of them this order places inside the run and holds apart
+            // from none. No machine for a set that already has its values in hand.
+            case ValueSet.Finite it -> it.values().stream().map(this::placeOf)
+                    .filter(at -> at != null && held.admits(at) && !apart.has(at))
+                    .findFirst().orElse(null);
+            case ValueSet.Cofinite it -> {
+                Place cheap = firstHeldIn(held, anchorIn(range), it.excluded(), apart);
+                // Where the order's own candidates answered, that is the value: they read better in
+                // a row than anything worked out of a machine, and the common case is a position
+                // whose rules say nothing about its values.
+                //
+                // And where they did not, they are not a proof. What they are is a handful, and a run
+                // away from that handful holds values none of them names — so the question goes to
+                // the crossing below, which answers it exactly. Read as an answer, a rule stating a
+                // run of the strings came back as one nothing could write a value in.
+                yield cheap != null || !(this instanceof Text) ? cheap
+                        : writableIn(it, held, apart, meter);
+            }
+            // The one shape whose values are not in hand: a language names its strings and does not
+            // list them, so what is left of it inside the run and away from the places held apart
+            // is a machine — which is the crossing between a set of strings and a run of the order,
+            // and the reading of extents is where that is made. A language is a set of strings, so
+            // no order but the strings holds one.
+            case ValueSet.Matching it ->
+                    this instanceof Text ? writableIn(it, held, apart, meter) : null;
+        };
+    }
+
+    /**
+     * A string of {@code set} that lies inside {@code held}, stands at none of {@code apart}, and a
+     * source can carry, or null where the crossing names none or ran out.
+     *
+     * <p>Asked of the reading of extents whatever shape the set is in. Which strings a set holds
+     * inside a run of the order is one question, and a set that lists the values it leaves out
+     * answers it the same way a set that names a language does — that one is every string less a
+     * handful, which is a language as much as any other. So the shapes differ in what they cost and
+     * not in what they come to: asked one way for one of them, a rule stating a run of the strings
+     * was answered as a rule nothing could write a value for.
+     *
+     * <p>What comes back is a value a source can carry, which is narrower than what the set holds: a
+     * set whose strings are all control characters has a value to offer and none to write, and a row
+     * nobody can paste is not a row.
+     */
+    private Place writableIn(ValueSet set, OrderedInterval held, PlacesApart apart, Meter meter) {
+        Language strings = TextExtents.stringsIn(set, held, meter);
+        // Only the words the run leaves in, which the language answers about for nothing. A word it
+        // does not hold is one the machine built to take it out would be built to change nothing.
+        Language left = strings == null ? null
+                : strings.without(textsAt(apart).stream().filter(strings::has).toList(), meter);
+        String some = left == null ? null : left.someWritten();
+        return some == null ? null : souther.compiler.numeric.Text.of(some);
+    }
+
+    /**
+     * The first value this order holds inside {@code range} that is neither excluded nor held
+     * apart, or null where this composed none.
+     *
+     * <p>Where the values are looked for is what the order says about its own spacing, and never
+     * how a place happens to be written. An order that steps runs out of values to rule out: the
+     * two lists name finitely many between them, so a walk one longer than that reaches a value
+     * neither of them names wherever the run holds one. An order with no step never runs out that
+     * way — a run holding every number between two of them is not walked through by counting — so
+     * what is looked at there is the stretches the named values leave, each of which the order can
+     * already give up a value from.
+     *
+     * <p><b>One value is what is wanted, so one is what is made.</b> Each candidate is composed and
+     * put to the run at once. Written as a list of them all and read afterwards, the walk composes
+     * every value it might have needed before it looks at the first — and the first is the answer
+     * almost always, while the walk is as long as the values ruled out. A position singling out a
+     * great many strings would have a string of every length up to that many written out to answer
+     * with the shortest.
+     */
+    private Place firstHeldIn(OrderedInterval range, Place from, Set<Value> excluded,
+                              PlacesApart apart) {
+        int named = excluded.size() + apart.count();
+        // A string has no step and nothing between two others that this language names — the string
+        // above one is a character nobody wrote. What it has is a least value with every longer one
+        // after it, and the ones a source can carry are what a row wants, so the run is walked by
+        // length through a letter anybody can paste. A run of the order bounded away from those
+        // holds none of them, and what covers that is the ends of the run — among the candidates
+        // before this is reached.
+        if (this instanceof Text) {
+            for (int step = 0; step <= named; step++) {
+                Place at = heldAt(souther.compiler.numeric.Text.of("a".repeat(step)),
+                        range, excluded, apart);
+                if (at != null) {
+                    return at;
+                }
+            }
+            return null;
+        }
+        if (spacing() == Granularity.DENSE) {
+            return betweenTheNamed(range, ruledOutIn(range, excluded, apart), excluded, apart);
+        }
+        if (!(from instanceof Count start)) {
+            return null;
+        }
+        for (int step = 0; step <= named; step++) {
+            Place above = heldAt(start.plus(step), range, excluded, apart);
+            if (above != null) {
+                return above;
+            }
+            Place below = heldAt(start.minus(step), range, excluded, apart);
+            if (below != null) {
+                return below;
+            }
+        }
         return null;
+    }
+
+    /**
+     * {@code candidate} where this order holds it inside {@code range} and neither list names it,
+     * or null.
+     *
+     * <p>One place a candidate is decided, whichever of the searches composed it. Each of them
+     * deciding for itself is three readings of what a value away from the ones ruled out is, and
+     * the day one of them learns about a fourth way of being refused the other two do not.
+     */
+    private Place heldAt(Place candidate, OrderedInterval range, Set<Value> excluded,
+                         PlacesApart apart) {
+        Place at = candidate == null ? null : onTheGrid(candidate);
+        Value wrote = at == null ? null : valueAt(at);
+        return wrote != null && range.admits(at) && !excluded.contains(wrote) && !apart.has(at)
+                ? at : null;
+    }
+
+    /** The places inside {@code range} that {@code excluded} or {@code apart} names, in the order
+     *  they lie in. */
+    private List<Place> ruledOutIn(OrderedInterval range, Set<Value> excluded, PlacesApart apart) {
+        List<Place> out = new ArrayList<>();
+        for (Value each : excluded) {
+            Place at = placeOf(each);
+            if (at != null && range.admits(at)) {
+                out.add(at);
+            }
+        }
+        for (Place each : apart.places()) {
+            if (range.admits(each)) {
+                out.add(each);
+            }
+        }
+        out.sort(null);
+        return out;
+    }
+
+    /**
+     * A value out of the first stretch {@code named} leaves inside {@code range} that holds one.
+     *
+     * <p>What a run with no step has instead of a walk. The values named are finitely many and the
+     * run between two of them holds values without end, so a run holding anything the two lists do
+     * not name holds it in one of these stretches — and which value a stretch gives up is the
+     * order's own answer ({@link #somethingInside}) rather than a second way of writing a number.
+     */
+    private Place betweenTheNamed(OrderedInterval range, List<Place> named, Set<Value> excluded,
+                                  PlacesApart apart) {
+        Endpoint from = range.low();
+        for (Place at : named) {
+            Place found = heldAt(somethingInside(from, Endpoint.exclusive(at)),
+                    range, excluded, apart);
+            if (found != null) {
+                return found;
+            }
+            from = Endpoint.exclusive(at);
+        }
+        return heldAt(somethingInside(from, range.high()), range, excluded, apart);
+    }
+
+    /**
+     * Where a walk over {@code range} starts.
+     *
+     * <p>An end the caller named, and the count of nothing where it named neither. What the run is
+     * met with is where the order stops, and every stepping order stops somewhere a walk would
+     * never come back from — anchored there, a position nothing bounds is walked from the least
+     * count there is and the value it composes is one no reader would write.
+     *
+     * <p>Asked of whether this order counts, and not of which carriers do. A walk that named them
+     * would be a second list of the carriers with counts, and the day one is added the walk would
+     * start nowhere at a carrier the rest of this answers about.
+     *
+     * <p><b>And a place the run holds, where a strict end names one it does not.</b> The walk spends
+     * a step for each value it was told to keep away from, which is what makes it enough: a stretch
+     * that long holds a value none of them names. Started at a value the run itself leaves out, the
+     * first of those steps is spent arriving rather than searching, and a run whose values were all
+     * held apart but one came back with nothing standing in it.
+     */
+    private Place anchorIn(OrderedInterval range) {
+        Endpoint end = range.low() != null ? range.low() : range.high();
+        if (end == null) {
+            return counts() ? Count.ZERO : null;
+        }
+        if (end.inclusive() || spacing() != Granularity.DISCRETE
+                || !(end.at() instanceof Count at)) {
+            return end.at();
+        }
+        // The count beside the one named, which is where a run this order steps along begins. Null
+        // where the order has no count there, which is the order saying the run begins nowhere.
+        return onTheGrid(range.low() != null ? at.plus(1) : at.minus(1));
+    }
+
+    /** The strings standing at {@code places}, which is what a language can be asked to leave out. */
+    private List<String> textsAt(PlacesApart places) {
+        List<String> out = new ArrayList<>();
+        for (Place at : places.places()) {
+            if (valueAt(at) instanceof Value.Text text) {
+                out.add(text.value());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The range of this order that {@code bounds} names, where {@code bounds} counts what this
+     * order counts.
+     *
+     * <p>The one crossing between the two, and it is here because this is where a count and a value
+     * of this order are the same fact said twice. What the numbers prove about a position is a pair
+     * of ends in the count space its atom lives in; what a reading of an order holds is a pair of
+     * ends on the order. The two are written the same way and are not the same thing — a day count
+     * is a number and a date is not — so the crossing is a question about the carrier and never a
+     * pair of ends passed across.
+     *
+     * <p>Nothing where this order counts nothing. A string stands in an order and no number stands
+     * under it, so a bound in a count space is about some other position and not this one — and
+     * saying it says nothing here is the difference between a reading that could not speak and one
+     * that spoke and placed no edge.
+     */
+    default PositionRestriction within(NumericDomain.Bounds bounds) {
+        return counts()
+                ? new PositionRestriction.Within(new OrderedInterval(bounds.min(), bounds.max()))
+                : new PositionRestriction.NotSpokenOf();
+    }
+
+    /**
+     * Whether any value this order holds inside {@code range} is one {@code set} admits.
+     *
+     * <p>The one place a set of values and a range on an order are put together. Each of them is
+     * read from the rules by a reading of its own, and neither has a word for what the other holds
+     * — a pattern names no ends and an ordering names no finite set — so what they have in common
+     * is a question about the order they are both about, and this is the order.
+     *
+     * <p><b>One position, and nothing about any other.</b> Which alternative of a reading survives
+     * is a question about a whole product and belongs to whoever holds the alternatives
+     * ({@link souther.compiler.values.AdmissibleValues#anyAlternativeAdmits}). What is answered here
+     * is one position's, so that a carrier added later answers what a carrier has to answer and not
+     * what a reading does.
+     *
+     * <p>{@link souther.compiler.values.Emptiness#UNDECIDED} where this order cannot say. A pattern over a carrier that is
+     * not the strings is a set belonging to no position of this order rather than one this refuses,
+     * and a machine the allowance will not pay for is a question that waits — neither of them is a
+     * value being ruled out.
+     *
+     * @param meter what may be built to answer, where answering takes a machine
+     */
+    default souther.compiler.values.Emptiness meets(ValueSet set, OrderedInterval range, Meter meter) {
+        return meets(set, range, meter, StringMachineAnswers.NONE);
+    }
+
+    /**
+     * The same, borrowing a machine {@code machines} has already made where one is needed.
+     *
+     * @param machines where an answer about the strings somebody has already worked out is lent
+     *                 from; what it lends costs {@code meter} nothing
+     */
+    default souther.compiler.values.Emptiness meets(ValueSet set, OrderedInterval range, Meter meter,
+                                                    StringMachineAnswers machines) {
+        if (range.holdsNothing()) {
+            return souther.compiler.values.Emptiness.EMPTY;
+        }
+        return switch (set) {
+            case ValueSet.Finite it -> anyOf(it.values(), range);
+            // Every value of the order is admitted, and the range holds one.
+            case ValueSet.Cofinite it -> it.excluded().isEmpty()
+                    ? souther.compiler.values.Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
+            case ValueSet.Matching it -> this instanceof Text
+                    ? stringsInside(it.language(), range, meter, machines)
+                    : souther.compiler.values.Emptiness.UNDECIDED;
+        };
+    }
+
+    /**
+     * Which values this order holds inside {@code range} that {@code set} admits.
+     *
+     * <p>{@link #meets} answering with the values rather than with whether there are any, for a
+     * reader relating one position to another. Whether a denial between two blocks leaves anything
+     * turns on which values each of them is left and not on whether it is left some, so the
+     * question a relation asks is this one — and it is here, beside the answer about one position,
+     * because a set and a range are put together in one place or in two that come to disagree.
+     *
+     * <p>Three answers, and the middle one is what keeps a relation cheap. A block left more values
+     * than a caller will count is one that never runs out for want of a value to take, so a reader
+     * relating a handful of blocks may stop counting rather than enumerate an order — and a block
+     * this cannot say the values of is a block a relation says nothing about, which is what every
+     * widening here is.
+     *
+     * @param atMost how many values a caller will count. Its own and not this order's: how many
+     *               there have to be before the answer stops mattering is a question about what the
+     *               caller is relating
+     */
+    default Admits valuesShared(ValueSet set, OrderedInterval range, int atMost) {
+        OrderedInterval held = extent().meet(range);
+        if (held.holdsNothing()) {
+            return new Admits.These(Set.of());
+        }
+        return switch (set) {
+            case ValueSet.Finite it -> named(it.values(), held, atMost);
+            case ValueSet.Cofinite it -> placed(held, it.excluded(), atMost);
+            // A language is a description of a machine rather than the set it comes to, and
+            // building one to relate two positions would spend a position's allowance on a question
+            // about a pair.
+            case ValueSet.Matching _ -> new Admits.NotKnown();
+        };
+    }
+
+    /**
+     * The same, of a block whose positions may be on no order at all.
+     *
+     * <p>Here rather than at the caller, because a block on no order is a case of the question and
+     * not a case of who is asking. Such a block has no range for its values to be met with, so a
+     * set naming them is the whole of what it holds; every other shape is one only an order can say
+     * the values of, since what a written set leaves out is every value there is. Answered where a
+     * caller happens to notice the absence, that caller would be deciding what a value and an order
+     * come to, which is what this type is for — and the second answer would count differently from
+     * this one the first time either changed.
+     */
+    static Admits leftAt(Carrier carrier, ValueSet set, OrderedInterval range, int atMost) {
+        if (carrier != null) {
+            return carrier.valuesShared(set, range, atMost);
+        }
+        return set instanceof ValueSet.Finite it ? Admits.of(it.values(), atMost)
+                : new Admits.NotKnown();
+    }
+
+    /** Which of {@code values} lie inside {@code range}, unknown where one of them is not a value
+     *  this order places at all. */
+    private Admits named(java.util.Set<Value> values, OrderedInterval range, int atMost) {
+        Set<Value> out = new LinkedHashSet<>();
+        for (Value each : values) {
+            Place at = placeOf(each);
+            if (at == null) {
+                return new Admits.NotKnown();
+            }
+            if (range.admits(at)) {
+                out.add(each);
+            }
+        }
+        return Admits.of(out, atMost);
+    }
+
+    /** Which values {@code range} holds that {@code excluded} does not name, where they are few
+     *  enough to write down. */
+    private Admits placed(OrderedInterval range, Set<Value> excluded, int atMost) {
+        List<Place> held = firstPlacesIn(range, atMost + excluded.size() + 1);
+        if (held == null) {
+            return new Admits.MoreThanCounted();
+        }
+        Set<Value> away = new LinkedHashSet<>();
+        for (Value each : excluded) {
+            Place at = placeOf(each);
+            if (at == null) {
+                return new Admits.NotKnown();
+            }
+            away.add(valueAt(at));
+        }
+        Set<Value> out = new LinkedHashSet<>();
+        for (Place at : held) {
+            Value value = valueAt(at);
+            if (value == null) {
+                return new Admits.NotKnown();
+            }
+            if (!away.contains(value)) {
+                out.add(value);
+            }
+        }
+        return Admits.of(out, atMost);
+    }
+
+    /**
+     * The value at a place on this order, or null where this order has no way of writing one down.
+     *
+     * <p>{@link #placeOf} the other way round, and here for the reason that one is: a value and
+     * where it sits are the same fact said twice, and the crossing between them is the carrier's.
+     * The temporal carriers place no written value, so nothing here writes one back.
+     */
+    private Value valueAt(Place at) {
+        return switch (this) {
+            case Whole _, Dense _ -> Value.number(Count.number(at).at());
+            case Text _ -> Value.text(((souther.compiler.numeric.Text) at).at());
+            case Ordinal it -> Value.of(it.caseAt(at));
+            case Days _, Seconds _, SecondsOfDay _, Nanos _ -> null;
+        };
+    }
+
+    /** Whether one of {@code values} is inside {@code range}, undecided where a value of the set is
+     *  not one this order places at all. */
+    private souther.compiler.values.Emptiness anyOf(java.util.Set<Value> values, OrderedInterval range) {
+        boolean placed = true;
+        for (Value each : values) {
+            Place at = placeOf(each);
+            if (at == null) {
+                placed = false;
+            } else if (range.admits(at)) {
+                return souther.compiler.values.Emptiness.NONEMPTY;
+            }
+        }
+        return placed ? souther.compiler.values.Emptiness.EMPTY : souther.compiler.values.Emptiness.UNDECIDED;
+    }
+
+    /**
+     * Whether {@code range} holds a value none of {@code excluded} is.
+     *
+     * <p>Answered by taking the values the range holds, and only as many of them as could be
+     * excluded: a range holding more than that holds one of them whatever the exclusions are, and
+     * counting further would be enumerating an order to answer a question about a handful of values.
+     */
+    private souther.compiler.values.Emptiness somethingNotExcluded(Set<Value> excluded, OrderedInterval range) {
+        List<Place> held = firstPlacesIn(range, excluded.size() + 1);
+        if (held == null) {
+            return souther.compiler.values.Emptiness.NONEMPTY;
+        }
+        List<Place> away = new ArrayList<>(excluded.size());
+        excluded.forEach(each -> {
+            Place at = placeOf(each);
+            if (at != null) {
+                away.add(at);
+            }
+        });
+        for (Place each : held) {
+            if (away.stream().noneMatch(each::sameAs)) {
+                return souther.compiler.values.Emptiness.NONEMPTY;
+            }
+        }
+        return souther.compiler.values.Emptiness.EMPTY;
+    }
+
+    /**
+     * The first {@code atMost} places {@code range} holds, or null where it holds more than that.
+     *
+     * <p>Null is the range holding more and never this declining to look: what it answers is a
+     * question about how many, and a caller reads it as the range being wider than the values it
+     * was asked about.
+     */
+    private List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
+        OrderedInterval held = extent().meet(range);
+        Endpoint low = held.low();
+        Endpoint high = held.high();
+        if (low == null || high == null) {
+            return null;
+        }
+        List<Place> out = new ArrayList<>();
+        if (this instanceof Text) {
+            souther.compiler.numeric.Text at = (souther.compiler.numeric.Text) low.at();
+            if (!low.inclusive()) {
+                at = at.justAbove();
+            }
+            while (Endpoint.someValueLiesBetween(Endpoint.inclusive(at), high)) {
+                if (out.size() == atMost) {
+                    return null;
+                }
+                out.add(at);
+                at = at.justAbove();
+            }
+            return out;
+        }
+        if (spacing() == Granularity.DENSE) {
+            // Between two places that are not one place there is always another, so a range holding
+            // few values is a range holding one: both ends at one place, and both of them its own.
+            return low.inclusive() && high.inclusive() && low.at().sameAs(high.at())
+                    ? List.of(low.at()) : null;
+        }
+        Count first = Count.number(low.at());
+        Count last = Count.number(high.at());
+        if (!low.inclusive()) {
+            first = first.plus(1);
+        }
+        if (!high.inclusive()) {
+            last = last.minus(1);
+        }
+        for (Count at = first; at.compareTo(last) <= 0; at = at.plus(1)) {
+            if (out.size() == atMost) {
+                return null;
+            }
+            out.add(at);
+        }
+        return out;
+    }
+
+    /**
+     * Whether any string {@code language} admits lies inside {@code range}.
+     *
+     * <p>The range is met with what this order holds first, so what is asked about is a stretch
+     * whose ends are strings; the question itself is {@link TextExtents#inside}, asked of
+     * {@code machines} so that a pair somebody has already asked about is answered from what they
+     * made.
+     */
+    private souther.compiler.values.Emptiness stringsInside(Language language, OrderedInterval range,
+                                                            Meter meter, StringMachineAnswers machines) {
+        return machines.inside(language, extent().meet(range), meter);
+    }
+
+    /**
+     * Where a written value sits on this order, or null where it is not a value of this order.
+     *
+     * <p>Beside {@link #placeOf(ObservedValue)} and not instead of it: that one places a value read
+     * back from a run, and this one places a value a rule named. What they have in common is the
+     * order, which is here, and what they differ in is where the value came from.
+     *
+     * <p>The temporal carriers place none. A date is ordered and has a count that stands for it, and
+     * a rule naming one reaches the reading of the order rather than the reading of values — so
+     * nothing ever asks this to place one, and answering would be a second way for a date to be
+     * written down.
+     */
+    private Place placeOf(Value value) {
+        return switch (this) {
+            case Whole _, Dense _ -> value instanceof Value.Number it
+                    ? onTheGrid(Count.of(it.value())) : null;
+            case Text _ -> value instanceof Value.Text it
+                    ? souther.compiler.numeric.Text.of(it.value()) : null;
+            case Ordinal it -> value instanceof Value.Case one ? it.at(one.data()) : null;
+            case Days _, Seconds _, SecondsOfDay _, Nanos _ -> null;
+        };
     }
 
     /**

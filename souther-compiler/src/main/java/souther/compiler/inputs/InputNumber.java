@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 
@@ -35,21 +37,40 @@ public final class InputNumber {
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
      */
-    public static NumericTerm of(Core e, InputReads reads, Symbols symbols) {
+    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
+                                 RuleReadingSource source) {
+        Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
-            TermPath of = reads.pathOf(measured.of(), symbols);
+            // A taking is of a location, so an argument that stands at none is one there is no
+            // location to take it of.
+            TermPath of = switch (reads.pathOf(measured.of(), source.newtypes())) {
+                case PathResolution.At(var at) -> at;
+                case PathResolution.NotAPosition _ -> null;
+                // A taking is of one location, and a name that only may stand at one is no one of
+                // them. Taken of any, the number would be a size of a sequence the run it is on
+                // never walked.
+                case PathResolution.MayStandAt _ -> null;
+            };
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
-                        reads.read().typeAt(of, symbols), symbols);
+                        inputs.typeAt(of, source), source.inners(), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
             // those values are read from a place.
-            return overARun(measured, reads, symbols);
+            return overARun(measured, inputs, reads, source);
         }
-        TermPath path = reads.pathOf(e, symbols);
-        return path == null ? null : new NumericTerm.ValueOf(path);
+        // And a number of the input is the value at a position, so an expression naming none names
+        // no number here.
+        return switch (reads.pathOf(e, source.newtypes())) {
+            case PathResolution.At(var at) -> new NumericTerm.ValueOf(at);
+            case PathResolution.NotAPosition _ -> null;
+            // And a number of the input is the value at one position. A name standing at one of
+            // several would be a number at whichever of them a reader picked, and a line drawn on
+            // it would fall at a place the rule may say nothing about.
+            case PathResolution.MayStandAt _ -> null;
+        };
     }
 
     /**
@@ -82,29 +103,30 @@ public final class InputNumber {
      * ({@link RunSource#overTheOccurrencesAt}), which is the same answer for the same reason: a
      * reading short rather than a line somewhere it does not go.
      */
-    private static NumericTerm overARun(NumericMeasures.Measured measured, InputReads reads,
-                                        Symbols symbols) {
-        Core walk = measured.of();
-        InputReads where = reads;
-        // By the bindings met, so a name that came round to itself stops rather than being followed
-        // again. Bindings are added on the way down and each tells itself from every other, so this
-        // is the shape of the tree saying so and not a depth somebody chose.
-        java.util.Set<souther.compiler.types.BindingId> met = new java.util.HashSet<>();
-        while (walk instanceof Core.Read read) {
-            if (!met.add(read.binding())
-                    || !(where.meaningOf(read, symbols) instanceof ReadMeaning.Through through)) {
-                return null;
-            }
-            walk = through.denotes().value();
-            where = through.denotes().at();
-        }
+    private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
+                                        InputReads reads, RuleReadingSource source) {
+        Symbols symbols = source.symbols();
+        // The walk and the names it stands under, which travel together: a name bound inside a
+        // helper stands for what the call handed over, and what is read of that afterwards is read
+        // where it stands rather than where the name was.
+        Denotation met = reads.denotes(measured.of(), symbols, source.newtypes());
+        Core walk = met.value();
+        InputReads where = met.at();
         souther.compiler.types.BindingId element =
-                souther.compiler.core.GrowingFold.elementBindingOf(walk);
+                WalkElements.elementBindingOf(walk, where, symbols, source.newtypes());
         if (element == null) {
             return null;
         }
-        ElementProjection answered = where.elements().projectionAt(element);
-        TermPath at = where.elementAt(element, symbols);
+        ElementProjection answered = where.projectionAt(element);
+        // Where the elements stand, and nothing where they stand nowhere: a run is over the values
+        // at a position, so a container this reading could not place leaves no run to take.
+        TermPath at = switch (where.elementAt(element, source.newtypes())) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _ -> null;
+            // A run is over the values at one position, and a walk whose elements come from more
+            // than one container is no one run.
+            case PathResolution.MayStandAt _ -> null;
+        };
         if (answered == null || at == null) {
             return null;
         }
@@ -117,14 +139,10 @@ public final class InputNumber {
         if (over == null) {
             return null;
         }
-        Type stands = where.read().typeAt(under, symbols);
+        Type stands = inputs.typeAt(under, source);
         return stands == null ? null
-                : NumericTerm.TakenOver.of(measured.operation(), over, stands, symbols);
+                : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
+                        symbols);
     }
 
-    /** The number a comparison is about, from whichever side names one. */
-    public static NumericTerm compared(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        NumericTerm left = of(comparison.left(), reads, symbols);
-        return left != null ? left : of(comparison.right(), reads, symbols);
-    }
 }

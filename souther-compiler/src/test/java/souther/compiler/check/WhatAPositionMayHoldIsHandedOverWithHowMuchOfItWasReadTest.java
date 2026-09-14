@@ -4,7 +4,6 @@ import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -50,8 +49,23 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         return read(source, named, ReadAs.THE_COMPILATION_DOES);
     }
 
+    /**
+     * The models above with their stand-in for a rule nothing reads written out.
+     *
+     * <p>Named rather than written, because which spelling this compiler cannot read is a fact
+     * about this compiler and moves ({@link souther.compiler.ARuleNoReadingTakesIn}). Written out
+     * six times, the day one of them became readable was the day these tests went on passing about
+     * a model with nothing unread in it.
+     */
+    private static String unreadable(String source) {
+        return source
+                .replace("UNREAD_VALUE", souther.compiler.ARuleNoReadingTakesIn.about("value"))
+                .replace("UNREAD_LEFT", souther.compiler.ARuleNoReadingTakesIn.about("left"))
+                .replace("UNREAD_RIGHT", souther.compiler.ARuleNoReadingTakesIn.about("right"));
+    }
+
     private static Read read(String source, String named, ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
@@ -60,7 +74,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols, policy), symbols);
+                RuleReadings.of(compilation, "demo"), policy), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -84,7 +98,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
+                RuleReadings.of(compilation, "demo"),
                 ReadAs.THE_COMPILATION_DOES);
     }
 
@@ -92,15 +106,26 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     private static final Value B = Value.text("B");
 
     /** {@code values} are what the position holds, and are the whole of what its rules leave it. */
-    private static void wholly(ValueSet values, FieldDomains read, String path) {
+    private static void wholly(ValueSet values, FieldDomains read, RuleKey path) {
         assertEquals(AdmissibleSet.complete(values), read.admits(path));
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void wholly(ValueSet values, FieldDomains read, String field) {
+        wholly(values, read, RuleKey.of(field));
     }
 
     /** {@code values} are what the position holds, the rules may leave fewer, and {@code why} is
      *  what stopped the reading short of them. */
     private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
-                                    String path) {
+                                    RuleKey path) {
         assertEquals(AdmissibleSet.partial(values, why), read.admits(path));
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
+                                    String field) {
+        asFarAsRead(values, why, read, RuleKey.of(field));
     }
 
     /**
@@ -123,9 +148,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 """, "R");
 
         ValueSet reported = ValueSet.oneOf(Set.of(Value.text("5"), Value.text("6")));
-        assertEquals(reported, read.admits("a").approximation(),
+        assertEquals(reported, read.admits(RuleKey.of("a")).approximation(),
                 "the values are the upper bound they always were");
-        assertNotEquals(AdmissibleSet.complete(reported), read.admits("a"),
+        assertNotEquals(AdmissibleSet.complete(reported), read.admits(RuleKey.of("a")),
                 "and the reading may not call them the whole of what the rules leave");
     }
 
@@ -138,7 +163,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant only = value == "A"
                 """, "Gender");
-        wholly(ValueSet.just(A), read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.just(A), read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -156,7 +181,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant shape = String.matches("[a-z]+", value)
-                """, "Code").admits(FieldDomains.THE_VALUE);
+                """, "Code").admits(RuleKey.THE_VALUE);
 
         assertEquals(AdmissibleSet.READ_IN_FULL, stated.completeness());
         assertTrue(stated.approximation().has(Value.text("ab")));
@@ -168,7 +193,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant shape = Bool.not(String.matches("[a-z]+", value))
-                """, "Code").admits(FieldDomains.THE_VALUE);
+                """, "Code").admits(RuleKey.THE_VALUE);
 
         assertEquals(AdmissibleSet.READ_IN_FULL, denied.completeness());
         assertFalse(denied.approximation().has(Value.text("ab")), "what the pattern takes is out");
@@ -186,7 +211,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || value == "B"
                 """, "Gender");
-        wholly(ValueSet.oneOf(Set.of(A, B)), read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.oneOf(Set.of(A, B)), read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -202,9 +227,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant either = value == "A" || String.startsWith("0",value)
+                    invariant either = value == "A" || UNREAD_VALUE
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /**
@@ -223,7 +248,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant either = left == "A" || String.startsWith("0",right)
+                    invariant either = left == "A" || UNREAD_RIGHT
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "left");
     }
@@ -232,7 +257,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      * And what such a position is told is that an alternative took it back, whatever the unread
      * branch was about.
      *
-     * <p>{@code left /= right} relates two positions and {@code code} is neither of them, so the
+     * <p>{@code left < right} relates two positions and {@code code} is neither of them, so the
      * reason the branch stopped is not a reason about {@code code}. Lent across, a report would
      * tell an author that a rule compares {@code code} with another position, and no rule does.
      *
@@ -248,7 +273,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Triple = { left: String, right: String, code: String }
-                    invariant either = left /= right || code == "A"
+                    invariant either = left < right || code == "A"
                 """, "Triple");
 
         asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "code");
@@ -298,7 +323,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      *
      * <p>{@code a == 5} admits every {@code b}, so the choice does and nothing about {@code b} went
      * unread — while that alternative stands. {@code a == 7} refuses every value it admits, and what
-     * is left is {@code a /= b} with {@code a} at 7, which is a rule this cannot read about a
+     * is left is {@code a < b} with {@code a} at 7, which is a rule this cannot read about a
      * {@code b} that is now not every value. A reading that had struck the rule off where the
      * choice was read would answer that the model leaves {@code b} every value and that this was
      * read in full.
@@ -309,7 +334,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data R = { a: Int, b: Int }
-                    invariant one = a == 5 || a /= b
+                    invariant one = a == 5 || a < b
                     invariant two = a == 7
                 """, "R");
 
@@ -348,7 +373,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         assertEquals(AdmissibleSet.wider(ValueSet.ANY, Set.of(
                         new AdmissibleSet.Widening.RuleUnread(UnreadReason.FORM_NOT_READ),
                         new AdmissibleSet.Widening.AlternativesNotSeparated())),
-                read.admits("a"));
+                read.admits(RuleKey.of("a")));
     }
 
     /**
@@ -367,9 +392,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant both = value == "A" && String.startsWith("A",value)
+                    invariant both = value == "A" && UNREAD_VALUE
                 """, "Gender");
-        asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /** And a rule it cannot read that names another position costs this one nothing at all.
@@ -383,7 +408,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant both = left == "A" && String.startsWith("A",right)
+                    invariant both = left == "A" && UNREAD_RIGHT
                 """, "Pair");
         wholly(ValueSet.just(A), read, "left");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
@@ -392,11 +417,15 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     /**
      * A rule relating two positions is told apart from one written in a form this cannot read.
      *
-     * <p>Both leave the positions open and neither is the other. Nothing about {@code left /= right}
+     * <p>Both leave the positions open and neither is the other. Nothing about {@code left < right}
      * was beyond this reading — both sides were recognised, and what it says is a fact about the
      * pair, which a set of one position's values is not. A regex over one of them is a form this
      * reading does not take apart, which is a fact about the reading and is lifted by different
      * work.
+     *
+     * <p>An ordering and not a denial, which is the relation this reading now holds: a denial
+     * between two positions is read, and what it leaves them is a relation beside the product
+     * rather than a rule that reached nothing.
      *
      * <p>Told apart where the reading gave up, since that is the only place both sides are still in
      * hand. Recovered afterwards from the spoiled positions alone, the two would be one answer.
@@ -407,7 +436,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant differ = left /= right
+                    invariant differ = left < right
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, related, "left");
         asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, related, "right");
@@ -416,9 +445,34 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Pair = { left: String, right: String }
-                    invariant shape = String.startsWith("A",left)
+                    invariant shape = UNREAD_LEFT
                 """, "Pair");
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, shaped, "left");
+    }
+
+    /**
+     * And a denial between two positions is not one of them either, because it is read.
+     *
+     * <p>The reason above is about a rule this reading recognised and could not turn into a set of
+     * one position's values. A denial is one it takes in — as a relation beside the product rather
+     * than as a set — so nothing about it went unread, and a position it names is one this reading
+     * speaks for. Left standing, the accounting would say the model draws a distinction this could
+     * not follow, and an author would be sent to a rule that was read in full.
+     *
+     * <p>What the positions hold is still every value. A denial narrows neither of them on its own,
+     * which is what parts being read from being narrowed.
+     */
+    @Test
+    void andADenialBetweenTwoPositionsIsReadRatherThanStoodOn() {
+        FieldDomains read = of("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant differ = left /= right
+                """, "Pair");
+
+        wholly(ValueSet.ANY, read, "left");
+        wholly(ValueSet.ANY, read, "right");
     }
 
     /**
@@ -436,7 +490,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Code = String
                     invariant same = value == value
-                """, "Code"), FieldDomains.THE_VALUE);
+                """, "Code"), RuleKey.THE_VALUE);
 
         FieldDomains fields = of("""
                 module demo
@@ -478,9 +532,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 module demo
 
                 data Gender = String
-                    invariant shape = String.startsWith("A",value)
+                    invariant shape = UNREAD_VALUE
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, RuleKey.THE_VALUE);
     }
 
     /** A position with no rules at all is open, and this can say so: the model divides it in no
@@ -492,7 +546,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Gender = String
                 """, "Gender");
-        wholly(ValueSet.ANY, read, FieldDomains.THE_VALUE);
+        wholly(ValueSet.ANY, read, RuleKey.THE_VALUE);
     }
 
     /** A denial over an enumeration leaves the cases it did not deny. */
@@ -516,7 +570,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         // the model settled rather than one a set happened to store them in, which for an immutable
         // copy is settled afresh on every run of the compiler.
         assertEquals(List.of(read.caseNamed("Green"), read.caseNamed("Blue")),
-                List.copyOf(((ValueSet.Finite) read.domains().admits("colour").approximation())
+                List.copyOf(((ValueSet.Finite) read.domains().admits(RuleKey.of("colour"))
+                        .approximation())
                         .values()));
     }
 
@@ -531,7 +586,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     @Test
     void aReadingOfNothingSpeaksForNoPosition() {
         asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE,
-                FieldDomains.THE_VALUE);
+                RuleKey.THE_VALUE);
         asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE, "anything");
     }
 
@@ -623,12 +678,17 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      *  read. Both, because either alone is half the claim: a position said to be handed on and
      *  narrowed anyway would be one this reading spoke for after all, and one read in full with no
      *  handoff recorded would be a subtree nobody is ever asked about. */
-    private static void handsOn(FieldDomains read, String path) {
+    private static void handsOn(FieldDomains read, RuleKey path) {
         wholly(ValueSet.ANY, read, path);
         assertTrue(read.handedOn().contains(path),
                 () -> path + " hands its rules on, and " + read.handedOn() + " says who does");
         assertTrue(read.everyRuleReachedAt(path),
                 () -> path + " is short of nothing: what is under it was never addressed to it");
+    }
+
+    /** The same, of the field the record's own rules call {@code field}. */
+    private static void handsOn(FieldDomains read, String field) {
+        handsOn(read, RuleKey.of(field));
     }
 
     /**

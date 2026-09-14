@@ -5,6 +5,7 @@ import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
@@ -21,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -60,6 +62,16 @@ class ProbedBytecodeTest {
         return compilation;
     }
 
+    /** The numbering of the bodies the classes below were generated from, asked of the check the
+     *  emitter reads too. Named apart from the plans this package's other tests build straight from
+     *  bodies, which have no compile behind them at all. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
+    }
+
     private static Map<String, ClassFileImage> probed(Compilation compilation) {
         souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
@@ -94,9 +106,8 @@ class ProbedBytecodeTest {
     @Test
     void aRunRecordsTheArmsItTook() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
-        Behavior submit = new Behavior(probed(compilation));
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
+        Behavior submit = new Behavior(probed(compilation), plan.identity());
 
         Set<Integer> negative = submit.armsFor(-1L);
         Set<Integer> cheap = submit.armsFor(50L);
@@ -108,6 +119,13 @@ class ProbedBytecodeTest {
         Set<Integer> between = new LinkedHashSet<>(negative);
         between.addAll(cheap);
         between.addAll(dear);
+        // Both families, because the sites are both and a run records each in its own. Counted
+        // over the arms alone this would be short by every comparison the plan numbered, and
+        // counted over one set holding both it would be the number this whole numbering exists to
+        // stop a reader working out for itself.
+        for (long cost : new long[] {-1L, 50L, 500L}) {
+            submit.comparisonsFor(cost).forEach(way -> between.add(way.at()));
+        }
         assertEquals(plan.sites().size(), between.size(),
                 "between them the three rows reach every site the plan numbered");
     }
@@ -116,13 +134,15 @@ class ProbedBytecodeTest {
      * shared between them would put every row's arms on every row. */
     @Test
     void oneThreadsArmsAreNotAnothers() throws Exception {
-        Behavior submit = new Behavior(probed(compiled()));
+        Compilation compilation = compiled();
+        NumberingIdentity under = checkedPlanOf(compilation).identity();
+        Behavior submit = new Behavior(probed(compilation), under);
         ExecutorService elsewhere = Executors.newSingleThreadExecutor();
         try {
-            Probe.begin();
+            Probe.begin(under);
             submit.apply(50L);
             Set<Integer> there = elsewhere.submit(() -> submit.armsFor(500L)).get();
-            Set<Integer> here = Probe.snapshot().taken();
+            Set<Integer> here = Probe.snapshot().arms();
             Probe.end();
 
             assertNotEquals(here, there);
@@ -132,14 +152,33 @@ class ProbedBytecodeTest {
         }
     }
 
-    /** Nothing collecting means nothing recorded, rather than something recorded somewhere. */
+    /**
+     * A run nobody is measuring lands nowhere, and there is no account of it to be had.
+     *
+     * <p>Both halves. The hits go nowhere rather than into whatever collected last, which is what
+     * the next row on this thread would otherwise start inside of; and asking what such a run did
+     * is refused rather than answered with an empty account. A number means a place under the
+     * numbering that handed it out, and a thread nothing began has none to name — so a snapshot
+     * there could only be a run under a numbering of nothing, which reads everywhere downstream as
+     * a row shown to have passed nowhere.
+     */
     @Test
-    void aRunNobodyIsMeasuringRecordsNothing() {
-        Behavior submit = new Behavior(probed(compiled()));
+    void aRunNobodyIsMeasuringLeavesNoAccountAtAll() {
+        Compilation compilation = compiled();
+        NumberingIdentity under = checkedPlanOf(compilation).identity();
+        Behavior submit = new Behavior(probed(compilation), under);
 
         submit.apply(50L);   // outside begin()/end()
 
-        assertEquals(Set.of(), Probe.snapshot().taken());
+        assertThrows(IllegalStateException.class, Probe::snapshot,
+                "a row nobody watched has no account, which is not an account of nothing");
+        // And the hits landed nowhere: a recording begun now is a recording of what happens now.
+        Probe.begin(under);
+        try {
+            assertEquals(Set.of(), Probe.snapshot().arms());
+        } finally {
+            Probe.end();
+        }
     }
 
     // --- what the shipped classes do not mention -------------------------------------------------
@@ -183,9 +222,10 @@ class ProbedBytecodeTest {
     @Test
     void aProbedClassAnswersWhatThePlainOneDoes() {
         Compilation compilation = compiled();
-        Behavior measured = new Behavior(probed(compilation));
+        NumberingIdentity under = checkedPlanOf(compilation).identity();
+        Behavior measured = new Behavior(probed(compilation), under);
         Behavior plain = new Behavior(compilation.db()
-                .ask(new Output.Linked(compilation.modules().get(0))).value());
+                .ask(new Output.Linked(compilation.modules().get(0))).value(), under);
 
         for (long cost : new long[] {-1L, 0L, 50L, 100L, 101L, 500L}) {
             assertEquals(String.valueOf(plain.apply(cost)), String.valueOf(measured.apply(cost)),
@@ -199,6 +239,10 @@ class ProbedBytecodeTest {
      * <p>An import's arms belong to its own module and are numbered against its own plan. Measuring
      * them here would put hits into a run whose report has no plan to read them by, so the linked set
      * replaces this module's classes and leaves the rest alone.
+     *
+     * <p>Every class that ships and can be run, and the one that cannot. A module's declarations are
+     * written onto a class of their own for an importer to read them off, and nothing loads it to
+     * run it, so what an evaluation is handed is what ships less that one.
      */
     @Test
     void onlyThisModulesClassesAreTheMeasuredOnes() {
@@ -212,7 +256,10 @@ class ProbedBytecodeTest {
         assertNotNull(plain);
         assertNotNull(linked);
 
-        assertEquals(plain.keySet(), linked.keySet(), "the same classes are loadable");
+        Set<String> loadable = new LinkedHashSet<>(plain.keySet());
+        assertTrue(loadable.remove(Emitted.declarations(module)),
+                "what ships carries the class an importer reads the declarations off");
+        assertEquals(loadable, linked.keySet(), "the same classes are loadable");
         for (Map.Entry<String, ClassFileImage> each : linked.entrySet()) {
             ClassFileImage want = measured.containsKey(each.getKey())
                     ? measured.get(each.getKey()) : plain.get(each.getKey());
@@ -231,8 +278,10 @@ class ProbedBytecodeTest {
 
         private final Object instance;
         private final Method apply;
+        private final NumberingIdentity under;
 
-        Behavior(Map<String, ClassFileImage> classes) {
+        Behavior(Map<String, ClassFileImage> classes, NumberingIdentity under) {
+            this.under = under;
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     ProbedBytecodeTest.class.getClassLoader());
@@ -257,11 +306,22 @@ class ProbedBytecodeTest {
             }
         }
 
-        Set<Integer> armsFor(long cost) {
-            Probe.begin();
+        /** The ways out of the comparisons this run evaluated. */
+        Set<ComparisonOutcome> comparisonsFor(long cost) {
+            Probe.begin(under);
             try {
                 apply(cost);
-                return Probe.snapshot().taken();
+                return Probe.snapshot().comparisons();
+            } finally {
+                Probe.end();
+            }
+        }
+
+        Set<Integer> armsFor(long cost) {
+            Probe.begin(under);
+            try {
+                apply(cost);
+                return Probe.snapshot().arms();
             } finally {
                 Probe.end();
             }

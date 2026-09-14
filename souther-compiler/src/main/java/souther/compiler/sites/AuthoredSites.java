@@ -5,9 +5,12 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -61,12 +64,36 @@ public final class AuthoredSites {
         this.byExtent = Map.copyOf(byExtent);
     }
 
-    /** The occurrences of {@code module}, or why they could not be told apart. */
-    public static Census of(Hir.Module module) {
+    /**
+     * What one walk of a module's source found: its occurrences, and where each construct it wrote
+     * stands.
+     *
+     * <p>Four answers and one walk, which is the whole of why they are made together. A module
+     * wrote what it wrote once, and four walks of it would be four answers to that — agreeing
+     * until the day one of them was taught something the others were not.
+     *
+     * <p>The forks, the conditions and the applications are answered whether or not the occurrences
+     * could be told apart. Two expressions written over one stretch of source is a fact about
+     * extents; which fork, which condition and which application is which is settled by an identity
+     * the extents play no part in.
+     */
+    public record Walked(Census census, WrittenForks forks, WrittenConditions conditions,
+                         WrittenApplications applications) {}
+
+    /** {@code module} walked, once. */
+    public static Walked walk(Hir.Module module) {
         Walk walk = new Walk();
         walk.module(module);
-        return walk.refusal != null ? walk.refusal
-                : new Census.Identified(new AuthoredSites(walk.byExtent));
+        return new Walked(walk.refusal != null ? walk.refusal
+                : new Census.Identified(new AuthoredSites(walk.byExtent)),
+                new WrittenForks(walk.byOrigin),
+                new WrittenConditions(walk.byCondition),
+                new WrittenApplications(walk.byApplication));
+    }
+
+    /** The occurrences of {@code module}, or why they could not be told apart. */
+    public static Census of(Hir.Module module) {
+        return walk(module).census();
     }
 
     /** How many occurrences were found. What a measurement reads, and what says a walk reached a
@@ -154,14 +181,93 @@ public final class AuthoredSites {
     /**
      * The walk, and what it refuses.
      *
-     * <p>It stops at the first refusal rather than gathering them: what a second one would say is
-     * that the same rule is broken again, and the revision is already not one an occurrence can be
-     * named in.
+     * <p>It keeps the first refusal rather than gathering them: what a second one would say is that
+     * the same rule is broken again, and the revision is already not one an occurrence can be named
+     * in. It goes on walking all the same, because the forks under a stretch of source two
+     * expressions were written over are still forks the module wrote.
      */
     private static final class Walk {
 
         private final Map<Region, Hir.Expr> byExtent = new LinkedHashMap<>();
+        /** Where each fork this module wrote stands, under the identity a copy cannot change.
+         *  Filled beside {@link #byExtent} and never instead of it: they answer two questions about
+         *  one walk, and a second walk would be a second answer to the first. */
+        private final Map<SourceConstructOrigin, SourcePos> byOrigin = new LinkedHashMap<>();
+        /** Where each condition this module wrote stands, under an identity a copy cannot change.
+         *  Beside {@link #byOrigin} rather than inside it: what a body takes an arm of and what a
+         *  row had to satisfy are two questions, and a reader holds one of them. */
+        private final Map<WrittenCondition, SourcePos> byCondition = new LinkedHashMap<>();
+        /** Where each application this module wrote stands, under the identity a copy cannot
+         *  change. Beside the other two rather than inside them: a rule read off a call is neither
+         *  a fork a body takes an arm of nor a condition a row had to satisfy. */
+        private final Map<SourceConstructOrigin, SourcePos> byApplication = new LinkedHashMap<>();
         private Census refusal;
+
+        /**
+         * Files where a fork the source wrote is.
+         *
+         * <p>Called beside {@code take} by the kinds a body takes an arm of, so that a kind given
+         * arms later is a kind whose neighbours here are visibly doing this. A kind that carries an
+         * origin and is no fork is left out and says so where it is walked. The first stands: a
+         * fork is written once, and a tree holding a second node under one origin is a copy, which
+         * the module that wrote it does not have.
+         */
+        private void wrote(SourceConstructOrigin origin, SourcePos at) {
+            if (origin != null && origin.isWritten() && at != null) {
+                byOrigin.putIfAbsent(origin, at);
+            }
+        }
+
+        /**
+         * Files where an application the source wrote stands.
+         *
+         * <p>Every one of them, and what the call states is not read here — for the reason
+         * {@link #wroteCondition(Hir.Binary)} gives about an operator. Which applications state a
+         * rule about the strings at a position is the reading's answer, and asking it here would be
+         * that recognition made a second time by a walk with none of what the reading knows.
+         *
+         * <p>Only an application an author wrote, which is what {@link ApplicationOrigin.Written}
+         * is and refuses anything else of. A call a pass composed states nothing, so a place filed
+         * for one would answer a question about a rule with somewhere no author can be sent. The
+         * first stands: an application is written once, and a tree holding a second node under one
+         * origin is a copy, which the module that wrote it does not have.
+         */
+        private void wroteApplication(Hir.Apply apply) {
+            if (apply.application() instanceof ApplicationOrigin.Written written
+                    && apply.pos() != null) {
+                byApplication.putIfAbsent(written.application(), apply.pos());
+            }
+        }
+
+        /**
+         * Files where a condition the source wrote is.
+         *
+         * <p>Where the condition itself is and never where the construct its identity is borrowed
+         * from is. An arm takes its name from the fork because the source wrote no construct at the
+         * arm; a report about it is still about the arm, and a reader sent to the fork would be
+         * sent past the thing the sentence is about.
+         */
+        private void wroteCondition(WrittenCondition which, SourcePos at) {
+            if (at != null) {
+                byCondition.putIfAbsent(which, at);
+            }
+        }
+
+        /**
+         * Files where {@code binary} stands.
+         *
+         * <p>Every one of them, and the operator is not read here. Which binaries a reading takes
+         * for conditions is that reading's answer — a comparison and a connective are conditions
+         * and arithmetic is not — and asking the operator here would be that recognition made a
+         * second time, in a walk that has none of what the reading knows. So what this files is
+         * where each stands, and a reading that recognised one has somewhere to point; the surplus
+         * is places nobody asks for.
+         */
+        private void wroteCondition(Hir.Binary binary) {
+            if (binary.origin() != null && binary.origin().isWritten()) {
+                wroteCondition(new WrittenCondition.Construct(binary.origin()), binary.pos());
+            }
+        }
 
         void module(Hir.Module module) {
             if (module == null) {
@@ -193,8 +299,6 @@ public final class AuthoredSites {
                     for (Hir.InvariantClause clause : data.invariants()) {
                         expr(clause.expr());
                     }
-                    data.decoder().ifPresent(this::decoder);
-                    data.encoder().ifPresent(this::encoder);
                 }
                 case Hir.SumData _, Hir.UnitData _ -> { }
             }
@@ -234,62 +338,25 @@ public final class AuthoredSites {
                 for (Hir.With with : row.withs()) {
                     expr(with.value());
                 }
-                expr(row.expected());
+                switch (row.expected()) {
+                    case Hir.Expected.Asserted(Hir.Expr answer) -> expr(answer);
+                    // A row whose answer is owed and one whose answer did not parse write nothing
+                    // here, so there is nothing written for a site to be at.
+                    case Hir.Expected.Unanswered _, Hir.Expected.Unwritten _ -> { }
+                }
             }
         }
 
         private void fake(Hir.Fake fake) {
             expr(fake.target());
             for (Hir.FakeRow row : fake.rows()) {
-                for (Hir.Expr input : row.inputs()) {
-                    expr(input);
+                switch (row.matched()) {
+                    case Hir.Matched.Arguments(List<Hir.Expr> inputs) -> inputs.forEach(this::expr);
+                    // A row that answers for anything writes no arguments, so there is nothing
+                    // written for a site to be at.
+                    case Hir.Matched.Anything _ -> { }
                 }
                 expr(row.output());
-            }
-        }
-
-        private void decoder(Hir.DecoderDef decoder) {
-            switch (decoder) {
-                case Hir.PrimDecoder _ -> { }
-                case Hir.ObjectDecoder object -> construct(object.result());
-                case Hir.NewtypeDecoder newtype -> construct(newtype.result());
-            }
-        }
-
-        private void construct(Hir.Construct construct) {
-            if (construct == null) {
-                return;
-            }
-            for (Hir.FieldInit init : construct.inits()) {
-                expr(init.value());
-            }
-        }
-
-        private void encoder(Hir.EncoderDef encoder) {
-            raw(encoder.result());
-        }
-
-        private void raw(Hir.RawExpr raw) {
-            switch (raw) {
-                case null -> { }
-                case Hir.TextRaw text -> expr(text.arg());
-                case Hir.IntRaw n -> expr(n.arg());
-                case Hir.BoolRaw b -> expr(b.arg());
-                case Hir.DecimalRaw d -> expr(d.arg());
-                case Hir.IsoTextRaw iso -> expr(iso.arg());
-                case Hir.EncodeRaw encode -> expr(encode.arg());
-                case Hir.ListEnc list -> expr(list.source());
-                case Hir.SetEnc set -> expr(set.source());
-                case Hir.MapEnc map -> expr(map.source());
-                case Hir.OptionRaw option -> {
-                    expr(option.access());
-                    raw(option.inner());
-                }
-                case Hir.ObjectRaw object -> {
-                    for (Hir.RawEntry entry : object.entries()) {
-                        raw(entry.value());
-                    }
-                }
             }
         }
 
@@ -304,7 +371,7 @@ public final class AuthoredSites {
          * not rest on that.
          */
         private void expr(Hir.Expr e) {
-            if (e == null || refusal != null) {
+            if (e == null) {
                 return;
             }
             switch (e) {
@@ -320,11 +387,13 @@ public final class AuthoredSites {
                 }
                 case Hir.Apply apply -> {
                     take(e);
+                    wroteApplication(apply);
                     expr(apply.function());
                     each(apply.args());
                 }
                 case Hir.Binary binary -> {
                     take(e);
+                    wroteCondition(binary);
                     expr(binary.left());
                     expr(binary.right());
                 }
@@ -339,25 +408,39 @@ public final class AuthoredSites {
                 }
                 case Hir.Match match -> {
                     take(e);
+                    wrote(match.origin(), match.pos());
                     expr(match.scrutinee());
-                    for (Hir.Case one : match.cases()) {
+                    for (int part = 0; part < match.cases().size(); part++) {
+                        Hir.Case one = match.cases().get(part);
+                        // Reaching the arm is the condition that the value turned out to be the
+                        // case the arm selects, and where that is written is the arm. The fork's
+                        // origin is what names it, since the source wrote no construct here of its
+                        // own; its place is the fork's and is not what a reader is shown.
+                        if (match.origin() != null && match.origin().isWritten()) {
+                            wroteCondition(new WrittenCondition.ForkArm(match.origin(), part),
+                                    one.pos());
+                        }
                         expr(one.body());
                     }
                 }
                 case Hir.If branch -> {
                     take(e);
+                    wrote(branch.origin(), branch.pos());
                     expr(branch.cond());
                     expr(branch.then());
                     expr(branch.els());
                 }
                 case Hir.IfConstructed attempt -> {
                     take(e);
+                    wrote(attempt.origin(), attempt.pos());
                     expr(attempt.construct());
                     expr(attempt.then());
                     for (Hir.ElseArm arm : attempt.els()) {
                         expr(arm.body());
                     }
                 }
+                // A collection literal carries an origin and is no fork: nothing takes an arm of
+                // one, so there is no arm of it for a report to be about.
                 case Hir.ListLit list -> {
                     take(e);
                     each(list.elements());
@@ -376,6 +459,13 @@ public final class AuthoredSites {
                 }
                 case Hir.ListComp comp -> {
                     take(e);
+                    // The comprehension itself is not a fork; each of its guards lowers to one, and
+                    // where that fork is written is where the guard is. Asked of the comprehension,
+                    // which is what numbers them, so this and the lowering cannot come to number
+                    // the guards differently.
+                    for (int guard = 0; guard < comp.guards().size(); guard++) {
+                        wrote(comp.forkOfGuard(guard), comp.guards().get(guard).pos());
+                    }
                     expr(comp.element());
                     each(comp.guards());
                 }
@@ -408,6 +498,12 @@ public final class AuthoredSites {
          * a stretch of one text, and one that is not says nothing about how far anything runs.
          */
         private void take(Hir.Expr written) {
+            // The first refusal is the one reported, and the walk goes on: what a second would say
+            // is that the same rule is broken again, while the forks under it are still forks this
+            // module wrote and are still to be found.
+            if (refusal != null) {
+                return;
+            }
             Region extent = written.region();
             if (extent == null) {
                 return;

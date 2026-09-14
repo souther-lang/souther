@@ -93,8 +93,10 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
                 denominator.multiply(other.denominator));
     }
 
-    /** @throws ArithmeticException where {@code other} is zero, which is a caller's mistake and not
-     *  a value this can hold */
+    /** This over {@code other}.
+     *
+     *  @throws ArithmeticException where {@code other} is zero, which is a caller's mistake and not
+     *          a value this can hold */
     public Rational dividedBy(Rational other) {
         if (other.signum() == 0) {
             throw new ArithmeticException("divided by zero");

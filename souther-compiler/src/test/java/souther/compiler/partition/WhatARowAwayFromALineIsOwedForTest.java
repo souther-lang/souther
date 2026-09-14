@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -11,6 +12,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -93,9 +95,8 @@ class WhatARowAwayFromALineIsOwedForTest {
      */
     @Test
     void aRunStoppingAtALineIsOwedToThatLine() {
-        RegionBasis basis = onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN);
+        FarEnd end = onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN);
 
-        FarEnd end = ((RegionBasis.Beside) basis).farEnd();
         assertInstanceOf(FarEnd.AtALine.class, end, "the run stops at a line somebody wrote");
         assertEquals("100", ((FarEnd.AtALine) end).where().at().written().key(),
                 "which is the comparison's, at a hundred");
@@ -104,10 +105,9 @@ class WhatARowAwayFromALineIsOwedForTest {
     /** And where nothing stops it, the run is owed to the line and to the order's own end. */
     @Test
     void aRunNothingStopsIsOwedToTheEndOfTheOrder() {
-        RegionBasis basis = onlyBasis(AMOUNT, "example.owed", "bare", "a = 0", PointRole.IN);
+        FarEnd basis = onlyBasis(AMOUNT, "example.owed", "bare", "a = 0", PointRole.IN);
 
-        assertEquals(new RegionBasis.Beside(new FarEnd.AtTheOrderEnd(
-                        souther.compiler.numeric.Towards.ABOVE)), basis,
+        assertEquals(new FarEnd.AtTheOrderEnd(Towards.ABOVE), basis,
                 "an Int runs on, and no rule says where it stops");
     }
 
@@ -119,25 +119,32 @@ class WhatARowAwayFromALineIsOwedForTest {
      */
     @Test
     void aRunStoppingWhereTheRulesLeaveOffIsOwedToNoLine() {
-        RegionBasis basis =
+        FarEnd basis =
                 onlyBasis(LENGTH, "example.extent", "take", "String.length(n) = 9", PointRole.IN);
 
-        assertInstanceOf(FarEnd.AtTheDomain.class, ((RegionBasis.Beside) basis).farEnd(),
+        assertInstanceOf(FarEnd.AtTheDomain.class, basis,
                 "the run stops where every rule leaves the quantity together");
     }
 
     /**
-     * What a rule that names a value leaves is not a run and is owed for the line alone.
+     * What a rule that names a value leaves is two runs, and each is owed for where it stops.
      *
-     * <p>{@code c.value == 5} puts every other value in one class. That class is two runs with the
-     * named value between them, so there is no far end to be owed to — and which value is left out
-     * is the line's, which a debt is keyed on already.
+     * <p>{@code c.value == 5} puts every other value in one class, and that class is the run under
+     * the named value and the run over it with the value between them. They are two runs of the
+     * arrangement like any other, so a row in one says nothing about the other and each is owed to
+     * the line together with whatever stops it on the far side.
      */
     @Test
-    void whatARuleNamingAValueLeavesIsOwedForTheLineAlone() {
-        assertEquals(RegionBasis.TheRest.INSTANCE,
-                onlyBasis(SINGLED, "example.singled", "check", "c = 5", PointRole.OUT),
-                "everything but the value the rule names, and nothing beside it");
+    void whatARuleNamingAValueLeavesIsTwoRunsOwedApart() {
+        FarEnd below = onlyBasis(SINGLED, "example.singled", "check", "c = 5",
+                new DomainPoint.InTheRegion(Towards.BELOW));
+        FarEnd above = onlyBasis(SINGLED, "example.singled", "check", "c = 5",
+                new DomainPoint.InTheRegion(Towards.ABOVE));
+
+        assertNotNull(below, "the run under the value stops somewhere");
+        assertNotNull(above, "and so does the run over it");
+        assertNotEquals(below, above,
+                "the two stop in different places, so a row in one is no row in the other");
     }
 
     /** Two rules of one behavior cutting at one number, with a clause's line below them. */
@@ -175,19 +182,26 @@ class WhatARowAwayFromALineIsOwedForTest {
         assertEquals(2, answer.bases().size(),
                 () -> "two comparisons stop the run at ten: " + answer.bases());
         assertEquals(1, answer.bases().stream()
-                        .map(each -> ((FarEnd.AtALine) ((RegionBasis.Beside) each).farEnd())
-                                .where().key())
+                        .map(each -> ((FarEnd.AtALine) each).where().key())
                         .distinct().count(),
                 "at one place, since the values part once");
     }
 
     /** The one thing a row at that point is owed for, refusing where there is more than one. */
-    private static RegionBasis onlyBasis(String model, String module, String behavior, String label,
+    private static FarEnd onlyBasis(String model, String module, String behavior, String label,
                                          PointRole role) {
+        Border line = borderAt(model, module, behavior, label).border();
+        return onlyBasis(model, module, behavior, label, line.theOne(role));
+    }
+
+    /** The same, of a point named by where it is — which is what tells two runs of one line
+     *  apart. */
+    private static FarEnd onlyBasis(String model, String module, String behavior, String label,
+                                         DomainPoint role) {
         PointAnswer answer = borderAt(model, module, behavior, label).border().answer(role);
         assertInstanceOf(PointAnswer.InRegion.class, answer,
                 () -> "the " + role + " point of " + label + " is a region");
-        List<RegionBasis> bases = answer.bases();
+        List<FarEnd> bases = answer.bases();
         assertEquals(1, bases.size(), () -> "one thing stops this run: " + bases);
         return bases.get(0);
     }

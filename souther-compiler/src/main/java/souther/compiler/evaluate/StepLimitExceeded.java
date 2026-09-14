@@ -14,6 +14,8 @@ package souther.compiler.evaluate;
 public final class StepLimitExceeded extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
+    /** The one of these there is; see {@link DepthLimitExceeded#INSTANCE}. */
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     public static final StepLimitExceeded INSTANCE = new StepLimitExceeded();
 
     private StepLimitExceeded() {

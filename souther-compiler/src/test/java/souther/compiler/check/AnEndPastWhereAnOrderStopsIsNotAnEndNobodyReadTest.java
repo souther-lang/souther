@@ -33,10 +33,18 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
         return new Hir.IntLit(value, NOWHERE, null);
     }
 
+    /** What {@code op} places, which is an order for every operator this reading takes. Read off
+     *  the operator rather than written out, so the reading is asked what the language says the
+     *  comparison places. */
+    private static ComparisonClaim.Cut ordering(BinOp op) {
+        return assertInstanceOf(ComparisonClaim.Cut.class, ComparisonPlacement.of(op),
+                () -> op + " orders the values either side of what it names");
+    }
+
     /** The ordinary reading, which sharpens a strict end onto the count beside it. */
     @Test
     void aStrictEndInsideTheOrderLandsOnTheCountBesideIt() {
-        InvariantBound.Read read = InvariantBound.at(BinOp.GT, whole(5), Carrier.WHOLE);
+        InvariantBound.Read read = InvariantBound.at(ordering(BinOp.GT), whole(5), Carrier.WHOLE);
 
         InvariantBound.Read.AnEnd end = assertInstanceOf(InvariantBound.Read.AnEnd.class, read);
         assertEquals(new InvariantBound(true, Endpoint.inclusive(Count.of(6))), end.bound());
@@ -52,28 +60,16 @@ class AnEndPastWhereAnOrderStopsIsNotAnEndNobodyReadTest {
     @Test
     void aStrictEndAtTheLastValueOfTheOrderLeavesNothing() {
         InvariantBound.Read read =
-                InvariantBound.at(BinOp.GT, whole(Long.MAX_VALUE), Carrier.WHOLE);
+                InvariantBound.at(ordering(BinOp.GT), whole(Long.MAX_VALUE), Carrier.WHOLE);
 
         assertInstanceOf(InvariantBound.Read.PastWhereTheOrderStops.class, read);
     }
 
-    /**
-     * An equality states no end, which is the answer the one above was being given.
-     *
-     * <p>Kept apart because a reader acting on them differs: nothing follows about the position from
-     * a rule this did not read, and everything follows from a rule that steps off the order.
-     */
-    @Test
-    void anEqualityStatesNoEnd() {
-        assertInstanceOf(InvariantBound.Read.NoEnd.class,
-                InvariantBound.at(BinOp.EQ, whole(5), Carrier.WHOLE));
-    }
-
-    /** And so does an ordering against something the order has no value for. */
+    /** An ordering against something the order has no value for states no end. */
     @Test
     void aLiteralTheOrderDoesNotReadStatesNoEnd() {
         assertInstanceOf(InvariantBound.Read.NoEnd.class,
-                InvariantBound.at(BinOp.GT, new Hir.StringLit("x", NOWHERE, null),
+                InvariantBound.at(ordering(BinOp.GT), new Hir.StringLit("x", NOWHERE, null),
                         Carrier.WHOLE));
     }
 }

@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -72,9 +72,9 @@ class AComparisonIsReadWhereverItStandsTest {
                 .ask(new Adequacy.PathReached("d")).value();
         assertNotNull(answers, "the model under test compiles");
         return answers.get("charge").found().entrySet().stream()
-                .filter(each -> each.getKey() instanceof ControlPointId.ComparisonPoint)
+                .filter(each -> each.getKey() instanceof ControlPlace.Outcome)
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
-                .map(each -> ((ControlPointId.ComparisonPoint) each.getKey()).held())
+                .map(each -> ((ControlPlace.Outcome) each.getKey()).held())
                 .toList();
     }
 
@@ -104,9 +104,8 @@ class AComparisonIsReadWhereverItStandsTest {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        Map<ControlPointId, Reachability> found = compilation.db()
+        CoverageSites.Plan plan = checked.plan();
+        Map<ControlPlace, Reachability> found = compilation.db()
                 .ask(new Adequacy.PathReached(module)).value().get(behavior).found();
         List<String> out = new ArrayList<>();
         unanswered(checked.behaviorBodies().get(behavior), plan, found, out);
@@ -115,13 +114,16 @@ class AComparisonIsReadWhereverItStandsTest {
 
     /** The traversal is this test's and which nodes are comparisons is the plan's. */
     private static void unanswered(Core e, CoverageSites.Plan plan,
-                                   Map<ControlPointId, Reachability> found, List<String> out) {
+                                   Map<ControlPlace, Reachability> found, List<String> out) {
         if (e instanceof Core.Binary node) {
-            for (boolean result : new boolean[] {true, false}) {
-                plan.outcomeOf(node, result)
-                        .filter(where -> !found.containsKey(where))
-                        .ifPresent(where -> out.add(node.op() + "@" + node.pos() + " " + result));
-            }
+            plan.comparisons().occurrenceAt(node).ifPresent(which -> {
+                for (boolean result : new boolean[] {true, false}) {
+                    plan.outcomeOf(which, result)
+                            .filter(where -> !found.containsKey(where))
+                            .ifPresent(where ->
+                                    out.add(node.op() + "@" + node.pos() + " " + result));
+                }
+            });
         }
         Core.forEachChild(e, child -> unanswered(child, plan, found, out));
     }

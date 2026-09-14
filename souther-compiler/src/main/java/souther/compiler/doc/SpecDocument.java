@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,14 +44,6 @@ public final class SpecDocument {
      */
     private static final Pattern INLINE_ANCHOR = Pattern.compile("\\[\\[([a-zA-Z0-9_-]+)]]");
     private static final Pattern HEADING = Pattern.compile("^(={2,})\\s+(.*\\S)\\s*$");
-    /**
-     * The delimiter of a block AsciiDoc takes as it stands: listing {@code ----}, literal
-     * {@code ....}, passthrough {@code ++++}, and the comment block {@code ////}. Four or more of
-     * the character repeated, and the block runs to the line that repeats it exactly — a shorter
-     * run, or a different character, is content rather than the end of it.
-     */
-    private static final Pattern OPAQUE_DELIMITER = Pattern.compile("^([-.+/])\\1{3,}$");
-
     /** A section: the first anchor written above its heading, its title, heading level (2 for
      *  {@code ==}), and body up to the next heading of the same or a higher level. */
     public record Section(String anchor, String title, int level, String body) {}
@@ -350,8 +343,8 @@ public final class SpecDocument {
             Section s = inOrder.get(i);
             // The anchor is asked of the same text the title is: an anchor is what a reader has in
             // hand, and a section whose prose never writes its own anchor is most of them.
-            Match.Held held = how.held((s.title() + " " + s.anchor()).toLowerCase(),
-                    ownTexts.get(i).toLowerCase(), terms);
+            Match.Held held = how.held((s.title() + " " + s.anchor()).toLowerCase(Locale.ROOT),
+                    ownTexts.get(i).toLowerCase(Locale.ROOT), terms);
             if (held.matched() > 0) {
                 hits.add(new Hit(s, held.named(), held.matched(), held.occurrences(),
                         snippet(ownTexts.get(i), terms, how)));
@@ -373,7 +366,8 @@ public final class SpecDocument {
         String line = body.lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("|") && !l.startsWith("["))
-                .filter(l -> terms.stream().anyMatch(term -> how.says(l.toLowerCase(), term)))
+                .filter(l -> terms.stream()
+                        .anyMatch(term -> how.says(l.toLowerCase(Locale.ROOT), term)))
                 .findFirst()
                 .orElseGet(() -> body.lines().map(String::strip)
                         .filter(l -> !l.isEmpty() && !l.startsWith("[") && !l.startsWith("|"))
@@ -382,7 +376,7 @@ public final class SpecDocument {
         if (plain.length() <= SNIPPET_WIDTH) {
             return plain;
         }
-        int at = terms.stream().mapToInt(term -> plain.toLowerCase().indexOf(term))
+        int at = terms.stream().mapToInt(term -> plain.toLowerCase(Locale.ROOT).indexOf(term))
                 .filter(found -> found >= 0).min().orElse(-1);
         int from = at < 0 ? 0 : Math.max(0, at - SNIPPET_WIDTH / 3);
         int to = Math.min(plain.length(), from + SNIPPET_WIDTH);

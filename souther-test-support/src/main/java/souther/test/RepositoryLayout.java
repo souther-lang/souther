@@ -12,9 +12,17 @@ import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -53,11 +61,16 @@ public final class RepositoryLayout {
 
     private final Path root;
     private final List<Path> modules;
+    private final Map<String, Path> byTheNameTheRootPomWrites;
     private final List<Path> sourceTrees;
 
-    private RepositoryLayout(Path root, List<Path> modules, List<Path> sourceTrees) {
+    /** {@code named} in the order the root pom names them, which is the order {@link #modules}
+     *  answers in: the pom is what that order is read from, and nothing here sorts it again. */
+    private RepositoryLayout(Path root, Map<String, Path> named, List<Path> sourceTrees) {
         this.root = root;
-        this.modules = List.copyOf(modules);
+        this.byTheNameTheRootPomWrites =
+                Collections.unmodifiableMap(new LinkedHashMap<>(named));
+        this.modules = List.copyOf(named.values());
         this.sourceTrees = List.copyOf(sourceTrees);
     }
 
@@ -86,7 +99,7 @@ public final class RepositoryLayout {
      */
     public static RepositoryLayout of(Path start) {
         Path root = rootAbove(start.toAbsolutePath().normalize());
-        List<Path> modules = new ArrayList<>();
+        LinkedHashMap<String, Path> modules = new LinkedHashMap<>();
         List<Path> sourceTrees = new ArrayList<>();
         for (String named : modulesNamedBy(root.resolve("pom.xml"))) {
             Path module = root.resolve(named).normalize();
@@ -96,7 +109,11 @@ public final class RepositoryLayout {
                         + " repository, and a check that walked one module fewer would answer"
                         + " about the rest and say nothing about this one");
             }
-            modules.add(module);
+            // Two entries under one name would leave whoever asked for it holding whichever came
+            // first, which is the reading answering a question it cannot tell apart.
+            if (modules.put(named, module) != null) {
+                throw new IllegalStateException("the root pom names the module " + named + " twice");
+            }
             Path src = module.resolve("src");
             if (Files.isDirectory(src)) {
                 sourceTrees.add(src);
@@ -113,6 +130,156 @@ public final class RepositoryLayout {
     /** Every module directory the root pom names, in the order it names them. */
     public List<Path> modules() {
         return modules;
+    }
+
+    /**
+     * The directory of the module called {@code named}.
+     *
+     * <p>What a check reaching another module's files wants, and the whole of what it should have
+     * to say. Naming the module is naming a subject — which module's fixtures, which module's
+     * corpus — and it stays written where the check is. Where that module is, is not a subject: a
+     * check working it out from where it happens to be standing answers about whatever directory
+     * the build was invoked from, and that is what this takes off it.
+     *
+     * <p>{@code named} as the root pom writes it, which is what a module is called in this reactor.
+     * A directory's own name is not that: the pom may reach a module through a directory above it,
+     * and two modules under different ones can end in the same name — so a lookup on the last step
+     * of the path would answer a question it cannot tell apart, and would answer it with whichever
+     * the pom happened to name first. The pom's names are unique because this reads them into one
+     * answer per name and refuses a second.
+     *
+     * <p>Refused rather than resolved where the root pom names no such module, so a module renamed
+     * out from under a check stops that check rather than handing it a directory that is not there.
+     */
+    public Path moduleNamed(String named) {
+        Path module = byTheNameTheRootPomWrites.get(named);
+        if (module == null) {
+            throw new IllegalArgumentException("the root pom names no module called " + named
+                    + ": it names " + byTheNameTheRootPomWrites.keySet());
+        }
+        return module;
+    }
+
+    /**
+     * What a build calls the directory it writes into.
+     *
+     * <p>Where a build puts what it made is a fact about how this repository is laid out, and it
+     * belongs beside the rest of them. Written out wherever it is wanted, it is a fact each writer
+     * has taken on: a check that says it is one that would go on looking in the old place, and a
+     * walk that says it in order to leave it out is one more copy to find when it moves.
+     *
+     * <p>Kept here rather than answered. A caller handed this can build the path to a build's
+     * output, which is the thing not writing it down was for, so what is answered is whether
+     * something is under one ({@link #isUnderBuildOutput}) or names one
+     * ({@link #namesBuildOutput}), and never the name itself.
+     */
+    private static String whereABuildWrites() {
+        return "target";
+    }
+
+    /**
+     * Whether {@code said} names the directory a build writes into, at any step of a path.
+     *
+     * <p>For a rule about what is written down rather than about what is on disk: a check that
+     * works out where compiled output is has said this somewhere, and saying it is what such a
+     * check has in common however it then goes looking.
+     */
+    public static boolean namesBuildOutput(String said) {
+        for (String step : said.split("[/\\\\]")) {
+            if (step.equals(whereABuildWrites())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code said}, taken together, names a directory a build compiles into.
+     *
+     * <p>For a rule about a check that works out where the compiled classes are. What such a check
+     * says is the directory a build writes to and the one it compiles into, and it says them as
+     * whatever a path is built out of — one text with both steps, or a step at a time. So they are
+     * asked of everything one method says rather than of one text: written a step at a time, no
+     * single text names an output.
+     *
+     * <p>Narrower than {@link #namesBuildOutput}, and narrower on purpose. A build writes more than
+     * classes — a jar, a launcher — and a check that runs what was shipped names where it was put
+     * without going looking for anybody's classes.
+     */
+    public static boolean namesCompiledOutput(Collection<String> said) {
+        boolean writes = false;
+        boolean compiled = false;
+        for (String each : said) {
+            for (String step : each.split("[/\\\\]")) {
+                writes |= step.equals(whereABuildWrites());
+                compiled |= COMPILED_INTO.contains(step);
+            }
+        }
+        return writes && compiled;
+    }
+
+    /** What a build calls the directories it compiles into, under the one it writes to. */
+    private static final Set<String> COMPILED_INTO = Set.of("classes", "test-classes");
+
+    /**
+     * What {@code module} compiled its {@code phase} sources to, or nothing where it built none.
+     *
+     * <p>A reading and not a place. What a caller does with a compiled output is ask what it holds,
+     * and what it would do with the path is walk it — which reads once more the files the reading
+     * exists to read once. So where a module's output is stays worked out here, beside the rest of
+     * what this knows about how the repository is laid out.
+     *
+     * <p>Nothing where the module built none, because that is two different things to two callers.
+     * A check about every module is entitled to treat a module that has sources and no output as a
+     * hole; a check about whichever module holds a name is entitled to look in the next one.
+     *
+     * @param phase {@code main} or {@code test}, as {@link #javaTreeOf} takes it
+     */
+    public Optional<CompiledClasses> compiledOutputOf(Path module, String phase) {
+        Path at = module.resolve(whereABuildWrites()).resolve(switch (phase) {
+            case "main" -> "classes";
+            case "test" -> "test-classes";
+            default -> throw new IllegalArgumentException(
+                    phase + " is not a phase a module compiles: main and test are");
+        });
+        return isThere(at) ? Optional.of(CompiledClasses.at(at)) : Optional.empty();
+    }
+
+    /**
+     * Whether {@code at} is a directory, where not being able to tell is not the same as no.
+     *
+     * <p>Nothing where a module built none is a fact a caller acts on — a check reads the next
+     * output, or passes over a module with no tests of its own. That this process could not look is
+     * not that fact, and answering both with the same no hands a caller the one it asked for
+     * whichever it met. What is not there is an answer; anything else that stops the look is a
+     * failure and says so.
+     */
+    private static boolean isThere(Path at) {
+        try {
+            return Files.readAttributes(at, BasicFileAttributes.class).isDirectory();
+        } catch (NoSuchFileException e) {
+            return false;
+        } catch (IOException e) {
+            throw new UncheckedIOException(at + " cannot be looked at, so whether a build wrote"
+                    + " anything there is a question this cannot answer", e);
+        }
+    }
+
+    /**
+     * Whether {@code file} is something a build wrote rather than something somebody did.
+     *
+     * <p>Asked of a walk that means to read what the repository holds: what a build wrote is a copy
+     * of something already counted, or output derived from it, and a walk that took both would
+     * report the same source twice and call the second one somebody's work.
+     */
+    public boolean isUnderBuildOutput(Path file) {
+        Path absolute = file.toAbsolutePath().normalize();
+        for (Path module : modules) {
+            if (absolute.startsWith(module.resolve(whereABuildWrites()))) {
+                return true;
+            }
+        }
+        return absolute.startsWith(root.resolve(whereABuildWrites()));
     }
 
     /**
@@ -139,13 +306,34 @@ public final class RepositoryLayout {
     public List<Path> mainTrees(String kind) {
         List<Path> out = new ArrayList<>();
         for (Path module : modules) {
-            Path tree = module.resolve("src").resolve("main").resolve(kind);
-            if (Files.isDirectory(tree)) {
+            Path tree = treeOf(module, "main", kind);
+            if (tree != null) {
                 out.add(tree);
             }
         }
         out.sort(Path::compareTo);
         return List.copyOf(out);
+    }
+
+    /**
+     * The {@code src/<phase>/java} of {@code module}, or null where it has none.
+     *
+     * <p>The roots the compiler is handed apart, which is what a check that reads sources for what
+     * a name means has to keep apart too. A name written in a test source resolves against that
+     * module's test root and its main root; one written in a main source resolves against the main
+     * root alone, whatever the tests beside it declare. Read off a path instead, which root a
+     * source is under is worked out by whoever asks and the answer is a spelling.
+     */
+    public Path javaTreeOf(Path module, String phase) {
+        return treeOf(module, phase, "java");
+    }
+
+    /** Where a module keeps one kind of source, or null where it keeps none of that kind. Beside
+     *  {@link #isThere} and for its reason: a tree this cannot look at is not a tree that is not
+     *  there. */
+    private static Path treeOf(Path module, String phase, String kind) {
+        Path tree = module.resolve("src").resolve(phase).resolve(kind);
+        return isThere(tree) ? tree : null;
     }
 
     /**
@@ -177,6 +365,124 @@ public final class RepositoryLayout {
     /** Every {@code .sou} in a source tree, sorted. */
     public List<Path> southerSources() {
         return filesUnderSourceTrees(".sou");
+    }
+
+    /** The module that ships the default library, and where under its resources it keeps it. */
+    private static final String SHIPS_THE_PRELUDE = "souther-compiler";
+    private static final String THE_PRELUDE_IS_UNDER = "souther";
+
+    /**
+     * The Souther sources this repository ships as its default library, sorted.
+     *
+     * <p>A population and not a directory. Three checks swept it and each had worked out where it
+     * was, so a source added to it reached whichever of them had been edited and the rest went on
+     * reporting a pass over the sources they knew about. Asked here, they sweep the same population
+     * or none of them does.
+     *
+     * <p>Narrower than {@link #southerSources}, which is every Souther source the repository holds:
+     * the models written to ask one question are sources too, and a check about the library is not
+     * about those. Filtering the wider answer down would be a second account of which of them are
+     * the library, kept beside the one the compiler ships by.
+     *
+     * <p>A corpus that is not there is refused rather than swept over. A sweep of no sources is a
+     * sweep every row of which holds, and a round trip over nothing reproduces everything it was
+     * given: the check reports a pass. That refusal belongs with the answer, because the place that
+     * hands the sources over is the only one that can tell a missing corpus from an empty one.
+     *
+     * <p>Walked once, because the repository does not move while a run happens. The checks that
+     * sweep the library ask for it once per property they hold over it, and the library is the same
+     * answer each time; only where the sources are is held, so what each check makes of them stays
+     * its own.
+     */
+    public List<Path> preludeSources() {
+        if (prelude == null) {
+            prelude = walkThePrelude();
+        }
+        return prelude;
+    }
+
+    private List<Path> prelude;
+
+    private List<Path> walkThePrelude() {
+        Path at = moduleNamed(SHIPS_THE_PRELUDE)
+                .resolve("src").resolve("main").resolve("resources").resolve(THE_PRELUDE_IS_UNDER);
+        if (!isThere(at)) {
+            throw new IllegalStateException(at + " is not there, so a sweep of the default library"
+                    + " would be a sweep of no sources and would report a pass over all of them");
+        }
+        List<Path> found = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(at)) {
+            walk.filter(Files::isRegularFile)
+                    .filter(each -> each.getFileName().toString().endsWith(".sou"))
+                    .forEach(found::add);
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
+        if (found.isEmpty()) {
+            throw new IllegalStateException(at + " holds no Souther source: the default library is"
+                    + " what the checks that sweep it are about, and there is none here");
+        }
+        found.sort(Path::compareTo);
+        return List.copyOf(found);
+    }
+
+    /**
+     * The one source of the default library that {@code module} names, without its suffix.
+     *
+     * <p>Looked for among {@link #preludeSources} rather than built from the same steps, so that
+     * what this hands back is one of the population above and not a path that would be one if it
+     * were there. A name the library does not have is refused with what it does have.
+     */
+    public Path preludeSourceOf(String module) {
+        List<Path> sources = preludeSources();
+        List<Path> named = sources.stream()
+                .filter(each -> each.getFileName().toString().equals(module + ".sou")).toList();
+        if (named.size() != 1) {
+            throw new IllegalArgumentException("the default library has " + named.size()
+                    + " sources called " + module + ".sou, among "
+                    + sources.stream().map(each -> each.getFileName().toString()).toList());
+        }
+        return named.getFirst();
+    }
+
+    /**
+     * Whether {@code said}, taken together, reaches a module by walking out of where it stands.
+     *
+     * <p>For a rule about a check that works out where another module's files are. What such a
+     * check says is a step out of its own directory and the name of the module it means to land in,
+     * and it says them as whatever a path is built out of — one text with both steps, or a step at
+     * a time — so they are asked of everything one method says rather than of one text.
+     *
+     * <p>The module's name is not what this refuses. Naming a module is naming a subject, and a
+     * check reaching for one asks {@link #moduleNamed} where it is; the {@code ..} beside it is the
+     * check answering that for itself, out of the directory the build was invoked from.
+     */
+    public boolean reachesAModuleThroughAParent(Collection<String> said) {
+        boolean walksOut = false;
+        boolean lands = false;
+        for (String each : said) {
+            for (String step : each.split("[/\\\\]")) {
+                walksOut |= step.equals("..");
+                lands |= isAModuleDirectory(step);
+            }
+        }
+        return walksOut && lands;
+    }
+
+    /**
+     * Whether {@code step} is what a module's directory is called.
+     *
+     * <p>The directory's own name and not the name the root pom writes, which is what
+     * {@link #moduleNamed} takes: this is asked of one step of a path, and a path reaches a module
+     * through the directory it is in whatever the pom calls the module.
+     */
+    private boolean isAModuleDirectory(String step) {
+        for (Path module : modules) {
+            if (module.getFileName().toString().equals(step)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

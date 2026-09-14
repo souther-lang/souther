@@ -1,14 +1,22 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.StringFacts;
+import souther.compiler.values.StringMachineAnswers;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.ConjoinedAdmissibleValues;
+import souther.compiler.values.UnreadReason;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.core.Evaluated;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.InvariantMessage;
@@ -16,11 +24,16 @@ import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtent;
+import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -83,41 +97,55 @@ import java.util.stream.Stream;
  * asks them in order.
  *
  * <p>The walk mirrors {@link TotalityChecker}: a {@code switch} over {@link Core} threading an
- * immutable environment. It is fail-open for what it cannot analyze — an expression or a shape it
- * has no rule for is swallowed, so a limit of this analysis can never reject a valid program. It is
- * not fail-open for this analysis disagreeing with itself: {@link Terms.OneTermTwoKinds} says one
- * name was given two values, and swallowing it produces a behavior with no findings, which is what a
- * behavior whose invariants all discharge produces. That one is rethrown ({@link #gaveUp}).
+ * immutable environment. It falls open on the limits it has named — a clause it cannot type, a call
+ * its expansion left standing that it has no signature for ({@link SecondaryClauseReading}) — so a
+ * limit of this analysis can never reject a valid program. It falls open on nothing else. A failure
+ * nobody named a limit is this compiler disagreeing with itself, and swallowing one produces a
+ * behavior with no findings, which is what a behavior whose invariants all discharge produces.
  */
 public final class InvariantChecker {
 
     /**
      * What one analysis came to.
      *
-     * <p>{@code status} is not about the model. It says whether the findings are all of the findings
-     * there were: this check is fail-open for what it cannot read, so an analysis that fell over on
-     * one of those produces exactly what an analysis that finished and found nothing produces, and a
-     * consumer reading only the two lists cannot tell them apart. Production does not need to — the run-time check is the backstop
-     * either way — but a test asserting that a construction is discharged is asserting something
-     * about an analysis that ran, and without this it would pass just as well on one that did not.
+     * <p>{@code status} is not about the model. It says whether an analysis ran: one that never had
+     * a representation to read produces exactly what one that read everything and found nothing
+     * produces, and a consumer reading only the two lists cannot tell them apart. Production does
+     * not need to — the run-time check is the backstop either way — but a test asserting that a
+     * construction is discharged is asserting something about an analysis that ran, and without this
+     * it would pass just as well on one that did not.
      */
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {}
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {
 
-    /** Whether an analysis produced all of the findings there were. {@code ABANDONED} covers both a
-     * walk that fell over and a body there was none of: neither ran to the end, and the findings are
-     * as complete in one case as in the other, which is not at all. */
+        /** What an analysis that was never run has to say, which is nothing and says so. A caller
+         *  without the representation this reads takes this rather than running the analysis over
+         *  an empty one — the same findings, and the opposite claim about the module. */
+        static Findings notRun() {
+            return new Findings(List.of(), List.of(), Status.ABANDONED);
+        }
+    }
+
+    /**
+     * Whether an analysis ran at all. {@code ABANDONED} is a body there was no representation of,
+     * which is not analyzed rather than analyzed and found to hold nothing.
+     *
+     * <p>Not the same question as whether every clause was read. A clause this reading stopped on
+     * comes back {@link TypedClause.Stopped} and the walk goes on to the next one, so a run can be
+     * {@code COMPLETE} and still have met a limit; what it met is recorded where it was met
+     * ({@link #gaveUp}), and what a construction was left owing is the reading's own answer.
+     */
     enum Status { COMPLETE, ABANDONED }
 
-    /** One analysis that fell over, and what it fell over on. */
-    record GaveUp(String where, RuntimeException why) {}
+    /** One analysis that stopped, and the limit it stopped on. */
+    record GaveUp(String where, WhatTheCheckCannotRead why) {}
 
     /**
      * Where a test in this package reads the analyses that fell over, and null everywhere else.
      *
-     * <p>Beside {@link #WATCHING} and for the same reason. Falling over is silent by design: the
-     * catch that makes this check unable to reject a valid program also makes it unable to say it
-     * stopped. A body with no discharge to run is not recorded here — there was nothing to fall over
-     * on — so what lands here is only what the analysis could not get through.
+     * <p>Beside {@link #WATCHING} and for the same reason. Stopping is silent by design: what keeps
+     * this check from ever rejecting a valid program also keeps it from saying it stopped. A body
+     * with no discharge to run is not recorded here — there was nothing to stop on — so what lands
+     * here is only the limits this reading actually met.
      */
     static List<GaveUp> GAVE_UP;
 
@@ -186,15 +214,23 @@ public final class InvariantChecker {
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
      * one the backend emits from.
      *
-     * <p>{@code invariants} holds the clauses of the module being checked. A type another module
-     * declares is not among them and its clauses are read off its declaration, which for a module
-     * reached through its published classes is the declaration that module published, read back by
-     * this front end (spec §published-modules). Either way the clause read here is the rule its
-     * author wrote, so where a declaration was written does not decide what can be discharged
-     * against it (spec §invariant-discharge-representation).
+     * <p>{@code rules} says where the declarations' clauses are answered from, asked by a
+     * declaration's address. Where the declaration was written decides nothing about what is read
+     * of it: one this module wrote, one a module compiled beside it wrote, and one published as
+     * classes and read back by this front end (spec §published-modules) all come back as what their
+     * own module expanded, and a construction of any of them comes to the same verdict (spec
+     * §invariant-discharge-representation).
+     *
+     * <p>What it may answer instead is that a declaration's clauses could not be worked out at all.
+     * That is a rule this check did not reach and is recorded as one; it is never read as a
+     * declaration with no rules, which is the same empty list and the opposite fact.
+     *
+     * <p>The scope those clauses mean something in is the source's, and is what this check reads
+     * every name in. One value and not a scope beside a lookup, so that what is read and what a
+     * reading made here is filed under cannot come from two places.
      */
-    public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
-                         Map<ValueName.Behavior, StatedContract> contracts) {
+    public record Source(Hir.Expr body, ElementProvenance elements, RuleReadingContext reading,
+                         Map<ValueName.Behavior, AssumedContract> contracts) {
 
         public Source {
             contracts = Map.copyOf(contracts);
@@ -227,20 +263,31 @@ public final class InvariantChecker {
     private final Predicates predicates;
     /** Whether an evaluation can answer, which is what decides that a continuation is reached. */
     private final PathCompletion completion;
+    /**
+     * The answers for the one declaration this check is seeding, where it is seeding one: what a
+     * plan of it admits where somebody made that already, and where the strings a set holds stop.
+     *
+     * <p>A declaration is read again for every conjunct whose contribution to an end has to be
+     * worked out by asking what the rules leave without it, and each of those readings meets the
+     * same sets. Where a set stops does not turn on which reading is asking, so it is not this
+     * reading's to keep: it is asked of these, which answer from what the store keeps for the
+     * declaration, from what the revision has worked out about the sets themselves, and walk what
+     * neither of them has.
+     */
+    private StringMachineAnswers answers;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
-    private InvariantChecker(Symbols symbols,
-                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                             ReadingPolicy policy) {
-        this(symbols, dischargeInvariants, Map.of(), policy);
+    private InvariantChecker(RuleReadingContext reading) {
+        this(reading, Map.of());
     }
 
-    private InvariantChecker(Symbols symbols,
-                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                             Map<ValueName.Behavior, StatedContract> contracts,
-                             ReadingPolicy policy) {
-        this.engine = new PathEngine(symbols, dischargeInvariants, contracts, policy);
+    private InvariantChecker(RuleReadingContext reading,
+                             Map<ValueName.Behavior, AssumedContract> contracts) {
+        this.engine = new PathEngine(reading, contracts);
+        // Borrowing nothing, since no declaration is being seeded yet, and knowing what the
+        // revision knows: where a set stops is the same answer whoever met it.
+        this.answers = StringMachineAnswers.unborrowed(reading.readings().extents());
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.symbols = engine.symbols();
@@ -257,18 +304,19 @@ public final class InvariantChecker {
      * in the representation the check reads.
      */
     public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                               TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                                               ReadingPolicy policy) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
+                                               TypeSymbol.AtModule named,
+                                               RuleReadingContext reading) {
+        InvariantChecker c = new InvariantChecker(reading);
         // Read over the declaration's own fields, each standing for itself: a construction hands one
         // value per field, so a clause naming a field names something wherever it is built. These
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        return c.capabilityOf(clause, read -> c.clauses.typed(read, named, data),
-                Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
+        return c.capabilityOf(clause,
+                _ -> c.clauses.typed(clause.asExpanded(), named),
+                Denotations.none().locations(c.clauses.bindingsOf(named).values(),
                         c.terms::placeSubject, c.terms::placeTerm),
-                data.name());
+                named.name());
     }
 
     /**
@@ -295,16 +343,18 @@ public final class InvariantChecker {
      * is nothing left to get wrong: it says where it was written and what it comes to, and the two
      * were made together ({@link ClausesForDischarge}).
      *
-     * @param clause the conjunct, as written and as this check reads it
-     * @param typing what types the read form here — a declaration's fields, a signature's names —
-     *               answering {@link TypedClause.Stopped} where typing it did not finish
+     * @param conjunct the conjunct, as written and as this check reads it
      * @param locations the names it may read, each standing for itself
+     * @param reading the world the rule is read in — the symbols that type the form here and the
+     *                invariants it may reach, what the reading may spend where it does not finish,
+     *                and where it borrows what has already been made of a declaration. Handed over
+     *                whole rather than assembled by each reader
      * @param describing what is being read, for the record a fail-open leaves behind
      */
     static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
-                                        Denotations locations, Symbols symbols,
-                                        ReadingPolicy policy, String describing) {
-        return new InvariantChecker(symbols, Map.of(), policy)
+                                        Denotations locations, RuleReadingContext reading,
+                                        String describing) {
+        return new InvariantChecker(reading)
                 .capabilityOf(conjunct.stated(), conjunct.at(), locations, describing);
     }
 
@@ -315,29 +365,18 @@ public final class InvariantChecker {
         TypedClause type(Hir.Expr read);
     }
 
+    /**
+     * What the reading made of {@code clause}, over the tree its reader types it into.
+     *
+     * <p>The typing is total. What a clause can stop this reading on is settled where the clause is
+     * typed ({@link SecondaryClauseReading}) and arrives as {@link TypedClause.Stopped}; the reading
+     * below reaches {@link CapabilityResult.AnalysisStopped} from that answer. A clause that could
+     * not be typed is not a clause found to be outside the fragment: being inside it is what was
+     * never asked.
+     */
     private ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
                                          Typing typing, Denotations locations, String describing) {
-        return capabilityOf(typed(typing, clause.read(), describing), clause.at(), locations,
-                describing);
-    }
-
-    /**
-     * {@code read} as its reader types it, or that typing it did not finish.
-     *
-     * <p>Fail-open, as the walk is, and the two ways it can stop answer alike:
-     * {@link TypedClause.Stopped} from this catch, and the same from the typing having caught
-     * something of its own ({@link Clauses#typed}). Which is why the reading below reaches
-     * {@link CapabilityResult.AnalysisStopped} from the answer and not only from here. A clause that
-     * could not be typed is not a clause found to be outside the fragment: being inside it is what
-     * was never asked.
-     */
-    private TypedClause typed(Typing typing, Hir.Expr read, String describing) {
-        try {
-            return typing.type(read);
-        } catch (RuntimeException why) {
-            gaveUp("typing " + describing, why);
-            return new TypedClause.Stopped();
-        }
+        return capabilityOf(typing.type(clause.read()), clause.at(), locations, describing);
     }
 
     /** The obligation {@code at} raises, and what came of reading {@code stated} for it. */
@@ -360,22 +399,14 @@ public final class InvariantChecker {
         if (!(typed instanceof TypedClause.Typed it)) {
             return new CapabilityResult.AnalysisStopped("typing " + describing);
         }
-        try {
-            return CapabilityResult.of(
-                    predicates.assumed(it.value(), locations, false));
-        } catch (RuntimeException why) {
-            // Fail-open, as the walk is — and said as a stop rather than as a conclusion, because
-            // what the clause is outside of is what this did not find out.
-            gaveUp("capabilityOf " + describing, why);
-            return new CapabilityResult.AnalysisStopped("capabilityOf " + describing);
-        }
+        return CapabilityResult.of(predicates.assumed(it.value(), locations, false));
     }
 
     /**
      * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
      * the atom each field is named by.
      *
-     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for what it says of
+     * <p>The same seeding a parameter of that type gets ({@link PathEngine#seedAt}), read for what it says of
      * the values instead of for what it discharges. A record's own clause relates its fields; each
      * field's type bounds that field on its own; and both land in one state over the same atoms,
      * which is what lets a bound reach one field through another.
@@ -395,21 +426,29 @@ public final class InvariantChecker {
      *                        where one could not be typed or held nothing this reads — the bounds are
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
-     * @param notGathered where a clause of the value did not reach the readings at all, as the
-     *                 paths the stops happened at. A clause that could not be typed, and a walk that
-     *                 stopped leaving rules nobody else reads ({@link PathEngine#leftBy}): in both,
-     *                 a rule of the declaration is one no reading here ever saw, so no reading can
-     *                 say it took that part of the declaration in. Not a walk that handed the rules
-     *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
-     *                 than nobody's
+     * @param notGathered where a clause of the value did not reach the readings at all, and what
+     *                 stopped it there. A clause that could not be typed, and a walk that stopped
+     *                 leaving rules nobody else reads ({@link PathEngine#leftBy}): in both, a rule
+     *                 of the declaration is one no reading here ever saw, so no reading can say it
+     *                 took that part of the declaration in. Not a walk that handed the rules on —
+     *                 those are {@link #handedOn()}, and they are somebody's to read rather than
+     *                 nobody's
      *
-     *                 <p>Where and not whether, because a rule that narrows a position names it,
-     *                 and a clause written under one field can name no position outside that field.
-     *                 Recorded as one flag for the value, a stop under a regex-bounded code spoiled
-     *                 the plain {@code Int} beside it, and a report said a rule about that
-     *                 {@code Int} may have gone unread when nothing was written about it at all.
-     *                 A stop at {@link FieldDomains#THE_VALUE} is the declaration's own clause and
-     *                 does reach every position of it.
+     *                 <p><b>And what stopped, not only where.</b> Seven things leave a position here
+     *                 and they are not one fact: a walk that went as far as the fields it could
+     *                 afford is one a run allowed more would go past, and a clause nothing could
+     *                 type is not. Held as the paths alone, the seven arrived downstream as one word
+     *                 and anything asking a question the paths do not answer had nothing to read.
+     *                 More than one per position, because a position can be short in more than one
+     *                 way
+     *
+     *                 <p>Where and not whether, because a rule that narrows what stands at a name
+     *                 writes that name, and a clause written under one field writes no name outside
+     *                 that field. Recorded as one flag for the value, a stop under a regex-bounded
+     *                 code spoiled the plain {@code Int} beside it, and a report said a rule about
+     *                 that {@code Int} may have gone unread when nothing was written about it at
+     *                 all. A stop at {@link RuleKey#THE_VALUE} is the declaration's own clause and
+     *                 does reach every name of it.
      *
      *                 <p>A different question from {@code everyClauseRead}, which is one reading's
      *                 account of the clauses it was handed: a clause that reading could not turn
@@ -419,41 +458,102 @@ public final class InvariantChecker {
      * @param handedOn the positions this reading ended at with a declaration still to be read under
      *                 them, which is an obligation on whoever walks the positions rather than
      *                 anything wrong here — see {@link Gathering#handedOn}
+     * @param admitted which values may stand at each name the reading wrote. Answered here because
+     *                 a name is filed under more than one subject and what it admits is the sets of
+     *                 those met — which is a machine, and the purse that pays for it is the one this
+     *                 reading was read under. Left to a caller, the caller would need that purse to
+     *                 finish an answer this reading started, and every later holder of this reading
+     *                 would be holding one
+     * @param unreadAt everything that stopped the reading from speaking for each name, empty where
+     *                 nothing did. Beside {@link #admitted} and never after it: a name whose sets
+     *                 could not be met is one this widened, and the two arrive together or a reader
+     *                 is handed every value with nothing saying why
+     * @param notSeparated the names whose values this reading cannot show are the whole of what the
+     *                 rules leave
+     * @param stringMachines what this reading answered its string questions from and what it made
+     *                 answering them. Carried by the reading because the reading is what came to
+     *                 them: asked of the lender afterwards, what comes back is what was there to
+     *                 borrow before this reading built anything
      */
-    record Seeded(ConstraintState<FactSubject> constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
-                  boolean everyClauseRead, Set<String> notGathered,
-                  Set<String> unreadOfEveryValue, Set<String> handedOn,
-                  Map<RuleRef, Map<Core, PartRead>> readBy,
-                  Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
+    record Seeded(ConstraintState<FactSubject> constraints, Map<RuleKey, FactSubject> atoms,
+                  Map<RuleKey, FactSubject> keys,
+                  Map<RuleKey, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
+                  boolean everyClauseRead, Map<RuleKey, Set<RulesMissed>> notGathered,
+                  Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
+                  List<Written> readings,
+                  Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
+                  Map<RuleKey, ValueSet> admitted,
+                  Map<RuleKey, List<UnreadReason>> unreadAt,
+                  Set<RuleKey> notSeparated,
+                  StringFacts stringMachines,
+                  Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
+                  Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
+                  BoundaryState derived, SettledOrderEnvelope settledOrder) {
 
         /** The atom each count is recorded against, for a reader that wants the subject and not
          *  which operation it is a count of. Projected rather than kept beside {@link #held()}: two
          *  maps of one thing are what this pair was before (#1027). */
-        Map<String, FactSubject> heldAtoms() {
-            Map<String, FactSubject> out = new LinkedHashMap<>();
+        Map<RuleKey, FactSubject> heldAtoms() {
+            Map<RuleKey, FactSubject> out = new LinkedHashMap<>();
             held.forEach((path, counted) -> out.put(path, counted.atom()));
             return out;
         }
 
-        public Seeded {
-            notGathered = Set.copyOf(notGathered);
-            unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
-            handedOn = Set.copyOf(handedOn);
-            // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
-            // iterates in an order salted once per JVM run, and what is read off these is a list of
-            // causes a report prints.
-            readBy = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
+        /**
+         * Both subjects the name {@code path} answers to.
+         *
+         * <p>A number has one of each and everything else has the second, and a clause is filed
+         * under whichever the reading recognised. Answered here because which subjects a name is
+         * filed under is how this reading files them: read from outside, a caller would be walking
+         * two of these maps and would be answering for a filing it does not own.
+         */
+        List<FactSubject> named(RuleKey path) {
+            return InvariantChecker.named(atoms, keys, path);
         }
 
-        /** What a walk that fell over comes to: no position named, no rule read, and saying so of
-         *  every position, since nothing here knows which of them the rules were about. */
-        static Seeded nothingRead() {
-            return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of()),
-                    new ReadingEvidence(),
-                    false, Set.of(FieldDomains.THE_VALUE), Set.of(FieldDomains.THE_VALUE),
-                    Set.of(), Map.of(), Map.of());
+        /** Every name this reading wrote — see {@link InvariantChecker#written}. */
+        Set<RuleKey> written() {
+            return InvariantChecker.written(atoms, keys);
+        }
+
+        /**
+         * Whether a declaration this reading reached wrote clauses nobody could work out.
+         *
+         * <p>One of the ways a rule goes ungathered and not all of them. A reading that stopped
+         * where it could afford to go no further has said nothing about a rule failing to arrive,
+         * and the two decide different things: the first is met again by a wider run, and the
+         * second is a rule the model states that nothing here has read. A reader that turns the
+         * lack into a refusal to publish an answer at all wants this one and not
+         * {@link FieldDomains#everyRuleReachedAt}, which is every stop there is.
+         *
+         * <p>Its own declarations and the ones it reaches through a spread alike. Which of them the
+         * clauses were missing from is not recorded, because a clause of any declaration reached
+         * can be about any name of this one — so what the reading is short of is the reading's and
+         * not one name's.
+         */
+        boolean clausesNotExpanded() {
+            return notGathered.values().stream().flatMap(Set::stream)
+                    .anyMatch(why -> why instanceof RulesMissed.ClausesNotExpanded);
+        }
+
+        public Seeded {
+            // Insertion order: what is read off this is a list of causes a report prints, and the
+            // causes at one position are printed in the order the reading met them.
+            Map<RuleKey, Set<RulesMissed>> missed = new LinkedHashMap<>();
+            notGathered.forEach((path, why) -> missed.put(path,
+                    Collections.unmodifiableSet(new LinkedHashSet<>(why))));
+            notGathered = Collections.unmodifiableMap(missed);
+            unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
+            handedOn = Set.copyOf(handedOn);
+            // In the order the readings were made, which is the order the declarations write their
+            // clauses: what is read off these is a list of causes a report prints.
+            readings = List.copyOf(readings);
+            // In the order the declaration writes its names, for the reason above: what is read off
+            // these is what a report says about each place, and a walk over a salted order would
+            // list them by a rule of this JVM run's.
+            admitted = Collections.unmodifiableMap(new LinkedHashMap<>(admitted));
+            unreadAt = Collections.unmodifiableMap(new LinkedHashMap<>(unreadAt));
+            notSeparated = Collections.unmodifiableSet(new LinkedHashSet<>(notSeparated));
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -488,60 +588,212 @@ public final class InvariantChecker {
      *                       them still being read
      * @param stopAt         which declarations are not read at all
      */
-    record Reach(RulesLeftOut withoutClauses, java.util.function.Predicate<TypeSymbol> stopAt) {
+    record Reach(RulesLeftOut withoutClauses, PartsLeftOut withoutParts,
+                 java.util.function.Predicate<TypeSymbol> stopAt) {
 
         /** Every rule, wherever it is written. */
-        static final Reach EVERYTHING = new Reach(RulesLeftOut.NONE, _ -> false);
+        static final Reach EVERYTHING =
+                new Reach(RulesLeftOut.NONE, PartsLeftOut.NONE, _ -> false);
+
+        /**
+         * Whether this reads the declaration whole: every rule it wrote, at every name it reaches.
+         *
+         * <p>Asked here rather than compared where it matters, because what a reader wants to know
+         * is whether the reading it is about to ask for is the declaration's own — and a reader
+         * that wrote the comparison out would be deciding what that means again wherever it wrote
+         * it.
+         *
+         * <p>It answers by being that reach and not by reading itself, so what keeps it true is
+         * that every way of asking for one answers with {@link #EVERYTHING} where what it was given
+         * leaves nothing out. {@link #withoutClausesOf} is the one that cannot: what it is given is
+         * a test, and whether a test ever matches is not a question about the test.
+         */
+        boolean everything() {
+            return this == EVERYTHING;
+        }
 
         /** Every rule but the ones {@code these} names wrote. */
         static Reach withoutClausesOf(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(RulesLeftOut.writtenOn(these), _ -> false);
+            return new Reach(RulesLeftOut.writtenOn(these), PartsLeftOut.NONE, _ -> false);
         }
 
-        /** Every rule that is not reached through one of {@code these}, they being supposed to hold
-         * values whatever is written under them. */
-        static Reach stoppingAt(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(RulesLeftOut.NONE, these);
+        /**
+         * Every rule, with one conjunct of one of them left out.
+         *
+         * <p>What a reader asking what that conjunct was holding compares against. Everything else
+         * the declaration says is still read, which is the whole of the difference from
+         * {@link #withoutClausesOf}: a clause has as many conjuncts as the author wrote, and taking
+         * the clause away answers for all of them at once.
+         */
+        static Reach withoutParts(java.util.Set<PartId<RuleRef.Invariant>> parts) {
+            return parts.isEmpty() ? EVERYTHING
+                    : new Reach(RulesLeftOut.NONE, PartsLeftOut.without(parts), _ -> false);
+        }
+
+        /**
+         * Every rule that is not reached through one of {@code these}, they being supposed to hold
+         * values whatever is written under them.
+         *
+         * <p>A set and not a test of one. Supposing nothing is reading the declaration whole, and
+         * said as a test that answers no it is a reading nobody can see is that one: a caller
+         * holding it would read the declaration again for want of a way to ask. So what is supposed
+         * is handed over as what it is, and an empty one is {@link #EVERYTHING}.
+         */
+        static Reach stoppingAt(Set<TypeSymbol> these) {
+            Set<TypeSymbol> supposed = Set.copyOf(these);
+            return supposed.isEmpty() ? EVERYTHING
+                    : new Reach(RulesLeftOut.NONE, PartsLeftOut.NONE, supposed::contains);
         }
     }
 
-    /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
-     * nothing about, which is the same answer as a declaration with no rules — so nothing about the
-     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
-     * caught ({@link #gaveUp}). */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy) {
-        return seedFields(named, data, symbols, policy, Map.of());
+    /** {@link Seeded} for one declaration, asking {@code machines} for what somebody has already
+     * made of its string rules before building any of it. A declaration this cannot read is one
+     * whose fields it says nothing about, which is the same answer as a declaration with no rules —
+     * so nothing about the declaration throws. {@link Terms.OneTermTwoKinds} is not about the
+     * declaration, and nothing below here catches it. */
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy, DeclarationReadings machines) {
+        return seedFields(named, source, policy, Map.of(), Reach.EVERYTHING, machines);
     }
 
     /**
-     * {@link Seeded} with some of the fields already settled at a value.
+     * The same, read in the world a walk carries.
      *
-     * <p>What is left for the others, given those. The same domain and the same closure — settling a
-     * field is one more assertion into it — so what comes back is the range each remaining field can
-     * still take, which is where a row completing that assignment has to look.
+     * <p>What a reader under a walk asks. It is handed the world the reading it stands inside was
+     * made in, so where it borrows from is already decided — including where that world was bounded
+     * for a reading under way ({@link RuleReadingContext#whileTheAnswerIsMade}), which a reader
+     * choosing a lender for itself would be choosing past.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled) {
-        return seedFields(named, data, symbols, policy, settled, Reach.EVERYTHING);
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingContext reading) {
+        return seedFields(named, reading.source(), reading.policy(), reading.readings());
+    }
+
+    /** The same, reading for itself. */
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy) {
+        return seedFields(named, source, policy, DeclarationReadings.NONE);
+    }
+
+    /** The same, with some of the fields already settled at a value, reading for itself. */
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
+        return seedFields(named, source, policy, settled, Reach.EVERYTHING,
+                DeclarationReadings.NONE);
+    }
+
+    /** The same, reading only as far as {@code reach} says, and reading for itself. */
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
+                             Reach reach) {
+        return seedFields(named, source, policy, settled, reach, DeclarationReadings.NONE);
     }
 
     /**
-     * The same, reading only as far as {@code reach} says at each name it meets.
+     * The same, with some of the fields settled at a value and reading only as far as {@code reach}
+     * says at each name it meets.
      *
-     * <p>What a rule did is read by asking what happens without it. Which clause moved an edge is not
-     * something the closure records — it answers with a number and not with how it got there — and
-     * this is that question put to the same reader rather than answered by a second one: seed the
-     * value again without one declaration's clauses, and an end that moves is an end that
+     * <p>What is left for the others, given those. The same domain and the same closure — settling
+     * a field is one more assertion into it — so what comes back is the range each remaining field
+     * can still take, which is where a row completing that assignment has to look.
+     *
+     * <p>What a rule did is read by asking what happens without it. Which clause moved an edge is
+     * not something the closure records — it answers with a number and not with how it got there —
+     * and this is that question put to the same reader rather than answered by a second one: seed
+     * the value again without one declaration's clauses, and an end that moves is an end that
      * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
      * says, and it is not that one — see {@link Reach}.
+     *
+     * <p>The canonical reading is the declaration's rules read whole: nothing settled at a value,
+     * nothing left out at any name it reaches. Every question that reaches the declaration and has
+     * nothing of its own to suppose asks for that one reading, and there is nothing to tell two of
+     * them apart — the same declaration, the same world, the same terms. So the first is made and
+     * the rest are lent it, for as long as the world it was read from is the one it was read from,
+     * which is what {@code readings} is answering for.
+     *
+     * <p>A reading with something settled or something left out is not that reading and is made
+     * here every time. It belongs to the question that asked for it: what it leaves out is that
+     * question's, and the next question leaves out something else.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-                             ReadingPolicy policy, Map<FieldDomains.Coordinate, Count> settled,
-                             Reach reach) {
-        InvariantChecker c = new InvariantChecker(symbols, Map.of(), policy);
-        Map<String, Type> fields = c.clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
+                             Reach reach, DeclarationReadings readings) {
+        return readFields(named, source, policy, settled, reach, readings).seeded();
+    }
+
+    /**
+     * The same, as the reading it is rather than as what the seeding left.
+     *
+     * <p>Which of the two a caller wants turns on whether it derives anything. What is worked out
+     * from a reading is worked out once and kept with it, so a caller that derives asks for the
+     * reading and is handed what the last of them made; one that only reads the seeding off has
+     * nothing to keep and takes {@link #seedFields}.
+     *
+     * <p><b>Whether the reading is the declaration's canonical one is decided here and nowhere
+     * else.</b> A reading with something settled or something left out is not that one: it belongs
+     * to the question that asked for it, and what it derives belongs there too. Both come back as
+     * the same kind of thing, so no reader downstream has to put the question again to know what it
+     * may keep.
+     */
+    static DeclarationReading readFields(TypeSymbol.AtModule named, RuleReadingSource source,
+                                         ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
+                                         Reach reach, DeclarationReadings readings) {
+        // What the declaration's string rules came to, asked for before anything else. Where a store
+        // is answering, making that answer is what makes the declaration's canonical reading — so a
+        // borrower asks for the machines and then looks for the reading, rather than reading for
+        // itself and standing a second reading beside the answer's.
+        StringMachineAnswers answers = readings.of(named.key());
+        if (!settled.isEmpty() || !reach.everything()) {
+            return DeclarationReading.of(
+                    seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+        }
+        return readings.reading(named.key(), source, policy,
+                () -> seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+    }
+
+    /**
+     * How many readings of a declaration have been made, for a test holding a reader to when it
+     * reads.
+     *
+     * <p>Counted rather than timed. What a caller is held to is that fixing a number reads nothing,
+     * that asking a question reads once, and that a second asker of the same declaration reads not
+     * at all — which is a shape and not a speed, and a measurement of the speed would pass on an
+     * implementation that had the shape wrong.
+     *
+     * <p>Counted where a reading is made and not where one is asked for. The two parted when a
+     * reading came to be lendable: a borrower asks and does not read, and a count taken at the
+     * asking would say the sharing never happened.
+     */
+    public static long readingsMade() {
+        return READINGS.get();
+    }
+
+    private static final AtomicLong READINGS = new AtomicLong();
+
+    /**
+     * The reading itself, made here and nowhere else.
+     *
+     * <p>What {@link #seedFields} does when it has nothing to lend. Separate from it so that a
+     * lender making the canonical reading of a declaration — which is a reader like any other —
+     * does not arrive back at the borrowing entry it is answering for, and so that what counts as a
+     * reading made is where the reading is made.
+     */
+    private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingSource source,
+                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
+                             Reach reach, DeclarationReadings machines,
+                             StringMachineAnswers answers) {
+        READINGS.incrementAndGet();
+        Symbols symbols = source.symbols();
+        // The three this was handed, put back together to hand on. Not a world of its own: nothing
+        // here chooses any of them, and a reader below is given what this reader was given.
+        InvariantChecker c =
+                new InvariantChecker(RuleReadingContext.of(source, policy, machines));
+        c.answers = answers;
+        // A newtype's value is the same location as the newtype, so it is at no name of its own and
+        // its fields are the first step there is. Read from the world rather than off a node handed
+        // in, and turned into a name here, where the names a rule may write are decided.
+        boolean atTheValue = DeclarationFacts.isNewtype(named, c.terms.newtypes());
+        Map<String, Type> fields = c.clauses.fieldsOf(named);
+        Map<String, BindingId> bindings = c.clauses.bindingsOf(named);
         Denotations at = Denotations.none()
                 .locations(bindings.values(), c.terms::placeSubject, c.terms::placeTerm);
         Known k = Known.top();
@@ -549,280 +801,478 @@ public final class InvariantChecker {
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
         // than about any one reading, and it is recorded here where the handing over happens.
-        Set<String> notGathered = new LinkedHashSet<>();
+        //
+        // With what stopped, and not the paths alone. One position can be short in more than one
+        // way — a walk that went no further and a clause of its own nobody could type — and a set
+        // of paths is where the seven causes became one.
+        Map<RuleKey, Set<RulesMissed>> notGathered = new LinkedHashMap<>();
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.
-        Set<String> unreadOfEveryValue = new LinkedHashSet<>();
+        Set<RuleKey> unreadOfEveryValue = new LinkedHashSet<>();
         // The positions this reading ended at with the rules under them still to be read by
         // somebody. Kept apart from the stops above because it is an obligation and not a finding:
         // whether anything took the rules over is settled by whoever walks the positions, and the
         // answer is not in this reading at all.
-        Set<String> handedOn = new LinkedHashSet<>();
+        Set<RuleKey> handedOn = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
         ReadingEvidence took = new ReadingEvidence();
         // What the bounds are able to state of each rule, as the reading that builds them says it.
         // Per part, because a rule is represented where every part of it is: a conjunct the bounds
         // hold nothing of leaves the range wider than the rule however well the conjunct beside it
         // went, and a set unioned over the whole clause says the opposite.
-        Map<RuleRef, Map<Core, PartRead>> readBy = new LinkedHashMap<>();
-
         Gathering gathering = new Gathering() {
 
             @Override
             public void gathered(RuleRef.Invariant from, Core clause,
+                                 List<Clauses.StatedPart> parts,
+                                 Map<PartId<RuleRef.Invariant>,
+                                         Map<ClauseOccurrence, PartAsRead>> constrained,
                                  Set<FactSubject> spokenFor) {
-                written.add(new Written(from, clause));
+                written.add(Written.of(new ReadingId(written.size()), clause, parts,
+                        reach.withoutParts(), constrained));
                 spokenFor.forEach(spoken -> took.record(from, spoken));
             }
 
             @Override
-            public void missed(String path, Borne borne) {
-                notGathered.add(path);
-                if (borne == Borne.BY_EVERY_VALUE) {
+            public void missed(RuleKey path, RulesMissed why) {
+                notGathered.computeIfAbsent(path, _ -> new LinkedHashSet<>()).add(why);
+                if (why.borne() == Borne.BY_EVERY_VALUE) {
                     unreadOfEveryValue.add(path);
                 }
             }
 
             @Override
-            public void handedOn(String path) {
+            public void handedOn(RuleKey path) {
                 handedOn.add(path);
             }
 
-            @Override
-            public void constrained(RuleRef.Invariant rule, Core part, PartRead read) {
-                readBy.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
-                        .put(part, read);
-            }
         };
-        try {
-            // Not read at all, which is a question about this position and is asked once.
-            boolean opened = !reach.stopAt().test(named);
-            // And whether any rule of it was left out, which is asked of each rule. The two are
-            // recorded at different grains on purpose: what is left out is a rule, and what is
-            // missing from this reading is the position, since a clause of this declaration can
-            // name any position of it.
-            boolean skipped = false;
-            if (!opened && !c.clauses.of(named, data).isEmpty()) {
-                gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
-            }
-            for (TypeOps.Declared declared :
-                    opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
-                // Where this clause becomes a rule of the model something can be attributed to.
-                // Everything below carries the origin as it is: what is written down here is read
-                // back by a report, and a reader handed the clause reference instead would have to
-                // decide for itself which of the rules that draw a line it was looking at. It is
-                // also what says whether this reader asked for the rule at all.
-                RuleRef.Invariant origin = new RuleRef.Invariant(Clause.Ref.of(declared));
-                if (reach.withoutClauses().excludes(origin)) {
-                    skipped = true;
-                    continue;
-                }
-                Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
-                if (stated == null) {
-                    read = false;
-                    gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
-                    continue;
-                }
-                written.add(new Written(origin, stated));
-                Predicates.Owed owed = c.predicates.assumed(stated, at, false,
-                        (part, said) -> gathering.constrained(origin, part, partRead(said)));
-                // And the reading that builds the numeric constraints, said by what it produced.
-                // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
-                // position itself; `value * value >= 4` comes back about an atom standing for the
-                // product, which is not the position and is not a reading of it.
-                Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
-                read &= !owed.unreadable();
-                k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
-            }
-            if (skipped) {
-                // A rule of this value that no reading here took in, said once however many were
-                // left out: what is recorded is which position is short, and the position is this
-                // value either way.
-                gathering.missed(FieldDomains.THE_VALUE, Borne.BY_EVERY_VALUE);
-            }
-            // And what each field's own type says of it, at the field's own location. A depth of one
-            // is already spent on the record, so this reaches the field's newtype and stops where the
-            // seeding of a parameter would.
-            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
-                Type type = fields.get(field.getKey());
-                if (type != null) {
-                    // Every position: this is the reading a boundary is derived from, and a rule
-                    // the construction must satisfy is a rule wherever in the value it sits.
-                    k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
-                            k, at, new GuaranteeWalk.Extent.EveryPosition(), gathering, reach);
-                }
-            }
-            Map<String, FactSubject> atoms = new LinkedHashMap<>();
-            Map<String, Type> typeAt = new LinkedHashMap<>();
-            Map<String, FieldDomains.Counted> held = new LinkedHashMap<>();
-            Map<String, FactSubject> keys = new LinkedHashMap<>();
-            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
-                Type type = fields.get(field.getKey());
-                if (type != null) {
-                    // A newtype's value is the same location as the newtype, so it is at no path of its
-                    // own and its fields are the first step there is. Named `value`, every position of a
-                    // record inside a newtype was filed one step deeper than anything asks for.
-                    c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
-                            atoms, typeAt, held, keys);
-                }
-            }
-            // Which values each position is left, off the clauses the walk reached. What reached this
-            // value is the walk's answer and is given to both readings; what each of them makes of a
-            // clause is its own, so neither can widen the other's idea of what it was handed.
-            Map<FactSubject, Type> positions = positions(atoms, keys, typeAt);
-            // One reading in two languages and not two readings: the connectives belong to the clause,
-            // so an alternative nothing can satisfy is dropped by asking the whole of what is known
-            // about it.
-            //
-            // Read before the ends are, because the reading of ends asks what this one made of each part
-            // it meets. Nothing here depends on that order otherwise — both are given the same clauses
-            // and neither takes anything from the other.
-            StatedByClauses stated = StatedByClauses.top();
-            // How a choice holds what it leaves, settled over the whole declaration before any of
-            // it is read. Its clauses are met, so what they come to together is the product of what
-            // each comes to, and a bound on that bounds every step of the fold — which is why the
-            // question is asked once here rather than of each clause as it arrives.
-            long expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
-            Alternatives alternatives = policy.holdsApart(expansion)
-                    ? Alternatives.APART : Alternatives.MERGED;
-            // What puts two sets of values together, and what it is allowed to build doing it. One
-            // for the whole of this value and not one per clause: what a position finally admits is
-            // met from every rule that reached it, so a pattern in one clause and a pattern in
-            // another pay into the same machine. Made per position inside — a complicated rule at
-            // one position may not spend what a plain one at another was going to need, or which of
-            // the two went unanswered would turn on the order they were written in.
-            souther.compiler.values.Allowance<FactSubject> allowed =
-                    souther.compiler.values.Allowance.ofAdmittedValues();
-            Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
-            // One reader for this value's positions, used over however many clauses reach it, and
-            // the one that decides the choices in what they came to.
-            StatedByClauses.Reading reader = StatedByClauses
-                    .readingOf(c.terms, at, positions, symbols, alternatives, allowed);
-            // What each clause said and what each part of it said, kept as they were read and
-            // asked afterwards. Which branch of a choice anybody can take turns on machines nobody
-            // has made at this point, and every one of these questions has a different answer for a
-            // branch that survives and one that does not — a clause's adoption included. Asked
-            // here, a reading answered from what it happened to hold, and an account named a rule
-            // of a branch nothing satisfies.
-            //
-            // Kept in the order they were read and not in a map keyed by what a node happens to be,
-            // because the order these are worked out in is the order the allowance is spent in: a
-            // walk over an identity map would make what a declaration can be told exactly turn on
-            // where its clauses landed in a table.
-            StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
-            for (Written each : written) {
-                stated = stated.meet(asked.read(reader, each, each.clause()));
-            }
-            // And now that every rule about this value has been said, what its positions admit is
-            // worked out — and with it what each clause and each part of it took in, since a branch
-            // decided is what every one of those turns on. Once, and here: a position's answer is
-            // met out of every clause that reached it, so anything built before the last of them
-            // arrived would be built out of less than the rules say — and which of two ways of
-            // writing the same rules was affordable would be a fact about the writing.
-            StatedByClauses.Answered<Written> answered = asked.resolve(reader, stated, allowed);
-            // What the answer has left, before a word of the account is read.
-            Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
-            AdmissibleValues<FactSubject> values = answered.whole().values();
-            answered.perClause().forEach((each, one) -> {
-                one.adopted().forEach(position -> took.record(each.from(), position));
-                took.stoppedBy(each.from(), one.aboutARule());
-            });
-            answered.perPart().forEach((each, parts) -> {
-                Map<Core, Set<FactSubject>> out = adoptedBy
-                        .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
-                parts.forEach(part -> out.put(part.getKey(), part.getValue().adopted()));
-            });
-            // And the same after it. Reading the account is reading an answer: the whole was worked
-            // out once above, and what each clause and each part of it took in is looked up in
-            // that. Worked out again per clause instead, asking what a rule adopted bought machines
-            // the answer had no use for — so how exactly the rest of the declaration could be
-            // answered depended on how much of its own account somebody had read.
-            //
-            // An assertion because it is about this compiler and not about any model, and here
-            // rather than in one test because every declaration a corpus holds goes through it.
-            // What comes after this line is the answer being carried on with, which may spend.
-            assert unspent.equals(leftOf(allowed, positions.keySet()))
-                    : "reading the account of " + named.name() + " spent its allowance";
-            // What was counted bounds what was built, which is the whole of why counting before
-            // reading is enough. It is an induction and its steps are held where they are taken —
-            // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
-            // the product (`WhatACountTakenBeforeReadingPromisesAboutWhatIsBuilt`) — and it reaches
-            // a clause at all because the count and the reading are one fold over it, so there is
-            // no second walk to disagree about which shape is a choice.
-            //
-            // This is where the two ends are tied, over whatever declarations a corpus holds. An
-            // assertion because it is about this compiler and not about the model, and because a
-            // throw would be caught by the fail-open above and leave the reading silently dropped.
-            assert alternatives == Alternatives.MERGED
-                    || heldApart(values) <= expansion
-                    : "a reading of " + named.name() + " expanded to " + heldApart(values)
-                            + " alternatives past a counted " + expansion;
-            // And which of the clauses place an edge, asked once the positions have names to be
-            // recognised by.
-            Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(readBy, adoptedBy));
-            ConstraintState<FactSubject> constraints = k.constraints()
-                    .takingValuesRead(values, allowed)
-                    .taking(answered.whole().ordered());
-            // How each atom's values are spaced, kept so that settling one afterwards states the
-            // equality the same way this does. A count is a whole number of things whatever the
-            // things are spaced by; a position's own value is spaced by its type.
-            Map<FactSubject, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
-            atoms.forEach((path, atom) -> {
-                Type type = typeAt.get(path);
-                if (type != null) {
-                    spacing.put(atom, c.terms.granularityOf(type));
-                }
-            });
-            held.forEach((path, counted) ->
-                    spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
-            for (Map.Entry<FieldDomains.Coordinate, Count> each : settled.entrySet()) {
-                FieldDomains.Coordinate where = each.getKey();
-                // The number the caller settled, which is the position's own value or the count
-                // taken of it. Two coordinates at one path and two atoms: a reading that resolved
-                // only the first left a rule over two counts unconditioned while the same rule was
-                // read whole when it was asked about.
-                FactSubject atom = switch (where.kind()) {
-                    case FieldDomains.CoordinateKind.OfItsOwnValue _ -> atoms.get(where.path());
-                    // A count and nothing else. What a clause of a value has words for is the
-                    // position and how much it holds; a number some other operation answers of the
-                    // same location is a quantity the declarations never mention, so what they say
-                    // about it is nothing rather than whatever stands in the count's slot (#1027).
-                    case FieldDomains.CoordinateKind.OfWhatAnOperationAnswers taken ->
-                            NumericMeasures.isMeasure(taken.operation())
-                                    ? atomOf(held.get(where.path())) : null;
-                };
-                if (atom == null) {
-                    continue;
-                }
-                // A count is a whole number of things, whatever the values counted are spaced by.
-                souther.compiler.numeric.Granularity spaced = spacing.get(atom);
-                if (spaced == null) {
-                    continue;
-                }
-                constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
-            }
-            return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, Set.copyOf(handedOn),
-                    readBy, Map.copyOf(spacing));
-        } catch (RuntimeException why) {
-            gaveUp("seedFields " + named.name(), why);
-            return Seeded.nothingRead();
+        // Not read at all, which is a question about this position and is asked once.
+        boolean opened = !reach.stopAt().test(named);
+        // And whether any rule of it was left out, which is asked of each rule. The two are
+        // recorded at different grains on purpose: what is left out is a rule, and what is
+        // missing from this reading is the position, since a clause of this declaration can
+        // name any position of it.
+        boolean skipped = false;
+        PublishedRules rules = c.clauses.of(named);
+        if (!opened && !rules.reached().isEmpty()) {
+            gathering.missed(RuleKey.THE_VALUE, new RulesMissed.PositionNotOpened());
         }
+        // A rule that never arrived, as against one this reading declined or could not read. It
+        // is recorded whether or not the position was opened: what it says is that the clauses
+        // of some declaration reached here were never worked out, which is true of this position
+        // however far the reading went into it.
+        if (!rules.everyRuleReached()) {
+            read = false;
+            gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
+        }
+        for (ClauseMeaning declared :
+                opened ? c.clauses.declared(named) : List.<ClauseMeaning>of()) {
+            // Where this clause becomes a rule of the model something can be attributed to.
+            // Everything below carries the origin as it is: what is written down here is read
+            // back by a report, and a reader handed the clause reference instead would have to
+            // decide for itself which of the rules that draw a line it was looking at. It is
+            // also what says whether this reader asked for the rule at all.
+            RuleRef.Invariant origin = new RuleRef.Invariant(declared.ref());
+            if (reach.withoutClauses().excludes(origin)) {
+                skipped = true;
+                continue;
+            }
+            Clauses.AsStated states = c.clauses.stated(declared);
+            if (states == null) {
+                read = false;
+                gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotTyped());
+                continue;
+            }
+            Core stated = states.states();
+            // The clause as one reading, and the parts its author wrote as subtrees of it. Which
+            // parts there are was settled where the clause was split; nothing here decides it.
+            // The shape of the whole clause, read out of the tree once. The parts are subtrees of
+            // it, so what a reader says about an occurrence of one is said in the numbering the
+            // clause hands out rather than in a numbering that starts wherever a part does.
+            ClauseView view = reach.withoutParts().viewOf(c.clauses.partsOf(states));
+            // A part at a time, and the ones this world holds. Which parts a clause has was settled
+            // where it was split, so a part left out is one left out of the list — never a node a
+            // walk was told to step over.
+            //
+            // What this reading makes of each occurrence is kept beside the reading rather than
+            // written into a table every reading shares: a clause is read once per place the walk
+            // opens a value at, and a table holding all of them together has nothing to say which
+            // reading an entry came from.
+            Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>> constrained =
+                    new LinkedHashMap<>();
+            Predicates.Owed owed = null;
+            for (Clauses.StatedPart part : view.present()) {
+                Predicates.Owed said = c.predicates.assumed(part.of(), at, false,
+                        (of, _, came) -> constrained
+                                .computeIfAbsent(part.id(), _ -> new LinkedHashMap<>())
+                                .put(of.at(), new PartAsRead(of, partRead(came))));
+                owed = owed == null ? said : owed.and(said);
+            }
+            written.add(new Written(new ReadingId(written.size()), stated, view, constrained,
+                    Map.of()));
+            if (owed == null) {
+                owed = Predicates.Owed.unread();
+            }
+            // And the reading that builds the numeric constraints, said by what it produced.
+            // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
+            // position itself; `value * value >= 4` comes back about an atom standing for the
+            // product, which is not the position and is not a reading of it.
+            Predicates.subjectsIn(owed).forEach(spoken -> took.record(origin, spoken));
+            read &= !owed.unreadable();
+            k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
+        }
+        if (skipped) {
+            // A rule of this value that no reading here took in, said once however many were
+            // left out: what is recorded is which position is short, and the position is this
+            // value either way.
+            gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotAsked());
+        }
+        // And what each field's own type says of it, at the field's own location. A depth of one
+        // is already spent on the record, so this reaches the field's newtype and stops where the
+        // seeding of a parameter would.
+        for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+            Type type = fields.get(field.getKey());
+            if (type != null) {
+                // Every position: this is the reading a boundary is derived from, and a rule
+                // the construction must satisfy is a rule wherever in the value it sits.
+                k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                        atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                        k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
+            }
+        }
+        Map<RuleKey, FactSubject> atoms = new LinkedHashMap<>();
+        Map<RuleKey, Type> typeAt = new LinkedHashMap<>();
+        Map<RuleKey, FieldDomains.Counted> held = new LinkedHashMap<>();
+        Map<RuleKey, FactSubject> keys = new LinkedHashMap<>();
+        for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+            Type type = fields.get(field.getKey());
+            if (type != null) {
+                // A newtype's value is the same location as the newtype, so it is at no name of
+                // its own and its fields are the first step there is. Named `value`, every
+                // position of a record inside a newtype was filed one step deeper than anything
+                // asks for.
+                c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                        atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                        type, at, symbols, 1, atoms, typeAt, held, keys);
+            }
+        }
+        // Which values each position is left, off the clauses the walk reached. What reached this
+        // value is the walk's answer and is given to both readings; what each of them makes of a
+        // clause is its own, so neither can widen the other's idea of what it was handed.
+        Map<FactSubject, Type> positions = positions(atoms, keys, typeAt);
+        // How a choice holds what it leaves, settled over the whole declaration before any of
+        // it is read. Its clauses are met, so what they come to together is the product of what
+        // each comes to, and a bound on that bounds every step of the fold — which is why the
+        // question is asked once here rather than of each clause as it arrives.
+        long expansion = policy.expansionOf(written.stream().map(Written::clause).toList());
+        Alternatives alternatives = policy.holdsApart(expansion)
+                ? Alternatives.APART : Alternatives.MERGED;
+        // What puts two sets of values together, and what it is allowed to build doing it. One
+        // for the whole of this value and not one per clause: what a position finally admits is
+        // met from every rule that reached it, so a pattern in one clause and a pattern in
+        // another pay into the same machine. Made per position inside — a complicated rule at
+        // one position may not spend what a plain one at another was going to need, or which of
+        // the two went unanswered would turn on the order they were written in.
+        Allowance<FactSubject> allowed =
+                policy.allowanceForAdmittedValues(c.answers.lending());
+        Map<RuleRef.Invariant, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
+        // The numbers this value's clauses can be about, read before any of them is. Both the fold
+        // below and the walk that classifies a comparison are given this one table.
+        Map<FactSubject, Coordinate> numbers = c.coordinatesOf(atoms, keys, held, typeAt);
+        // One reader for this value's positions, used over however many clauses reach it, and
+        // the one that decides the choices in what they came to.
+        StatedByClauses.Reading reader = StatedByClauses
+                .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
+                        c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers));
+        // What each clause said and what each part of it said, kept as they were read and
+        // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
+        // read and on machines nobody has made at this point, and every one of these questions
+        // has a different answer for a branch that survives and one that does not — a clause's
+        // adoption included. Asked here, a reading answered from what it happened to hold, and
+        // an account named a rule of a branch nothing satisfies.
+        //
+        // Kept in the order they were read and not in a map keyed by what a node happens to be,
+        // because the order these are worked out in is the order the allowance is spent in: a
+        // walk over an identity map would make what a declaration can be told exactly turn on
+        // where its clauses landed in a table.
+        StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
+        for (Written each : written) {
+            // A clause this world holds no part of is no rule of it. Read as one, the reading would
+            // compose a tree of nothing at all, which is not the shape a clause has.
+            //
+            // Read off what the world holds rather than worked out from the tree: which parts are
+            // here was settled when the clause was viewed, and a walk of the shape to find out
+            // would be the same answer at the cost of building one.
+            if (each.parts().isEmpty()) {
+                continue;
+            }
+            // And the clause read in this world. A reader asking what one conjunct was holding
+            // compares two readings of this declaration, and they are two readings of one world
+            // only where the conjunct is out of both — which is what left a choice composed the
+            // same way with the conjunct and without it, so that every end it was holding came back
+            // held by nobody.
+            // Which rule the clause is of, read off the parts that say it. A conjunct carries the
+            // rule it is of, and every one of these is a conjunct of the same clause, so the first
+            // of them answers for all — asked here, where the reading is known to have parts.
+            asked.read(reader, at, each, each.parts().getFirst().id().rule(),
+                    each.clause(), each.view());
+        }
+        // And now that every rule about this value has been said, what its positions admit is
+        // worked out — and with it what each clause and each part of it took in, since a branch
+        // decided is what every one of those turns on. Once, and here: a position's answer is
+        // met out of every clause that reached it, so anything built before the last of them
+        // arrived would be built out of less than the rules say — and which of two ways of
+        // writing the same rules was affordable would be a fact about the writing.
+        StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed,
+                policy.allowanceForWhatARuleLeaves(allowed));
+        // What the answer has left, before a word of the account is read.
+        int unspent = spentBy(allowed);
+        AdmissibleValues<FactSubject> values = answered.whole().values();
+        // And where a choice of a rule left an end of it open, which is the reading of ends saying
+        // what became of its own clause. Read off the account rather than walked for: the answer is
+        // composed over the tree the author wrote, with the branches nobody can be in already
+        // dropped, and a walk here would be asking a second time about a shape the settlement has
+        // finished with.
+        Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen =
+                new LinkedHashMap<>();
+        Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen =
+                new LinkedHashMap<>();
+        answered.perClause().forEach((each, one) -> {
+            narrowedBy.put(each.from(), one);
+            one.account().adopted().forEach(position -> took.record(each.from(), position));
+            // Here, and here alone, what a reading met becomes what an author wrote. Everything
+            // above is coordinates of the tree this reading was built over, which two constructions
+            // of one declaration number differently ({@link ClauseOccurrence}); what is filed is
+            // the part its author wrote, which is the same whichever reading met it. Two readings
+            // short of one thing about one part are one fact from here on.
+            Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote = authoredPartsOf(each);
+            Set<RuleShortfall> filed = new LinkedHashSet<>();
+            one.account().aboutARule().forEach(met -> filed.add(met.of(wroteIt(met.at(), wrote))));
+            took.stoppedBy(each.from(), filed);
+            // Only the rules with one, so that a reader asking a position what is left open there
+            // walks the rules that have something rather than every rule of the declaration.
+            //
+            // And only what a choice is answerable for. An end left open under a conjunction is one
+            // the rule's own questions already leave standing, and a second account of it is one
+            // stop said twice — so it does not cross.
+            one.account().endsLeftOpen().byNumber().forEach((position, behind) -> {
+                if (behind.underAChoice()) {
+                    endsLeftOpen.computeIfAbsent(each.from(), _ -> new LinkedHashMap<>())
+                            .computeIfAbsent(position, _ -> new LinkedHashSet<>())
+                            .addAll(wroteAll(behind, wrote));
+                }
+            });
+            one.account().boundsLeftOpen().forEach((number, behind) -> {
+                if (behind.underAChoice()) {
+                    boundsLeftOpen.computeIfAbsent(each.from(), _ -> new LinkedHashMap<>())
+                            .computeIfAbsent(number, _ -> new LinkedHashSet<>())
+                            .addAll(wroteAll(behind, wrote));
+                }
+            });
+        });
+        // And each reading with the account of its own parts, which is what the walk below reads
+        // them off. One rule is read once per place the walk opens a value at, and each of those
+        // readings walks the tree a substitution built for it — so an account of every reading
+        // together is one whose entries are told apart by which objects those substitutions
+        // allocated, and a reader walking one reading finds another reading's answer as readily.
+        List<Written> accounted = new ArrayList<>(written.size());
+        for (Written each : written) {
+            accounted.add(each.alsoAdopting(answered.perPart().getOrDefault(each, List.of())));
+        }
+        // And the same after it. Reading the account is reading an answer: the whole was worked
+        // out once above, and what each clause and each part of it took in is looked up in
+        // that. Worked out again per clause instead, asking what a rule adopted bought machines
+        // the answer had no use for — so how exactly the rest of the declaration could be
+        // answered depended on how much of its own account somebody had read.
+        //
+        // An assertion because it is about this compiler and not about any model, and here
+        // rather than in one test because every declaration a corpus holds goes through it.
+        // What comes after this line is the answer being carried on with, which may spend.
+        assert unspent == spentBy(allowed)
+                : "reading the account of " + named.name() + " spent its allowance";
+        // What was counted bounds what was built, which is the whole of why counting before
+        // reading is enough. It is an induction and its steps are held where they are taken —
+        // a leaf is one alternative, a choice holds at most the sum and a conjunction at most
+        // the product (`WhatACountTakenBeforeReadingPromisesAboutWhatIsBuilt`) — and it reaches
+        // a clause at all because the count and the reading are one fold over it, so there is
+        // no second walk to disagree about which shape is a choice.
+        //
+        // This is where the two ends are tied, over whatever declarations a corpus holds. An
+        // assertion because it is about this compiler and not about the model: what it would say
+        // if it were false is that a count this reading was bounded by did not bound it, which is
+        // not something an author can act on.
+        assert alternatives == Alternatives.MERGED
+                || heldApart(values) <= expansion
+                : "a reading of " + named.name() + " expanded to " + heldApart(values)
+                        + " alternatives past a counted " + expansion;
+        // And which of the clauses place an edge, asked once the positions have names to be
+        // recognised by.
+        Reading reading = c.directsIn(accounted, at, numbers, took,
+                new RulesRead(narrowedBy));
+        ConstraintState<FactSubject> constraints = k.constraints()
+                .takingRead(answered.whole().confinement(), allowed, c.answers);
+        // How each atom's values are spaced, kept so that settling one afterwards states the
+        // equality the same way this does. A count is a whole number of things whatever the
+        // things are spaced by; a position's own value is spaced by its type.
+        Map<FactSubject, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
+        atoms.forEach((path, atom) -> {
+            Type type = typeAt.get(path);
+            if (type != null) {
+                spacing.put(atom, c.terms.granularityOf(type));
+            }
+        });
+        held.forEach((path, counted) ->
+                spacing.put(counted.atom(), souther.compiler.numeric.Granularity.DISCRETE));
+        for (Map.Entry<NumberAt<RuleKey>, Count> each : settled.entrySet()) {
+            NumberAt<RuleKey> where = each.getKey();
+            // The number the caller settled, which is the position's own value or the count
+            // taken of it. Two coordinates at one path and two atoms: a reading that resolved
+            // only the first left a rule over two counts unconditioned while the same rule was
+            // read whole when it was asked about.
+            FactSubject atom = switch (where.of()) {
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atoms.get(where.position());
+                // A count and nothing else. What a clause of a value has words for is the
+                // position and how much it holds; a number some other operation answers of the
+                // same location is a quantity the declarations never mention, so what they say
+                // about it is nothing rather than whatever stands in the count's slot (#1027).
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                        NumericMeasures.isMeasure(taken.operation())
+                                ? atomOf(held.get(where.position())) : null;
+            };
+            if (atom == null) {
+                continue;
+            }
+            // A count is a whole number of things, whatever the values counted are spaced by.
+            souther.compiler.numeric.Granularity spaced = spacing.get(atom);
+            if (spaced == null) {
+                continue;
+            }
+            constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
+        }
+        // And what stands at each name the reading wrote, which is the last of this answer and is
+        // built here because here is where the purse is. A name is filed under a subject the
+        // interval algebra knows it by and a subject everything else knows it by, and what it
+        // admits is what both leave — a machine, out of the same allowance every rule that reached
+        // the name paid into. Handed over unfinished, whoever asked would need this purse to
+        // finish it, and a reading kept by a reader that only asks questions of it would be
+        // keeping an allowance.
+        Map<RuleKey, ValueSet> admitted = new LinkedHashMap<>();
+        Map<RuleKey, List<UnreadReason>> unreadAt = new LinkedHashMap<>();
+        Set<RuleKey> notSeparated = new LinkedHashSet<>();
+        ConjoinedAdmissibleValues<FactSubject> readAs = constraints.values();
+        for (RuleKey field : written(atoms, keys)) {
+            ValueSet here = ValueSet.ANY;
+            List<UnreadReason> why = new ArrayList<>();
+            // Not asked at all where the reading admits nothing. What it holds there is not the
+            // relation's projections — those are empty wherever the relation is — but where the
+            // arithmetic had got to when it learned that no value of this type exists, so whether
+            // it is exact is a question about a projection nobody is being shown. And the answer
+            // owed about such a declaration is that it has no values, which is said elsewhere and
+            // is not made truer by a note about how the values were held.
+            boolean separated = true;
+            for (FactSubject name : named(atoms, keys, field)) {
+                // Where it could not be built, the set widens and says so in the same breath —
+                // which is the list below.
+                Allowance.Composed made =
+                        allowed.meet(readAs.blockOf(name), here, readAs.at(name));
+                here = made.set();
+                if (made.gaveUp()) {
+                    why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
+                }
+                separated = separated && readAs.projectionExactAt(name);
+                // Every one of them. Two subjects of one name are two ways the same rules were
+                // filed, and a rule filed under one of them is not the rule filed under the other:
+                // an ordering the interval algebra knows the place by and a pattern the values
+                // reading knows it by stop this reading in two ways, and each is a rule of the
+                // author's to act on. Said once here — a limit met under both names is one limit.
+                for (UnreadReason each : readAs.whyUnread(name)) {
+                    if (!why.contains(each)) {
+                        why.add(each);
+                    }
+                }
+            }
+            admitted.put(field, here);
+            if (!why.isEmpty()) {
+                unreadAt.put(field, List.copyOf(why));
+            }
+            if (!separated) {
+                notSeparated.add(field);
+            }
+        }
+        return new Seeded(constraints, atoms, keys, held, reading, took, read,
+                notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
+                written, Map.copyOf(spacing), admitted, unreadAt, notSeparated,
+                c.answers.facts(),
+                Collections.unmodifiableMap(new LinkedHashMap<>(endsLeftOpen)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(boundsLeftOpen)),
+                // Where every rule reaching this value leaves the numbers its operations answer,
+                // taken from the reading with the choices settled. The interval algebra never
+                // enters an alternative, so this is the one answer that says where a choice of two
+                // bounds on a length stops it.
+                answered.whole().confinement().derived(),
+                // And the same of the positions themselves, which the same reading settled and
+                // nothing carried out of it. Both names each position answers to, because a clause
+                // is filed under whichever the reading that read it recognised — asked of one, what
+                // a choice left a position would turn on how the rule was spelled.
+                answered.whole().confinement().envelopeOver(aliasesOf(atoms, keys)));
+    }
+
+    /**
+     * Every name a reading wrote, which is every name that answers to either subject.
+     *
+     * <p>A number is called one thing by the interval algebra and another by everything else, and
+     * the two are filed as they are found — so a walk over one of the maps would leave a name held
+     * only by the other answering from a default, which is the widest thing there is to say and is
+     * said about a place a clause may well have narrowed.
+     *
+     * <p>The keys and then the atoms, which is the keys: an atom is named from a body key, so a
+     * name with an atom has a key and the second pass adds nothing. A size has no key and is not
+     * one of these — it is a number taken of what stands at a name. So the order is the walk's, and
+     * the walk's is the declaration's.
+     */
+    private static Set<RuleKey> written(Map<RuleKey, FactSubject> atoms,
+                                        Map<RuleKey, FactSubject> keys) {
+        Set<RuleKey> out = new LinkedHashSet<>(keys.keySet());
+        out.addAll(atoms.keySet());
+        return out;
+    }
+
+    /** Both subjects the name {@code path} answers to — see {@link Seeded#named}. Over the two maps
+     *  rather than over a reading, so that the reading itself can be answered for before there is
+     *  one to ask. */
+    private static List<FactSubject> named(Map<RuleKey, FactSubject> atoms,
+                                           Map<RuleKey, FactSubject> keys, RuleKey path) {
+        List<FactSubject> names = new ArrayList<>();
+        FactSubject atom = atoms.get(path);
+        if (atom != null) {
+            names.add(atom);
+        }
+        FactSubject key = keys.get(path);
+        if (key != null) {
+            names.add(key);
+        }
+        return names;
+    }
+
+    /**
+     * Every name every position of this value answers to, keyed by the position.
+     *
+     * <p>The names alone, and never a count's. What a count is is a number taken of what stands at
+     * a name, and where it stops is settled by a reading of its own ({@link BoundaryState}) — put
+     * in here, one path would carry two orders and whichever was met last would be the one a line
+     * was drawn from.
+     */
+    private static Map<RuleKey, List<FactSubject>> aliasesOf(Map<RuleKey, FactSubject> atoms,
+                                                             Map<RuleKey, FactSubject> keys) {
+        Map<RuleKey, List<FactSubject>> out = new LinkedHashMap<>();
+        written(atoms, keys).forEach(path -> out.put(path, named(atoms, keys, path)));
+        return out;
     }
 
     /** The atom of a count that may not be there, which every lookup of one wants. */
     private static FactSubject atomOf(FieldDomains.Counted counted) {
         return counted == null ? null : counted.atom();
-    }
-
-    /** The same over a whole reading, for the readers that take the map. */
-    private static Map<String, FactSubject> heldAtomsOf(Map<String, FieldDomains.Counted> held) {
-        Map<String, FactSubject> out = new LinkedHashMap<>();
-        held.forEach((path, counted) -> out.put(path, counted.atom()));
-        return out;
     }
 
     /** How many alternatives a reading came to, a reading that admits nothing holding none. */
@@ -834,10 +1284,10 @@ public final class InvariantChecker {
     /**
      * The atom each position under {@code value} is named by, keyed by the path it is reached at.
      *
-     * <p>The walk {@link #seedAt} took, over the same reads, so a position the seeding put a bound on
-     * is a position this can name. Two levels down as well as one: a clause on a record relates a
-     * field of a field to something, and the bound that leaves on it is read at the path it sits at
-     * rather than at the record it happens to be inside.
+     * <p>The walk {@link PathEngine#seedAt} took, over the same reads, so a position the seeding
+     * put a bound on is a position this can name. Two levels down as well as one: a clause on a
+     * record relates a field of a field to something, and the bound that leaves on it is read at
+     * the path it sits at rather than at the record it happens to be inside.
      *
      * <p>A name wrapped round a value is not a step of the path ({@link Location#isStep}), which is
      * the rule the rest of this already reads by: the atom of {@code w.value.n} <em>is</em> the atom
@@ -846,15 +1296,16 @@ public final class InvariantChecker {
      * went unnamed — so the clauses of a record inside a newtype reached the domain and nothing could
      * ask for what they left.
      */
-    private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
-                      Map<String, FieldDomains.Counted> held, Map<String, FactSubject> keys) {
+    private void name(Core value, RuleKey path, Type type, Denotations at, Symbols symbols,
+                      int depth, Map<RuleKey, FactSubject> atoms, Map<RuleKey, Type> typeAt,
+                      Map<RuleKey, FieldDomains.Counted> held, Map<RuleKey, FactSubject> keys) {
         // What the position is called, and the atom it is. Asked together, because where a position
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
         //
-        // Both, because only some positions are numbers. An enumeration is ordered and carries no
-        // atom, so a clause bounding one is recognised by what it is called and by nothing above it.
+        // Both, because a position may have either or both, and which it has is `Terms.positionOf`'s
+        // answer. What is done here is recording that answer; classifying the position's type again
+        // would be a second table, and the two would agree until one of them learned something.
         Terms.Position position = terms.positionOf(value, at);
         FactSubject atom = position.atom();
         if (atom != null) {
@@ -875,7 +1326,7 @@ public final class InvariantChecker {
         // operation — the one that counts what the position's type holds. A coordinate that recorded
         // only "not the value" brought a count and a number some other operation answers of the same
         // location to one name (#1027).
-        ValueName countsIt = NumericMeasures.takenOf(type, symbols);
+        ValueName countsIt = NumericMeasures.takenOf(type, terms.newtypeInners());
         FactSubject counted = countsIt == null ? null : terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, new FieldDomains.Counted(counted, countsIt));
@@ -886,8 +1337,8 @@ public final class InvariantChecker {
         // ends that walk, and a copy of it here is a place the two could come to disagree.
         Core inner = value;
         Type worn = type;
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            Type under = TypeOps.fieldTypes(layer.data(), symbols).get("value");
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, terms.newtypeInners())) {
+            Type under = terms.newtypeInners().under(Type.ref(layer.named()));
             if (under == null) {
                 break;
             }
@@ -897,12 +1348,26 @@ public final class InvariantChecker {
         if (depth > GuaranteeWalk.FIELDS_SEEDED) {
             return;
         }
-        // Which positions a value has is the reading's answer and not a second classification here:
-        // a record's fields, and the part a sum's cases share, which is readable on a value of the
-        // sum exactly as a field of a record is.
-        for (Map.Entry<String, Type> field : PositionReading.of(worn, symbols).positionsUnder().entrySet()) {
+        // What a clause of this value may name is the reading's answer and not a second
+        // classification here: a record's fields, and the part a sum's cases share, which is
+        // readable on a value of the sum exactly as a field of a record is. Which of these names a
+        // row writes a value at is somewhere else's question — a name every case of a sum spreads
+        // is written at the sum and stands under each of the cases.
+        //
+        // A name still worn here is one the walk above could not take off, which is a declaration
+        // that returns to itself. Its `value` is this very value, so following it names the same
+        // thing again a step deeper than anything asks about.
+        Map<String, Type> under = switch (ValueReading.of(
+                worn, terms.newtypeInners(), terms.kinds(), symbols, terms.published())) {
+            case ValueReading.AtAValue read -> read.named();
+            // Every name that comes off has come off above, so a name still worn is a declaration
+            // that returns to itself: what it wraps is the value already being read, and reading it
+            // again names that value at a path one `value` deeper than anything asks about.
+            case ValueReading.UnderAName _ -> Map.of();
+        };
+        for (Map.Entry<String, Type> field : under.entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    GuaranteeWalk.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }
@@ -916,8 +1381,9 @@ public final class InvariantChecker {
      * both names — a number is called one thing by the interval algebra and another by everything
      * else — both are filed, since a clause reaching it may be recognised by either.
      */
-    private static Map<FactSubject, Type> positions(Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                             Map<String, Type> typeAt) {
+    private static Map<FactSubject, Type> positions(Map<RuleKey, FactSubject> atoms,
+                                             Map<RuleKey, FactSubject> keys,
+                                             Map<RuleKey, Type> typeAt) {
         Map<FactSubject, Type> out = new LinkedHashMap<>();
         typeAt.forEach((path, type) -> {
             FactSubject key = keys.get(path);
@@ -932,12 +1398,6 @@ public final class InvariantChecker {
         return out;
     }
 
-    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
-     * wraps, which is at no path of its own, so its fields are the first step there is. */
-    private static String under(String path, String field) {
-        return path.isEmpty() ? field : path + "." + field;
-    }
-
     /**
      * One end a clause places on one coordinate of a value, and the declaration that placed it.
      *
@@ -946,35 +1406,287 @@ public final class InvariantChecker {
      * and places nothing on it: that 9 is where {@code b} stops, and a position whose only limit is
      * another position's is one the model draws no line through. Only what is here may be a line.
      *
-     * @param path     where the coordinate sits, read from the value these are of
-     * @param measured whether the coordinate is a count taken of the position rather than its value
-     * @param from     the rule that placed it, which is what names the line. The clause and not
-     *                 the declaration it is on: two clauses of one declaration placing an end at
-     *                 one value are two rules a row could be owed to, and held as declarations
-     *                 they came back as one
+     * @param at       where the coordinate sits, read from the value these are of, and which of the
+     *                 numbers there this end is on — a count taken of the position, or its value
+     * @param statement which statement of which conjunct placed it, which is what names the line.
+     *                 The clause and not the declaration it is on: two clauses of one declaration
+     *                 placing an end at one value are two rules a row could be owed to, and held as
+     *                 declarations they came back as one. And the statement and not the conjunct:
+     *                 one conjunct states as many rules as the reading arrives at inside it, and
+     *                 each of them places its own end
+     * @param stands   where, and in which reading, the part that placed it is. One part states as
+     *                 many rules as its author wrote into it and each of them stands somewhere, so
+     *                 what says which of them this end came of is the place; and a rule is read
+     *                 once per place the walk opens a value at, so which reading placed it is the
+     *                 other half of the same answer
      */
-    record Direct(FieldDomains.Coordinate at, RuleRef.Invariant from,
-                  InvariantBound bound, Core part, int conjunct) {
+    record Direct(NumberAt<RuleKey> at, InvariantStatementId statement, InvariantBound bound,
+                  ReadingPlace stands) {
 
-        /** Where in the value the end was placed. Never which end it is: one position carries more
-         *  than one number and {@link #at} is what says which of them this is. */
-        String path() {
-            return at.path();
+        /** What the value's rules call where the end was placed. Never which end it is: one name
+         *  carries more than one number and {@link #at} is what says which of them this is. */
+        RuleKey path() {
+            return at.position();
+        }
+
+        /** Which conjunct the statement is of, which is what a rule is named by. Read off the
+         *  statement rather than carried beside it: the two would be free to disagree about which
+         *  conjunct a statement belongs to. */
+        PartId<RuleRef.Invariant> part() {
+            return statement.part();
         }
     }
 
-    /** One clause reaching a value, rebased onto the positions of that value, and which clause it
-     * is. */
-    private record Written(RuleRef.Invariant from, Core clause) {}
+    /**
+     * Which of the readings this walk opened one is.
+     *
+     * <p>Issued by the walk that opens them, counted from nought, and meaning nothing away from it
+     * — a reading of one declaration and a reading of another are both the first thing their walk
+     * did. What pairs it with the declaration is the walk holding both.
+     *
+     * <p>Here so that two readings are two because the walk opened two, and not because the trees
+     * a substitution built for them happen to differ. A clause is read once per place the walk
+     * opens a value at, and what each of those made of a part is the reading's own; told apart by
+     * the representation instead, two readings that arrived at the same tree would be one, and
+     * which of them that was would be a fact about the substitution.
+     */
+    record ReadingId(int ordinal) {
 
-    /** What each of {@code positions} has left of its allowance, for holding an answer to what it
-     *  spent between two moments. */
-    private static Map<FactSubject, Integer> leftOf(
-            souther.compiler.values.Allowance<FactSubject> allowed,
-            Set<FactSubject> positions) {
-        Map<FactSubject, Integer> out = new LinkedHashMap<>();
-        positions.forEach(each -> out.put(each, allowed.left(each)));
+        ReadingId {
+            if (ordinal < 0) {
+                throw new IllegalArgumentException("a reading is counted from zero: " + ordinal);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "reading #" + ordinal;
+        }
+    }
+
+    /**
+     * One place in one reading of a clause, which is what an answer about a part is filed under.
+     *
+     * <p>An occurrence is a coordinate of a clause and every clause has a first one, so it says
+     * where without saying whose. A rule is read once per place the walk opens a value at, and what
+     * each of those readings made of the place it stands at is that reading's — the same rule read
+     * at {@code was} and at {@code now} raises the questions of {@code was} at one and of
+     * {@code now} at the other, and they are two answers about one written conjunct.
+     *
+     * <p>Which is what the node used to say and what saying only the coordinate leaves out. Each
+     * reading walked the tree a substitution built for it, so the node was where and whose at once;
+     * held apart, both halves have to be here.
+     */
+    record ReadingPlace(ReadingId reading, ClauseOccurrence at) {
+
+        ReadingPlace {
+            if (reading == null || at == null) {
+                throw new IllegalArgumentException("a place is somewhere, in some reading");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return reading + " " + at;
+        }
+    }
+
+    /**
+     * What a conjunct handed to the next reading is one of: which part of which rule, and where in
+     * that part the comparison stands.
+     *
+     * <p><b>The occurrence, because one authored part states more than one comparison.</b> A denial
+     * is carried to the leaves as a clause is read, so a conjunction an author wrote as a denied
+     * choice is one part and two comparisons — and both are handed on, because each is a rule the
+     * reading that draws lines has something to do with. Named by the part alone, the second is the
+     * first said again and the reading below never sees it.
+     *
+     * <p><b>And the place is not here, because one conjunct read twice is one conjunct.</b> A rule
+     * is read once per place the walk opens a value at, so a record holding two of a type is two
+     * readings of that type's clause — one written rule, and a row is owed for it once. Named by
+     * the place as well, each reading would hand on its own and the model would owe a row per
+     * place it happens to be carried to.
+     *
+     * <p>Which is why this is neither {@link ReadingPlace} nor {@link PartId} but the statement:
+     * one hand-over per comparison the reading arrived at inside a conjunct, however many places
+     * that conjunct was read at.
+     */
+    record HandOver(InvariantStatementId statement) {
+
+        HandOver {
+            if (statement == null) {
+                throw new IllegalArgumentException(
+                        "a conjunct handed on is part of some rule, somewhere in it");
+            }
+        }
+    }
+
+    /**
+     * One clause reaching a value, rebased onto the positions of that value, which clause it is,
+     * and the parts its author wrote it in.
+     *
+     * <p>The clause is what the readings of values and of order are asked about: its conjuncts meet
+     * inside one reading, and a branch one of them rules out is ruled out there. The parts are what
+     * a line drawn on a position is attributed to, and each of them is a subtree of that same
+     * reading — carrying which part of the clause it is, settled where the clause was split.
+     *
+     * <p>And which reading of them this is ({@link ReadingId}), because what it made of each part
+     * is its own and a rule is read once per place the walk opens a value at.
+     *
+     * <p>Which rule the clause is of is said by the parts and is not kept beside them. A part
+     * carries the rule it is a conjunct of, so a reading that held one as well would be keeping the
+     * same fact twice — and two of them can be built disagreeing, which is a reading filing an
+     * answer under one rule while describing another.
+     */
+    record Written(ReadingId opened, Core clause, ClauseView view,
+                   Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>>
+                           constrained,
+                   Map<ClauseOccurrence, ReadByClauses.OfAPart> adopted) {
+
+        Written {
+            constrained = Map.copyOf(constrained);
+        }
+
+        /** The clause {@code authored} was written in, as {@code world} holds it, with what the
+         *  reading that built it made of each occurrence of each part it holds. */
+        static Written of(ReadingId opened, Core clause, List<Clauses.StatedPart> authored,
+                          PartsLeftOut world,
+                          Map<PartId<RuleRef.Invariant>,
+                                  Map<ClauseOccurrence, PartAsRead>> constrained) {
+            if (authored.isEmpty()) {
+                throw new IllegalArgumentException("a clause reaching a value is written in parts");
+            }
+            return new Written(opened, clause, world.viewOf(authored), constrained, Map.of());
+        }
+
+        /**
+         * The same reading, with the account it came to once every branch of the value was decided.
+         *
+         * <p>Held by the reading it is an account of. A clause is read once per place the walk
+         * opens a value at, and the readings of one rule walk trees a substitution built for each
+         * of them — so an account of all of them together is told apart by nothing but which
+         * objects those substitutions happened to allocate.
+         */
+        Written alsoAdopting(
+                List<Map.Entry<ClauseOccurrence, ReadByClauses.OfAPart>> account) {
+            Map<ClauseOccurrence, ReadByClauses.OfAPart> out = new LinkedHashMap<>();
+            account.forEach(each -> out.put(each.getKey(), each.getValue()));
+            return new Written(opened, clause, view, constrained,
+                    Collections.unmodifiableMap(out));
+        }
+
+        /** What this reading made of the part at {@code at}, or null where it read no such part —
+         *  which is not the same as having read it and made nothing of it. */
+        ReadByClauses.OfAPart adoptedAt(ClauseOccurrence at) {
+            return adopted.get(at);
+        }
+
+        /**
+         * What the reading that built this made of one occurrence of one of its parts, or null
+         * where it read no such occurrence — which is not the same as having read it and made
+         * nothing of it.
+         *
+         * <p>Held by the reading that made it rather than looked up in a table every reading
+         * writes into. A clause is read once per place the walk opens a value at, so a table
+         * holding all of them together has to say which reading each entry came from — and the
+         * only thing that said so was which objects a substitution happened to allocate.
+         */
+        PartRead read(PartId<RuleRef.Invariant> part, ClauseOccurrence at) {
+            Map<ClauseOccurrence, PartAsRead> said = constrained.get(part);
+            PartAsRead one = said == null ? null : said.get(at);
+            return one == null ? null : one.said();
+        }
+
+        /** Which rule of the model this is — see {@link ClauseView#rule}. */
+        RuleRef.Invariant from() {
+            return view.rule();
+        }
+
+        /**
+         * The parts of it this reading's world holds, which is what every walk over this clause
+         * reads.
+         *
+         * <p>The only parts a walk can reach from here. What the author wrote is spent above, on
+         * naming the rule; offered beside these, a walk would have both lists and would have to be
+         * written to take the right one — which is what left the connectives composed over
+         * conjuncts every walk beside them had left out.
+         */
+        List<Clauses.StatedPart> parts() {
+            return view.present();
+        }
+    }
+
+    /**
+     * Which part its author wrote each part of {@code reading}'s tree is.
+     *
+     * <p>Read off what the reading was built from and not counted again. Which parts a clause has
+     * was settled where it was split, and a second count made where a reading stands is a count
+     * that moves with whatever that reading's substitution put into the tree.
+     */
+    private static Map<ClauseOccurrence, PartId<RuleRef.Invariant>> authoredPartsOf(
+            Written reading) {
+        Map<ClauseOccurrence, PartId<RuleRef.Invariant>> out = new LinkedHashMap<>();
+        reading.parts().forEach(part -> under(part.of(), part.id(), out));
         return out;
+    }
+
+    /**
+     * Every occurrence of {@code shape} filed under the part it is written in.
+     *
+     * <p>Over the shape and not over what some reading of it happened to reach. A walk that stopped
+     * where a reading did would leave the coordinates it never got to naming no part, and what was
+     * decided under a choice it gave up at is exactly what has to cross.
+     */
+    private static void under(ClauseExpr shape, PartId<RuleRef.Invariant> part,
+                              Map<ClauseOccurrence, PartId<RuleRef.Invariant>> out) {
+        out.put(shape.at(), part);
+        switch (shape) {
+            case ClauseExpr.Leaf _ -> { }
+            case ClauseExpr.Joined it -> {
+                under(it.left(), part, out);
+                under(it.right(), part, out);
+            }
+            case ClauseExpr.Scoped it -> under(it.body(), part, out);
+        }
+    }
+
+    /**
+     * Which part its author wrote {@code at} is, refusing a coordinate of no part of the reading.
+     *
+     * <p>Every coordinate that reaches here was handed out by the same reading, so one that names
+     * no part of it is this compiler's two answers disagreeing rather than a fact about a model.
+     * Answered with nothing, what a rule is answerable for would be filed under no part and a
+     * report would have nowhere to send anybody.
+     */
+    private static PartId<RuleRef.Invariant> wroteIt(
+            ClauseOccurrence at, Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote) {
+        PartId<RuleRef.Invariant> part = wrote.get(at);
+        if (part == null) {
+            throw new IllegalStateException(
+                    "a reading decided something at " + at + ", which is no part of it");
+        }
+        return part;
+    }
+
+    /** Each of {@code behind}'s choices, as what a reader is owed and where they go about it. */
+    private static Set<ChoiceToLift> wroteAll(
+            EndsLeftOpen.Behind behind, Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote) {
+        Set<ChoiceToLift> out = new LinkedHashSet<>();
+        behind.named().forEach(choice -> out.add(new ChoiceToLift(choice.writtenAs(),
+                RuleSite.at(choice.writtenAs().origin(), wroteIt(choice.writtenIn(), wrote)))));
+        return out;
+    }
+
+    /**
+     * How much an allowance has spent in all, for holding an answer to what it spent between two
+     * moments.
+     *
+     * <p>One number and not a purse for every position this reading knows about. A purse belongs
+     * to a factor, and which factors there are is settled by the rules rather than before them, so
+     * a list of the expected ones would leave out the one an equality made.
+     */
+    private static int spentBy(Allowance<FactSubject> allowed) {
+        return allowed.spentSoFar();
     }
 
     /**
@@ -1003,7 +1715,7 @@ public final class InvariantChecker {
         /**
          * A value the construction need not make, so a rule under it refuses no construction.
          *
-         * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
+         * <p>The same reach {@link #BY_EVERY_VALUE} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
          * fields does.
          *
@@ -1028,7 +1740,12 @@ public final class InvariantChecker {
     interface Gathering {
 
         /**
-         * The clause {@code from}, rebased onto the positions of the value being read.
+         * The clause {@code from}, rebased onto the positions of the value being read, and the
+         * parts its author wrote it in.
+         *
+         * <p>Both, because two readings ask for two things about one clause: what it states is read
+         * as one thing, and what an author is answerable for is a part. The parts arrive carrying
+         * which part of the clause each is, so nothing here has to work that out of the tree.
          *
          * @param spokenFor the positions the reading that builds the numeric constraints took it in
          *                  about, said by that reading. Handed over here rather than worked out
@@ -1036,7 +1753,10 @@ public final class InvariantChecker {
          *                  deciding it from the clause's shape is guessing at another reader's
          *                  semantics
          */
-        void gathered(RuleRef.Invariant from, Core clause, Set<FactSubject> spokenFor);
+        void gathered(RuleRef.Invariant from, Core clause, List<Clauses.StatedPart> parts,
+                      Map<PartId<RuleRef.Invariant>, Map<ClauseOccurrence, PartAsRead>>
+                              constrained,
+                      Set<FactSubject> spokenFor);
 
         /**
          * A rule of this value that reached no reading, either because it could not be stated or
@@ -1046,8 +1766,13 @@ public final class InvariantChecker {
          * is one whose position is exactly what is unknown about it, and a subtree that was not
          * entered holds rules nobody here has read. What a collector does with it is the same
          * either way.
+         *
+         * <p>Which is true of the rule and was taken for true of the cause. What stopped is
+         * {@link RulesMissed}, and it is carried rather than turned into what it costs: a collector
+         * that wants to know whether a wider run would get past it has to be able to ask, and a
+         * {@link Borne} is the answer to a different question.
          */
-        void missed(String path, Borne borne);
+        void missed(RuleKey path, RulesMissed why);
 
         /**
          * A position where this reading ends and the rules under it become another reading's.
@@ -1064,44 +1789,28 @@ public final class InvariantChecker {
          * position under which no reading was ever opened would claim to have read rules it never
          * saw.
          */
-        void handedOn(String path);
+        void handedOn(RuleKey path);
 
-        /**
-         * What the reading that builds the bounds made of one part of {@code rule}, as it read it.
-         *
-         * <p>Per part, because a conjunction is one rule read a conjunct at a time and evidence
-         * gathered for the whole answers a clause half of which nothing read on the strength of the
-         * half that was. Recorded here so that nothing downstream reads the part a second time: two
-         * readings of one conjunct agree only for as long as nobody changes one of them.
-         */
-        void constrained(RuleRef.Invariant rule, Core part, PartRead read);
     }
 
     /**
-     * What each reading made of each part of each rule, as each of them said so while reading it.
+     * What each rule's own tree came to, once every branch of the value is decided.
      *
-     * <p>Per part, because a conjunction is one rule read a conjunct at a time and evidence gathered
-     * for the whole answers a clause half of which nothing read on the strength of the half that
-     * was. Keyed by the part as the tree holds it, so the walk that reads the clause afterwards
-     * finds this reading's own answer about the very node it holds rather than reading it again.
+     * <p>What a part of a rule came to is not here. That is the reading's own and is held by the
+     * reading that made it ({@link Written#adoptedAt}), because a rule is read once per place the
+     * walk opens a value at and an answer about a part means nothing without saying which of those
+     * readings said it.
      *
-     * @param read    what the reading that builds the numeric constraints made of each part
-     * @param adopted what the reading that turns clauses into sets of values took each part in about
+     * @param byRule  what each rule's own tree came to, which is the only thing that answers what
+     *                that rule did to a position. The declaration's answer is met from every rule
+     *                reaching the position, so a reader taking it for one rule's would lend a rule
+     *                that narrows nothing whatever its neighbours narrowed
      */
-    record PartsRead(Map<RuleRef, Map<Core, PartRead>> read,
-                     Map<RuleRef, Map<Core, Set<FactSubject>>> adopted) {
+    record RulesRead(Map<RuleRef.Invariant, ReadByClauses.OfARule> byRule) {
 
-        /** What the reading that builds the bounds made of {@code part} of {@code rule}, or null
-         *  where it read no such part — which is not the same as having read it and made nothing of
-         *  it. */
-        PartRead readIn(RuleRef rule, Core part) {
-            Map<Core, PartRead> said = read.get(rule);
-            return said == null ? null : said.get(part);
-        }
-
-        Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
-            Map<Core, Set<FactSubject>> said = adopted.get(rule);
-            return said == null ? null : said.get(part);
+        /** What {@code rule}'s own tree left, or null where no reading answered over it. */
+        ReadByClauses.OfARule ruleIn(RuleRef rule) {
+            return byRule.get(rule);
         }
     }
 
@@ -1113,12 +1822,13 @@ public final class InvariantChecker {
      * for a conjunct it never saw — and read as "nothing constrained here" it would answer for the
      * position that conjunct names.
      *
-     * <p>Not an ordinary limit, so not swallowed. A shape a walk has no rule for leaves the run-time
-     * check standing; this is the two walks disagreeing about what the clause is made of, and a
-     * value that came back with nothing to say for that reason reads exactly like a value whose
-     * rules were all read.
+     * <p>Not a rule this reading declines. The seeding hands over the same clause the readings went
+     * back over, so the two meet the same parts by construction — and where they do not, both of
+     * this compiler's accounts of one clause are standing and they are not the same clause. A value
+     * that came back with nothing to say for that reason reads exactly like a value whose rules were
+     * all read.
      */
-    static final class APartNoReadingSaw extends TheCheckDisagreesWithItself {
+    static final class APartNoReadingSaw extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 
@@ -1169,6 +1879,16 @@ public final class InvariantChecker {
     }
 
     /**
+     * One occurrence of a part as that reading read it: the shape it is, and what the reading made
+     * of it.
+     *
+     * <p>The shape and not the node alone. A reader of this asks what the occurrence is written as
+     * and which nodes it was spelled as, and the shape is where that is already answered; read off
+     * the node, it would be the connectives recognised a second time.
+     */
+    record PartAsRead(ClauseExpr of, PartRead said) {}
+
+    /**
      * A coordinate a clause reaching this value could be about.
      *
      * <p>The term itself, and not a path beside a flag saying a number was taken of it. A number
@@ -1183,12 +1903,12 @@ public final class InvariantChecker {
      *                position no line is drawn on named nothing, and the reading that could say so
      *                had never heard of the position
      */
-    private record Coordinate(FieldDomains.Coordinate at, Carrier carrier) {
+    private record Coordinate(NumberAt<RuleKey> at, Carrier carrier) {
 
-        /** Where in the value it sits. Never what it is: two numbers can be taken at one path, and
-         *  {@link #at} is what tells them apart. */
-        String path() {
-            return at.path();
+        /** What the value's rules call it. Never what it is: two numbers can be taken at one name,
+         *  and {@link #at} is what tells them apart. */
+        RuleKey path() {
+            return at.position();
         }
     }
 
@@ -1210,28 +1930,43 @@ public final class InvariantChecker {
      *                  Beside the ends rather than derived from them: a clause that placed no end
      *                  may have raised a question all the same, and a clause that placed one raised
      *                  more than the line. Nothing here says whether anything answered
-     * @param raisedByPart the same, kept per part of each rule. A conjunction is one rule the author
-     *                  wrote, and what it raises is what its conjuncts raise together — so a reader
-     *                  that found one conjunct wanting and reached for the rule's questions would
-     *                  name the positions of the conjunct written beside it as well
+     * @param raisedByPart the same, kept for each place in the rule's clause. A conjunction is one
+     *                  rule the author wrote, and what it raises is what its conjuncts raise
+     *                  together — so a reader that found one conjunct wanting and reached for the
+     *                  rule's questions would name the positions of the conjunct written beside it
+     *                  as well. Per place and not per part, because one part states as many rules
+     *                  as its author wrote into it and each of them raises its own questions
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
-                   Map<String, List<TypeSymbol.AtModule>> narrowers,
-                   Map<RuleRef, Required> raised,
-                   Map<RuleRef, Map<Core, Required>> raisedByPart) {}
+                   List<FieldDomains.WithoutAnEnd> withoutAnEnd,
+                   List<FieldDomains.AboutOneCoordinate> aboutOneCoordinate,
+                   Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
+                   Map<RuleRef.Invariant, Required> raised,
+                   Map<ReadingPlace, Required> raisedByPart,
+                   Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing) {}
 
-    private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                   Map<String, FieldDomains.Counted> held,
-                                   Map<String, Type> typeAt,
-                                   ReadingEvidence took, PartsRead parts) {
+    /**
+     * The numbers the clauses of one value can be about, each under the name they write for it.
+     *
+     * <p>Made before any clause is read, because two readings want it. The walk that classifies a
+     * comparison asks which number a rule places its end on; the fold that reads the clause tree
+     * asks which of the positions a leaf orders, so that a rule bounding a length is not taken for
+     * one whose end nothing worked out. Built twice, the two would answer about two tables the day
+     * one of them learned a number the other had not.
+     */
+    private Map<FactSubject, Coordinate> coordinatesOf(Map<RuleKey, FactSubject> atoms,
+                                                       Map<RuleKey, FactSubject> keys,
+                                                       Map<RuleKey, FieldDomains.Counted> held,
+                                                       Map<RuleKey, Type> typeAt) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
-            Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
-            byName.put(key, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
+            Carrier carrier =
+                    Carrier.ofValue(typeAt.get(path), terms.newtypeInners(), symbols,
+                            terms.kinds(), terms.published());
+            byName.put(key, new Coordinate(NumberAt.valueOf(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {
-                byName.put(atom, new Coordinate(FieldDomains.Coordinate.value(path), carrier));
+                byName.put(atom, new Coordinate(NumberAt.valueOf(path), carrier));
             }
         });
         // A count is a whole number whatever it counts, so nothing about the container decides how
@@ -1239,25 +1974,60 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(FieldDomains.Coordinate.takenBy(path, counted.by()),
+                new Coordinate(NumberAt.takenOf(path, counted.by()),
                         Carrier.WHOLE)));
+        return byName;
+    }
+
+    private Reading directsIn(List<Written> stated, Denotations at,
+                                   Map<FactSubject, Coordinate> byName,
+                                   ReadingEvidence took, RulesRead rules) {
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
-        Map<String, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
-        Map<RuleRef, Required> raised = new LinkedHashMap<>();
-        Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
-        stated.forEach(each ->
-                direct(each.clause(), each.from(), new int[1], at, byName, out, noLines, narrowers, raised,
-                        took, typeAt, parts, raisedByPart));
+        SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd = new LinkedHashMap<>();
+        SequencedMap<Candidate, Set<InvariantStatementId>> aboutOneCoordinate = new LinkedHashMap<>();
+        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
+        Map<RuleRef.Invariant, Required> raised = new LinkedHashMap<>();
+        Map<ReadingPlace, Required> raisedByPart = new LinkedHashMap<>();
+        Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
+                new LinkedHashMap<>();
+        // The parts this world holds, which is the same list every other walk over these clauses
+        // was given: a part one of them reached that another never read is a value whose rules were
+        // not gathered ({@link APartNoReadingSaw}). One list and not one rule each of them
+        // consults, so the agreement is not something a walk has to be written to keep.
+        stated.forEach(each -> each.parts().forEach(part ->
+                // The part as the clause was read into, walked from there. Read out of the tree
+                // again, the occurrences under one part would be numbered afresh from wherever the
+                // part begins, and an answer filed by the reading that seeded it would be asked
+                // for under a number this walk made up.
+                //
+                // Which statements the conjunct states, and what each is called, come from the one
+                // walk that numbers them ({@link ConjunctStatements}). Counted here, this would be a
+                // second answer to what a conjunct states, and a reading that made less of a clause
+                // than another would name the same rule differently.
+                ConjunctStatements.of(part.of(), part.id()).forEach(reached ->
+                        direct(reached.said(), reached.statement(), each, part.id(),
+                                inside(reached.crossed(), at), byName, out, noLines,
+                                withoutAnEnd, aboutOneCoordinate, narrowers,
+                                raised, took, rules, raisedByPart, standing))));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)));
+        return new Reading(List.copyOf(out), List.copyOf(noLines),
+                List.copyOf(withoutAnEnd.values()),
+                // Made once each, from the statements gathered under them: a candidate rebuilt as
+                // the walk met another statement copied what it had so far every time.
+                aboutOneCoordinate.entrySet().stream()
+                        .map(each -> new FieldDomains.AboutOneCoordinate(
+                                each.getKey().at(), each.getValue()))
+                        .toList(),
+                Map.copyOf(narrowers),
+                Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
-    private static void raises(Map<RuleRef, Required> into, RuleRef.Invariant rule,
+    private static void raises(Map<RuleRef.Invariant, Required> into, RuleRef.Invariant rule,
                                ClauseStates states) {
         into.merge(rule, Required.ofInvariant(states), Required::and);
     }
@@ -1271,19 +2041,18 @@ public final class InvariantChecker {
      * nothing read on the strength of the half that was, which is how `value >= 1 && value * value
      * >= 4` came back with nothing to say while the same two rules written apart were reported.
      */
-    private void settle(Core part, RuleRef.Invariant rule, ClauseStates states,
-                        InvariantBound.Read placed,
-                        Denotations at,
-                        Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
-                        ReadingEvidence took, Map<String, Type> typeAt,
-                        PartsRead parts,
-                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
+    private void settle(Core part, RuleRef.Invariant rule, Written of,
+                        InvariantStatementId statement, ClauseOccurrence at,
+                        ClauseStates states, InvariantBound.Read placed,
+                        Map<FactSubject, Coordinate> byName, Map<RuleRef.Invariant, Required> raised,
+                        ReadingEvidence took,
+                        Map<ReadingPlace, Required> raisedByPart) {
         raises(raised, rule, states);
         // And what this part of it raises, kept apart from what the rule raises. A reader that found
         // one conjunct wanting reaches for this: the questions of the conjunct written beside it are
         // not what that conjunct left standing.
-        raisedByPart.computeIfAbsent(rule, _ -> new java.util.IdentityHashMap<>())
-                .merge(part, Required.ofInvariant(states), Required::and);
+        raisedByPart.merge(new ReadingPlace(of.opened(), at),
+                Required.ofInvariant(states), Required::and);
         // A part the reading of ends took in is accounted for by that reading, whatever shape the
         // clause has. Asked of the reading and not of the shape: the two were one question while a
         // bound this could fold was the only clause that arrived here as a bound, and reading the
@@ -1300,7 +2069,7 @@ public final class InvariantChecker {
         }
         // The positions this part is about, by every name each answers to, since a reading files a
         // clause under whichever name it recognised.
-        Set<String> named = states.about();
+        Set<RuleKey> named = states.about();
         Set<FactSubject> about = new LinkedHashSet<>();
         for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
             if (named.contains(each.getValue().path())) {
@@ -1310,7 +2079,8 @@ public final class InvariantChecker {
         if (about.isEmpty()) {
             return;
         }
-        Set<FactSubject> here = parts.adoptedIn(rule, part);
+        ReadByClauses.OfAPart adopted = of.adoptedAt(at);
+        Set<FactSubject> here = adopted == null ? null : adopted.adopted();
         // What this very reading made of this very part, as it said so when it read it. Asked
         // again here, the part was read a second time, and two readings of one conjunct agree only
         // for as long as nobody changes one of them.
@@ -1320,7 +2090,7 @@ public final class InvariantChecker {
         // the position it names. The seeding hands the whole clause to the same reader this walks,
         // so there is no such part — and if the two ever come apart, this value reads as one whose
         // rules were not gathered rather than as one whose rules were read and said nothing.
-        PartRead read = parts.readIn(rule, part);
+        PartRead read = of.read(statement.part(), at);
         Set<FactSubject> constrained = read == null ? null : read.constrained();
         if (here == null || constrained == null) {
             throw new APartNoReadingSaw(part);
@@ -1337,60 +2107,139 @@ public final class InvariantChecker {
     }
 
     /**
-     * {@code clause}'s ends and what it relates, taking a conjunction one conjunct at a time as an
-     * invariant is.
+     * Where a statement stands: the reading at the conjunct, entered into each binding the walk
+     * crossed to reach it.
      *
-     * <p>Both answers from one reading of the clause. A comparison either places an end on a
+     * <p>What crossing a binding means is this reading's and is spent here. The walk that numbers
+     * the statements hands the bindings over rather than entering them, because a reading that has
+     * no environment to carry crosses the same binding by doing nothing — said there, one reader's
+     * answer would be every reader's.
+     */
+    private Denotations inside(List<ClauseExpr.Scoped> crossed, Denotations at) {
+        Denotations here = at;
+        for (ClauseExpr.Scoped each : crossed) {
+            here = terms.inside(each.binding(), here);
+        }
+        return here;
+    }
+
+    /**
+     * One part of a clause: its ends and what it relates, read where it stands.
+     *
+     * <p>Both answers from one reading of the part. A comparison either places an end on a
      * coordinate or relates one to something else, and which of the two it did is the same question
      * asked once — read apart, the second would be a walk that had to agree with this one about which
      * comparisons it had already accounted for.
+     *
+     * <p>Which part of which rule this is arrives with it, and so does which statement of that part
+     * ({@link ConjunctStatements}). Which parts a clause has is what its author wrote and is settled
+     * where the clause was split, and which statements a part states is settled where they are
+     * numbered, so nothing here recognises a connective or counts anything: a second walk with a
+     * counter of its own calls one authored part two the day the two disagree about which parts
+     * there are.
+     *
+     * <p>A binding is crossed before this and never descended into as a part. The body is what the
+     * part states, read inside it (ADR-0106) — so a rule stating its end through a helper places the
+     * line the same rule written out places — and a helper calling a helper is bindings all the way
+     * down. What a helper's body joined is still this one part, and this reading has one end for it.
      */
-    private void direct(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
+    private void direct(ClauseExpr.Part said, InvariantStatementId statement,
+                        Written of, PartId<RuleRef.Invariant> part, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
-                        Map<String, List<TypeSymbol.AtModule>> narrowers,
-                        Map<RuleRef, Required> raised, ReadingEvidence took,
-                        Map<String, Type> typeAt,
-                        PartsRead parts,
-                        Map<RuleRef, Map<Core, Required>> raisedByPart) {
-        if (clause instanceof Core.Binary and && and.op() == BinOp.AND) {
-            // One rule the author wrote, so what it raises is what its conjuncts raise together.
-            // Left before right, which is the order the clause was written in and the order
-            // {@code ClauseHelpers.conjunctsOf} reads it in: the two readings of one clause number
-            // its conjuncts alike, which is what lets a line drawn here be recognised as the line
-            // the declaration's own reading drew (issue #1062).
-            direct(and.left(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
-            direct(and.right(), from, conjunct, at, byName, out, noLines, narrowers, raised, took,
-                    typeAt, parts, raisedByPart);
-            return;
-        }
-        // Which conjunct of the clause this is, taken here so that every one of them is numbered —
-        // including the ones no end comes out of. Numbered only where a line was drawn, the count
-        // would depend on what this reading could make of the conjuncts before it, and two readings
-        // of one clause would disagree about which line is which.
-        int part = conjunct[0]++;
-        if (!(clause instanceof Core.Binary bin)) {
-            settle(clause, from, states(clause, at, byName, null),
+                        SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd,
+                        SequencedMap<Candidate, Set<InvariantStatementId>> naming,
+                        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
+                        Map<RuleRef.Invariant, Required> raised, ReadingEvidence took,
+                        RulesRead rules,
+                        Map<ReadingPlace, Required> raisedByPart,
+                        Map<FieldDomains.BoundaryQuestion,
+                                FieldDomains.BoundaryStanding> standing) {
+        // Which rule this is a part of, asked of the part. Carried beside it, a reading could be
+        // given a part of one rule and told it was reading another.
+        RuleRef.Invariant from = part.rule();
+        // The rule this part states, which is what every reading below is of. Under a denial that
+        // is what the denial denies, and the denial itself is spent where the comparison is read
+        // ({@link StatedComparison#of}) rather than carried down as a flag each reader applies.
+        // Taken as the outermost of what the shape was spelled as, this is the {@code not} an
+        // author wrote, which is no comparison — and a rule written under one placed no end, drew
+        // no line and was about no number, while the reading that turns clauses into sets read it
+        // perfectly well.
+        Core clause = said.of();
+        // Whether an expression answers a value, of the clause this part was read out of. The root
+        // and not the part: a binding is crossed before this, and the part under it is one the
+        // binding is evaluated before — read as a root of its own, the name that binding gave would
+        // be free and an arm depending on it would answer a value the clause never comes to.
+        Arrivals answering = Arrivals.inTheTree(of.clause());
+        // What a rule about the strings at a position says about where they stop, which is a rule
+        // of this conjunct as much as an ordering written here is. Beside the reading of
+        // comparisons and not inside it: what such a rule states is not a comparison and has no
+        // sides to walk, and it reaches a position a comparison could reach as readily.
+        //
+        // Before the reading below, which needs to know: a conjunct that stated where the values
+        // stop has a line, and is not one an author is owed a sentence about for having drawn none.
+        RunsRead runs = runsOf(new ReadingPlace(of.opened(), said.at()), of, statement, byName, out);
+        // What an author wrote and where, which is what a sentence about the rule points at. A rule
+        // written under a denial is shown as the denial: that is what is on the line.
+        restricting(said.written(), said.at(), from, of, part, byName, rules, noLines, runs);
+        aChoiceAboutOneCoordinate(said, statement, at, byName, naming);
+        // Where this clause is recognised as a comparison, and the one place it is. What each
+        // reader below wants is what the recognition established — the two sides to walk, and what
+        // the rule states of them — so each is handed that rather than the node it was read off.
+        // Asked again below, the question is answered a second time and every reader has a case to
+        // invent an answer for: the one where the operator compares nothing, which the recognition
+        // here already took out.
+        //
+        // Of the part and its polarity together, so what comes back is the comparison the clause
+        // states. A reader handed the operator and told separately how the clause stands is a
+        // reader that has to remember to put the two together, which is the one thing this walk
+        // was not doing.
+        StatedComparison comparison = StatedComparison.of(said);
+        if (comparison == null) {
+            // Nothing written as a comparison, so there is no reading of one for the classification
+            // to be handed: what is below reads a clause for the end it places on a position and
+            // for which declarations narrowed that position, and neither is a thing another shape
+            // of rule states.
+            settle(clause, from, of, statement, said.at(),
+                    states(clause, at, byName, null, answering, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, raisedByPart);
             return;
         }
-        if (!InvariantBound.ordering(bin.op()) && bin.op() != BinOp.EQ) {
-            settle(bin, from, states(bin, at, byName, arithmeticOf(bin, at, byName)),
+        Core.Binary bin = (Core.Binary) clause;
+        // And the one reading of the arithmetic over it, handed to each of the questions asked of
+        // it: what the clause states, and what a reader is left with where no end came of it.
+        CanonicalForm read = canonicalFormOf(comparison, at, byName);
+        // What the rule states, with the denial already in it.
+        ComparisonClaim asWritten = comparison.claim();
+        // Which number this conjunct is about, written down before anything is asked about what it
+        // did to it. Every shape of rule alike: whether an end is read from it below decides which
+        // reader states where the values stop, and decides nothing about which conjuncts account
+        // for where they stop.
+        aboutOneCoordinate(read, statement, naming);
+        // What the comparison states of the coordinate it names, read from whichever side bears
+        // one, as `0 <= value` says what `value >= 0` says. The turn is spent making this, so no
+        // reader below holds a claim beside a note about which way round it was written.
+        //
+        // Above what the claim is, because which number the rule is about does not turn on that. A
+        // rule that names a value is about the number it names as plainly as one that orders the
+        // values around it, and the lookup done under the ordering alone was one every other
+        // reading of the clause had to do again for itself.
+        StatedComparison.Numbered<Coordinate> numbered =
+                comparison.at(each -> byName.get(nameOf(each, at)));
+        if (asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
+            settle(bin, from, of, statement, said.at(),
+                    states(bin, at, byName, read, answering, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, raisedByPart);
+            // And handed on, which is not the same as being reported. A rule that rules one value
+            // out places no end and is no failure of this reading, so there is nothing here for an
+            // author to lift and there is a conjunct for the reading that draws lines to make what
+            // it can of.
+            withoutAnEnd.putIfAbsent(new HandOver(statement),
+                    new FieldDomains.WithoutAnEnd(statement, comparison, said.written().pos(),
+                            of.clause()));
             return;
-        }
-        // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
-        // says.
-        Coordinate found = byName.get(nameOf(bin.left(), at));
-        Core bound = bin.right();
-        BinOp op = bin.op();
-        if (found == null) {
-            found = byName.get(nameOf(bin.right(), at));
-            bound = bin.left();
-            op = InvariantBound.flipped(op);
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
         // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
@@ -1400,36 +2249,57 @@ public final class InvariantChecker {
         // the order places none — there is no value to draw a line at — and it is not a relation
         // either: what it compares the coordinate to is a constant this read perfectly. So it falls
         // out here rather than being filed as a clause that could have moved an edge.
-        InvariantBound.Read end = found == null || !InvariantBound.ordering(op)
-                ? new InvariantBound.Read.NoEnd()
-                : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
-        Coordinate about = found;
+        InvariantBound.Read end = numbered != null
+                && numbered.claim() instanceof ComparisonClaim.Cut cut
+                ? InvariantBound.at(cut, Terms.asWrittenValue(numbered.other(), at),
+                        numbered.number().carrier())
+                : new InvariantBound.Read.NoEnd();
+        Coordinate about = numbered == null ? null : numbered.number();
         // What the clause is about, asked of the comparison and not of what `end` came to. A
         // coordinate compared for order against something naming no other coordinate states where
         // the values stop, whether or not the number on the other side is one this could fold.
-        // Read once for this comparison and handed to both of the questions asked of it: what the
-        // clause states, and what a reader is left with where no end came of it.
-        Arithmetic read = arithmeticOf(bin, at, byName);
-        ClauseStates shape = states(bin, at, byName, read);
+        ClauseStates shape = states(bin, at, byName, read, answering, runs);
         // And nothing of this value on the other side. `ARelation` is only what
         // `Relates.twoPositions` recognises, which wants each whole side to be a position — so
         // `width <= height + 1` is not one, and read as a bound it raised a question about where
         // `width` stops that no reading can ever answer, because a rule relating two positions
         // places no end (ADR-0090). The reader already knows: the reason it records for such a
         // comparison is `ComparisonBetweenPositions`.
-        if (about != null && InvariantBound.ordering(op)
-                && coordinatesIn(bound, at, byName).isEmpty()
+        if (about != null && numbered.claim() instanceof ComparisonClaim.Cut
+                && coordinatesIn(numbered.other(), at, byName, answering).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {
-            Set<String> positions = new LinkedHashSet<>(named.positions());
-            // The position the bound sits at, which the walk over the comparison names anyway. Added
+            Set<RuleKey> names = new LinkedHashSet<>(named.named());
+            // The name the bound sits at, which the walk over the comparison writes anyway. Added
             // so that the arm cannot be reached with nothing to be about.
-            positions.add(about.path());
+            names.add(about.path());
             // And the number the line is on, which is the coordinate this reading already holds. Not
-            // rebuilt from the path: which of a position's numbers a line is on is what the operation
-            // beside it says, and a reader handed the path alone has to go and ask something else.
-            shape = new ClauseStates.ABound(about.at(), positions);
+            // rebuilt from the name: which of the numbers at a name a line is on is what the
+            // operation beside it says, and a reader handed the name alone has to ask something
+            // else.
+            shape = new ClauseStates.ABound(about.at(), names);
         }
-        settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
+        // And where this part raises the question of where the values there stop and no end came of
+        // it, the answer to that question. Made once, when the question is first met: which limit
+        // it is is read off the coordinate the question is keyed by, and the coordinate is what
+        // carries the carrier — so the same reading of the same carrier is what any part raising
+        // this question would come to, and it is done once rather than done again and reconciled.
+        // What a part met afterwards adds is itself.
+        if (shape instanceof ClauseStates.ABound stated
+                && end instanceof InvariantBound.Read.NoEnd) {
+            // Once per number the clause stops the values on. A comparison states one, which is
+            // what this arm is reached from; written for that one alone, a clause stating two would
+            // leave the second question with nothing standing against it.
+            stated.lines().forEach(line ->
+                    standing.compute(new FieldDomains.BoundaryQuestion(from, line),
+                            (question, had) -> had == null
+                                    ? new FieldDomains.BoundaryStanding(
+                                            UnreadComparison.whereALineWouldFall(
+                                                    about.carrier() != null),
+                                            List.of(part))
+                                    : had.and(part)));
+        }
+        settle(bin, from, of, statement, said.at(), shape, end, byName, raised, took,
+                raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have
@@ -1442,7 +2312,13 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(bin, from, part, at, byName, noLines, read);
+            noLineDrawn(read, bin, part, at, byName, answering, noLines);
+            // The hand-over beside the finding, and not read off it. Both come of this conjunct
+            // having no end, and they answer different questions: what an author is owed a word
+            // about, and what the next reading is given to read.
+            withoutAnEnd.putIfAbsent(new HandOver(statement),
+                    new FieldDomains.WithoutAnEnd(statement, comparison, said.written().pos(),
+                            of.clause()));
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1450,10 +2326,295 @@ public final class InvariantChecker {
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
-            out.add(new Direct(found.at(), from, placed.bound(), bin, part));
+            out.add(new Direct(about.at(), statement, placed.bound(),
+                    new ReadingPlace(of.opened(), said.at())));
         }
     }
 
+
+    /**
+     * A choice written about one of this value's numbers, put forward as a candidate for the end
+     * the rules leave on it.
+     *
+     * <p>No line is drawn here. This walk stops at a choice, so what a choice leaves a number is
+     * not something it has — that is composed where the branches have their fate
+     * ({@link Confinement.Planned#either}) and is what the rules leave. What is written down is
+     * that this part is about that number, which is what the attribution of an end to a conjunct
+     * runs over ({@link FieldDomains#movedEnds}): a part with no end of its own that moves one is
+     * exactly the case that machinery exists for, and a choice is one.
+     *
+     * <p>One per number the leaves under it state a line on, and never a claim that this choice is
+     * why the end is there: whether taking the part away moves the end is the counterfactual's, and
+     * a candidate that moves none is named nowhere. Which is why they are put forward for every
+     * number the leaves name and not for the ones a choice was newly given an answer about — a
+     * candidate costs a counterfactual and claims nothing, and a rule saying which of them may be
+     * one would be a second place deciding what a choice does.
+     */
+    private void aChoiceAboutOneCoordinate(ClauseExpr.Part said, InvariantStatementId statement,
+                                           Denotations at, Map<FactSubject, Coordinate> byName,
+                                           SequencedMap<Candidate, Set<InvariantStatementId>> naming) {
+        // The shape the walk is already holding. Read again from the node, this would be a second
+        // reading of the clause's structure, and one made under a polarity of its own: a choice an
+        // author wrote as a denied conjunction is a choice, and the shape says so.
+        if (!(said instanceof ClauseExpr.Joined joined)
+                || joined.how() != ConditionJoin.EITHER) {
+            return;
+        }
+        // Of the choice's own statement, because that is the statement there is. This walk stops at
+        // a choice, so what is under it is how the choice states its rule and not a statement of
+        // the conjunct — a leaf of one is reached by no reading that files an answer about it, and
+        // naming it here would be a statement nobody issued.
+        numbersALineIsStatedOn(joined, at, byName)
+                .forEach(number -> aboutOneCoordinate(number, statement, naming));
+    }
+
+    /**
+     * The numbers the leaves under {@code stated} say the values stop somewhere on.
+     *
+     * <p>A walk for what the leaves state and never for what the clause comes to. Which values a
+     * choice leaves is settled where the branches have their fate, and nothing here asks: a leaf
+     * under an {@code &&} and one under a {@code ||} state the same line, and this is that answer
+     * gathered over whatever an author wrote between them.
+     *
+     * <p>A leaf stating a line on a number this reading cannot name brings nothing, as one stating
+     * no line does. What each number here is is a candidate and no more — whether the part is why
+     * an end is there is the counterfactual's answer ({@link FieldDomains#movedEnds}) — so a leaf
+     * with no number to offer has nothing to put forward either way.
+     *
+     */
+    private Set<NumberAt<RuleKey>> numbersALineIsStatedOn(ClauseExpr stated, Denotations at,
+                                                          Map<FactSubject, Coordinate> byName) {
+        switch (stated) {
+            case ClauseExpr.Scoped it -> {
+                // A binding is crossed and never a leaf of its own: what the part states is what
+                // its body states, read inside it — so a rule stating its line through a helper
+                // states the line the same rule written out states.
+                return numbersALineIsStatedOn(it.body(), terms.inside(it.binding(), at), byName);
+            }
+            case ClauseExpr.Joined it -> {
+                Set<NumberAt<RuleKey>> both =
+                        new LinkedHashSet<>(numbersALineIsStatedOn(it.left(), at, byName));
+                both.addAll(numbersALineIsStatedOn(it.right(), at, byName));
+                return both;
+            }
+            case ClauseExpr.Leaf it -> {
+                // The one number the rule is over, which is the same answer the attribution of an
+                // end to a conjunct is put forward on. A rule over several is a line between them
+                // and an end at none, so it puts nothing forward.
+                // The clause this leaf was read out of does not reach here either, and what is
+                // asked is which number the rule is over rather than which arms it may come to.
+                return switch (lineStatedIn(it.of(), it.positive(), at, byName,
+                        Arrivals.everyArmIsTakenForAValue())) {
+                    case StatedLines.Statement.OnWhatStandsAtAPosition found ->
+                            Set.of(found.number());
+                    case StatedLines.Statement.OnADerivedNumber found ->
+                            Set.of(found.number().asNumber());
+                    case StatedLines.Statement.NoLine _,
+                         StatedLines.Statement.Between _,
+                         StatedLines.Statement.AdmitsNothing _,
+                         StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
+                };
+            }
+        }
+    }
+
+    /**
+     * The reading of the numbers this value's operations answer, out of the one table of them.
+     *
+     * <p>Only those: where the values at a position stop is the reading of ends' order and is
+     * settled there, and a number that cannot be made into one of these cannot reach this reading
+     * ({@link DerivedNumber}).
+     */
+    private static BoundaryReading boundariesOf(Terms terms,
+                                                Map<FactSubject, Coordinate> byName) {
+        Map<FactSubject, DerivedNumber> numbers = new LinkedHashMap<>();
+        Map<DerivedNumber, Carrier> carriers = new LinkedHashMap<>();
+        byName.forEach((name, coordinate) -> {
+            DerivedNumber number = DerivedNumber.of(coordinate.at());
+            if (number == null || coordinate.carrier() == null) {
+                return;
+            }
+            numbers.put(name, number);
+            carriers.put(number, coordinate.carrier());
+        });
+        return BoundaryReading.of(terms, numbers, carriers);
+    }
+
+    /**
+     * The classification of one leaf, for the fold that reads the clause tree.
+     *
+     * <p>Bound to the table of numbers rather than made from it again, so that the reading which
+     * says a rule bounds a length is the same one the walk over comparisons uses. What the fold
+     * does with the answer is its own ({@link StatedByClauses.Reading#whole}); what is answered
+     * here is a fact about the clause, which is why it is asked of the reader holding the
+     * arithmetic.
+     */
+    private StatedLines linesStatedAgainst(Map<FactSubject, Coordinate> byName) {
+        return new StatedLines() {
+
+            @Override
+            public StatedLines.Statement of(Core leaf, boolean positive, Denotations at) {
+                // One reader over however many clauses reach this value, handed a leaf and not the
+                // clause it was read out of — so there is no tree here to root a reading of
+                // arrivals at, and the part is the one thing it must not be rooted at.
+                return lineStatedIn(leaf, positive, at, byName,
+                        Arrivals.everyArmIsTakenForAValue());
+            }
+
+            @Override
+            public Set<FactSubject> waitingOnAReader(StatedLines.Statement stated,
+                                                     Set<FactSubject> named) {
+                return switch (stated) {
+                    case StatedLines.Statement.NoLine _ -> Set.of();
+                    // A line between several of this value's numbers falls at none of them, so
+                    // nothing about where any one of them stops is waiting on a reader.
+                    case StatedLines.Statement.Between _ -> Set.of();
+                    // Which position it is about is what reading further would say, so every
+                    // position the leaf writes is one whose end waits on a reader.
+                    case StatedLines.Statement.OnANumberNotNamed _ -> named;
+                    // And a rule no row meets settles nothing for the alternative beside it. What
+                    // the choice comes to is that alternative, whose end is where it was — so the
+                    // positions this rule writes stay waiting, and nothing here strikes them off
+                    // on the strength of a branch nobody is in.
+                    case StatedLines.Statement.AdmitsNothing _ -> named;
+                    case StatedLines.Statement.OnWhatStandsAtAPosition it ->
+                            ownValuesAmong(named, it.number(), byName);
+                    // A line on a number an operation answers leaves the position's own order
+                    // exactly where it was. Whether that line was placed is the reading that holds
+                    // those numbers' answer, and it is filed under the number rather than here.
+                    case StatedLines.Statement.OnADerivedNumber _ -> Set.of();
+                };
+            }
+        };
+    }
+
+    /** The positions of {@code named} that {@code number} is the value standing at. */
+    private static Set<FactSubject> ownValuesAmong(Set<FactSubject> named,
+                                                   NumberAt<RuleKey> number,
+                                                   Map<FactSubject, Coordinate> byName) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        for (FactSubject each : named) {
+            Coordinate here = byName.get(each);
+            if (here != null && here.at().equals(number)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static final StatedLines.Statement NO_LINE = new StatedLines.Statement.NoLine();
+    private static final StatedLines.Statement BETWEEN = new StatedLines.Statement.Between();
+    private static final StatedLines.Statement ELSEWHERE =
+            new StatedLines.Statement.OnANumberNotNamed();
+    private static final StatedLines.Statement ADMITS_NOTHING =
+            new StatedLines.Statement.AdmitsNothing();
+
+    /**
+     * Which of this value's numbers one leaf says the values stop on.
+     *
+     * <p>The three ways a leaf can state no line, told apart by what this reader has and the ends
+     * have not. A rule that is no comparison says which values may stand somewhere and orders none
+     * of them. A denial of one value rules that value out and leaves every other where it was. And
+     * a comparison whose positions cancel holds of every row there is, which the arithmetic settles
+     * and a reading of the sides cannot — {@code n - n >= 0} names {@code n} twice and stops it
+     * nowhere.
+     *
+     * <p>Then which number the line falls on, which is what the canonical form of the comparison
+     * says and is not read off the sides. A rule whose coordinate is written inside an expression —
+     * {@code String.length(s) * 2 >= 4} — is a rule about that coordinate, and a reading that
+     * looked for a name spelled as a whole side would call it a rule about nothing.
+     */
+    private StatedLines.Statement lineStatedIn(Core leaf, boolean positive, Denotations at,
+                                               Map<FactSubject, Coordinate> byName,
+                                               Arrivals answering) {
+        if (!(leaf instanceof Core.Binary bin)) {
+            return NO_LINE;
+        }
+        StatedComparison read = StatedComparison.of(bin, positive);
+        if (read == null) {
+            return NO_LINE;
+        }
+        if (read.claim() instanceof ComparisonClaim.Singled singled
+                && !singled.holdsAtTheValue()) {
+            return NO_LINE;
+        }
+        // Whether the rule holds one of this value's positions to another, which is a fact about
+        // the two sides and not about the arithmetic: {@code n >= m + 1} is over two numbers and
+        // holds no position to a position, so the end at each of them is one a reader is still owed.
+        // Asked of the canonical form, the two would be one answer and a bound against something
+        // built from a position would read as a line that falls at neither.
+        if (Relates.twoPositions(bin, e -> {
+            FactSubject named = nameOf(e, at);
+            return named != null && byName.containsKey(named) ? named : null;
+        })) {
+            return BETWEEN;
+        }
+        return switch (canonicalFormOf(read, at, byName)) {
+            // The walk stopped inside a side. Where one whole side is a position and the other
+            // names none, the line is on that position and the arithmetic stopping says nothing
+            // about it: what it could not read is an order it has no words for, and a rule holding
+            // a string or a case of an enumeration against a constant states where those values
+            // stop as plainly as a bound on a number does.
+            //
+            // Anywhere else, which number the rule stops the values on is what reading further
+            // would say — and every number the leaf writes about is one waiting on that reading,
+            // the numbers an operation answers among them.
+            case CanonicalForm.NotRead _ -> {
+                Coordinate against =
+                        heldAgainstAConstant(bin, at, byName, answering);
+                yield against == null ? ELSEWHERE : statedOn(against);
+            }
+            // The positions cancelled, and what is left is a number against a number. Asked of the
+            // comparison the clause states, which already holds the denial, so a rule admitting
+            // nothing and one restricting nothing are told apart here and not by a reader pairing
+            // this with a polarity of its own.
+            case CanonicalForm.CutsNothing form ->
+                    form.holdsOfEveryRow() ? NO_LINE : ADMITS_NOTHING;
+            // Over one number, which is the line's. Over several, and holding no position to a
+            // position, the rule stops the values somewhere on one of them and which is what
+            // reading further would say — the same answer as a number with no name at all.
+            case CanonicalForm.Over over -> over.numbers().size() == 1
+                    ? statedOn(over.numbers().iterator().next()) : ELSEWHERE;
+        };
+    }
+
+    /**
+     * The position one whole side of {@code bin} is, where the other side names none, or null
+     * where the comparison is not of that shape.
+     *
+     * <p>The one shape the arithmetic answers nothing about and a line still falls on. Asked of the
+     * two sides whole, which is the same question {@link Relates#twoPositions} asks and the answer
+     * it did not have a use for: a comparison naming one position and holding it against something
+     * with no position in it stops that position's values, whatever the order is made of.
+     *
+     * <p>Reached only where the form was not read. A comparison the arithmetic followed is
+     * classified by what it followed to, so this adds no second answer to a question that has one —
+     * it answers where the first reading said it had none, and it says a number rather than a
+     * narrower one.
+     */
+    private Coordinate heldAgainstAConstant(Core.Binary bin, Denotations at,
+                                            Map<FactSubject, Coordinate> byName,
+                                            Arrivals answering) {
+        Coordinate left = byName.get(nameOf(bin.left(), at));
+        Coordinate right = byName.get(nameOf(bin.right(), at));
+        if (left != null && right == null
+                && coordinatesIn(bin.right(), at, byName, answering).isEmpty()) {
+            return left;
+        }
+        if (right != null && left == null
+                && coordinatesIn(bin.left(), at, byName, answering).isEmpty()) {
+            return right;
+        }
+        return null;
+    }
+
+    /** Which of the two a line on {@code number} is, said by the number itself. */
+    private static StatedLines.Statement statedOn(Coordinate number) {
+        DerivedNumber derived = DerivedNumber.of(number.at());
+        return derived == null
+                ? new StatedLines.Statement.OnWhatStandsAtAPosition(number.at())
+                : new StatedLines.Statement.OnADerivedNumber(derived);
+    }
 
     /**
      * What {@code e} is called where a coordinate is looked up.
@@ -1476,11 +2637,17 @@ public final class InvariantChecker {
      * read to the end — both sides were recognised — and raises no question about one position; a
      * rule this made nothing of raises the same question every other rule about a position's values
      * raises, and is answered or not by whichever reading could take it in.
+     *
+     * @param read what this reader's arithmetic made of the clause, or null where the clause is no
+     *             comparison. Handed in rather than read here: which clauses are comparisons is
+     *             settled where one is recognised, and a second reading of it here is a second
+     *             answer to that question
      */
     private ClauseStates states(Core clause, Denotations at,
-                                Map<FactSubject, Coordinate> byName, Arithmetic read) {
-        List<String> found = new ArrayList<>();
-        namedIn(clause, at, byName, found);
+                                Map<FactSubject, Coordinate> byName, CanonicalForm read,
+                                Arrivals answering, RunsRead runs) {
+        List<RuleKey> found = new ArrayList<>();
+        namedIn(clause, at, byName, answering, found);
         // What the rule cuts, ahead of what it looks like. Which values a rule restricts is settled
         // by the quantity its canonical form cuts, and that is the rule `UnreadComparison.why` is
         // written around one layer down — asked of what the rule cuts, and of the sides only where
@@ -1498,8 +2665,8 @@ public final class InvariantChecker {
         // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
         // is not a rule that restricts no value of this position — it is a rule about nowhere, said
         // by the one authority for that question, which is whether the value is mentioned.
-        if (!found.isEmpty() && read != null && clause instanceof Core.Binary bin
-                && read.holdsOfEveryRow(bin.op())) {
+        if (!found.isEmpty() && read instanceof CanonicalForm.CutsNothing nothing
+                && nothing.holdsOfEveryRow()) {
             return new ClauseStates.NoRestriction();
         }
         if (Relates.twoPositions(clause, e -> {
@@ -1508,7 +2675,63 @@ public final class InvariantChecker {
         })) {
             return new ClauseStates.ARelation();
         }
-        return ClauseStates.SomethingElse.naming(found);
+        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stopped =
+                stoppedOnTheFormOf(found, read, byName, answering);
+        // And where whether it states one was not worked out, the question stands with no answer.
+        // Left out, a limit of this compiler would come out as a rule that raises no such question,
+        // which is what a rule read to the end and stating no bound comes out as.
+        //
+        // Both readings' reasons at a name either of them stopped at, since either is a thing that
+        // would have to change: written over the other, whichever ran second would be the only one
+        // an author was sent to.
+        runs.undecided(byName).forEach((name, why) -> stopped.merge(name, why, InvariantChecker::alsoSaying));
+        // What a rule about the strings at a position came to, where this conjunct is one. Such a
+        // rule states where the values stop exactly when the strings it admits run between places
+        // the order does not already hold them, which is the reading's own answer and not something
+        // read back off the ends it produced. Every number it came to, because one clause read a
+        // branch at a time can state a line on one and leave the next standing.
+        Set<NumberAt<RuleKey>> lines = runs.bounding();
+        return lines.isEmpty()
+                ? ClauseStates.SomethingElse.naming(found).unread(stopped)
+                : new ClauseStates.ABound(lines, new LinkedHashSet<>(found), stopped);
+    }
+
+    /**
+     * What stopped the reading of this clause's form, or null where it ran to the end.
+     *
+     * <p>What it decides is whether the clause states where the values stop. A comparison the
+     * arithmetic took apart says so or does not, and either way the classification is made; one it
+     * did not says neither, and what would settle it is reading further.
+     *
+     * <p>Which values may stand at the names the clause writes is not asked here and is not what
+     * this is about. {@code value * value >= 4} restricts them whether or not anything folds the
+     * product, and a form nobody read is no reason to stop asking a question the model raises.
+     *
+     * <p><b>What the reading afterwards made of the clause is not read here.</b> The shape of the
+     * expression is the model, and this is asked of it: a quantity is what an answer about this
+     * classification is given in, and taking one would put the answer inside the thing it is an
+     * answer about.
+     */
+    private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
+            List<RuleKey> found, CanonicalForm read, Map<FactSubject, Coordinate> byName,
+            Arrivals answering) {
+        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
+        // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
+        // which is what it states and not what a reading of it managed — so however little of the
+        // form was read, there is no line for anything to be undecided about.
+        if (!(read instanceof CanonicalForm.NotRead stopped)
+                || !(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
+            return out;
+        }
+        // The same answer at each name the conjunct writes, because the form is what would settle
+        // any of them: one comparison has one arithmetic, and where that stopped no name it writes
+        // has a line worked out. What differs between names is settled per conjunct and arrives
+        // here as separate readings of separate comparisons, which is why this is asked per name
+        // rather than said once of the clause.
+        BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
+                placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin());
+        found.forEach(each -> out.put(each, List.of(why)));
+        return out;
     }
 
     /**
@@ -1520,8 +2743,8 @@ public final class InvariantChecker {
      * it is a coordinate of its own.
      */
     private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
-                         List<String> out) {
-        for (Coordinate each : coordinatesIn(e, at, byName)) {
+                         Arrivals answering, List<RuleKey> out) {
+        for (Coordinate each : coordinatesIn(e, at, byName, answering)) {
             if (!out.contains(each.path())) {
                 out.add(each.path());
             }
@@ -1537,12 +2760,29 @@ public final class InvariantChecker {
      * its values are ordered on, and a count is ordered as a whole number whatever it counts.
      */
     private List<Coordinate> coordinatesIn(Core e, Denotations at,
-                                           Map<FactSubject, Coordinate> byName) {
-        Places places = placesIn(e, at, byName);
+                                           Map<FactSubject, Coordinate> byName,
+                                           Arrivals answering) {
+        Places places = placesIn(e, at, byName, answering);
         List<Coordinate> out = new ArrayList<>();
-        for (String path : places.origin().positions()) {
+        for (RuleKey path : places.origin().positions()) {
             out.add(places.met().get(path));
         }
+        return out;
+    }
+
+    /**
+     * The same for a comparison, which is the two sides one after the other.
+     *
+     * <p>A comparison stands at no place of the value, so what it names is what its sides name and
+     * the sides are what there is to walk. Read off a node holding both, this would be the same
+     * walk reached through a value the readers below have no reason to hold.
+     */
+    private List<Coordinate> coordinatesIn(StatedComparison comparison, Denotations at,
+                                           Map<FactSubject, Coordinate> byName,
+                                           Arrivals answering) {
+        List<Coordinate> out =
+                new ArrayList<>(coordinatesIn(comparison.left(), at, byName, answering));
+        out.addAll(coordinatesIn(comparison.right(), at, byName, answering));
         return out;
     }
 
@@ -1554,10 +2794,11 @@ public final class InvariantChecker {
      * one name and the names carry the same rules, so a clause about one position is named once —
      * held under the coordinate instead, two names of one place would be two.
      */
-    private record Places(ValueOrigin<String> origin, Map<String, Coordinate> met) {}
+    private record Places(ValueOrigin<RuleKey> origin, Map<RuleKey, Coordinate> met) {}
+
 
     /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
-    private static Carrier carrierAt(String path, Places left, Places right) {
+    private static Carrier carrierAt(RuleKey path, Places left, Places right) {
         Coordinate here = left.met().containsKey(path) ? left.met().get(path)
                 : right.met().get(path);
         return here == null ? null : here.carrier();
@@ -1570,13 +2811,14 @@ public final class InvariantChecker {
      * shape are taken apart the same way. What is this reader's own is the lookup: a clause names a
      * coordinate of the value it is written about, where a body names a position of an input.
      */
-    private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName) {
-        Map<String, Coordinate> met = new LinkedHashMap<>();
-        ValueOrigin<String> origin = ValueOrigin.of(e, at,
-                new ValueOrigin.Reading<String, Denotations>() {
+    private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+                            Arrivals answering) {
+        Map<RuleKey, Coordinate> met = new LinkedHashMap<>();
+        ValueOrigin<RuleKey> origin = ValueOrigin.of(e, at,
+                new ValueOrigin.Reading<RuleKey, Denotations>() {
 
             @Override
-            public String positionOf(Core here, Denotations where) {
+            public RuleKey positionOf(Core here, Denotations where) {
                 FactSubject named = nameOf(here, where);
                 Coordinate found = named == null ? null : byName.get(named);
                 if (found == null) {
@@ -1589,7 +2831,7 @@ public final class InvariantChecker {
             /** A clause is written about the value in front of it, and there is no operation here
              *  that hands one of its parts out under a name of its own. */
             @Override
-            public String madeFrom(Core here, Denotations where) {
+            public RuleKey madeFrom(Core here, Denotations where) {
                 return null;
             }
 
@@ -1608,6 +2850,38 @@ public final class InvariantChecker {
             @Override
             public Denotations inside(Core.LetIn li, Denotations where) {
                 return terms.inside(li, where);
+            }
+
+            /**
+             * And an arm that opened a name is one this reader does not go inside, which it says
+             * rather than reading the arm where the fork stands.
+             *
+             * <p>What a clause is about is one of a pair. The reading of values reads the same
+             * conjunct and says which coordinates it constrained, and a coordinate this names that
+             * the other never reached is a question standing with nothing to account for it
+             * ({@link FieldDomains.AStandingQuestionWithNoAccount}) — which is the two coming
+             * apart, not a fact about the model. That reading does not go inside a name an arm
+             * opened, so neither does this one, and a clause whose arm reads what the arm bound
+             * names one position fewer than it is about.
+             *
+             * <p>Which arms those are is {@link Terms}' answer and not a list kept here. It says
+             * what choosing an arm binds and what that arm opened, and an arm that opened nothing
+             * is read where the fork stands by every reader — a condition settles what it settles
+             * wherever it is read, and a departure was taken where nothing was built.
+             */
+            @Override
+            public ValueOrigin.Opened<Denotations> choosing(Choice.Decides decidedBy,
+                                                            Denotations where) {
+                Terms.Chose chose = terms.chose(decidedBy, where);
+                return chose.opened() == null ? new ValueOrigin.Opened.Entered<>(chose.at())
+                        : new ValueOrigin.Opened.NotEntered<>();
+            }
+
+            /** Whether an expression answers a value, of the tree this reading was made for, as
+             *  for a body's reading next door. */
+            @Override
+            public boolean answers(Core here, Denotations where) {
+                return answering.at(here);
             }
         });
         return new Places(origin, met);
@@ -1631,115 +2905,642 @@ public final class InvariantChecker {
      * <p>Which limit stopped it is {@link UnreadComparison}'s, so a {@code guard} of this shape
      * cannot come to a different answer. What is read here is only what each side of the comparison
      * came to, which is this reader's own way of looking a coordinate up.
+     *
+     * <p><b>And which positions there are findings for is the quantity's where there is one.</b>
+     * The walk says what each place the comparison mentions is called and which came first; the
+     * quantity says which of them the rule is about. Taken from the walk, {@code x + y - y <= 20}
+     * left a finding at {@code y} of a rule its own canonical form had cancelled — and the word
+     * left there was the word for {@code x}.
+     *
+     * <p>The reading and nothing beside it. The node to walk, what the rule states of its sides and
+     * what the arithmetic made of them are three readings of one comparison, and handed over as
+     * three arguments they are as much one comparison as the caller left them.
      */
-    private void noLineDrawn(Core.Binary comparison, RuleRef.Invariant from, int conjunct,
+    private void noLineDrawn(CanonicalForm read, Core clause, PartId<RuleRef.Invariant> part,
                             Denotations at,
-                            Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out,
-                            Arithmetic read) {
-        if (!InvariantBound.ordering(comparison.op())) {
+                            Map<FactSubject, Coordinate> byName, Arrivals answering,
+                            List<FieldDomains.NoLine> out) {
+        if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
-        Places left = placesIn(comparison.left(), at, byName);
-        Places right = placesIn(comparison.right(), at, byName);
-        BlockReason.RuleWithoutLineReason why = UnreadComparison.why(left.origin(), right.origin(),
-                read.quantity(),
-                place -> carrierAt(place, left, right) != null);
-        for (Coordinate each : coordinatesIn(comparison, at, byName)) {
-            FieldDomains.NoLine said =
-                    new FieldDomains.NoLine(each.at(), from, comparison, conjunct, why);
-            if (!out.contains(said)) {
-                out.add(said);
+        StatedComparison comparison = read.comparison();
+        Places left = placesIn(comparison.left(), at, byName, answering);
+        Places right = placesIn(comparison.right(), at, byName, answering);
+        Predicate<RuleKey> ordered = place -> carrierAt(place, left, right) != null;
+        Map<RuleKey, Coordinate> met = new LinkedHashMap<>();
+        for (Coordinate each : coordinatesIn(comparison, at, byName, answering)) {
+            met.putIfAbsent(each.path(), each);
+        }
+        switch (cuts(read, byName, answering)) {
+            case UnreadComparison.Quantity.Read<RuleKey> quantity -> {
+                BlockReason.RuleWithoutLineReason why =
+                        UnreadComparison.ofTheQuantity(quantity, ordered);
+                for (RuleKey path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
+                    file(met.get(path), part, clause, why, out);
+                }
+            }
+            // Where the reading stopped there is no quantity to be a subject, so every place the
+            // walk met is asked, and asked for itself.
+            case UnreadComparison.Quantity.NotRead<RuleKey> notRead -> {
+                for (Coordinate each : met.values()) {
+                    file(each, part, clause,
+                            UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
+                                    ordered),
+                            out);
+                }
             }
         }
     }
 
     /**
-     * What this reader's arithmetic made of one comparison, read once and projected twice.
+     * What a rule filed at {@code where} is about, as this reader knows it.
+     *
+     * <p>What this reader supplies is what it calls the place. Whether the rule states anything
+     * about the values standing there is the same question a body's comparison is held to, and is
+     * answered where both readers meet it.
+     */
+    private static RuleAt<RuleKey> ruleAt(Coordinate where, Places left, Places right) {
+        return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
+    }
+
+    /**
+     * Written down where this conjunct holds a position's values down and places no end on them.
+     *
+     * <p>Everything outside what an invariant admits is refused at construction (E1903), so such a
+     * rule restricts the position and the values it leaves out are no class of it (ADR-0090). Said
+     * as a division, the sentence a reader is shown tells them the model divides a position its own
+     * declaration says cannot hold the other side; passed over in silence, the position comes back
+     * with no classes and nothing saying why, and a reader downstream takes the silence for the
+     * model dividing it no way at all.
+     *
+     * <p><b>Nothing here reads the rule.</b> What a clause states about the values at a position is
+     * worked out once, by the reading that turns clauses into sets, and every question below is put
+     * to whichever answer owns it — so a predicate this compiler learns to read, a language that
+     * turns out to be finite, and a congruence read one day all arrive without a word of this
+     * changing. Read a second time here, this walk would be deciding for itself what a rule means
+     * about a position, which is the one thing that has to have a single owner.
+     *
+     * <p><b>And every question is asked at the scope of what is filed.</b> What is written down
+     * names one rule and one of its conjuncts, so what the conjunct contributed is asked of that
+     * conjunct and what the rule left is asked of that rule's own tree. Taken from the declaration's
+     * answer, which is met from every rule reaching the position, {@code invariant value == 7}
+     * beside a rule that says nothing lends the second its narrowing — and the reason goes out
+     * against the one rule that holds the position to nothing.
+     */
+    private void restricting(Core clause, ClauseOccurrence at, RuleRef.Invariant from,
+                             Written of, PartId<RuleRef.Invariant> part,
+                             Map<FactSubject, Coordinate> byName, RulesRead rules,
+                             List<FieldDomains.NoLine> noLines, RunsRead runs) {
+        ReadByClauses.OfAPart account = of.adoptedAt(at);
+        ReadByClauses.OfARule rule = rules.ruleIn(from);
+        if (account == null || rule == null) {
+            return;
+        }
+        for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
+            FactSubject position = each.getKey();
+            // What this conjunct did to the position, asked of each reading about its own work. A
+            // part that put no constraint on the values restricts nothing, whatever else it settled
+            // — a dead branch settles every position it named by imposing nothing on it — and one
+            // that placed an end has a line, which is accounted for by whoever draws lines.
+            // A part that put no constraint on the values restricts nothing, and one that placed an
+            // end has a line — from the ordering it wrote, or from the run of the strings it
+            // admits, which are the two ways a conjunct states where the values stop.
+            if (!account.restricts(position) || account.stops(position)
+                    || runs.bounds(position)) {
+                continue;
+            }
+            // And where whether it states where the values stop was not worked out, nothing was
+            // established about that. What is written down is what stopped it: said as a rule read
+            // to the end without a line, a limit of this compiler would be published as a fact
+            // about the model.
+            // One finding per reason. A clause read a branch at a time can be stopped by one thing
+            // in one branch and another in the next, and those send an author to two different
+            // places; the first of them standing for the rest would make which one they are sent to
+            // turn on which branch was written first.
+            List<BlockReason.RuleReadingStopped> stopped = runs.stoppedAt(position);
+            if (!stopped.isEmpty()) {
+                stopped.forEach(why -> add(noLines,
+                        new FieldDomains.NoLine(each.getValue().at(), part, clause, why)));
+                continue;
+            }
+            // And where the position could not hand its rules on as sets, the same thing is
+            // outstanding and no rule of it is why. Written down all the same: what a reader takes
+            // from an absence here is that the model draws no line, and the truth is that nobody
+            // worked out whether it does.
+            if (runs.notPublishedAt(position)) {
+                add(noLines, new FieldDomains.NoLine(each.getValue().at(), part, clause,
+                        new BlockReason.RulesNotHandedOnAsSets()));
+                continue;
+            }
+            // And what the rule itself came to once its own choices are decided and its own
+            // languages built, which is what says whether it holds the position down at all: in
+            // `value == 5 || value /= 5` each side names values and the rule leaves the position
+            // exactly as wide as it was.
+            if (!rule.narrows(position)) {
+                continue;
+            }
+            FieldDomains.NoLine said = new FieldDomains.NoLine(each.getValue().at(), part, clause,
+                    new BlockReason.RuleRestrictingToAdmittedValues());
+            add(noLines, said);
+        }
+    }
+
+    /** Both lists, the second's after the first's, each reason once. */
+    private static List<BlockReason.RuleReadingStopped> alsoSaying(
+            List<BlockReason.RuleReadingStopped> these,
+            List<BlockReason.RuleReadingStopped> those) {
+        List<BlockReason.RuleReadingStopped> out = new ArrayList<>(these);
+        those.stream().filter(each -> !out.contains(each)).forEach(out::add);
+        return List.copyOf(out);
+    }
+
+    /** One finding per rule and reason, however many readers arrive at it. */
+    private static void add(List<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
+        if (!noLines.contains(said)) {
+            noLines.add(said);
+        }
+    }
+
+    /**
+     * Where a rule about the strings at a position leaves that position, and which number it is
+     * about.
+     *
+     * <p>Two answers of one recognition and neither read off the other. Which of a position's
+     * numbers such a rule is written about is settled by the call, so it is written down whatever
+     * became of the text in it — a format written out of a constant a module cannot reach is a rule
+     * about the string as plainly as one written out. Where the strings stop is a further question,
+     * asked only of a language this has, and answered under its own allowance.
+     *
+     * <p><b>Nothing here reads the rule.</b> What each conjunct states about the strings at a
+     * position is worked out once, by the reading that turns clauses into sets, and arrives as the
+     * position and the plan it left there. Read a second time here, this walk would be deciding for
+     * itself what a predicate means about a position.
+     *
+     * <p>The ends stand beside the ends an ordering places and are the same kind of thing: this
+     * conjunct states them, and which of them survives the rules beside it is
+     * {@link DeclaredBounds.End#tighter}'s. So they go where a comparison's own end goes and not
+     * among the ends worked out from what the rules leave together — a run is what this conjunct
+     * admits, and no counterfactual is needed to find out that it placed it.
+     *
+     * <p>Only on the position's own value. A string is the one value with two numbers, and what a
+     * run of the strings says is about the order they are written on and not about how many
+     * characters they hold; a rule about the length is a rule about a whole number and is read
+     * where whole numbers are.
+     */
+    private RunsRead runsOf(ReadingPlace stands,
+                        Written of, InvariantStatementId statement,
+                        Map<FactSubject, Coordinate> byName, List<Direct> out) {
+        ReadByClauses.OfAPart account = of.adoptedAt(stands.at());
+        if (account == null) {
+            return RunsRead.NOTHING;
+        }
+        Map<FactSubject, Run> byPosition = new LinkedHashMap<>();
+        account.aboutStrings().forEach((position, stated) -> {
+            Coordinate found = byName.get(position);
+            if (found == null) {
+                return;
+            }
+            // The value's own number, built here rather than taken from the coordinate in hand: a
+            // position measured by a count of itself has one of those, and a rule about the strings
+            // is about neither that count nor whichever of the two this map happens to hold.
+            NumberAt<RuleKey> value = NumberAt.valueOf(found.path());
+            // And the strings only where the rule was read to them. What a rule this could not read
+            // admits is not every string; it is not known, and a run read off what the reading left
+            // would be a run of a set the rule does not have. Whether it states where the values
+            // stop is undecided, which is not the same as its stating that they stop nowhere.
+            switch (stated) {
+                case AdmittedStrings.Admitting it ->
+                        byPosition.put(position, placed(it.set(), value, statement, stands, out));
+                case AdmittedStrings.NotKnown it ->
+                        byPosition.put(position, new Run.Undecided(it.why()));
+                // And a rule of a position that could not hand its sets on leaves the question
+                // standing with nothing about the rule to say. What was not made is the position's
+                // group of them, which this rule is no more answerable for than the one beside it.
+                case AdmittedStrings.NotPublished _ ->
+                        byPosition.put(position, new Run.NotPublished());
+            }
+        });
+        return new RunsRead(byPosition);
+    }
+
+    /**
+     * One position's ends, where the rule's strings are a run that holds it.
+     *
+     * <p>Three answers of the reading and three things to do. A run holds the values between two
+     * places, and each of those the order does not already hold is an end this conjunct placed. A
+     * language that is not one run leaves the position where it was. And a reading that ran out of
+     * what it may build has established nothing, so what is written down is that it stopped —
+     * folded into the second, a limit of this compiler would be published as a rule that draws no
+     * line, which is a sentence about the model.
+     *
+     * <p>A run holding the position where the order already holds it is not one it bounds. Every
+     * string is at or above the string of nothing, so a rule leaving the values from there upwards
+     * with no end above them has said where none of them stop — and it is a run all the same, which
+     * is why what is asked of it is which of its ends the rule placed.
+     */
+    private Run placed(ValueSet set, NumberAt<RuleKey> value, InvariantStatementId statement,
+                       ReadingPlace stands, List<Direct> out) {
+        switch (extentOf(set)) {
+            // A run holding one string is the rule naming a value rather than bounding a range, and
+            // a value it names is a distinction of the position rather than an edge on it.
+            case TextExtent.One run when run.holdsOneValue() -> {
+                return new Run.NotBounding();
+            }
+            case TextExtent.One run -> {
+                boolean placed = false;
+                if (run.holdsFromAbove()) {
+                    placed = true;
+                    out.add(new Direct(value, statement,
+                            new InvariantBound(true, Endpoint.inclusive(run.first())), stands));
+                }
+                if (run.after() != null) {
+                    placed = true;
+                    out.add(new Direct(value, statement,
+                            new InvariantBound(false, Endpoint.exclusive(run.after())), stands));
+                }
+                return placed ? new Run.Bounding(value) : new Run.NotBounding();
+            }
+            case TextExtent.NoNamedRun _ -> {
+                return new Run.NotBounding();
+            }
+            case TextExtent.NotBuilt it -> {
+                return new Run.Undecided(
+                        List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
+            }
+        }
+    }
+
+    /**
+     * Where the strings {@code set} holds stop, answered once for the set wherever it is asked.
+     *
+     * <p>The same set comes back as often as the declaration is read, and it comes back again for
+     * every conjunct whose contribution to an end is worked out by asking what the rules leave
+     * without it. Where a set stops does not turn on which of those readings is asking, so it is
+     * answered once — the allowance each answer is made under is the same, which is what makes the
+     * second asking the same question rather than a cheaper one.
+     *
+     * <p>Filed under the set and not under a plan for one. Two rules whose strings came out the same
+     * are one question here, and a plan is what would be built rather than what was — filed under
+     * one, a hit would have to stand for two plans meaning the same thing, and this reading's
+     * answer would depend on something no reader can see.
+     */
+    private TextExtent extentOf(ValueSet set) {
+        return answers.extentOf(set);
+    }
+
+    /**
+     * What one conjunct's rule about the strings at one position came to.
+     *
+     * <p>Three answers, and every reader of them takes the one it is given rather than working it
+     * out again from what was produced. The ends this conjunct placed, the question it raises about
+     * where the values stop, and whether an author is owed a word about a rule that drew no line
+     * are three readings of this one answer — read back off the ends instead, the classification
+     * would be derived from the thing it classifies.
+     */
+    sealed interface Run {
+
+        /** The conjunct states where the values stop on {@code number}. */
+        record Bounding(NumberAt<RuleKey> number) implements Run {}
+
+        /** It states which strings stand there and stops them nowhere: the strings it admits are
+         *  not one stretch of the order, or the stretch they make is one the order already holds. */
+        record NotBounding() implements Run {}
+
+        /**
+         * Whether it states where the values stop was not worked out, and what stopped it.
+         *
+         * <p>Every reason, in the order the clause writes them. Two branches of one choice can be
+         * stopped by two different things and those go out under two different words, so which of
+         * them a reader is shown may not turn on which branch was written first.
+         */
+        record Undecided(List<BlockReason.RuleReadingStopped> why) implements Run {}
+
+        /**
+         * The position could not hand its rules on as the sets they leave, so there was no set to
+         * ask.
+         *
+         * <p>Its own answer and not a reason of this rule's. What was not made is the position's
+         * whole group of sets and no rule of it is answerable for that, so this carries no reason
+         * to name one with — what it says is that the question about this conjunct stands, and the
+         * one word for why is the position's ({@link BlockReason.RulesNotHandedOnAsSets}).
+         */
+        record NotPublished() implements Run {}
+    }
+
+    /** What one conjunct's rules about strings came to, per position. */
+    record RunsRead(Map<FactSubject, Run> byPosition) {
+
+        static final RunsRead NOTHING = new RunsRead(Map.of());
+
+        /**
+         * The numbers this conjunct states the values stop on, in the order they were read.
+         *
+         * <p>Every one of them. One clause is read a branch at a time and the branches are joined,
+         * so what it comes to is an answer per position — and a clause whose branches all state a
+         * run at two positions states one at each. Held as one number, which of them a reader is
+         * told about would be a choice nothing here may make.
+         */
+        Set<NumberAt<RuleKey>> bounding() {
+            Set<NumberAt<RuleKey>> out = new LinkedHashSet<>();
+            byPosition.values().forEach(each -> {
+                if (each instanceof Run.Bounding it) {
+                    out.add(it.number());
+                }
+            });
+            return out;
+        }
+
+        /** What stopped the reading at each name it stopped at, for the classification to carry. */
+        private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
+                Map<FactSubject, Coordinate> byName) {
+            SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
+            byPosition.forEach((position, run) -> {
+                Coordinate found = byName.get(position);
+                if (run instanceof Run.Undecided it && found != null) {
+                    out.put(found.path(), it.why());
+                }
+            });
+            return out;
+        }
+
+        /** Whether this conjunct has a line at {@code position} — see {@link Run.Bounding}. */
+        boolean bounds(FactSubject position) {
+            return byPosition.get(position) instanceof Run.Bounding;
+        }
+
+        /** What stopped the reading at {@code position}, or null where nothing did. */
+        List<BlockReason.RuleReadingStopped> stoppedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.Undecided it ? it.why() : List.of();
+        }
+
+        /**
+         * Whether this conjunct states a rule about the strings at {@code position} that the
+         * position could not hand on as a set.
+         *
+         * <p>Asked apart from {@link #stoppedAt} because the answer is not one of that one's. Those
+         * are reasons about a rule and this one is about the position, and the two would be one
+         * list only by giving the position's shortfall a rule to be filed against.
+         */
+        boolean notPublishedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.NotPublished;
+        }
+
+    }
+
+    /**
+     * Written down where this conjunct placed no end and its quantity is over one coordinate.
+     *
+     * <p>Off the canonical quantity, which is what says which number a rule is about. A rule naming
+     * a value, one holding the value away from one, and one whose arithmetic no end could be read
+     * from are three ways of leaving a coordinate somewhere without saying where — and read off the
+     * spelling of a side instead, the third is a rule about nothing at all: {@code value * 2 >= 4}
+     * has a bare name on neither side.
+     *
+     * <p>One coordinate, which is what leaves a relation out: a rule over a form on two of them is
+     * about the pair, and an end attributed to it at either would be an end of a number it does not
+     * divide.
+     *
+     * <p>What the rule does to that number is nobody's answer here. It is read afterwards, from
+     * what the rules leave the coordinate without this conjunct
+     * ({@link FieldDomains#movedEndsOf}).
+     */
+    private static void aboutOneCoordinate(CanonicalForm read, InvariantStatementId statement,
+                                          SequencedMap<Candidate, Set<InvariantStatementId>> out) {
+        if (!(read instanceof CanonicalForm.Over over) || over.numbers().size() != 1) {
+            return;
+        }
+        aboutOneCoordinate(over.numbers().iterator().next().at(), statement, out);
+    }
+
+    /**
+     * One conjunct's quantity over one number, as the walk gathers the statements that reach it.
+     *
+     * <p>What the candidates are being collected under while the clause is read, and no part of what
+     * a reading answers. A candidate is made once, from the statements gathered here, rather than
+     * remade with one more statement in it each time the walk meets another — which copied the set
+     * it had grown so far, once per statement, for every statement.
+     */
+    private record Candidate(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part) {}
+
+    /**
+     * One candidate, kept once, with the statement that reached this number written into it.
+     *
+     * <p>A part reaching one number twice is one thing to ask a counterfactual about, because
+     * taking a part away takes away everything it stated. Which statements those were is another
+     * question and is kept: the intervention is the conjunct's, and what tells the end on this
+     * number from the end the same conjunct accounts for on another is which of its statements are
+     * about which.
+     */
+    private static void aboutOneCoordinate(NumberAt<RuleKey> at, InvariantStatementId statement,
+                                           SequencedMap<Candidate, Set<InvariantStatementId>> out) {
+        out.computeIfAbsent(new Candidate(at, statement.part()), _ -> new LinkedHashSet<>())
+                .add(statement);
+    }
+
+    /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
+    private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
+                             BlockReason.RuleWithoutLineReason why,
+                             List<FieldDomains.NoLine> out) {
+        FieldDomains.NoLine said = new FieldDomains.NoLine(where.at(), part, clause, why);
+        if (!out.contains(said)) {
+            out.add(said);
+        }
+    }
+
+    /**
+     * What this reader's arithmetic made of one recognised comparison.
      *
      * <p>Two questions come off one reading. Which coordinates the quantity is over is what says
      * whether a rule relates two positions or bounds one, and what is left when they cancel is what
-     * says whether the rule holds of every row. Read separately, each reader called the same
-     * arithmetic on the same two sides and the answers agreed only because the calls were the same
-     * — which is the shape this branch removed from {@link ComparisonAssessment} at the other
-     * producer, and put back here.
+     * says whether the rule holds of every row. Read separately, each reader calls the same
+     * arithmetic on the same two sides and the answers agree only for as long as the calls are kept
+     * the same, which is why the assessment a {@code guard}'s comparison goes through is one
+     * reading as well.
      *
-     * @param quantity what the canonical form cuts, in the words {@link UnreadComparison} reads
-     * @param residue  what is left of {@code left - right} once the positions have cancelled, or
-     *                 null where the arithmetic stopped or a position is still in it
+     * <p><b>The comparison it was read of, in every case.</b> A reader below has the node to walk
+     * and what the rule states of its sides without going back to either: this is what one
+     * comparison came to, and not a result standing beside a comparison somebody handed over with
+     * it.
+     *
+     * <p><b>And the number left over only where there is one.</b> A residue is what the two sides
+     * come to once the positions have gone, so there is one exactly where the canonical form has no
+     * position left in it. Held beside a quantity that says the same thing, the two are one fact
+     * with two accounts, and a reader asking the residue whether the positions cancelled is
+     * answered by whichever account its writer kept in step. Here the residue is a field of the one
+     * case that has one: a residue standing beside a position is not refused, it is unwritable.
      */
-    private record Arithmetic(UnreadComparison.Quantity<String> quantity,
-                              java.math.BigDecimal residue) {
+    private sealed interface CanonicalForm {
+
+        /** The comparison this is the reading of, as the clause states it — the denial the clause
+         *  was read under is already inside the claim, so nothing below applies one. */
+        StatedComparison comparison();
 
         /**
-         * Whether the comparison holds of every row there is.
+         * The canonical form has no position left in it, and this is what {@code left - right} came
+         * to.
          *
-         * <p>Two halves and both are needed. The positions have to cancel — the quantity is empty,
-         * so no value of anything is either side of anything — and what is left has to be true.
-         * {@code lo - lo >= 0} is {@code 0 >= 0}, which every row satisfies; {@code lo - lo >= 1}
-         * is {@code 0 >= 1}, which no row satisfies, and a rule that admits nothing is the opposite
-         * of one that restricts nothing. Read off the empty quantity alone, the two came out alike.
-         *
-         * <p>Every comparison and not the orderings alone. Which operator is written is no part of
-         * whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as the
-         * first one does, and an author who wrote it would have been told that which values may
-         * stand at {@code lo} is a question nothing answered. What the operator decides is what the
-         * residue has to be, which is the switch here and nothing else.
+         * <p>Which is not the same as the comparison naming no position: {@code lo - lo > 0} and
+         * {@code 1 > 0} both arrive here, and what tells them apart is whether the clause names a
+         * position at all — asked by the one authority for that question, which is the walk over
+         * the clause, and not by this.
          */
-        boolean holdsOfEveryRow(BinOp op) {
-            if (residue == null) {
-                return false;
+        record CutsNothing(StatedComparison comparison, BigDecimal residue)
+                implements CanonicalForm {
+
+            /**
+             * Whether the comparison holds of every row there is.
+             *
+             * <p>Asked only here, because only here is there a number for it to be true of.
+             * {@code lo - lo >= 0} is {@code 0 >= 0}, which every row satisfies; {@code lo - lo >=
+             * 1} is {@code 0 >= 1}, which no row satisfies, and a rule that admits nothing is the
+             * opposite of one that restricts nothing. Read off the empty quantity alone, the two
+             * came out alike.
+             *
+             * <p>Every comparison and not the orderings alone. Which operator is written is no part
+             * of whether a rule states anything: {@code lo - lo == 0} holds of every row exactly as
+             * the first one does, and an author who wrote it would have been told that which values
+             * may stand at {@code lo} is a question nothing answered. What the comparison decides
+             * is what the residue has to be, and which way the residue has to stand is what the
+             * relation it states is answered at.
+             *
+             * <p>Of the comparison the clause states, which is where the denial has already gone.
+             * Asked of the one an author spelled, this answers about {@code 0 >= 0} for a clause
+             * stating {@code 0 < 0}, and a reader has to pair it with a polarity to get back what
+             * the rule says — which is the pairing being remembered once per reader.
+             */
+            boolean holdsOfEveryRow() {
+                return comparison.claim().statedRelation().holds(residue.signum());
             }
-            int sign = residue.signum();
-            return switch (op) {
-                case GE -> sign >= 0;
-                case GT -> sign > 0;
-                case LE -> sign <= 0;
-                case LT -> sign < 0;
-                case EQ -> sign == 0;
-                case NE -> sign != 0;
-                case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-            };
+        }
+
+        /**
+         * The arithmetic read no form here, and what it was looking at when it stopped.
+         *
+         * <p>The node and the environment it was read in, which is what the walk stopped at. Not
+         * what a reader downstream makes of them: which subject that expression is about is an
+         * answer, and holding it here would put an answer inside what a classification is asked of.
+         */
+        record NotRead(StatedComparison comparison, Core stoppedAt, Denotations under)
+                implements CanonicalForm {}
+
+        /**
+         * The canonical form is over these numbers.
+         *
+         * <p>One arm for one and for several. How many there are is what an answer turns on — a
+         * rule over one bounds it, a rule over two relates them — and that is read off the set
+         * where the answer is given. Split here, this would be carrying the answer's distinction
+         * in the classification's vocabulary.
+         *
+         * <p><b>The numbers and not the names.</b> A name carries more than one — a string has its
+         * own order and its length — so a form over two numbers of one name is over two things, and
+         * counting the names would call it one. What the places are is read off these
+         * ({@link #positions}), which is the direction that loses nothing.
+         *
+         * <p><b>A set and no order.</b> These are the atoms the canonical form has a coefficient
+         * for, and what a form is does not say which of them comes first. A reader that needs them
+         * in an order gets one from the walk over the clause, which met them somewhere
+         * ({@code UnreadComparison.over}). Typed as a sequence, this would promise an order that is
+         * whatever a hash of the atoms happened to give.
+         */
+        record Over(StatedComparison comparison, java.util.Set<Coordinate> numbers)
+                implements CanonicalForm {
+
+            public Over {
+                if (numbers.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a form over no number is one whose positions cancelled, which is"
+                                    + " the arm with the residue");
+                }
+                numbers = java.util.Set.copyOf(numbers);
+                // One name and two of its numbers is a form the language cannot write today, since
+                // a shape declares one measure of itself. Refused here rather than passed on: the
+                // answer for such a form is neither of the two a reader has — it is over one name
+                // and over two numbers — so a reader handed either would be told what the form does
+                // not say.
+                if (numbers.stream().map(Coordinate::path).distinct().count() == 1
+                        && numbers.size() != 1) {
+                    throw new IllegalStateException(
+                            "a form over one name and more than one of its numbers: " + numbers);
+                }
+            }
+
+            /** The places these numbers are at, which is fewer than the numbers wherever one name
+             *  carries two. */
+            java.util.Set<RuleKey> positions() {
+                java.util.Set<RuleKey> out = new LinkedHashSet<>();
+                numbers.forEach(each -> out.add(each.path()));
+                return out;
+            }
         }
     }
 
     /**
-     * That reading, made once for a comparison, or null where the operator is not one.
+     * What the form cuts, in the words {@link UnreadComparison} reads.
+     *
+     * <p><b>The projection runs this way and only this way.</b> A canonical form is what the clause
+     * came to; a quantity is the vocabulary the answer about it is given in, and which arm it is
+     * turns on how many positions are left and on what the walk met where the reading stopped. So
+     * an answer is made from a classification, and no classification is made from an answer — which
+     * is what {@code Required} being independent of the readers rests on one layer up.
+     *
+     * <p>Here rather than on the form, so that the classification's own value names nothing
+     * {@link UnreadComparison} declares. Held as a field of it, the two would be one reading with
+     * two accounts and the answer would be inside the thing it is an answer about.
+     */
+    private UnreadComparison.Quantity<RuleKey> cuts(CanonicalForm form,
+                                                    Map<FactSubject, Coordinate> byName,
+                                                    Arrivals answering) {
+        return switch (form) {
+            case CanonicalForm.NotRead it -> new UnreadComparison.Quantity.NotRead<>(
+                    placesIn(it.stoppedAt(), it.under(), byName, answering).origin());
+            case CanonicalForm.CutsNothing _ -> new UnreadComparison.Quantity.CutsNothing<>();
+            case CanonicalForm.Over it -> it.positions().size() == 1
+                    ? new UnreadComparison.Quantity.OverOne<>(it.positions().iterator().next())
+                    : new UnreadComparison.Quantity.OverSeveral<>(it.positions());
+        };
+    }
+
+    /**
+     * That reading, made once for a comparison.
+     *
+     * <p>Of a comparison and not of a node, because whether the operator compares is settled where
+     * one is recognised and a caller has to hold that to get here. Taking the node, this would
+     * settle it a second time and owe an answer for the case where it does not compare — a case
+     * nothing reaches, so nothing would notice what the answer came to be.
      *
      * <p>This reader's own, because the atoms are: a clause names a coordinate of the value it is
      * written about. What is done with the answer is {@link UnreadComparison}'s, so a {@code guard}
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private Arithmetic arithmeticOf(Core.Binary comparison, Denotations at,
-                                    Map<FactSubject, Coordinate> byName) {
-        if (!comparison.op().compares()) {
-            return null;
-        }
+    private CanonicalForm canonicalFormOf(StatedComparison recognised, Denotations at,
+                                          Map<FactSubject, Coordinate> byName) {
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
         // together — read as an atom and found unprojectable afterwards, both were already gone.
         AffineForms.Outcome<FactSubject, Denotations> left =
-                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+                terms.outcomeOf(recognised.left(), at, byName::containsKey);
         AffineForms.Outcome<FactSubject, Denotations> right =
-                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+                terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
-                return new Arithmetic(new UnreadComparison.Quantity.NotRead<>(
-                        placesIn(stopped.node(), stopped.at(), byName).origin()), null);
+                return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at());
             }
         }
-        NumericDomain.LinearForm<FactSubject> whole =
+        LinearForm<FactSubject> whole =
                 ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());
-        java.util.Set<String> over = new LinkedHashSet<>();
+        // The numbers the form is left over, counted as numbers. A path carries more than one — a
+        // string has its own order and its length — so a form over two numbers of one name is over
+        // two things, and counting the names would call it one.
+        java.util.Set<Coordinate> numbers = new LinkedHashSet<>();
         for (FactSubject atom : whole.coefs().keySet()) {
-            over.add(byName.get(atom).path());
+            numbers.add(byName.get(atom));
         }
-        return over.isEmpty()
-                ? new Arithmetic(new UnreadComparison.Quantity.CutsNothing<>(), whole.constant())
-                : new Arithmetic(new UnreadComparison.Quantity.Over<>(over), null);
+        return numbers.isEmpty() ? new CanonicalForm.CutsNothing(recognised, whole.constant())
+                : new CanonicalForm.Over(recognised, numbers);
     }
 
     /**
@@ -1751,7 +3552,7 @@ public final class InvariantChecker {
      */
     private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
                           Map<FactSubject, Coordinate> byName,
-                          Map<String, List<TypeSymbol.AtModule>> narrowers) {
+                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers) {
         FactSubject named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
@@ -1775,56 +3576,45 @@ public final class InvariantChecker {
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
 
     /**
-     * Analyzes one behavior body against the bindings its inputs are. Nothing the body is throws:
-     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneTermTwoKinds}
-     * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
-     * the analysis representation could not be built or typed for, and is not analyzed at all.
+     * Analyzes one behavior body against the bindings its inputs are. What a clause of it may stop
+     * this reading on is settled where the clause is typed and arrives as an answer
+     * ({@link SecondaryClauseReading}), so the walk here runs to the end or the compile stops: a
+     * failure the walk raises is this compiler's and not the body's. A {@code null} body is one the
+     * analysis representation could not be built or typed for, and is not analyzed at all, which is
+     * the {@code ABANDONED} this answers with.
      */
-    static Findings analyze(Core body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
-                            Map<ValueName.Behavior, StatedContract> contracts,
-                            Scope params, Symbols symbols, ReadingPolicy policy) {
-        InvariantChecker c = new InvariantChecker(symbols, invariants, contracts, policy);
+    static Findings analyze(Core body, RuleReadingContext reading,
+                            Map<ValueName.Behavior, AssumedContract> contracts,
+                            Scope params) {
+        InvariantChecker c = new InvariantChecker(reading, contracts);
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
-        try {
-            Entered in = new Entered(Known.top(), Denotations.none());
-            for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
-                in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
-                        body.pos()), in.known(), in.at());
-            }
-            c.entering(body, in.known(), in.at(), ONE_READING);
-        } catch (RuntimeException why) {
-            // fail-open: the run-time invariant check remains the backstop
-            gaveUp("analyze", why);
-            return new Findings(c.errors, c.warnings, Status.ABANDONED);
+        Entered in = new Entered(Known.top(), Denotations.none());
+        for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
+            in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
+                    body.pos()), in.known(), in.at());
         }
+        c.entering(body, in.known(), in.at(), ONE_READING);
         return new Findings(c.errors, c.warnings, Status.COMPLETE);
     }
 
     /**
-     * Records an analysis that fell over, for a test in this package to read.
+     * Records a limit this reading stopped on, for a test in this package to read.
      *
-     * <p>Every place this check swallows a failure comes through here, so what must not be swallowed
-     * is refused in one place. A shape the walk has no rule for is what fail-open is for: the
-     * run-time check stands for the clause, and reporting the walk's limit as the author's problem is
-     * what the policy avoids. {@link Terms.OneTermTwoKinds} is not that. It says this check called two
-     * values one value, and what it would produce if caught is a behavior with no findings — which
-     * is exactly what a behavior whose invariants all discharge produces.
+     * <p>It takes a {@link WhatTheCheckCannotRead} and nothing wider, which is the whole of how the
+     * two questions are kept apart. One is about the program and about how much of it this compiler
+     * can follow, and falling open on it is right: the run-time check stands, and a limit of this
+     * analysis may never reject a valid program. The other is about the compiler — a node refusing
+     * to be built, a walk reaching a state it says cannot exist — and there is no reading of the
+     * program under which it is acceptable.
      *
-     * <p>{@link souther.compiler.diag.DiagnosticPlace.NotOnePlace} and {@link Clause.NotOneClause} are not that either, for
-     * the same reason. One says a place this check was about to send a reader to runs between two
-     * files; the other says two readings of one clause disagree about what the declaration says.
-     * Both are this compiler's model contradicting itself, which is a different thing from this
-     * compiler not being able to follow a program.
+     * <p>Which of the two a failure is, is not decided here and is not decided from its type. It is
+     * decided where the limit was met, by whoever had the standing to say so, and what arrives here
+     * is that decision. A failure nobody made one of cannot reach this method: it is not caught
+     * anywhere below, and it stops the compile as what it is.
      */
-    static void gaveUp(String where, RuntimeException why) {
-        // Asked of what the failure is and not of which ones this has met. A list here is a copy of
-        // the types that carry the distinction, and a new way for the check to disagree with itself
-        // would go on being reported as an ordinary limit with nothing failing while it did.
-        if (why instanceof souther.compiler.diag.TheCompilerDisagreesWithItself) {
-            throw why;
-        }
+    static void gaveUp(String where, WhatTheCheckCannotRead why) {
         List<GaveUp> watching = GAVE_UP;
         if (watching != null) {
             watching.add(new GaveUp(where, why));
@@ -2248,7 +4038,7 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declarations().declaration(made.typeName()) instanceof Hir.Data type)) {
+        if (!(symbols.declaredNode(made.typeName()) instanceof Hir.Data type)) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);
@@ -2270,7 +4060,7 @@ public final class InvariantChecker {
      * value and not a choice of arms.
      */
     private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
-        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
+        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldValue fv : nd.values()) {
             BindingId field = fields.get(fv.field());
@@ -2282,7 +4072,7 @@ public final class InvariantChecker {
             Core written = terms.writtenValue(fv.value(), at);
             given.put(field, written != null ? written : fv.value());
         }
-        return verdictOf(nd.typeName(), type, given, k, at, !constantlyBuilt(type, nd));
+        return verdictOf(nd.typeName(), given, k, at, !constantlyBuilt(type, nd));
     }
 
     /** Which of the values a construction hands over is not one a clause may be read against
@@ -2361,7 +4151,7 @@ public final class InvariantChecker {
 
     /** The discharge verdict for a construction of {@code type} whose fields are being given
      * {@code given}. */
-    private Judgment verdictOf(TypeSymbol.AtModule named, Hir.Data type, Map<BindingId, Core> given, Known k,
+    private Judgment verdictOf(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
                                Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
@@ -2390,15 +4180,17 @@ public final class InvariantChecker {
         // The clauses that state something here, and not whether they are all of them: a clause
         // stating nothing readable at this construction is one the run-time check stands for, which
         // is what `unreadable` below already carries for the ones that were read.
-        for (Clauses.Stated stated : clauses.statedAt(named, type, given).clauses()) {
-            Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
-            unreadable |= o.unreadable();
-            for (Predicates.Part eachOne : o.parts()) {
-            if (!(eachOne instanceof Predicates.Part.Carried carriedOne)) {
-                continue;
-            }
-            Predicates.Clause one = carriedOne.clause();
-                owed.add(new Owing(stated, one));
+        for (Clauses.Stated stated : clauses.statedAt(named, given).clauses()) {
+            for (Clauses.StatedPart part : stated.parts()) {
+                Predicates.Owed o =
+                        predicates.obligations(part.expr(), k, at, unnamed, decidesFalse);
+                unreadable |= o.unreadable();
+                for (Predicates.Part eachOne : o.parts()) {
+                    if (!(eachOne instanceof Predicates.Part.Carried carriedOne)) {
+                        continue;
+                    }
+                    owed.add(new Owing(stated, carriedOne.clause()));
+                }
             }
         }
         if (owed.isEmpty()) {
@@ -2475,7 +4267,7 @@ public final class InvariantChecker {
      * it under either answer would report a clause the value does not fail, or leave one it does.
      */
     private static ClauseStatus statusOf(Predicates.Clause owed, NumericDomain<FactSubject> dom, Known k,
-                                         Clause clause) {
+                                         Clause.Ref clause) {
         boolean established = owed.dischargedBy(dom, k.facts());
         boolean refused = owed.refutedBy(dom, k.facts());
         if (established && refused) {
@@ -2491,7 +4283,7 @@ public final class InvariantChecker {
     /** Records what was proved about {@code clause}, joining it with what is already there for it:
      * one clause reached twice — through two spreads, or read again under a rewrite — is one
      * clause. */
-    private static void put(SequencedMap<Clause.Id, Judged> found, Clause clause,
+    private static void put(SequencedMap<Clause.Id, Judged> found, Clause.Ref clause,
                             ClauseStatus status) {
         found.merge(clause.id(), new Judged(clause, status), Judged::merge);
     }
@@ -2503,10 +4295,10 @@ public final class InvariantChecker {
      * them: which of the three a clause came out as is one answer, and the set of clauses this check
      * read is partitioned by it rather than covered by sets that have to be kept apart.
      */
-    record Judged(Clause clause, ClauseStatus status) {
+    record Judged(Clause.Ref clause, ClauseStatus status) {
 
         static Judged merge(Judged a, Judged b) {
-            return new Judged(Clause.merge(a.clause(), b.clause()),
+            return new Judged(Clause.Ref.merge(a.clause(), b.clause()),
                     ClauseStatus.of(a.status(), b.status()));
         }
 
@@ -2519,10 +4311,10 @@ public final class InvariantChecker {
     /** One obligation and the clause it was owed by. */
     private record Owing(Clauses.Stated from, Predicates.Clause owed) {
 
-        /** The clause this was owed by: which one it is, what a sentence may call it, and where a
-         * reader can be sent. None of those is read here — this hands the clause on whole, so that
-         * a site choosing what to say asks it rather than being handed one of its answers. */
-        Clause clause() {
+        /** The clause this was owed by: which one it is and what a sentence may call it. Neither is
+         * read here — this hands the clause on whole, so that a site choosing what to say asks it
+         * rather than being handed one of its answers. */
+        Clause.Ref clause() {
             return from.clause();
         }
     }
@@ -2583,18 +4375,18 @@ public final class InvariantChecker {
 
         /** The clauses nothing known there establishes — the ones this check could not settle and
          * the ones the value fails, which is what E2011 is about. */
-        SequencedMap<Clause.Id, Clause> unsettled() {
+        SequencedMap<Clause.Id, Clause.Ref> unsettled() {
             return where(ClauseStatus::unsettled);
         }
 
         /** The clauses the guards establish. */
-        SequencedMap<Clause.Id, Clause> settled() {
+        SequencedMap<Clause.Id, Clause.Ref> settled() {
             return where(status -> status == ClauseStatus.SETTLED);
         }
 
         /** The clauses the value being built fails wherever it is built, which is what E2010 is
          * about — and not every clause left standing beside them. */
-        SequencedMap<Clause.Id, Clause> refuted() {
+        SequencedMap<Clause.Id, Clause.Ref> refuted() {
             return where(status -> status == ClauseStatus.REFUTED);
         }
 
@@ -2606,12 +4398,12 @@ public final class InvariantChecker {
          * is depends on the path, so none of them is one the value fails and the reader is sent to
          * each of them under what is true of it.
          */
-        SequencedMap<Clause.Id, Clause> refutedSomewhere() {
+        SequencedMap<Clause.Id, Clause.Ref> refutedSomewhere() {
             return where(status -> status == ClauseStatus.REFUTED_SOMEWHERE);
         }
 
-        private SequencedMap<Clause.Id, Clause> where(Predicate<ClauseStatus> which) {
-            SequencedMap<Clause.Id, Clause> side = new LinkedHashMap<>();
+        private SequencedMap<Clause.Id, Clause.Ref> where(Predicate<ClauseStatus> which) {
+            SequencedMap<Clause.Id, Clause.Ref> side = new LinkedHashMap<>();
             found.forEach((id, one) -> {
                 if (which.test(one.status())) {
                     side.put(id, one.clause());
@@ -2637,15 +4429,21 @@ public final class InvariantChecker {
             return canName(refuted());
         }
 
-        private static boolean canName(SequencedMap<Clause.Id, Clause> side) {
+        private static boolean canName(SequencedMap<Clause.Id, Clause.Ref> side) {
             return side.values().stream().anyMatch(clause -> clause.name().isPresent());
         }
 
-        /** Where the clauses on a side are, in the order they were declared — every one of them,
-         * whether or not this compile has a file to quote it from. */
+        /**
+         * Where the clauses on a side are, in the order they were declared — every one of them,
+         * whether or not this compile has a file to quote it from.
+         *
+         * <p>Asked of {@code written} rather than read off the clauses. A judgment says which
+         * clauses it is about, and where each of them is written is the declaration's answer: taken
+         * from the judgment, a report would point where the clause was when the judgment was made.
+         */
         static Stream<souther.compiler.diag.DiagnosticPlace> pointsTo(
-                SequencedMap<Clause.Id, Clause> side) {
-            return side.values().stream().map(Clause::at);
+                SequencedMap<Clause.Id, Clause.Ref> side, ClauseLocations written) {
+            return side.keySet().stream().map(written::of);
         }
     }
 
@@ -2687,8 +4485,8 @@ public final class InvariantChecker {
      * a set with no names in it renders as, and reading it back as an answer puts "no clause was
      * named" and "there is no clause" into one value.
      */
-    private static String names(SequencedMap<Clause.Id, Clause> clauses) {
-        return clauses.values().stream().map(Clause::name).flatMap(Optional::stream)
+    private static String names(SequencedMap<Clause.Id, Clause.Ref> clauses) {
+        return clauses.values().stream().map(Clause.Ref::name).flatMap(Optional::stream)
                 .map(ClauseName::value).collect(Collectors.joining(", "));
     }
 
@@ -2737,12 +4535,7 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {
-
-        Verdict verdict() {
-            return judgment.verdict();
-        }
-    }
+    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {}
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
@@ -2820,7 +4613,7 @@ public final class InvariantChecker {
      * A case split a value is handed, and the bindings in scope where it stands. A case split is a
      * node answering one of several arms where which one is decided by something a reading can
      * assume — an {@code if} by its condition, a {@code match} by which case the scrutinee is — and
-     * which arms those are is {@link #armsOf}'s answer, so nothing reading a site asks which of the
+     * which arms those are is settled where the split is read, so nothing reading a site asks which of the
      * forms it was handed.
      *
      * <p>The node and the scope go together: a node is found by searching down from the outside, and
@@ -3008,7 +4801,7 @@ public final class InvariantChecker {
      * enough and was once all there was: a kind can be answered {@code true} here and still reach no
      * reader that opens one. What carries the decision out is that this is the one gate — {@link
      * #splitIn} finds a site by asking it, and {@link #splitOf} reads the arms off the same
-     * {@link Choice} — and that {@link #choosing} switches over {@link Choice.Decides}, which is
+     * {@link Choice} — and that {@link Terms#choosing} switches over {@link Choice.Decides}, which is
      * sealed, so a kind declared a split with nothing to enter it by does not compile.
      */
     private static boolean isASplit(Core e) {
@@ -3274,8 +5067,8 @@ public final class InvariantChecker {
      * module path. What the message says is a different question with a different answer — whether
      * the clause could be named — and neither decides the other.
      */
-    private static <M extends Message & Supporting> Diagnostic finish(
-            Diagnostic.Builder said, SourcePos at, SequencedMap<Clause.Id, Clause> clauses,
+    private <M extends Message & Supporting> Diagnostic finish(
+            Diagnostic.Builder said, SourcePos at, SequencedMap<Clause.Id, Clause.Ref> clauses,
             M label) {
         said.at(at);
         // One label per place, and the clauses are what there are several of. A label is a sentence
@@ -3285,7 +5078,7 @@ public final class InvariantChecker {
         // reads as a repeat rather than as two clauses. Which clauses they are is in the message,
         // which names them.
         java.util.Set<souther.compiler.diag.DiagnosticPlace> already = new java.util.LinkedHashSet<>();
-        Judgment.pointsTo(clauses).forEach(place -> {
+        Judgment.pointsTo(clauses, this.clauses.written()).forEach(place -> {
             if (!already.add(place)) {
                 return;
             }

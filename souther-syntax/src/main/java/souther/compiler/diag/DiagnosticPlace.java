@@ -107,14 +107,13 @@ public sealed interface DiagnosticPlace {
     /**
      * A region that is no place: none at all, one with an end missing, or one nobody placed.
      *
-     * <p>Marked like {@link NotOnePlace}, and for the reason that type gives. What raises one of
-     * these runs inside an analysis that falls open, and a refusal that arrived as an ordinary
-     * {@link IllegalArgumentException} would be swallowed there — turning a label this could not
-     * place into a whole subject reported as having nothing wrong with it, which is what a subject
-     * that passed looks like. Dropping one label was the old behaviour and was already the defect;
-     * dropping the analysis around it is worse.
+     * <p>What a caller handed over, and not a state this got into: a region names a source or it
+     * does not, and one that does not is not a place however the report around it is shown. Refused
+     * rather than answered with a place put together from whatever file the report ends up filed
+     * under — the reading that made a label about a published module's clause point into the
+     * caller's file.
      */
-    final class NotAPlace extends IllegalArgumentException implements TheCompilerDisagreesWithItself {
+    final class NotAPlace extends IllegalArgumentException {
 
         private static final long serialVersionUID = 1L;
 
@@ -126,17 +125,15 @@ public sealed interface DiagnosticPlace {
     /**
      * A region whose ends were read from two sources.
      *
-     * <p>Its own type because a check that would see one swallows what it throws: an analysis that
-     * fell over leaves the run-time check standing, which is the right answer for a shape the walk
-     * has no rule for and the wrong one here. What this says is that the compiler built a place that
-     * is not a place — and swallowed, it comes out as a behavior with nothing to report, the same
-     * thing a behavior whose invariants all discharge comes out as.
+     * <p>Its own type and not one of the above. A region naming no source is a caller that has not
+     * finished answering; a region whose ends name two is one that answered twice, and the two are
+     * not the same mistake to look for. There is no place for this to become: a reader sent to it
+     * would be sent to one file and shown a stretch measured in another.
      *
      * <p>Here rather than beside the caller that used to raise it, because this is where a region
      * becomes a place and a region that is two places has no place to become.
      */
-    final class NotOnePlace extends IllegalArgumentException
-            implements TheCompilerDisagreesWithItself {
+    final class NotOnePlace extends IllegalArgumentException {
 
         private static final long serialVersionUID = 1L;
 

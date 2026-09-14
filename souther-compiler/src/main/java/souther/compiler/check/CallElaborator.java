@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -15,7 +16,10 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -67,7 +71,8 @@ public final class CallElaborator {
             default -> null;
         };
         if (element == null || element instanceof Type.Nothing
-                || TypeOps.supportsOrdering(element, ctx.symbols())) {
+                || TypeOps.supportsOrdering(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                        ctx.published())) {
             return;
         }
         String name = call.written().substring(call.written().indexOf('.') + 1);
@@ -89,7 +94,8 @@ public final class CallElaborator {
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
         if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
-                || TypeOps.supportsOrdering(answered, ctx.symbols())) {
+                || TypeOps.supportsOrdering(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                        ctx.published())) {
             return;
         }
         throw CompileException.of(Diagnostic
@@ -120,9 +126,12 @@ public final class CallElaborator {
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
-        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.published());
+        // A name written where a value goes, and no call written anywhere: reading a value's name
+        // is running its body, so the call is this compiler's and there is none to send anybody to.
         return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
-                List.of(), TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
+                List.of(), ConstructOccurrence.unwritten(),
+                TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
     /**
@@ -166,7 +175,7 @@ public final class CallElaborator {
         CompleteSignature kept = callee == null
                 ? null : ctx.preserved().signatureOf(callee.denotes());
         if (kept != null) {
-            return preservedCall(call, callee, kept, env, ctx, expected);
+            return preservedCall(call, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         // A temporal written out is a value, not an application: which it is was settled when the
@@ -184,8 +193,11 @@ public final class CallElaborator {
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
         if (callee != null && callee.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
+            // The binding's own name, as every other read of one is built with. What the author
+            // applied is the application's answer and not this read's: where a lowering bound what
+            // was applied, the two are a field read and the name it was bound to.
             return new Core.Apply(
-                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
+                    new Core.Read(local.name(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
@@ -211,7 +223,25 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
                     + " reaches " + reaches + ", which no method is emitted for");
         }
-        return new Core.Call(reached(declaration, ctx), ca.cores(), result, call.pos());
+        return new Core.Call(reached(declaration, ctx), ca.cores(), wroteIt(call, ctx), result,
+                call.pos());
+    }
+
+    /**
+     * Which call of the model this is, in the copy of the body being elaborated.
+     *
+     * <p>Read off what the application says it is here for, which is the one answer to that: a call
+     * an author wrote is a construct their text counted, and it is that construct in every copy an
+     * expansion makes of the body around it. Minted here instead, two copies of one call would be
+     * two calls of the model.
+     *
+     * <p>Nothing for an application no author wrote. A composed call, an eta-expansion and a
+     * derived one are this compiler's, so there is no call for a reader to be sent to — and a
+     * construct invented for one would point at something nobody can edit.
+     */
+    private static ConstructOccurrence wroteIt(Hir.Apply call, CheckContext ctx) {
+        return call.application() instanceof ApplicationOrigin.Written(SourceConstructOrigin wrote)
+                ? ctx.occurrenceOf(wrote) : ConstructOccurrence.unwritten();
     }
 
     /**
@@ -222,16 +252,20 @@ public final class CallElaborator {
      * was given. What differs is only that this one is a node of its own, so a reader that has no
      * business with a call left standing meets it as itself rather than as an ordinary call it might
      * try to emit.
+     *
+     * <p>What is applied comes from {@code kept} and is not taken from the call a second time. The
+     * signature was looked up under what the callee denotes, and it says which operation it is the
+     * signature of, so the two cannot come apart.
      */
-    private static Core preservedCall(Hir.Apply call, Hir.Var.Denoting callee,
-                                      CompleteSignature kept, Scope env,
+    private static Core preservedCall(Hir.Apply call, CompleteSignature kept, Scope env,
                                       CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         if (call.args().size() != params.size()) {
             arity(call, params.size());
         }
-        Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
+        Map<String, Type> bind = SignatureApplication.settledByValues(
+                params, kept.result(), expected, ca::type, ctx.published());
         requireValueArgs(call, params, ca, bind);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
@@ -245,74 +279,26 @@ public final class CallElaborator {
                 // Refused here rather than inside the walk, and by the sentence a value argument is
                 // refused by: both kinds of argument are one rule, and this is the reader that
                 // still has the argument to point at.
-                if (TypeOps.unify(declared.result(), answered, bind, ctx.symbols())
+                if (TypeOps.unify(declared.result(), answered, bind, ctx.published())
                         instanceof Fit.Disagrees d) {
                     throw Elaborator.doesNotFit(call.args().get(i), d.actual(), d.expected(),
                             "argument " + (i + 1) + " of " + call.written());
                 }
             }
         }
-        return new Core.PreservedCall(callee.denotes(), ca.cores(),
+        // The operation as the signature that just typed this call says it: what was applied and
+        // what it takes are one answer, and asking anything a second time for the name would be
+        // reaching for a declaration this already has in hand.
+        // Which application of which source this is, taken from the node the source was read into.
+        // Worked out here instead, it would be a second answer to a question the frontend settled.
+        // Both answers carried and neither decided here. Which occurrence of the operation's name
+        // this applies is the callee's, and why the application is here is the application's — and
+        // a call kept for a reader to quote is not always one an author wrote, a library operation
+        // used as a value being expanded into a block whose application is kept the same way.
+        return new Core.PreservedCall(kept.declaring(), ca.cores(),
+                new Core.KeptCallPlace(call.answered().origin(), call.application(),
+                        ctx.lineage()),
                 TypeOps.substitute(kept.result(), bind), call.pos());
-    }
-
-    /**
-     * What a call settles of the signature it applies, before any function argument is typed.
-     *
-     * <p>Two things state something about a polymorphic signature's variables, and they are asked in
-     * this order because the order is the whole of the rule.
-     *
-     * <ol>
-     *   <li>What the context expects of the result, where the signature takes a function at all. A
-     *       variable a function parameter mentions has to be decided before that function is typed,
-     *       and where no argument decides it the position the call stands in is the only thing that
-     *       does.</li>
-     *   <li>What each value argument states, the ones that state something first. An argument that
-     *       answers no value — an empty collection carries a bottom — says nothing about what it
-     *       holds, and letting it settle a variable would hold every other argument to the element
-     *       type of nothing. A bottom then widens to what the others settled instead of the other way
-     *       round.</li>
-     * </ol>
-     *
-     * <p>Every reader of a declared signature asks this: the call that expands one, the call that
-     * keeps one standing, and the walk that reads one to learn what a function it was handed takes.
-     * They differ in what they do with a function argument afterwards — a fold reads its result as
-     * the accumulator to grow, an ordinary application does not — and in nothing before it. Said once
-     * because a difference here is not a failure but a variable settled to the wrong type, which is
-     * reported somewhere else as something else.
-     */
-    static Map<String, Type> settledByValues(Hir.Apply call, List<Type> params, Type result,
-                                             Type expected,
-                                             java.util.function.IntFunction<Type> argType,
-                                             CheckContext ctx) {
-        Map<String, Type> bind = new HashMap<>();
-        if (params.stream().anyMatch(Type.FnOf.class::isInstance)) {
-            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols());
-        }
-        // Each value argument is asked once, here, in the order it is written. What the ordering
-        // below decides is which of them settles a variable first, and nothing about how many times
-        // an argument is read: typing one can decide a variable of the application it stands in, so a
-        // second reading is a second answer, and then the argument classified and the argument
-        // unified are not the same reading of it.
-        Type[] stated = new Type[params.size()];
-        List<Integer> stating = new ArrayList<>();
-        List<Integer> bottoms = new ArrayList<>();
-        for (int i = 0; i < params.size(); i++) {
-            if (params.get(i) instanceof Type.FnOf) {
-                continue;
-            }
-            stated[i] = argType.apply(i);
-            (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
-        }
-        stating.addAll(bottoms);
-        // What an argument settles, and not whether it fits: that is required of each argument once
-        // the substitution is complete, and required there because that is where the argument itself
-        // is in hand. A refusal from here would name the argument in words and point at the callee,
-        // the two being as far apart as an argument list is long.
-        for (int i : stating) {
-            TypeOps.bindVars(params.get(i), stated[i], bind, ctx.symbols());
-        }
-        return bind;
     }
 
     /**
@@ -358,11 +344,11 @@ public final class CallElaborator {
             return cores[i].type();
         }
 
-        /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
+        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType} does. */
         void require(int i, Type expected, String what) {
             Core c = Elaborator.elaborate(args.get(i), env, ctx);
             cores[i] = c;
-            Elaborator.requireType(args.get(i), c.type(), expected, ctx.symbols(), what);
+            Elaborator.requireType(args.get(i), c.type(), expected, ctx.published(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -374,7 +360,7 @@ public final class CallElaborator {
                 throw new IllegalStateException(
                         "argument " + (i + 1) + " required before it was typed");
             }
-            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.symbols(), what);
+            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.published(), what);
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
@@ -418,7 +404,7 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Hir.Apply call) {
+    static RuntimeException noCallee(Hir.Apply call, Symbols symbols) {
         if (call.answered() == null) {
             return new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
@@ -430,8 +416,17 @@ public final class CallElaborator {
                             .hint(new BehaviorMessage.WhatReachesABehavior(call.written()))
                             .say(new BehaviorMessage.ABehaviorCannotBeCalledFromHere(call.written())).build());
             // A type applied to an argument is a construction, and every place a construction is
-            // allowed rewrites it before the check reads it. Reaching here means it was written
-            // somewhere no rewrite covers, so say what it is rather than what it is not.
+            // allowed rewrites it before the check reads it — where what was written is one. A
+            // newtype wraps a single value, so an application of one to any other count is not a
+            // construction of it and is left as it was written; it reaches here from a place the
+            // rewrite covers, and what is wrong with it is the count and not the place.
+            case ValueName.OfType named when isANewtype(named, symbols) && call.args().size() != 1 ->
+                    CompileException.of(Diagnostic.at(call.appliedAt())
+                            .say(new DataMessage.ANewtypeWrapsOneValue(
+                                    call.written(), String.valueOf(call.args().size())))
+                            .build());
+            // Any other application of a type reached here from somewhere no rewrite covers, so say
+            // what it is rather than what it is not.
             case ValueName.OfType named -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
             // A binding applied to arguments, whose type here is not a function. Either it is not one
@@ -449,6 +444,13 @@ public final class CallElaborator {
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             case null -> unelaborated("nothing", call);
         };
+    }
+
+    /** Whether the applied name is a newtype — read from the declaration, which says so, and not
+     *  from the shape of what was written. */
+    private static boolean isANewtype(ValueName.OfType named, Symbols symbols) {
+        return symbols != null
+                && symbols.declaredNode(named.type()) instanceof Hir.Data data && data.newtype();
     }
 
     private static IllegalStateException unelaborated(String what, Hir.Apply call) {
@@ -504,8 +506,8 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` reached signature application"
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
         }
-        Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
-                expected, ca::type, ctx);
+        Map<String, Type> bind = SignatureApplication.settledByValues(
+                signature.params(), signature.result(), expected, ca::type, ctx.published());
         requireValueArgs(call, signature.params(), ca, bind);
         try {
             for (int i = 0; i < args.size(); i++) {
@@ -536,7 +538,8 @@ public final class CallElaborator {
     }
 
     /** Each value argument held to the parameter it was given to, at its own position — the
-     * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
+     * refusal {@link SignatureApplication#settledByValues} leaves to whoever has the argument in
+     * hand. */
     private static void requireValueArgs(Hir.Apply call, List<Type> params, CallArgs ca,
                                          Map<String, Type> bind) {
         for (int i = 0; i < params.size(); i++) {
@@ -619,8 +622,13 @@ public final class CallElaborator {
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
         // reaches here — NewtypeDesugar has lowered it to a NewData literal.
         // a function value in force, or a recursive helper's signature: which of the two
-        // is the denotation's to say, and only one of them is bound here
-        if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
+        // is the denotation's to say, and only one of them is bound here.
+        //
+        // Looked up by what the callee reaches. The signatures are keyed by the reference a call is
+        // left standing on, and what a report quotes is the name the author applied — which a
+        // rewrite of the callee leaves alone, so a lookup on that finds the sugar and not the
+        // operation it stands for.
+        if (env.of(callee.denotes(), callee.reaches()) instanceof Type.FnOf fn) {
             if (args.size() != fn.params().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
@@ -679,11 +687,11 @@ public final class CallElaborator {
             Elaborator.optionCaseWritten(call.written(), call.pos());
             CompileException bareLibraryName = StdlibNames.writtenBare(
                     ctx.symbols().library().names(), call.written(), call.written(),
-                    call.name().region());
+                    call.applied().reportedAt());
             if (bareLibraryName != null) {
                 throw bareLibraryName;
             }
-            throw noCallee(call);
+            throw noCallee(call, ctx.symbols());
         }
         arity(call, required.params().size());
         for (int i = 0; i < required.params().size(); i++) {
@@ -780,13 +788,6 @@ public final class CallElaborator {
                         .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
     }
 
-    /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
-     * function itself, and a call may be written either way. */
-    private static String shortName(String fn) {
-        int dot = fn.indexOf('.');
-        return dot < 0 ? fn : fn.substring(dot + 1);
-    }
-
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
         return CompileException.of(Diagnostic.at(pos)
@@ -814,7 +815,11 @@ public final class CallElaborator {
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
         parseTemporal(kind, call.written(), lit.value(), lit.reportedAt());
-        return new Core.Temporal(kind, lit.value(), call.pos());
+        // The construction this was written as, carried across the fold. A temporal reaches Core as
+        // the value it denotes, and the application it was spelled with is folded away — not which
+        // one it was, which a reader writing the construction back out needs and the place cannot
+        // answer for.
+        return new Core.Temporal(kind, lit.value(), call.application(), call.pos());
     }
 
     /** Parses a written temporal, reporting a malformed one against {@code at} — the text the

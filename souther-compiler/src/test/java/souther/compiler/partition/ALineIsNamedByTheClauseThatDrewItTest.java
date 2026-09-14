@@ -1,19 +1,16 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.observe.ObservedValue;
+import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -98,7 +95,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
         Cut at1 = cutAt(length, 1L);
 
         assertEquals(List.of("invariant Length (floorA)", "invariant Length (floorB)"),
-                at1.origins().stream().map(OriginRef::named).toList(),
+                at1.origins().stream().map(LineOrigin::saidWithoutAPlace).toList(),
                 "one cut, two rules that drew it");
 
         // Under the declaration that drew them, and named in the terms it wrote: the line is owed
@@ -146,23 +143,20 @@ class ALineIsNamedByTheClauseThatDrewItTest {
 
     private static Cut cutAt(Axis axis, long value) {
         return axis.cuts().stream()
-                .filter(c -> c.value().equals(new ObservedValue.Integer(value)))
+                .filter(c -> c.at().sameAs(Count.of(value)))
                 .findFirst().orElseThrow(() -> new AssertionError("no cut at " + value + "; had "
-                        + axis.cuts().stream().map(Cut::value).toList()));
+                        + axis.cuts().stream().map(Cut::at).toList()));
     }
 
     private static Axis axis(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        assertNotNull(prepared);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return Partitions.of("price", InputDomain.of(sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }
@@ -171,6 +165,6 @@ class ALineIsNamedByTheClauseThatDrewItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

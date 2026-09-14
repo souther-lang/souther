@@ -34,32 +34,57 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AChoiceIsOneConnectiveAndNotATreeTest {
 
     private static final List<String> POSITIONS = List.of("value", "other", "neither");
+
+    /**
+     * What every choice here is told its unread alternative left open.
+     *
+     * <p>The same at every bracketing, which is what the property needs: whether a choice opened a
+     * position is settled where the clause an author wrote meets what became of its branches, so a
+     * bracketing cannot change it and this test may not let one. What is held is that everything a
+     * reading does with it afterwards is associative and commutative too.
+     */
+    private static final Set<String> OPENED = Set.of("value", "other");
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
 
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
-    private Map<String, AdmissibleValues<String>> readings() {
-        Map<String, AdmissibleValues<String>> out = new LinkedHashMap<>();
-        out.put("top", AdmissibleValues.top());
-        out.put("value == A", AdmissibleValues.at("value", ValueSet.just(A)));
-        out.put("value == B", AdmissibleValues.at("value", ValueSet.just(B)));
-        out.put("value /= A", AdmissibleValues.at("value", ValueSet.allBut(A)));
-        out.put("other == A", AdmissibleValues.at("other", ValueSet.just(A)));
-        out.put("value == A && other == A", AdmissibleValues.at("value", ValueSet.just(A))
-                .meet(AdmissibleValues.at("other", ValueSet.just(A)), sets));
-        out.put("value == B && other == B", AdmissibleValues.at("value", ValueSet.just(B))
-                .meet(AdmissibleValues.at("other", ValueSet.just(B)), sets));
+    private static PlannedValues<String> at(String atom, ValueSet set) {
+        return PlannedValues.at(atom, AdmittedPlan.of(set));
+    }
+
+    /** A description worked out and told what its unread alternatives left open, which is what a
+     *  reader is handed. Said once, where the whole of what the clauses came to is in hand. */
+    private AdmissibleValues<String> opened(PlannedValues<String> planned) {
+        return planned.resolve(sets).values().alsoOpenedAt(OPENED);
+    }
+
+    /**
+     * The alternatives every triple below is drawn from, each one a branch somebody can be in.
+     *
+     * <p>Every one of them stands, because that is what a choice between two of them is a choice
+     * between. Where a branch is one nobody can be in, what the choice leaves is settled over the
+     * values and the order together and the alternatives are never composed — so a bracketing of
+     * those is a rule about the caller that settles them, and it is held where that caller is
+     * ({@code ADeadBranchIsSettledTheSameHoweverTheChoiceWasBracketedTest}).
+     */
+    private Map<String, PlannedValues<String>> readings() {
+        Map<String, PlannedValues<String>> out = new LinkedHashMap<>();
+        out.put("top", PlannedValues.top());
+        out.put("value == A", at("value", ValueSet.just(A)));
+        out.put("value == B", at("value", ValueSet.just(B)));
+        out.put("value /= A", at("value", ValueSet.allBut(A)));
+        out.put("other == A", at("other", ValueSet.just(A)));
+        out.put("value == A && other == A",
+                at("value", ValueSet.just(A)).meet(at("other", ValueSet.just(A))));
+        out.put("value == B && other == B",
+                at("value", ValueSet.just(B)).meet(at("other", ValueSet.just(B))));
         out.put("unread about value",
-                AdmissibleValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ));
+                PlannedValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ));
         out.put("unread about nothing",
-                AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
-        out.put("unread about both", AdmissibleValues.unreadable(Set.of("value", "other"),
+                PlannedValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+        out.put("unread about both", PlannedValues.unreadable(Set.of("value", "other"),
                 UnreadReason.RELATES_TWO_POSITIONS));
-        out.put("two rules leaving nothing", AdmissibleValues.at("value", ValueSet.just(A))
-                .meet(AdmissibleValues.at("value", ValueSet.just(B)), sets));
-        out.put("shown impossible from outside",
-                AdmissibleValues.at("value", ValueSet.just(A)).leavingNothing());
         return out;
     }
 
@@ -96,11 +121,11 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     /** Three alternatives leave what they leave, however they are bracketed. */
     @Test
     void threeAlternativesLeaveTheSameHoweverTheyAreBracketed() {
-        Map<String, AdmissibleValues<String>> readings = readings();
+        Map<String, PlannedValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets).join(right, sets)),
-                        answers(left.join(middle.join(right, sets), sets)),
+                        answers(opened(left.joinLive(middle).joinLive(right))),
+                        answers(opened(left.joinLive(middle.joinLive(right)))),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   against   " + leftName + " || (" + middleName + " || "
                                 + rightName + ")"))));
@@ -109,9 +134,10 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     /** And however they are ordered. */
     @Test
     void twoAlternativesLeaveTheSameHoweverTheyAreOrdered() {
-        Map<String, AdmissibleValues<String>> readings = readings();
+        Map<String, PlannedValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((rightName, right) ->
-                assertEquals(answers(left.join(right, sets)), answers(right.join(left, sets)),
+                assertEquals(answers(opened(left.joinLive(right))),
+                        answers(opened(right.joinLive(left))),
                         () -> leftName + " || " + rightName + "   against   "
                                 + rightName + " || " + leftName)));
     }
@@ -119,12 +145,12 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     /** And a conjunction beside them reads the same, wherever the brackets of the choice fell. */
     @Test
     void aConjunctionBesideThemReadsTheSameEitherWay() {
-        Map<String, AdmissibleValues<String>> readings = readings();
-        AdmissibleValues<String> beside = AdmissibleValues.at("other", ValueSet.allBut(B));
+        Map<String, PlannedValues<String>> readings = readings();
+        PlannedValues<String> beside = at("other", ValueSet.allBut(B));
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets).join(right, sets).meet(beside, sets)),
-                        answers(left.join(middle.join(right, sets), sets).meet(beside, sets)),
+                        answers(opened(left.joinLive(middle).joinLive(right).meet(beside))),
+                        answers(opened(left.joinLive(middle.joinLive(right)).meet(beside))),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B, against the other bracketing"))));
     }
@@ -139,16 +165,16 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
      */
     @Test
     void andAFurtherAlternativeAfterThatConjunctionReadsTheSame() {
-        Map<String, AdmissibleValues<String>> readings = readings();
-        AdmissibleValues<String> beside = AdmissibleValues.at("other", ValueSet.allBut(B));
-        AdmissibleValues<String> after =
-                AdmissibleValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ);
+        Map<String, PlannedValues<String>> readings = readings();
+        PlannedValues<String> beside = at("other", ValueSet.allBut(B));
+        PlannedValues<String> after =
+                PlannedValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ);
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets).join(right, sets).meet(beside, sets)
-                                .join(after, sets)),
-                        answers(left.join(middle.join(right, sets), sets).meet(beside, sets)
-                                .join(after, sets)),
+                        answers(opened(left.joinLive(middle).joinLive(right)
+                                .meet(beside).joinLive(after))),
+                        answers(opened(left.joinLive(middle.joinLive(right))
+                                .meet(beside).joinLive(after))),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B and joined with an unread rule about"
                                 + " value, against the other bracketing"))));

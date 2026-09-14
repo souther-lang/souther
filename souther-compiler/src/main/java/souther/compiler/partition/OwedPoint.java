@@ -13,8 +13,9 @@ package souther.compiler.partition;
  * where a declaration took the position in came back owed to the line below it and to nobody else,
  * and the declaration that put the end there was told nothing about a row it could be asked for.
  *
- * @param point       what a row here is owed for, which two readings of it share
- * @param attribution whose it is to write a row here, as this reading settled it
+ * <p>Two things, and they answer different questions: the point is what a row here is owed for,
+ * which two readings of it share, and the attribution is whose it is to write that row, as this
+ * reading settled it.
  */
 public final class OwedPoint {
 

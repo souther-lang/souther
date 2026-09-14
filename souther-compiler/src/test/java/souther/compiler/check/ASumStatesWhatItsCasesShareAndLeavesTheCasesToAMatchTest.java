@@ -5,7 +5,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -73,17 +72,21 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
             let keep (n) = n
             """;
 
-    private final Symbols symbols = symbols();
+    private final RuleReadingSource rules = rules();
 
-    private final PathEngine engine = new PathEngine(symbols, Map.of(),
-            Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    private final Symbols symbols = rules.symbols();
 
-    private final GuaranteeWalk walk = new GuaranteeWalk(engine.guarantees());
+    private final PathEngine engine = new PathEngine(
+            RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+            Terms.Of.THE_DISCHARGE_TREE);
 
-    private static Symbols symbols() {
+    private final GuaranteeWalk walk =
+            new GuaranteeWalk(engine.guarantees(), DeclarationNewtypes.asWritten(symbols));
+
+    private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private Core.Read place(String name) {
@@ -98,7 +101,7 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     private record Told(Map<String, List<String>> guaranteed, List<String> handedOn) {}
 
     private Told reading(String name) {
-        return reading(name, GuaranteeWalk.Scope.everyPosition());
+        return reading(name, GuaranteeWalk.Scope.everyName());
     }
 
     private Told reading(String name, GuaranteeWalk.Scope scope) {
@@ -108,19 +111,19 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
                 engine.terms().placeTerm(root.binding()));
         Map<String, List<String>> guaranteed = new LinkedHashMap<>();
         List<String> handedOn = new ArrayList<>();
-        walk.from(root, FieldDomains.THE_VALUE, at, scope,
+        walk.from(root, RuleKey.THE_VALUE, at, scope,
                 new GuaranteeWalk.Reader() {
                     @Override
-                    public void guaranteed(String path, TypeGuarantee guarantee) {
-                        guaranteed.computeIfAbsent(path, _ -> new ArrayList<>())
+                    public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
+                        guaranteed.computeIfAbsent(path.toString(), _ -> new ArrayList<>())
                                 .add(guarantee.rule().clause().toString());
                     }
 
                     @Override
-                    public void handedOn(String path, Type type) {
-                        // The value itself is at the empty path, which reads as nothing in a
-                        // failure message. Named here so a diff says which position it was.
-                        handedOn.add(path.isEmpty() ? "the value" : path);
+                    public void handedOn(RuleKey path, Type type) {
+                        // The value itself is at no name of its own, which reads as nothing in a
+                        // failure message. Named here so a diff says which value it was.
+                        handedOn.add(path.isTheValueItself() ? "the value" : path.toString());
                     }
                 });
         return new Told(guaranteed, handedOn);
@@ -198,8 +201,9 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
 
     /** Reading everything but the rules {@code declaration} wrote. */
     private static GuaranteeWalk.Scope without(String declaration) {
-        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryPosition(), _ -> false,
-                RulesLeftOut.writtenOn(each -> each.name().equals(declaration)));
+        return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryName(), _ -> false,
+                RulesLeftOut.writtenOn(each -> each.name().equals(declaration)),
+                PartsLeftOut.NONE);
     }
 
     /**

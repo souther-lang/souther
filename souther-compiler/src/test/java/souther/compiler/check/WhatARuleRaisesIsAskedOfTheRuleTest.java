@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -32,16 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatARuleRaisesIsAskedOfTheRuleTest {
 
-    private static Map<RuleRef, Required> raisedBy(String source, String type) {
+    private static Map<RuleRef.Invariant, Required> raisedBy(String source, String type) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
-        assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).required();
+        assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).required();
     }
 
     /** What the rule raises, as `obligation at subject`, so a question and its subject are read
@@ -58,7 +57,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
                 ? invariant.clause().name().map(ClauseName::value) : java.util.Optional.empty();
     }
 
-    private static Required only(Map<RuleRef, Required> raised, String clause) {
+    private static Required only(Map<RuleRef.Invariant, Required> raised, String clause) {
         return raised.entrySet().stream()
                 .filter(e -> nameOf(e.getKey()).filter(clause::equals).isPresent())
                 .map(Map.Entry::getValue).findFirst()
@@ -75,7 +74,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void anOrderingBoundRaisesTheValuesAndTheLine() {
-        Map<RuleRef, Required> raised = raisedBy("""
+        Map<RuleRef.Invariant, Required> raised = raisedBy("""
                 module example.rooms
 
                 data Length = Int
@@ -157,7 +156,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      * had answered.
      *
      * <p>Which the quantity settles and the spelling cannot. What a rule restricts is what its
-     * canonical form cuts, which is the rule {@link UnreadComparison#why} is written around one
+     * canonical form cuts, which is the rule {@link UnreadComparison.Quantity.NotRead} is written around one
      * layer down — and this classification was still counting the sides.
      */
     @Test
@@ -184,7 +183,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void aRelationBetweenTwoPositionsRaisesNothing() {
-        Map<RuleRef, Required> raised = raisedBy("""
+        Map<RuleRef.Invariant, Required> raised = raisedBy("""
                 module example.booking
 
                 data Span = { startsAt: Int, endsAt: Int }
@@ -203,6 +202,32 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     }
 
     /**
+     * And a denial between two positions raises nothing either, though a reading takes it in.
+     *
+     * <p>Two questions with one name between them. Whether a reading can hold what a rule says and
+     * whether a rule raises a question about one position are different things: the values now hold
+     * {@code p /= q} as a relation between two blocks, and it still divides neither of them, so
+     * there is nothing here for a measure of coverage to go and check.
+     *
+     * <p>Which is why the two are not kept in step. A capability gained on one side is not a reason
+     * to move the other, and this is what says so.
+     */
+    @Test
+    void andSoDoesADenialAReadingTakesIn() {
+        Required.Irrelevant said = assertInstanceOf(Required.Irrelevant.class,
+                only(raisedBy("""
+                        module example.booking
+
+                        data Pair = { p: Int, q: Int }
+                            invariant differ = p /= q
+                        """, "Pair"), "differ"),
+                "a rule about a pair raises no question about one position");
+
+        assertEquals(Set.of(Required.Because.IT_RELATES_TWO_POSITIONS), said.because());
+        assertEquals(Set.of(), said.obligations());
+    }
+
+    /**
      * A conjunction is one rule, and raises what its parts raise together.
      *
      * <p>The relational half takes nothing away. Written as a first-wins answer, whichever conjunct
@@ -210,7 +235,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void aConjunctionRaisesWhatItsPartsRaiseTogether() {
-        Map<RuleRef, Required> raised = raisedBy("""
+        Map<RuleRef.Invariant, Required> raised = raisedBy("""
                 module example.booking
 
                 data Span = { startsAt: Int, endsAt: Int }

@@ -1,9 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -37,8 +38,10 @@ import java.util.Map;
  * arithmetic of it comes to, so reading that expression is this walk's and no one else's
  * (ADR-0111).
  *
- * @param <A> what the caller calls an atom
- * @param <E> what the caller carries as it goes inside a binding
+ * <p>Two things are the caller's throughout, and every reading and every walk below is written over
+ * them: {@code A} is what the caller calls an atom, and {@code E} is what it carries as it goes
+ * inside a binding. Neither is declared here — this class holds no state — so each of
+ * {@link Reading} and the walks says them for itself.
  */
 public final class AffineForms {
 
@@ -64,6 +67,19 @@ public final class AffineForms {
          *  rather than reaching for a library of its own. */
         Symbols symbols();
 
+        /** What the declarations the expression was written against say. Asked beside the symbols
+         *  because what a carrier is depends on which of them is a sum and what its cases are, and
+         *  that is the declaration's own answer rather than the tree it was written in. */
+        PublishedDeclarations published();
+
+        /** Which form each of those declarations was written in, for the carrier's question about
+         *  whether one is a sum. */
+        DeclarationKinds kinds();
+
+        /** What each of them that wears one value wraps, for the walk that takes the names off a
+         *  position before the carrier is read. */
+        NewtypeInners inners();
+
         /** {@code e} as a form, where nothing here composes one: an atom, a value read through, or
          *  null where the caller can say nothing about it. */
         LinearForm<A> leafOf(Core e, E at);
@@ -71,6 +87,7 @@ public final class AffineForms {
         /** What {@code li}'s body is read in. The one place a binding is entered, so that what a
          *  name means is settled once and no reader interprets a binder for itself. */
         E inside(Core.LetIn li, E at);
+
 
         /**
          * The value {@code read}'s name denotes, where the name and that value are one value — or
@@ -375,6 +392,21 @@ public final class AffineForms {
         }
 
         @Override
+        public PublishedDeclarations published() {
+            return of.published();
+        }
+
+        @Override
+        public DeclarationKinds kinds() {
+            return of.kinds();
+        }
+
+        @Override
+        public NewtypeInners inners() {
+            return of.inners();
+        }
+
+        @Override
         public LinearForm<A> leafOf(Core e, E at) {
             return of.leafOf(e, at);
         }
@@ -383,6 +415,7 @@ public final class AffineForms {
         public E inside(Core.LetIn li, E at) {
             return of.inside(li, at);
         }
+
 
         @Override
         public ReadThrough<E> readThrough(Core.Read read, E at) {
@@ -435,48 +468,44 @@ public final class AffineForms {
      */
     private static <A, E> java.util.List<Standing<A, E>> standing(
             Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
-        switch (e) {
+        return switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
                 if (through != null) {
                     if (through.value() == e || !following.add(r.binding())) {
-                        return java.util.List.of(new Standing<>(e, at, reading));
+                        yield java.util.List.of(new Standing<>(e, at, reading));
                     }
                     java.util.List<Standing<A, E>> denoted =
                             standing(through.value(), through.at(), reading, following);
                     following.remove(r.binding());
-                    return denoted;
+                    yield denoted;
                 }
                 java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
                 if (alternatives == null || alternatives.isEmpty()
                         || !following.add(r.binding())) {
-                    return java.util.List.of(new Standing<>(e, at, reading));
+                    yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : membersOf(alternatives, reading)) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
                 following.remove(r.binding());
-                return each;
+                yield each;
             }
-            case Core.LetIn li -> {
-                return standing(li.body(), reading.inside(li, at), reading, following);
-            }
+            case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
             case Core.FieldAccess _, Core.TupleGet _ -> {
                 java.util.List<Standing<A, E>> written = eliminated(e, at, reading, following);
                 if (written == null) {
-                    return java.util.List.of(new Standing<>(e, at, reading));
+                    yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : written) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
-                return each;
+                yield each;
             }
-            default -> {
-                return java.util.List.of(new Standing<>(e, at, reading));
-            }
-        }
+            default -> java.util.List.of(new Standing<>(e, at, reading));
+        };
     }
 
     /**
@@ -506,45 +535,37 @@ public final class AffineForms {
      */
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
             Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
-        switch (e) {
+        return switch (e) {
             case Core.FieldAccess fa -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
                     if (!(target.value() instanceof Core.Construct nd)) {
-                        return null;
+                        yield null;
                     }
-                    Standing<A, E> given = null;
-                    for (Core.FieldValue each : nd.values()) {
-                        if (each.field().equals(fa.field())) {
-                            // What a member gives a field is read with what the member is read
-                            // with, which is how one plurality stays one over the parts of it.
-                            given = new Standing<>(each.value(), target.at(), target.reading());
-                            break;
-                        }
+                    Core written = ConstructionProjection.given(nd, fa.field());
+                    if (written == null) {
+                        yield null;
                     }
-                    if (given == null) {
-                        return null;
-                    }
-                    out.add(given);
+                    // What a member gives a field is read with what the member is read with, which
+                    // is how one plurality stays one over the parts of it.
+                    out.add(new Standing<>(written, target.at(), target.reading()));
                 }
-                return out;
+                yield out;
             }
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
                     if (!(tuple.value() instanceof Core.Tuple written) || get.index() < 0
                             || get.index() >= written.elements().size()) {
-                        return null;
+                        yield null;
                     }
                     out.add(new Standing<>(written.elements().get(get.index()), tuple.at(),
                             tuple.reading()));
                 }
-                return out;
+                yield out;
             }
-            default -> {
-                return null;
-            }
-        }
+            default -> null;
+        };
     }
 
     /**
@@ -612,16 +633,19 @@ public final class AffineForms {
                     answered(e, at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
                     answered(e, at, reading, following, stopped);
-            // A newtype's construction is the value it wraps. What makes it one is the declaration
-            // and never the shape, which is what `isSingleValueNewtype` is asked — a data of one
-            // field that is not a newtype wraps its value rather than being it, and its
-            // construction is a value of its own.
+            // A newtype's construction is the value it wraps. Whether the name is one is asked of
+            // the reading of the position, which says the names a value is written under: a
+            // newtype puts one there and a data of one field does not — that one wraps its value
+            // rather than being it, and its construction is a value of its own. Asked of the
+            // declarations again instead, this would be a second answer to how far a name reaches.
             // A carrier takes the same names off to find a value written down, and answers above
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
             case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), reading.symbols()) ->
+                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                            reading.published())
+                            .isWrapped() ->
                     formOf(nd.values().get(0).value(), at, reading, following, stopped);
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather
@@ -682,7 +706,9 @@ public final class AffineForms {
      * not recognise would stop a reading the grammar below can still take apart.
      */
     private static <A, E> LinearForm<A> literal(Core e, Reading<A, E> reading) {
-        Carrier carrier = Carrier.ofValue(e.type(), reading.symbols());
+        Carrier carrier =
+                Carrier.ofValue(e.type(), reading.inners(), reading.symbols(), reading.kinds(),
+                        reading.published());
         if (carrier == null || !carrier.counts()) {
             return null;
         }
@@ -701,7 +727,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
                                                  java.util.Set<BindingId> following,
                                                  Stop<A, E> stopped) {
-        LinearForm<souther.compiler.semantics.ArgumentRef> says = formSaidOf(call);
+        LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the
@@ -709,9 +735,10 @@ public final class AffineForms {
         // met an expression an author would change — it has met this call.
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
-        for (Map.Entry<souther.compiler.semantics.ArgumentRef, BigDecimal> each
-                : says.coefs().entrySet()) {
-            int position = CallArguments.positionIn(each.getKey(), Terms.operationOf(call));
+        for (Map.Entry<DeclaredArgument, BigDecimal> each : says.coefs().entrySet()) {
+            // The call here may be the runnable tree's and not a kept one, so its argument count
+            // is checked here rather than by a kept call's own constructor.
+            int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
             if (position < 0 || position >= args.size()) {
                 return stoppedAtTheCall(call, at, stopped);
             }
@@ -749,7 +776,7 @@ public final class AffineForms {
      * read in holds it another, and the fact is about the operation either way; read off one shape,
      * the same statement would be composed in one representation and left a leaf in the other.
      */
-    private static LinearForm<souther.compiler.semantics.ArgumentRef> formSaidOf(Core e) {
+    private static LinearForm<DeclaredArgument> formSaidOf(Core e) {
         souther.compiler.types.ValueName operation = Terms.operationOf(e);
         return operation == null ? null : DischargeRules.answersAFormOf(operation);
     }

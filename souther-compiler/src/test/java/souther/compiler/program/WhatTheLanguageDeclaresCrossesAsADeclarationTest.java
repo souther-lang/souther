@@ -9,6 +9,7 @@ import souther.compiler.types.TypeSymbols;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -65,11 +66,13 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
 
         assertEquals("`demo.Mode` is declared by A_MODULE and by THE_LANGUAGE",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
-                        List.of(module("demo", twice)), List.of(twice), List.of(), kernels()))
+                        List.of(module("demo", twice)), List.of(twice), List.of(), Map.of(),
+                        kernels()))
                         .getMessage());
         assertEquals("`demo.Mode` is declared by A_MODULE and by A_MODULE_ON_THE_PATH",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
-                        List.of(module("demo", twice)), List.of(), List.of(twice), kernels()))
+                        List.of(module("demo", twice)), List.of(), List.of(twice), Map.of(),
+                        kernels()))
                         .getMessage());
     }
 

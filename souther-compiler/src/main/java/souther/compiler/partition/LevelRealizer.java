@@ -5,12 +5,19 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
+import souther.compiler.regex.Meter;
+import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Where each position has to stand for a row to be at one coverage item.
@@ -43,26 +50,55 @@ public final class LevelRealizer {
      *               leave and never narrower than what reaches the item, which is what makes an
      *               exhausted walk of it a proof
      */
-    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within) {
+    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
+                               WitnessSearch looking) {
+        return realize(standing, within, looking, ValuesTried.NONE);
+    }
+
+    /**
+     * The same, leaving out the places this point was already composed at.
+     *
+     * <p>Asked again because the row a place was built into did not stand at the point, which is
+     * the one thing that answers it and is settled after this has returned. So what comes back is a
+     * candidate and not a witness, and a caller that reads it as one has stopped at the first place
+     * the region admits.
+     *
+     * <p>The exclusions are the caller's and are not kept here. A search that remembered what it
+     * had offered would answer differently on two askings of one question, and what it had offered
+     * would outlive the point it was offered for.
+     */
+    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
+                               WitnessSearch looking, ValuesTried tried) {
         if (within == null) {
             throw new IllegalArgumentException(
                     "a search looks inside a region, and there is always one: an item nothing on the"
                             + " way to it narrows is searched for in what the declarations leave,"
                             + " which is an answer and not an absence");
         }
+        // The other vocabulary a position is read in, and it is not optional either. A search that
+        // may be handed none is a search that composes without asking what the position holds,
+        // which is how a boundary came to be offered a value the declarations refuse.
+        if (looking == null) {
+            throw new IllegalArgumentException(
+                    "a value is composed at a position, and what that position admits is an answer"
+                            + " the reading already has: a search that may be handed none is one"
+                            + " that composes without asking");
+        }
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> ofOne(one, within);
-            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within);
-            case Standing.OfAForm over -> ofAForm(over, within);
+            case Standing.OfOneCoordinate one -> ofOne(one, within, looking, tried);
+            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking, tried);
+            case Standing.OfAForm over -> ofAForm(over, within, tried);
         };
     }
 
     /** One position at a place of its own carrier that the item accepts. */
     private Realization ofOne(Standing.OfOneCoordinate one,
-                              souther.compiler.inputs.SearchRegion within) {
-        Place at = placeMeeting(one.where(), one.of(), bounds(within, one.term()));
-        return at == null ? new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE)
-                : found(Map.of(one.term(), at), within);
+                              souther.compiler.inputs.SearchRegion within,
+                              WitnessSearch looking, ValuesTried tried) {
+        Place at = placeMeeting(one.where(), one.term(), one.of(), bounds(within, one.term()),
+                looking, tried, Map.of());
+        return at == null ? Realization.Unknown.nothingComposedOne()
+                : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
     }
 
     /**
@@ -75,34 +111,115 @@ public final class LevelRealizer {
      * about the pair. Where they leave none, nothing is composed — and that is reported as a search
      * that found nothing rather than as a proof, because two ranges leaving no place in common is a
      * fact about the ranges and the pair may be refused or admitted by a rule neither range holds.
+     *
+     * <p><b>From either position, because a relation has no first coordinate.</b> Which of the two
+     * is settled before the other is asked is this search's own arrangement and is no part of what
+     * the rule said, so both arrangements are tried and the pair is what either of them reaches. A
+     * relation over an order that names a value above any of its own and none below one — which
+     * every order over strings is — is composable from the lower position and from neither other
+     * way round, so settling the same one of the two always made {@code a < b} answerable and
+     * {@code b > a} not.
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
-                              souther.compiler.inputs.SearchRegion within) {
-        NumericDomain.Bounds on = bounds(within, two.on());
-        NumericDomain.Bounds together = commonRange(on, bounds(within, two.against()), two.of(),
-                two.where().anchor().asACount());
-        for (Place common : alongTheLine(together, two.of())) {
-            // Where the first has to stand relative to the second: the place the level's distance
-            // from it, and then whatever the item asks of that place. Arithmetic on the carrier's
-            // counts and not a walk along it — a walk is an addition that only exists where the
-            // order has a smallest step, so a rule over two decimals had no pair anything could
-            // compose.
-            // Null where the carrier's arithmetic could not put the item's levels beside the place
-            // the other position stands at — read on, an item with no level in it was handed to a
-            // reader that asks where its level falls.
-            Criterion here = relativeTo(two.where(), common, two.of());
-            Place at = here == null ? null : placeMeeting(here, two.of(), on);
-            if (at == null) {
+                              souther.compiler.inputs.SearchRegion within,
+                              WitnessSearch looking, ValuesTried tried) {
+        // What each reading left behind, in the two vocabularies there are for it. Kept apart all
+        // the way here: how a walk ended says which of them it is, and a reader told the wrong one
+        // is sent to raise a figure that reached its end or told that no number would have helped
+        // where one would.
+        java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        java.util.Set<CompositionRepertoire> notAllOf =
+                java.util.EnumSet.noneOf(CompositionRepertoire.class);
+        for (Reading reading : readings(two)) {
+            NumericDomain.Bounds settled = bounds(within, reading.settles());
+            NumericDomain.Bounds together = commonRange(settled,
+                    bounds(within, reading.anchors()), two.of(),
+                    reading.where().anchor().asACount());
+            Outwards.Walked walked = alongTheLine(together, two.of());
+            if (walked == null) {
+                // Nothing composed a place to anchor at, which is this reading's own answer and
+                // says nothing about how much of the line was looked at.
                 continue;
             }
-            Map<NumericTerm.FromOnePosition, Place> fixing = new LinkedHashMap<>();
-            fixing.put(two.on(), at);
-            fixing.put(two.against(), common);
-            if (found(fixing, within) instanceof Realization.Found made) {
-                return made;
+            // How the walk ended, put to the vocabulary that ending belongs to. Read over the
+            // endings rather than off a boolean made from them: a walk that met the figure and one
+            // that had no step to take are both walks that did not try every place, and told apart
+            // only afterwards they were named for each other.
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
+                        CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
+            }
+            for (Place common : walked) {
+                // Where the settled one has to stand relative to the anchored one: the place the
+                // level's distance from it, and then whatever the item asks of that place.
+                // Arithmetic on the carrier's counts and not a walk along it — a walk is an
+                // addition that only exists where the order has a smallest step, so a rule over two
+                // decimals had no pair anything could compose.
+                // Null where the carrier's arithmetic could not put the item's levels beside the
+                // place the other position stands at — read on, an item with no level in it was
+                // handed to a reader that asks where its level falls.
+                Criterion here = relativeTo(reading.where(), common, two.of());
+                Place at = here == null ? null
+                        : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
+                                Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
+                                        common));
+                if (at == null) {
+                    continue;
+                }
+                Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                fixing.put(new RealizationTarget.AtOnePosition(reading.settles()), at);
+                fixing.put(new RealizationTarget.AtOnePosition(reading.anchors()), common);
+                if (found(fixing, within, tried) instanceof Realization.Found made) {
+                    return made;
+                }
             }
         }
-        return new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+        // Nothing was composed, which is what a pair the ranges leave no place for comes to and
+        // what this has always said. What a walk left is said beside that answer rather than in
+        // place of it, each in its own vocabulary: raising a figure goes past it, and raising
+        // anything reaches no second place on an order that has no step.
+        //
+        // The word follows the walk that has one. A walk with no step to take composed a place and
+        // tried it, which is what the second word is for; a walk that met the figure says what this
+        // has always said, and the figures hold it to that at both ends. They cannot both be here —
+        // both readings walk the one order this pair is on, and an order with no step reaches no
+        // figure — and it is {@link Realization.Unknown} that holds them to it rather than this
+        // sentence.
+        if (!notAllOf.isEmpty()) {
+            return Realization.Unknown.searchLeftSomethingUntried(stoppedBy, notAllOf);
+        }
+        return Realization.Unknown.nothingComposedOne(stoppedBy);
+    }
+
+    /**
+     * One way round to search a pair: which position is settled first, and what is asked of it once
+     * the other is standing somewhere.
+     *
+     * <p>The criterion travels with the pair because it is about a quantity, and the quantity is
+     * how far one of them stands from the other — which is two quantities for two positions
+     * ({@link Criterion#reflected()}). A reading that carried the positions and left the criterion
+     * alone would ask the second one for the distance the first one owes.
+     *
+     * @param settles the position a place is composed for, given where the other one stands
+     * @param anchors the position a place is taken for first, from what both of them admit
+     */
+    private record Reading(NumericTerm.FromOnePosition settles,
+                           NumericTerm.FromOnePosition anchors, Criterion where) {}
+
+    /**
+     * The ways round to search this pair, in the order they are tried.
+     *
+     * <p>Both, always, and the first is the one the rule was written as. Which of them reaches a
+     * pair is an answer about the order the positions are on and not about the item, so trying only
+     * the one that comes to hand is what made the same relation answerable written one way and not
+     * the other.
+     */
+    private static List<Reading> readings(Standing.OfTwoOnOneCarrier two) {
+        return List.of(new Reading(two.on(), two.against(), two.where()),
+                new Reading(two.against(), two.on(), two.where().reflected()));
     }
 
     /**
@@ -112,7 +229,8 @@ public final class LevelRealizer {
      * that takes a value away takes one — everything that moves an end is in the range already. So
      * what this steps past is holes, and there are as many of those as the rules state.
      */
-    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT = 64;
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
 
     /**
      * The places to try the pair at, from the one the ranges leave outward.
@@ -128,12 +246,16 @@ public final class LevelRealizer {
      * only pair on the line that cannot be written.
      *
      * <p>One place where the carrier's values do not count. There is no next place to step to, so
-     * the one the ranges leave is the whole of what there is to try.
+     * the one the ranges leave is the whole of what this can name — and the walk says so, because
+     * it is not the whole of what the line holds.
+     *
+     * <p>Null where nothing composed a place to start from, which is this one's own answer and not
+     * something to ask a walk about: a walk of no places would have to say whether there were more,
+     * and there was never a walk.
      */
-    private static List<Place> alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        // Nothing composed, which is this one's own answer and not something to ask a walk about.
+    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
         Place first = carrier.somethingInside(together.min(), together.max());
-        return first == null ? List.of()
+        return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
                         HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
@@ -180,32 +302,40 @@ public final class LevelRealizer {
      * apart so that how long this is willing to look does not read as a fact about the order.
      */
     private Realization ofAForm(Standing.OfAForm over,
-                                souther.compiler.inputs.SearchRegion within) {
+                                souther.compiler.inputs.SearchRegion within, ValuesTried tried) {
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms =
-                new java.util.ArrayList<>();
+        List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms = new java.util.ArrayList<>();
         for (Map.Entry<NumericTerm, java.math.BigDecimal> each
                 : AffineReading.ordered(over.form())) {
-            NumericTerm.FromOnePosition at = each.getKey().atOnePosition();
-            // What a search hands back is an assignment: somewhere a row is asked to hold a value.
-            // A form over a number no single position answers has nothing here to assign, and that
-            // is a row this composed none of rather than a level the rules refuse.
-            if (at == null) {
-                return new Realization.Unknown(
-                        Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
-            }
-            terms.add(Map.entry(at, each.getValue()));
+            // Every number is realized by rebuilding one value, so what the walk assigns is a demand
+            // and there is one for each term of the form. Whether anything writes such a value is
+            // not asked here and is not this reader's to answer: a walk that turned a term away for
+            // being of the wrong kind would be deciding what is buildable from the shape of the
+            // number, which is the answer that went stale the first time something learned to build
+            // one.
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
         }
         boolean bounded = true;
-        for (Level level : LevelCandidateSource.forItem(over.where(), levels)) {
-            Search search = new Search(terms, over.on(), within);
+        // Every budget any of the level walks ran out of. Collected and not chosen between: two
+        // levels stopped by two figures are two things this compiler declined to do, and a reader
+        // asking what would let the search go further is owed both.
+        java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), levels);
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            Search search = new Search(terms, over.on(), within, tried);
             Reached reached = search.solve(level.asACount());
+            stoppedBy.addAll(search.stoppedBy());
             if (reached == Reached.FOUND) {
-                Realization made = found(search.fixing(), within);
+                Realization made = found(search.fixing(), within, tried);
                 if (made instanceof Realization.Found) {
                     return made;
                 }
@@ -221,13 +351,19 @@ public final class LevelRealizer {
         // be settled by looking: a walk of the whole box that reaches the level nothing else does is
         // a proof, and a side that none of the levels tried reached is a side this stopped looking
         // at.
-        return bounded && over.where() instanceof Criterion.AtTheLevel
-                ? new Realization.Impossible()
-                : new Realization.Unknown(Realization.Unknown.Reason.THE_SEARCH_RAN_OUT);
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        // A side is never settled by looking, so what this comes back with is that something was
+        // left untried — which is what it has always come back with, whether or not a figure of
+        // this compiler's was reached. The figures are said beside that answer and do not choose
+        // it, which is why the answer is not named for one of them running out.
+        return Realization.Unknown.searchLeftSomethingUntried(stoppedBy);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
-    private static final int STEPS_A_SEARCH_MAY_TAKE = 200_000;
+    private static final int STEPS_A_SEARCH_MAY_TAKE =
+            CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
 
     /**
      * How many values of a progression nothing bounds are tried.
@@ -253,7 +389,8 @@ public final class LevelRealizer {
      * the second value, and what would ask for a third is a run with two holes in it beside each
      * other.
      */
-    private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT = 16;
+    private static final int VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT =
+            CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum();
 
     /**
      * What a walk of one position came to.
@@ -281,7 +418,8 @@ public final class LevelRealizer {
      *  reading of every rule reaching the form's positions, and what it buys is skipping
      *  assignments the rules refuse — worth paying for a search that ends quickly and not for one
      *  walking a box a hundred thousand wide. */
-    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN = 2_000;
+    private static final int HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN =
+            CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN.maximum();
 
 
     /** How far a derived end is written out where the division that makes it does not end. Any
@@ -305,7 +443,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms;
+        private final List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -318,6 +456,14 @@ public final class LevelRealizer {
         private final Carrier[] carriers;
         /** Where a row for the item being searched for may be written. */
         private final souther.compiler.inputs.SearchRegion within;
+        /**
+         * The assignments a row was already built from that did not stand at the point.
+         *
+         * <p>Held whole and asked at the end of the walk, which is where an assignment exists. A
+         * walk that took one of these out a position at a time would take out every assignment
+         * standing that position there, and the ones nothing has tried are most of them.
+         */
+        private final ValuesTried tried;
         private final Place[] at;
         /**
          * Where each term runs before anything is fixed, worked out once.
@@ -333,31 +479,50 @@ public final class LevelRealizer {
          * What the positions from each one on can add up to, worked out once.
          *
          * <p>A form names no position twice and weighs none of them by nothing — {@link
-         * NumericDomain.LinearForm} drops a coefficient the moment it comes to zero — so every
+         * LinearForm} drops a coefficient the moment it comes to zero — so every
          * suffix of it is a form and has an image.
          */
         private final AdditiveImage[] fromHere;
         private int taken;
         private int asked;
+        /** Which budgets of this compiler's this walk ran out of, recorded where each ran out. What
+         *  it came back with says that nothing was reached and not what kept it from reaching. */
+        private final java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
 
-        Search(List<Map.Entry<NumericTerm.FromOnePosition, java.math.BigDecimal>> terms,
-               Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within) {
+        java.util.Set<CompositionBudget> stoppedBy() {
+            return stoppedBy;
+        }
+
+        /** Whether there is room for another assignment, marking the budget where there is not. */
+        private boolean stepsLeft() {
+            if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                stoppedBy.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE);
+                return false;
+            }
+            return true;
+        }
+
+        Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
+               Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within,
+               ValuesTried tried) {
+            this.tried = tried;
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                carriers[i] = on.get(terms.get(i).getKey());
+                carriers[i] = on.get(terms.get(i).getKey().term());
             }
             this.within = within;
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                runsBetween[i] = bounds(within, terms.get(i).getKey());
+                runsBetween[i] = bounds(within, terms.get(i).getKey().term());
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
                 Map<NumericTerm, souther.compiler.numeric.Rational> coefs = new LinkedHashMap<>();
                 for (int j = i; j < terms.size(); j++) {
-                    coefs.put(terms.get(j).getKey(),
+                    coefs.put(terms.get(j).getKey().term(),
                             souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
                 }
                 // Each term's own spacing, which is what the image was always asking for: a sum of
@@ -378,8 +543,8 @@ public final class LevelRealizer {
          * nowhere, and a map with nothing under a key is a row somebody is offered with a position
          * missing from it.
          */
-        Map<NumericTerm.FromOnePosition, Place> fixing() {
-            Map<NumericTerm.FromOnePosition, Place> out = new LinkedHashMap<>();
+        Map<RealizationTarget, Place> fixing() {
+            Map<RealizationTarget, Place> out = new LinkedHashMap<>();
             for (int i = 0; i < terms.size(); i++) {
                 if (at[i] == null) {
                     throw new IllegalStateException(
@@ -401,7 +566,8 @@ public final class LevelRealizer {
          */
         private Reached walk(int i, java.math.BigDecimal owed,
                              souther.compiler.inputs.SearchRegion here) {
-            if (++taken > STEPS_A_SEARCH_MAY_TAKE) {
+            taken++;
+            if (!stepsLeft()) {
                 return Reached.INCOMPLETE;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
@@ -409,7 +575,7 @@ public final class LevelRealizer {
             // ends, a box a million wide is walked a million times and the budget runs out on
             // `a + b <= 2000000` — an equation with one answer.
             NumericDomain.Bounds left =
-                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey()));
+                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey().term()));
             if (i == terms.size() - 1) {
                 return solving(i, owed, coef, left);
             }
@@ -425,7 +591,7 @@ public final class LevelRealizer {
                             carriers[i].spacing()),
                     left);
             return switch (may) {
-                case CandidateDomain.None ignored -> Reached.EXHAUSTED;
+                case CandidateDomain.None _ -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
                 // One value out of a coset whose values fill. There is no next one to step to, so
                 // what this walked was never the whole of it however the value turned out.
@@ -448,7 +614,7 @@ public final class LevelRealizer {
         private Reached trying(int i, java.math.BigDecimal x, java.math.BigDecimal owed,
                                java.math.BigDecimal coef, souther.compiler.inputs.SearchRegion here) {
             souther.compiler.inputs.SearchRegion next =
-                    narrowing(here, terms.get(i).getKey(), x);
+                    narrowing(here, terms.get(i).getKey().term(), x);
             if (next == null) {
                 return Reached.EXHAUSTED;
             }
@@ -481,7 +647,7 @@ public final class LevelRealizer {
                 if (reached == Reached.INCOMPLETE) {
                     weakest = Reached.INCOMPLETE;
                 }
-                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
             }
@@ -505,14 +671,30 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
-            for (Place x : Outwards.from(new Count(on.from()), new Count(on.by()), carriers[i],
-                    on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT)) {
+            Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
                 }
-                if (taken > STEPS_A_SEARCH_MAY_TAKE) {
+                if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
+            }
+            // Never a proof either way: a run without an end is not walked to the end, and a walk
+            // of every value this had is still a walk of a progression. What the figure adds is
+            // only said where the run held one more and this did not take it — added whenever the
+            // walk came back empty, it would name a figure over a run that had nothing further in
+            // it, which is this compiler claiming to have been stopped where it was not.
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE ->
+                        stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                // A progression is a sum of counts, and a sum exists only over orders that count
+                // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
+                // form over an order with no arithmetic, which is refused before a search is built.
+                case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
+                        "a progression over an order with no step: " + carriers[i]);
             }
             return Reached.INCOMPLETE;
         }
@@ -557,6 +739,14 @@ public final class LevelRealizer {
             if (!theRulesHaveNotRefused()) {
                 at[i] = null;
                 return Reached.EXHAUSTED;
+            }
+            // And not one a row was already built from that did not stand. Stepped past like a
+            // value the rules leave nothing beside, and said as a walk that was cut short rather
+            // than one that tried everything: what took this assignment away is this compiler
+            // having looked, so a walk that gave it up proves nothing about the level.
+            if (tried.holds(fixing())) {
+                at[i] = null;
+                return Reached.INCOMPLETE;
             }
             return Reached.FOUND;
         }
@@ -606,7 +796,7 @@ public final class LevelRealizer {
          * to nothing it had not already checked.
          */
         private boolean theRulesHaveNotRefused() {
-            java.util.Map<NumericTerm, Place> all = new LinkedHashMap<>();
+            java.util.Map<RealizationTarget, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
@@ -726,9 +916,6 @@ public final class LevelRealizer {
                         within.except() == null ? null : onto.apply(within.except()),
                         within.away());
             }
-            case Criterion.AnythingBut other ->
-                    only(new Criterion.AnythingBut(onto.apply(other.excluded())),
-                            onto.apply(other.excluded()));
         };
     }
 
@@ -746,19 +933,30 @@ public final class LevelRealizer {
      * a row offered for a side that is really at the point against the line is a row an author pastes
      * and re-measures to find the item still uncovered.
      */
-    private static Place placeMeeting(Criterion where, Carrier carrier,
-                                      NumericDomain.Bounds bounds) {
+    private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
+                                      Carrier carrier, NumericDomain.Bounds bounds,
+                                      WitnessSearch looking, ValuesTried tried,
+                                      Map<RealizationTarget, Place> given) {
+        PlacesApart apart = tried.apartFor(new RealizationTarget.AtOnePosition(term), given);
         Place offered = switch (where) {
-            case Criterion.AtTheLevel at -> placeOf(at.at());
-            // From the end the line is at, which is what makes the row one beside the boundary
-            // rather than one at the far side of the partition. The point carries which end that is
-            // and is not asked for it again: handed it a second time, a caller could ask for a run
-            // to be read from the end it is not named for, which is the shape of one decision given
-            // from two places.
+            // The level itself, and the set is not asked. A point on a line stands where the rule
+            // wrote it; held to what the declarations admit, a line drawn at a value they refuse
+            // would stop being an item rather than being reported as one nothing can stand at.
+            // A level already tried with the rest of them standing where they stand now is not
+            // offered again. The rule wrote one place here and a row built from that arrangement
+            // did not stand, so there is nothing else to offer under it — said as nothing composed
+            // rather than as the same place a second time, which a caller asking again would read
+            // as a search that had not moved.
+            case Criterion.AtTheLevel at ->
+                    apart.has(placeOf(at.at())) ? null : placeOf(at.at());
+            // Nothing composed where nothing worked out what the position holds. Which is this
+            // compiler's own limit and is reported in the word it has for one: a run searched against
+            // a set nobody established would offer a row at a position whose rules were never read.
             case Criterion.Within within ->
-                    within.somewhereInside(carrier, bounds.min(), bounds.max());
-            case Criterion.AnythingBut other ->
-                    carrier.somethingOtherThan(List.of(placeOf(other.excluded())), bounds);
+                    whatTheValuesAre(term, looking.admitted())
+                            instanceof AdmittedValues.Admitted.Values(ValueSet admits)
+                            ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
+                            : null;
         };
         if (offered == null) {
             return null;
@@ -768,6 +966,100 @@ public final class LevelRealizer {
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
         return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
+    }
+
+    /**
+     * What the position admits, where the place being composed is a value of it.
+     *
+     * <p>Asked of the location the number is read from rather than of the number, because one location
+     * is measured at as many numbers as the rules name of it and admits one set of values — a rule
+     * about one of those numbers is what leaves the others short, which is the whole reason this set
+     * is here.
+     *
+     * <p><b>And every value there is where the number is one taken of the position rather than its
+     * own.</b> {@code String.length(code)} counts a string and the place composed for it is a count;
+     * the set holds the strings. Put to it, every count would be refused for not being one of them,
+     * and a boundary on a length would stop being offered a row at all. What a value carrying that
+     * count looks like is asked where such a value is written ({@link Witnesses}) and the set reaches
+     * it there.
+     */
+    private static AdmittedValues.Admitted whatTheValuesAre(NumericTerm.FromOnePosition term,
+                                                            AdmittedValues admitted) {
+        return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
+                : new AdmittedValues.Admitted.Values(ValueSet.ANY);
+    }
+
+    /**
+     * A place inside the run this item is, that the position's values take in.
+     *
+     * <p>The end the item is named for is tried first, in each run in turn. That is what makes the
+     * row one beside the boundary rather than one at the far side of the partition, and the item
+     * carries which end it is: asked for a second time by a caller, a run could be read from the end
+     * it is not named for, which is one decision given from two places.
+     *
+     * <p>And the values themselves once every one of those ends is refused. Which is the same
+     * arrangement {@link Carrier#somethingOtherThan} is under, reached for the same reason: the ends
+     * read better in a row than anything worked out of a set, and they are not exhaustive — a run
+     * bounded by a rule about one number of the position starts at the one value a rule about another
+     * refuses, and nothing about the run says so. The set is crossed with the run rather than asked
+     * on its own, so a value it holds inside the run is not lost to whichever value it names first.
+     *
+     * <p><b>An allowance per crossing, which is why what arrives is the way to get one.</b> An item
+     * is a region and a region is as many runs as the rules leave it, so this crosses the set with
+     * each of them in turn — and a meter spends down. Shared between the runs, what the first
+     * crossing cost would be taken off what the second may spend, and whether a run is answered
+     * would follow from where it came in the order they are looked at. Which order that is is a
+     * searching policy and no answer about the values ({@link LevelRegion}).
+     */
+    private static Place someValueIn(Criterion.Within within, Carrier carrier,
+                                     NumericDomain.Bounds bounds, ValueSet admits,
+                                     PlacesApart apart, Supplier<Meter> allowance) {
+        LevelSpace space = LevelSpace.onACarrier(carrier);
+        List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
+        for (LevelInterval look : runs) {
+            // And not one this point was already tried at. The run's own representative is the
+            // cheap answer and stays the first one offered; offered again after the row built from
+            // it did not stand, it would be the whole of what a second asking ever reaches, and the
+            // search below it would never be asked.
+            if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on
+                    && carrier.admitted(admits, on.at()) && !apart.has(on.at())) {
+                return on.at();
+            }
+        }
+        for (LevelInterval look : runs) {
+            OrderedInterval run = runOf(look, carrier);
+            Place held = run == null ? null
+                    : carrier.somewhereIn(admits, run, apart, allowance.get());
+            if (held != null) {
+                return held;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * One run of the levels as a run of the carrier's own places, or null where its ends are not
+     * places of the position.
+     *
+     * <p>Null where an end says how much of the quantity a rule wrote rather than a value of it. Such
+     * a run is in the written form's units, and a set of the position's values has nothing to say
+     * about a number in them — put to one, the set would be answering about a value nobody holds.
+     */
+    private static OrderedInterval runOf(LevelInterval look, Carrier carrier) {
+        Endpoint low = endOf(look.low(), carrier);
+        Endpoint high = endOf(look.high(), carrier);
+        boolean lost = (look.low() != null && low == null)
+                || (look.high() != null && high == null);
+        return lost ? null : new OrderedInterval(low, high);
+    }
+
+    /** One end of such a run, or null where it is not a place of the position. */
+    private static Endpoint endOf(Bound end, Carrier carrier) {
+        if (end == null || end.at().per().compareTo(BigDecimal.ONE) != 0) {
+            return null;
+        }
+        return end.at().written() instanceof Level.OnACarrier on && on.of().equals(carrier)
+                ? new Endpoint(on.at(), end.inclusive()) : null;
     }
 
     /**
@@ -840,12 +1132,21 @@ public final class LevelRealizer {
      * exist. What it removes is narrower and is what a search over ranges gets wrong: a placement
      * the rules are already known to refuse, offered as a row and then reported as though the point
      * had nothing at it.
+     *
+     * <p><b>And the same for an arrangement a row was already built from.</b> A caller that asks
+     * again has asked again for a reason, and one handed back what it handed back before spends
+     * every value it is allowed on the one arrangement. Each search narrows by what was tried where
+     * it can — a carrier is asked for a place away from them, a walk steps past an arrangement it
+     * reaches — and this is where that stops being each search's to remember.
      */
-    private Realization found(Map<NumericTerm.FromOnePosition, Place> fixing,
-                              souther.compiler.inputs.SearchRegion within) {
+    private Realization found(Map<RealizationTarget, Place> fixing,
+                              souther.compiler.inputs.SearchRegion within, ValuesTried tried) {
+        if (tried.holds(fixing)) {
+            return Realization.Unknown.nothingComposedOne();
+        }
         return theRulesHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
-                : new Realization.Unknown(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE);
+                : Realization.Unknown.nothingComposedOne();
     }
 
     /**
@@ -869,15 +1170,11 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<? extends NumericTerm, Place> fixing,
+    private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            souther.compiler.inputs.SearchRegion within) {
-        Map<NumericTerm, Count> counted = new LinkedHashMap<>();
-        fixing.forEach((term, at) -> {
-            if (at instanceof Count count) {
-                counted.put(term, count);
-            }
-        });
-        return counted.isEmpty() || within.given(counted).emptiness().isEmpty();
+        Map<NumericTerm, Place> standing = new LinkedHashMap<>();
+        fixing.forEach((target, at) -> standing.put(target.term(), at));
+        return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 
     /** The same, of the rules as some of the positions have been fixed. */

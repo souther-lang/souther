@@ -1,13 +1,15 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
-import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
-import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.EndSide;
@@ -41,7 +43,7 @@ import java.util.Map;
  * <p>What such a line owes is not what a body's line owes, and that difference is why an author
  * writes the rule on the data. Nothing outside a declaration's rule can be constructed, so the far
  * side of its line holds no value and no row is asked for there. That answer is read off the rule
- * that drew the line ({@link OriginRef.InvariantOrigin}) and is already right — what was missing was
+ * that drew the line ({@link LineOrigin.InvariantOrigin}) and is already right — what was missing was
  * the line.
  */
 public final class DeclaredThresholds {
@@ -52,34 +54,41 @@ public final class DeclaredThresholds {
      * <p>Already obligations rather than thresholds, for the reason an {@code ensures}'s are: a line
      * between two positions divides neither, so there is no class for a partition to be told about.
      */
-    public static List<LineDrawn> between(String behavior, InputDomain inputs,
-                                   souther.compiler.inputs.Quantities quantities,
-                                   Symbols symbols) {
+    public static List<LineDrawn> between(String behavior,
+                                   InputReading read) {
         List<LineDrawn> out = new ArrayList<>();
-        for (ClauseWithoutAnEnd clause : inputs.clausesWithoutAnEnd()) {
-            drawn(behavior, clause, inputs, quantities, symbols, out);
+        for (ClauseWithoutAnEnd clause : read.domain().clausesWithoutAnEnd()) {
+            drawn(behavior, clause, read, out);
         }
         return List.copyOf(out);
     }
 
     /** What one conjunct draws, or nothing where it draws no line on a quantity of its own. */
-    private static void drawn(String behavior, ClauseWithoutAnEnd clause, InputDomain inputs,
-                              souther.compiler.inputs.Quantities quantities, Symbols symbols,
-                              List<LineDrawn> out) {
-        if (!(clause.part() instanceof Core.Binary comparison) || !comparison.op().compares()) {
-            return;
-        }
-        Map<BindingId, TermPath> roots = rootsOf(clause, symbols);
+    private static void drawn(String behavior, ClauseWithoutAnEnd clause,
+                              InputReading read, List<LineDrawn> out) {
+        Symbols symbols = read.symbols();
+        Map<BindingId, TermPath> roots = rootsOf(clause, symbols, read.rules().newtypes());
         if (roots.isEmpty()) {
             return;
         }
         // No answer to be read, because a declaration's clause is about the values a type admits and
         // there is nothing a behavior answered for it to be about.
-        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison,
-                InputReads.ofADeclaredClause(inputs, roots), symbols, quantities, null, true);
+        // And no arrival: a declaration's clause stands in no body for anything to be on the way
+        // to, which reads as an arrival that restricts nothing.
+        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, clause.states(),
+                Citation.of(clause.wrote()), read,
+                InputReads.ofADeclaredClause(roots), null,
+                souther.compiler.coverage.Arrivals.inTheTree(clause.readOutOf()), true);
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.
+        //
+        // Which is what keeps a conjunct from being drawn twice. One handed over with no end is
+        // read there as an end where its quantity is over one coordinate
+        // ({@code FieldDomains.AboutOneCoordinate}), and here as a line where its quantity is over
+        // none of them or several — so the two are disjoint exactly as far as the two readings
+        // agree about how many coordinates a quantity is over. They are two readings of one
+        // question and neither is asked of the other.
         if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
@@ -94,10 +103,18 @@ public final class DeclaredThresholds {
      * has always been. Read as an end of a position it would name a position the rule does not
      * divide.
      */
-    private static OriginRef.InvariantOrigin originOf(ClauseWithoutAnEnd clause, Cutting cutting) {
-        return new OriginRef.InvariantOrigin(clause.rule(), clause.conjunct(),
-                endKept(cutting.valueBelongsBelow(), cutting.holdsAtTheValue()),
-                cutting.holdsAtTheValue());
+    private static LineOrigin.InvariantOrigin originOf(ClauseWithoutAnEnd clause, Cutting cutting) {
+        // Which end a rule keeps is an order's answer. A clause naming a value of the quantity two
+        // positions stand apart keeps neither end of it — what it parts is that number from every
+        // other one — so there is no end for this to have placed, and a caller reaching here with
+        // one is holding a line whose shape it has not established.
+        ComparisonClaim.Cut order = cutting.ordering();
+        if (order == null) {
+            throw new IllegalStateException("which end a clause keeps, asked of one that names a"
+                    + " value: " + clause.rule());
+        }
+        return new LineOrigin.InvariantOrigin(new DeclaredLine.OfAStatement(clause.statement()),
+                endKept(order), order.holdsAtTheValue());
     }
 
     /**
@@ -109,12 +126,14 @@ public final class DeclaredThresholds {
      * two are held against each other: a rule stated as one end and read back as the other is a
      * line whose sides are the wrong way round, and it asks for two rows that prove nothing.
      *
-     * <p>Read off the side alone, the answer is right wherever a rule admits its own threshold and
-     * the other one wherever it does not — so {@code a <= b} lands correctly and {@code a < b} lands
-     * inverted, which is a whole half of the rules a model can write.
+     * <p>Read off the side the rule's own value belongs to alone, the answer is right wherever a
+     * rule admits its threshold and the other one wherever it does not — so {@code a <= b} lands
+     * correctly and {@code a < b} lands inverted, which is a whole half of the rules a model can
+     * write. What the end is read off is the side the rule is satisfied on, which is the claim's
+     * answer and puts the two facts together once.
      */
-    static EndSide endKept(boolean valueBelongsBelow, boolean holdsAtTheValue) {
-        return valueBelongsBelow == holdsAtTheValue ? EndSide.UPPER : EndSide.LOWER;
+    static EndSide endKept(ComparisonClaim.Cut order) {
+        return EndSide.facing(order.satisfyingSide());
     }
 
     /**
@@ -130,7 +149,8 @@ public final class DeclaredThresholds {
      * clause is a rule of the model whether or not this could say what its names stand for, and what
      * the model states at those positions is said by the reading that filed the rule there.
      */
-    private static Map<BindingId, TermPath> rootsOf(ClauseWithoutAnEnd clause, Symbols symbols) {
+    private static Map<BindingId, TermPath> rootsOf(ClauseWithoutAnEnd clause, Symbols symbols,
+                                                    DeclarationNewtypes newtypes) {
         Map<BindingId, TermPath> roots = new LinkedHashMap<>();
         // Both the declaration that wrote the clause and the one it was read under, because a name
         // wrapped round a record is a governing declaration of its own: the record's clauses are
@@ -144,12 +164,9 @@ public final class DeclaredThresholds {
         // further down than the position it is at.
         for (souther.compiler.types.TypeSymbol.AtModule declaration
                 : List.of(clause.rule().clause().id().declaredOn(), clause.readUnder())) {
-            if (!(symbols.declarations().declaration(declaration) instanceof Hir.Data data)) {
-                continue;
-            }
             Type of = Type.ref(declaration);
-            TypeOps.fieldBindings(declaration, data, symbols).forEach((field, binding) ->
-                    roots.putIfAbsent(binding, Location.isStep(of, field, symbols)
+            TypeOps.fieldBindings(declaration, symbols).forEach((field, binding) ->
+                    roots.putIfAbsent(binding, Location.isStep(of, field, newtypes)
                             ? clause.at().then(field) : clause.at()));
         }
         return roots;

@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
@@ -8,8 +7,8 @@ import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
@@ -90,49 +89,118 @@ final class Predicates {
         return assume(assumed(stated, at, false), k, Known.Held.ON_THE_PATH).and(nested);
     }
 
-    /** What {@code e}, asserted with polarity {@code positive}, says of every element of a container.
-     * Mirrors {@link #obligations}: a conjunction states each of its sides, and a negation flips the
-     * polarity. Only a stated quantifier is recorded — denying one says some element fails the
-     * predicate, and which one is not something this check can name. */
+    /** What {@code raw}, asserted with polarity {@code positive}, says of every element of a
+     * container, added to {@code out}. Read over the clause's shape as {@link #obligations} is, so
+     * the two agree about which parts a clause has by having been given the same answer. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
-        Core e = Conditions.asSizeComparison(raw);
-        if (e instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
-            quantifiedBy(b.left(), at, true, out);
-            quantifiedBy(b.right(), at, true, out);
-            return;
+        out.addAll(new Quantifiers(this).read(raw, positive, at, terms::inside));
+    }
+
+    /**
+     * The quantifiers a clause states, read over the shape it was written in.
+     *
+     * <p>Over the shape ({@link ClauseExpr}), so a clause under a binding is read where its names
+     * mean something and a helper's expansion states what the same rule written out states. Read
+     * as a tree of its own, a quantifier an author stated through a helper was owed by the reading
+     * of what the clause owes and unknown to this one, which is a guarantee assembled from a clause
+     * read to two depths.
+     */
+    private record Quantifiers(Predicates of)
+            implements ClauseReading<List<Quantified>, Denotations> {
+
+        /**
+         * A conjunction states what both of its conjuncts state, and a choice is read whole.
+         *
+         * <p>Only a stated quantifier is recorded, and what a choice states is neither of its
+         * sides — one of them holds and this cannot say which — so the whole of it is read as a
+         * part, where nothing names a quantifier.
+         */
+        @Override
+        public Descent<List<Quantified>> at(ClauseExpr.Joined join) {
+            return switch (join.how()) {
+                case BOTH -> new Descent.Into<>(Quantifiers::together);
+                case EITHER -> new Descent.Whole<>();
+            };
         }
-        Core under = Conditions.negated(e);
-        if (under != null) {
-            quantifiedBy(under, at, !positive, out);
-            return;
+
+        @Override
+        public List<Quantified> whole(ClauseExpr.Part part, Denotations at) {
+            return of.quantifierStatedBy(Conditions.asSizeComparison(part.of()), part.positive(),
+                    at);
         }
+
+        private static List<Quantified> together(List<Quantified> left, List<Quantified> right) {
+            if (left.isEmpty() || right.isEmpty()) {
+                return left.isEmpty() ? right : left;
+            }
+            List<Quantified> both = new ArrayList<>(left);
+            both.addAll(right);
+            return both;
+        }
+    }
+
+    /**
+     * The quantifier {@code e} is, where it is one, stated over the element it quantifies.
+     *
+     * <p>Denying one says some element fails the predicate, and which one is not something this
+     * check can name, so a denied quantifier states nothing here.
+     */
+    private List<Quantified> quantifierStatedBy(Core e, boolean positive, Denotations at) {
         if (!positive || !(e instanceof Core.PreservedCall call)
                 || !DischargeRules.isQuantifier(call.operation())) {
-            return;
+            return List.of();
         }
         Handed over = Combinators.handedTo(call, at);
         Carrying carried = DischargeRules.carried(call);
         if (over == null || carried == null || over.step().params().size() != 1) {
-            return;
+            return List.of();
         }
         // The container is the carrying rule's, which is the one argument this predicate is about.
         // What the operation hands its closure answers the same question about the same argument, and
         // is asked here only for the closure.
         FactSubject container = terms.subjectOf(carried.container(), at);
         if (container == null) {
-            return;
+            return List.of();
         }
-        out.add(new Quantified(container, carried.through(), over.step()));
+        return List.of(new Quantified(container, carried.through(), over.step()));
     }
 
-    /** Whether {@code e} is, or names, one of {@code values}. */
-    static boolean names(Core e, Set<Core> values) {
-        if (values.contains(e)) {
+    /**
+     * Whether {@code e} is, or names, one of the values {@code handed} stands for.
+     *
+     * <p>Asked of what each part of {@code e} denotes and not of the tree it is written as. The
+     * values a site hands over stand in the clause, and a binding may stand between: an expansion
+     * leaves {@code let $n = <value> in ...}, and what is written where the value was is a read of
+     * the binder. Matched by the node, the clause a helper states came out naming none of them,
+     * while the same clause written out named one — so a value no guard can be written about was
+     * owed a guard for having been reached through a helper.
+     *
+     * <p>Which is the identity question every other reader here asks by subject, and it is asked the
+     * same way: a binding is entered as what it was given ({@link Terms#inside}), so a read of the
+     * binder is the value it was given, and the two spellings name the same thing.
+     */
+    private boolean names(Core e, Set<FactSubject> handed, Denotations at) {
+        if (handed.contains(terms.subjectOf(e, at))) {
             return true;
         }
+        // A binding is crossed as a binding. Its body is what the clause names, read inside it; what
+        // it was given is reached through the name where the body reads it, and is not a part of the
+        // clause on its own.
+        if (e instanceof Core.LetIn li) {
+            return names(li.body(), handed, terms.inside(li, at));
+        }
         boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] = found[0] || names(child, values));
+        Core.forEachChild(e, child -> found[0] = found[0] || names(child, handed, at));
         return found[0];
+    }
+
+    /** What each of {@code values} is, where the site that hands them over stands. */
+    private Set<FactSubject> handedOver(Set<Core> values, Denotations at) {
+        Set<FactSubject> out = new java.util.LinkedHashSet<>();
+        for (Core value : values) {
+            out.add(terms.subjectOf(value, at));
+        }
+        return out;
     }
 
     /**
@@ -307,15 +375,17 @@ final class Predicates {
         }
 
         boolean dischargedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null && d.entails(numeric.form(), numeric.rel())
-                    || fact != null && fact.entailedBy(facts)
-                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
+            return (numeric != null && d.entails(numeric.form(), numeric.rel()))
+                    || (fact != null && fact.entailedBy(facts))
+                    || (piecewise != null && !decidedAsWritten(d, facts)
+                            && piecewise.entailedBy(d));
         }
 
         boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null && d.refutes(numeric.form(), numeric.rel())
-                    || fact != null && fact.refutedBy(facts)
-                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
+            return (numeric != null && d.refutes(numeric.form(), numeric.rel()))
+                    || (fact != null && fact.refutedBy(facts))
+                    || (piecewise != null && !decidedAsWritten(d, facts)
+                            && piecewise.refutedBy(d));
         }
 
         /**
@@ -330,10 +400,10 @@ final class Predicates {
          * that takes the call as an unknown cannot settle, and that is untouched.
          */
         private boolean decidedAsWritten(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null
-                    && (d.entails(numeric.form(), numeric.rel())
-                            || d.refutes(numeric.form(), numeric.rel()))
-                    || fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts));
+            return (numeric != null
+                            && (d.entails(numeric.form(), numeric.rel())
+                                    || d.refutes(numeric.form(), numeric.rel())))
+                    || (fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts)));
         }
     }
 
@@ -362,9 +432,21 @@ final class Predicates {
             return new Owed(List.of(), holds ? Fold.HOLDS : Fold.FAILS);
         }
 
-        /** One part of the clause this could make nothing of, which is {@code where}. */
+        /**
+         * A part this reading was not asked for.
+         *
+         * <p>Nothing owed and nothing settled, which is a clause with that part taken out of it and
+         * not a clause that holds. {@link Fold#HOLDS} would state the part rather than leave it
+         * unread, and a reading asked what a clause comes to without one of its conjuncts would be
+         * told the conjunct is true.
+         */
+        static Owed unread() {
+            return new Owed(List.of(), Fold.NOT_DECIDED);
+        }
+
+        /** One part of the clause this could make nothing of, said as what stopped the reading. */
         static Owed unreadable(Core where) {
-            return new Owed(List.of(new Part.Unread(where)), Fold.NOT_DECIDED);
+            return new Owed(List.of(new Part.Unread(FragmentReason.of(where))), Fold.NOT_DECIDED);
         }
 
         static Owed of(Clause clause) {
@@ -445,18 +527,25 @@ final class Predicates {
         }
 
         /**
-         * The check made nothing of it, and {@code at} is the part it stopped on.
+         * The check made nothing of it, and {@code why} is what it stopped on, said as one of the
+         * reasons there are.
          *
-         * <p>The node and not a word for it. Whoever reads this wants to say what in the clause was
-         * not read, and working that out from the clause afterwards is a second walk that can come
-         * back with a different answer from the one that gave up — which is how a clause with
-         * nothing wrong in it came to be described as naming a term the check cannot name.
+         * <p>The conclusion and not the node it was drawn from. Whoever reads this wants to say what
+         * in the clause was not read, and working that out from the clause afterwards is a second
+         * walk that can come back with a different answer from the one that gave up — which is how a
+         * clause with nothing wrong in it came to be described as naming a term the check cannot
+         * name. So the walk that gave up says why, where it gave up.
+         *
+         * <p>And carrying the node instead would put a term in an answer read at a call. What a
+         * caller may assume is read for what it says ({@link TermMeaning}), and a part handing the
+         * node back would let a reader of that answer ask where the term stands — which two readings
+         * of one declaration compare equal about and would then disagree on.
          */
-        record Unread(Core at) implements Part {
+        record Unread(FragmentReason why) implements Part {
 
             public Unread {
-                if (at == null) {
-                    throw new IllegalArgumentException("a part nothing was made of is somewhere");
+                if (why == null) {
+                    throw new IllegalArgumentException("a part nothing was made of says why");
                 }
             }
         }
@@ -465,10 +554,11 @@ final class Predicates {
     /**
      * Whether a clause came out one way or the other before any construction was looked at.
      *
-     * <p>Read here, off the expression this walk normalizes and reads, rather than off the one an
-     * author wrote. {@code Int.compare(1, 2) >= 0} is a call until {@link #asOrderComparison} makes
-     * it {@code 1 >= 2}, so a reader folding the written form first sees a call and the fold that
-     * matters happens in here.
+     * <p>Read here, off what this walk read the clause as, rather than off the expression an author
+     * wrote. {@code Int.compare(1, 2) >= 0} folds through nothing the library declares, and the
+     * order it states of {@code 1} and {@code 2} is what settles it — so a reader folding the
+     * written form sees a call, and the fold that matters happens once each reading of the clause is
+     * in hand.
      */
     enum Fold {
 
@@ -515,9 +605,18 @@ final class Predicates {
         return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per);
     }
 
-    /** Told what one part of a clause owed, keyed by the part it was read from. */
+    /**
+     * The same over a shape the caller already read the clause into, so that what is said about an
+     * occurrence is said in the numbering the clause handed out.
+     */
+    Owed assumed(ClauseExpr of, Denotations at, boolean decidesFalse, PerPart per) {
+        return new Owing(this, Set.of(), decidesFalse, Discharge.AN_ASSUMPTION)
+                .read(of, at, terms::inside, per == null ? null : per::read);
+    }
+
+    /** Told what one part of a clause owed, by the shape of the clause it was read at. */
     interface PerPart {
-        void read(Core part, Owed owed);
+        void read(ClauseExpr of, Core part, Owed owed);
     }
 
     /**
@@ -584,7 +683,10 @@ final class Predicates {
      * clause may be read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, at, unnamed, true, decidesFalse, Discharge.spending(k), null);
+        // What each handed-over value is, worked out once and where the site stands. Read again
+        // further down, a value under a binding would be asked about at names the site never had.
+        return obligations(inv, at, handedOver(unnamed, at), true, decidesFalse,
+                Discharge.spending(k), null);
     }
 
     /**
@@ -594,86 +696,134 @@ final class Predicates {
      * name is one thing, and the date a day after it is another — so the one that answers is the one
      * taken. Reading a predicate never takes a reading away.
      */
-    private Owed obligations(Core rawInv, Denotations at, Set<Core> unnamed,
+    private Owed obligations(Core rawInv, Denotations at, Set<FactSubject> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
                              PerPart per) {
-        Core sized = Conditions.asSizeComparison(rawInv);
-        Core ordered = Conditions.asOrderComparison(terms, sized, at);
-        Owed read = read(ordered, at, unnamed, positive, decidesFalse, discharge, per);
-        Owed out = ordered != sized && read.unreadable()
-                ? read(sized, at, unnamed, positive, decidesFalse, discharge, per) : read;
-        if (per != null) {
-            // Keyed by the part as it was handed in, which is the node a reader of this walk holds.
-            // What it was rewritten to on the way is this reading's business.
-            per.read(rawInv, out);
-        }
-        return out;
+        return new Owing(this, unnamed, decidesFalse, discharge)
+                .read(rawInv, positive, at, terms::inside,
+                        per == null ? null : per::read);
     }
 
-    /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
-     * which is where each of them is taken as the comparison it states. */
-    private Owed read(Core inv, Denotations at, Set<Core> unnamed,
-                      boolean positive, boolean decidesFalse, Discharge discharge,
-                      PerPart per) {
-        if (inv instanceof Core.Binary b && b.op() == BinOp.AND && positive) {
-            // Each conjunct on its own: an invariant is a set of things that hold, and one the check
-            // cannot read leaves its own run-time check standing without costing the others theirs.
-            // That it stands is carried rather than dropped — the other conjunct being discharged is
-            // not the invariant proven.
-            return obligations(b.left(), at, unnamed, true, decidesFalse, discharge, per)
-                    .and(obligations(b.right(), at, unnamed, true, decidesFalse, discharge, per));
+    /**
+     * What a clause owes, read over the shape it was written in.
+     *
+     * <p>Over the shape ({@link ClauseExpr}), so that what a connective composes is recognised in
+     * one place and this reading agrees with every other by having been given the answer. A binding
+     * is where the environment changes, which is why a rule stated through a helper owes what the
+     * same rule written out owes — read as a shape with no word for it, such a rule owed nothing
+     * and a construction the guards refute went unreported.
+     *
+     * <p>What it carries beside the clause is what a caller settled before the reading began: the
+     * values the site hands over that no clause may be read against, whether a clause folding false
+     * decides the construction, and which relations this reading may take in. None of them turns on
+     * where in the clause the reading stands.
+     */
+    private record Owing(Predicates of, Set<FactSubject> unnamed, boolean decidesFalse,
+                         Discharge discharge) implements ClauseReading<Owed, Denotations> {
+
+        /**
+         * A conjunction owes what both of its conjuncts owe, and a choice is read whole.
+         *
+         * <p>Each half of a conjunction on its own: an invariant is a set of things that hold, and
+         * one the check cannot read leaves its own run-time check standing without costing the
+         * others theirs. A choice states neither of its parts — one of them holds and this cannot
+         * say which — so what is handed to the reader of comparisons is the whole of it.
+         */
+        @Override
+        public Descent<Owed> at(ClauseExpr.Joined join) {
+            return switch (join.how()) {
+                case BOTH -> new Descent.Into<>(Owed::and);
+                case EITHER -> new Descent.Whole<>();
+            };
         }
-        Core under = Conditions.negated(inv);
-        if (under != null) {
-            return obligations(under, at, unnamed, !positive, decidesFalse, discharge, per);
+
+        @Override
+        public Owed whole(ClauseExpr.Part part, Denotations at) {
+            return of.owing(Conditions.asSizeComparison(part.of()), at, unnamed, part.positive(),
+                    decidesFalse, discharge);
         }
-        Boolean folded = decidedAt(inv);
-        if (folded != null) {
-            // The clause folds once the construction's own expressions stand where it read a field.
-            // Folding the way it is read owes nothing; folding the other way is a violation, and
-            // saying so needs no term to be named. Read under a denial it is the other answer that
-            // discharges, which is why the polarity is asked.
-            if (folded == positive) {
-                return Owed.decided(true);
+    }
+
+    /** What one part of a clause owes, read as the comparison it states. */
+    private Owed owing(Core inv, Denotations at, Set<FactSubject> unnamed,
+                       boolean positive, boolean decidesFalse, Discharge discharge) {
+        ComparisonReadings readings = Conditions.comparisonsStatedBy(terms, inv, at);
+        if (readings.inReadingOrder().isEmpty()) {
+            return owedBy(inv, at, unnamed, positive, decidesFalse);
+        }
+        // The first reading this construction can be read against is the one taken, which is what
+        // the reading order is for. Reading a predicate never takes a reading away, so a reading
+        // that came to nothing leaves the next one to answer rather than answering for it.
+        Owed answer = null;
+        for (StatedComparison stated : readings.inReadingOrder()) {
+            answer = owedBy(stated, inv, at, unnamed, positive, decidesFalse, discharge);
+            if (!answer.unreadable()) {
+                return answer;
             }
-            if (decidesFalse) {
-                return Owed.decided(false).and(Owed.of(VIOLATED));
-            }
         }
-        // Either it did not fold, or it folded the other way and this caller does not report that as
-        // a violation — folding the way it is read returned above. What it owes is read on,
-        // unchanged, and the fold is said beside it: a reader classifying the clause needs it, and
-        // taking the reading away here would change what this caller is answered.
-        Fold fold = folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
+        return answer;
+    }
+
+    /** What a clause that states no comparison owes: it may fold, and it may be a predicate a guard
+     *  settles by name. Stated as itself, because a condition that is not a comparison is the one
+     *  value it names. */
+    private Owed owedBy(Core inv, Denotations at, Set<FactSubject> unnamed, boolean positive,
+                        boolean decidesFalse) {
+        Boolean folded = decidedAt(inv, at);
+        Owed decided = decidedBy(folded, positive, decidesFalse);
+        return decided != null ? decided
+                : owing(inv, foldOf(folded), null, null, new Conditions.Polar(inv, positive),
+                        unnamed, at);
+    }
+
+    /** What a clause owes where it states {@code stated}, with {@code inv} the expression the caller
+     *  was handed and so the one a report about the clause names. */
+    private Owed owedBy(StatedComparison stated, Core inv, Denotations at, Set<FactSubject> unnamed,
+                        boolean positive, boolean decidesFalse, Discharge discharge) {
+        Boolean folded = decidedAt(stated, at);
+        Owed decided = decidedBy(folded, positive, decidesFalse);
+        if (decided != null) {
+            return decided;
+        }
         NumericConstraint numeric = null;
         Piecewise piecewise = null;
-        if (inv instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
-            Rel eff = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
-            LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
-            // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
-            // that is not in the relation is not something the relation depends on — turning a clause
-            // away for a value it does not actually rest on would report nothing about a value the
-            // author was never asked about.
-            LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
-            if (between != null && discharge.takesIn(between)) {
-                numeric = new NumericConstraint(between, eff);
-                // The same clause read as the cases of whatever chooses inside it. Both readings are
-                // kept: a guard may name the call itself, which the clause as it stands is what
-                // settles, and reading it case by case never takes that away.
-                piecewise = piecewiseOf(numeric, inv, at);
-            }
+        LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
+        LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
+        // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
+        // that is not in the relation is not something the relation depends on — turning a clause
+        // away for a value it does not actually rest on would report nothing about a value the
+        // author was never asked about.
+        LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
+        if (between != null && discharge.takesIn(between)) {
+            numeric = new NumericConstraint(between, stated.relationUnder(positive));
+            // The same clause read as the cases of whatever chooses inside it. Both readings are
+            // kept: a guard may name the call itself, which the clause as it stands is what
+            // settles, and reading it case by case never takes that away.
+            piecewise = piecewiseOf(numeric, stated.left(), stated.right(), at);
         }
-        Conditions.Polar polar = Conditions.polar(inv, positive);
+        return owing(inv, foldOf(folded), numeric, piecewise, Conditions.polar(stated, positive),
+                unnamed, at);
+    }
+
+    /**
+     * What a clause that did not settle on its own owes: what it states of the numbers, and what a
+     * guard settling it by name would have to have settled.
+     *
+     * <p>{@code where} is the expression the caller was handed. A reading that made nothing of the
+     * clause says where it stopped, and where it stopped is somewhere the author wrote — a statement
+     * this reading composed stands nowhere and would name a comparison nobody can be shown.
+     */
+    private Owed owing(Core where, Fold fold, NumericConstraint numeric, Piecewise piecewise,
+                       Conditions.Polar polar, Set<FactSubject> unnamed, Denotations at) {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
+        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed, at)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
-            return Owed.unreadable(inv).alsoFolded(fold);
+            return Owed.unreadable(where).alsoFolded(fold);
         }
         // What the values this clause names carry, read off the atoms rather than off the tree: an
         // atom files what it carries where it is named, so having read the clause into forms is
@@ -682,10 +832,34 @@ final class Predicates {
         return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
     }
 
+    /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
+     * own — or null where it owes what it states after all.
+     *
+     * <p>The clause folds once the construction's own expressions stand where it read a field.
+     * Folding the way it is read owes nothing; folding the other way is a violation, and saying so
+     * needs no term to be named. Read under a denial it is the other answer that discharges, which
+     * is why the polarity is asked. A caller that does not report the other way round is answered
+     * with nothing here and reads on. */
+    private static Owed decidedBy(Boolean folded, boolean positive, boolean decidesFalse) {
+        if (folded == null) {
+            return null;
+        }
+        if (folded == positive) {
+            return Owed.decided(true);
+        }
+        return decidesFalse ? Owed.decided(false).and(Owed.of(VIOLATED)) : null;
+    }
+
+    /** What a clause reading on says about its own fold: either it did not fold, or it folded the
+     * other way and this caller does not report that as a violation. A reader classifying the clause
+     * needs it, and taking the reading away would change what this caller is answered. */
+    private static Fold foldOf(Boolean folded) {
+        return folded == null ? Fold.NOT_DECIDED : Fold.FAILS;
+    }
 
     /**
-     * The atoms {@code cond} names as numbers: the two sides of a comparison where it is one, and
-     * the value it is otherwise.
+     * The atoms {@code cond} names as numbers, which for a condition that states no comparison is
+     * the single value it is.
      *
      * <p>Naming and not walking. Reading either side into a form is what names every value in it,
      * and an atom files what it carries where it is named — so this asks for the names and takes what
@@ -702,20 +876,21 @@ final class Predicates {
      */
     private Set<FactSubject> atomsNamedBy(Core cond, Denotations at) {
         Set<FactSubject> out = new LinkedHashSet<>();
-        if (cond instanceof Core.Binary b && Conditions.relOf(b.op()) != null) {
-            LinearForm<FactSubject> left = terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> right = terms.affineOf(b.right(), at);
-            if (left != null) {
-                out.addAll(left.coefs().keySet());
-            }
-            if (right != null) {
-                out.addAll(right.coefs().keySet());
-            }
-            return out;
-        }
         FactSubject atom = terms.atomOf(cond, at);
         if (atom != null) {
             out.add(atom);
+        }
+        return out;
+    }
+
+    /** The same, of a comparison: both of its sides, whatever it states of them. */
+    private Set<FactSubject> atomsNamedBy(StatedComparison stated, Denotations at) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        for (Core side : List.of(stated.left(), stated.right())) {
+            LinearForm<FactSubject> form = terms.affineOf(side, at);
+            if (form != null) {
+                out.addAll(form.coefs().keySet());
+            }
         }
         return out;
     }
@@ -736,9 +911,26 @@ final class Predicates {
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
-    Boolean decidedAt(Core inv) {
-        Object folded = Terms.folded(inv, terms.symbols());
+    Boolean decidedAt(Core inv, Denotations at) {
+        Object folded = Terms.folded(inv, terms.symbols(), at);
         return folded instanceof Boolean b ? b : null;
+    }
+
+    /**
+     * The same, of a comparison a reading arrived at rather than of an expression.
+     *
+     * <p>Folded from the two sides and what the comparison places, because a statement has no node
+     * to fold. Which is the whole of what folding a comparison is either way — an expression folds a
+     * side at a time and puts the two together under the relation its operator placed
+     * ({@link ConstEval#stands}) — and it is what lets a composed comparison be decided at all:
+     * {@code Int.compare(1, 2) >= 0} folds through nothing the library declares, and the order it
+     * states of {@code 1} and {@code 2} is settled here.
+     */
+    private Boolean decidedAt(StatedComparison stated, Denotations at) {
+        Object left = Terms.folded(stated.left(), terms.symbols(), at);
+        Object right = Terms.folded(stated.right(), terms.symbols(), at);
+        return (left == null || right == null) ? null
+                : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }
 
     static List<FactSubject> firstOnly(List<FactSubject> keys) {
@@ -754,12 +946,13 @@ final class Predicates {
      * afterwards by comparing the state to what went in: that comparison says whether anything
      * changed, which is a third question and is the answer to neither.
      *
-     * @param read whether any of these domains took the condition in
+     * @param taken     whether any of these domains took the condition in
+     * @param shapeRead whether a rule here read the shape it is written in at all
      */
     record Assumed(Known known, boolean taken, boolean shapeRead) {
 
         Assumed alsoRead(boolean moreTaken, boolean moreShape) {
-            return moreTaken && !taken || moreShape && !shapeRead
+            return (moreTaken && !taken) || (moreShape && !shapeRead)
                     ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
         }
     }
@@ -768,87 +961,210 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        Core cond = Conditions.asSizeComparison(rawCond);
-        // Two answers, and they were one until a condition could name something without this having
-        // read what it says. What was taken in is what a proof about this path may rest on; what was
-        // read is what an unsettled arm may be explained by. A condition whose shape ran out still
-        // narrows the state through the subject it names, and a proof that left it out would name a
-        // set of conditions that can all hold and say they cannot.
-        boolean taken = false;
-        boolean shapeRead = false;
-        Core ordered = Conditions.asOrderComparison(terms, cond, at);
-        if (ordered != cond) {
-            // Both hold of the same values: the order the call decides, and the bound on the sign
-            // that decides it. Which one a clause is read against is settled where the clause is
-            // read, so a guard states each of them rather than choosing here.
-            Assumed first = assumeCond(ordered, k, at, positive);
-            k = first.known();
-            taken = first.taken();
-            shapeRead = first.shapeRead();
+        return new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+    }
+
+    /**
+     * What taking a clause as holding does to what is known, before it is given a state to do it to.
+     *
+     * <p>Threading a state through the parts is this reading's own algebra and not the shape's: the
+     * right half of a conjunction is taken under what the left half left, so the two are read in
+     * order. Held as a state the fold carried downward, every reading over a clause would be one
+     * that runs left to right, which is true of this one and of none of the others.
+     */
+    @FunctionalInterface
+    private interface Assumption {
+
+        /** What this comes to, taken under {@code known}. */
+        Assumed from(Known known);
+    }
+
+    /**
+     * What a condition taken in makes known, read over the shape it was written in.
+     *
+     * <p>Over the shape ({@link ClauseExpr}) and not over the tree, so that what a connective
+     * composes, where a denial goes and where a binding stands are recognised once and this reading
+     * agrees with every other by having been given the answer. Read as a tree of its own, this had
+     * words for a connective and a denial and none for a binding — so a rule an author stated by
+     * naming it made nothing known, while the same rule written out made the comparison known, and
+     * the one reader with no tree-rebuilding above it named a dead branch on one spelling only.
+     */
+    private record Assuming(Predicates of) implements ClauseReading<Assumption, Denotations> {
+
+        /**
+         * A conjunction is taken in a half at a time, and a choice whole.
+         *
+         * <p>One of a choice's parts holds and this cannot say which, so taking either of them in
+         * would rule out values the condition admits. What is left of it is that the author named
+         * the two, which the part it is read as says.
+         */
+        @Override
+        public Descent<Assumption> at(ClauseExpr.Joined join) {
+            return switch (join.how()) {
+                case BOTH -> new Descent.Into<>(Assuming::both);
+                case EITHER -> new Descent.Whole<>();
+            };
         }
-        // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
-        if (cond instanceof Core.Binary b
-                && (b.op() == BinOp.AND && positive || b.op() == BinOp.OR && !positive)) {
-            Assumed left = assumeCond(b.left(), k, at, positive);
-            // Either side taken in is the condition taken in. A conjunction one half of which reads
-            // is not one nothing was read of, and calling it that would name this compiler's limit
-            // where the limit was reached on one operand only.
-            return assumeCond(b.right(), left.known(), at, positive)
-                    .alsoRead(left.taken() || taken, left.shapeRead() || shapeRead);
+
+        @Override
+        public Assumption whole(ClauseExpr.Part part, Denotations at) {
+            return known -> of.taking(part, known, at);
         }
-        Core under = Conditions.negated(cond);
-        if (under != null) {
-            return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
+
+        /**
+         * The right half under what the left half left.
+         *
+         * <p>Either side taken in is the condition taken in. A conjunction one half of which reads
+         * is not one nothing was read of, and calling it that would name this compiler's limit
+         * where the limit was reached on one operand only.
+         */
+        private static Assumption both(Assumption left, Assumption right) {
+            return known -> {
+                Assumed one = left.from(known);
+                return right.from(one.known()).alsoRead(one.taken(), one.shapeRead());
+            };
         }
-        Known out = k;
+    }
+
+    /**
+     * What taking one part of a condition as holding comes to.
+     *
+     * <p>Every reading of the comparison it states, because each of them holds of the same values:
+     * the order a call decides, and the bound on the sign that decides it. Which one a clause is
+     * read against is settled where the clause is read, so a guard states each of them rather than
+     * choosing here.
+     */
+    private Assumed taking(ClauseExpr.Part part, Known k, Denotations at) {
+        boolean positive = part.positive();
+        Core cond = Conditions.asSizeComparison(part.of());
+        // A connective taken whole states no comparison — that is what taking it whole means — so
+        // it is not asked for one. What it names is the two halves the shape composed, and without
+        // saying they were named a value one of them computes is one nothing has ever spoken of.
+        if (part instanceof ClauseExpr.Joined join) {
+            return taking(cond, join.writtenHalves(), k, at, positive);
+        }
+        List<StatedComparison> readings =
+                Conditions.comparisonsStatedBy(terms, cond, at).inReadingOrder();
+        if (readings.isEmpty()) {
+            return taking(cond, List.of(), k, at, positive);
+        }
+        Assumed so = new Assumed(k, false, false);
+        for (StatedComparison stated : readings) {
+            Assumed one = taking(stated, so.known(), at, positive);
+            so = one.alsoRead(so.taken(), so.shapeRead());
+        }
+        return so;
+    }
+
+    /**
+     * What taking a condition that states no comparison as holding comes to.
+     *
+     * <p>What it can still say is what the value it names carries, what a quantifier over it states
+     * of a container's elements, and that the condition itself holds — the last keyed on the
+     * condition as written, which is what a guard settles a predicate by.
+     *
+     * <p>{@code mentioned} is what the author named here that nothing else on this path will
+     * record: the two halves of a connective this reading states neither of. Neither half is read,
+     * so without this a value one of them computes is one nothing has ever spoken of, and a clause
+     * over it is left to the run-time check rather than asked of the author who did write about it.
+     *
+     * <p>Two halves and no further. What a condition names is the wider question — a call naming
+     * three arguments names them as plainly, and none of them arrives here — and this is the
+     * shape's answer to it, not the question's. Widening it widens what a clause may be owed for
+     * and what a report may point at, which is its own change and not this reading's to make.
+     */
+    private Assumed taking(Core cond, List<Core> mentioned, Known k, Denotations at,
+                           boolean positive) {
+        Known out = spokenIn(k, mentioned, at);
         // What the values this condition names carry, whichever way the condition itself is read.
         // Read off the atoms the condition was named into and not by walking it again: naming an
         // expression is what files what its values carry, so the reading that named it has them
-        // ({@link IntrinsicNumericFacts}). Taken before the condition is read at all, for the reason
-        // the reachability question below is asked with them.
+        // ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(atomsNamedBy(cond, at));
-        for (NumericConstraint c : known) {
-            // A size is never negative whether or not the condition holds, so this holds of the value
-            // and not of the path — the condition is only where the container got named.
-            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
-        }
+        out = carrying(out, known);
+        List<Quantified> quantified = new ArrayList<>();
+        quantifiedBy(cond, at, positive, quantified);
+        out = out.and(quantified);
+        // Two answers and not one, as everywhere here: what a proof may rest on, and what an
+        // unsettled arm may be explained by. They move together on this route and are still asked
+        // apart, because one of them coming to answer the other is how a limit of this compiler
+        // gets reported as a fact about the model.
+        boolean taken = !known.isEmpty() || !quantified.isEmpty();
+        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty();
+        return settling(out, Conditions.Polar.itself(cond, positive), at, taken, shapeRead);
+    }
+
+    /**
+     * What taking a condition stating {@code stated} as holding comes to.
+     *
+     * <p>Both routes, always: what the comparison says of the numbers, and that the canonical
+     * comparison it comes to holds. Which one carries a clause is decided where the clause is read,
+     * and a guard does not know which that will be.
+     *
+     * <p>No quantifier is asked for. What states one is a call to an operation over a container, and
+     * a comparison is not one however it was arrived at — so asking would be asking a question whose
+     * answer the shape already gives.
+     */
+    private Assumed taking(StatedComparison stated, Known k, Denotations at, boolean positive) {
+        // Taken before the comparison is read at all, for the reason the reachability question
+        // below is asked with them.
+        List<NumericConstraint> known = terms.carriedBy(atomsNamedBy(stated, at));
+        Known out = carrying(k, known);
         // A condition no case of what it is written over can satisfy is one this branch is never
         // entered under, and a value the program never builds is not one to report about. Asked of
         // everything the condition itself established and not only of what held on the way in: a
         // size and what an operation answers hold of the value however the condition comes out, and
         // a case read without them is one this would call reachable where the construction below,
         // which is handed the same facts, would not.
-        if (noCaseSatisfies(cond, out, at, positive)) {
+        if (noCaseSatisfies(stated, out, at, positive)) {
             // Read, and read to the end: what it comes to is that nothing enters here.
             return new Assumed(out.reachingNothing(), true, true);
         }
-        taken |= !known.isEmpty();
-        shapeRead |= !known.isEmpty();
-        if (cond instanceof Core.Binary b) {
-            Rel rel = Conditions.relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : Conditions.negateRel(rel);
-            LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
-            if (la != null && ra != null) {
-                LinearForm<FactSubject> compared = la.minus(ra);
-                out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
-                taken = true;
-                shapeRead |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
-            }
-            // What the comparison named, recorded as spoken about: a construction from one of these
-            // is one the author has said something about, whichever route ends up carrying it.
-            Set<FactSubject> named = new HashSet<>(spokenOf(b.left(), at, la));
-            named.addAll(spokenOf(b.right(), at, ra));
-            out = out.speaking(named);
+        boolean taken = !known.isEmpty();
+        boolean shapeRead = !known.isEmpty();
+        LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
+        LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
+        if (la != null && ra != null) {
+            LinearForm<FactSubject> compared = la.minus(ra);
+            out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
+                    terms.kindsOf(compared));
+            taken = true;
+            shapeRead |= readsItsShape(stated.left(), at) && readsItsShape(stated.right(), at);
         }
-        List<Quantified> quantified = new ArrayList<>();
-        quantifiedBy(cond, at, positive, quantified);
-        out = out.and(quantified);
-        taken |= !quantified.isEmpty();
-        shapeRead |= !quantified.isEmpty();
-        // Both routes, always: which one carries a clause is decided where the clause is read, and a
-        // guard does not know which that will be.
-        Conditions.Polar polar = Conditions.polar(cond, positive);
+        // What the comparison named, recorded as spoken about: a construction from one of these
+        // is one the author has said something about, whichever route ends up carrying it.
+        Set<FactSubject> named = new HashSet<>(spokenOf(stated.left(), at, la));
+        named.addAll(spokenOf(stated.right(), at, ra));
+        out = out.speaking(named);
+        return settling(out, Conditions.polar(stated, positive), at, taken, shapeRead);
+    }
+
+    /** {@code k} with each of {@code mentioned} recorded as one this condition named. No form is
+     * read of them: what a connective stands between is a condition and not a number, so what is
+     * recorded is that it was written and nothing about what it computes. */
+    private Known spokenIn(Known k, List<Core> mentioned, Denotations at) {
+        Set<FactSubject> named = new HashSet<>();
+        for (Core each : mentioned) {
+            named.addAll(spokenOf(each, at, null));
+        }
+        return k.speaking(named);
+    }
+
+    /** {@code k} holding what those values carry. A size is never negative whether or not the
+     * condition holds, so this holds of the value and not of the path — the condition is only where
+     * the container got named. */
+    private Known carrying(Known k, List<NumericConstraint> known) {
+        Known out = k;
+        for (NumericConstraint c : known) {
+            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
+        }
+        return out;
+    }
+
+    /** {@code out} also holding that {@code polar}'s condition came out the way it states, keyed on
+     * what a guard settling it would settle. */
+    private Assumed settling(Known out, Conditions.Polar polar, Denotations at, boolean taken,
+                             boolean shapeRead) {
         FactSubject key = terms.subjectOf(polar.expr(), at);
         return key == null ? new Assumed(out, taken, shapeRead)
                 : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true,
@@ -1002,17 +1318,16 @@ final class Predicates {
      * reported against guards that cannot all hold, which is a diagnostic about a value the program
      * never builds.
      */
-    private boolean noCaseSatisfies(Core cond, Known k, Denotations at, boolean positive) {
-        if (!(cond instanceof Core.Binary b) || Conditions.relOf(b.op()) == null) {
-            return false;
-        }
-        Rel stated = positive ? Conditions.relOf(b.op()) : Conditions.negateRel(Conditions.relOf(b.op()));
-        LinearForm<FactSubject> la = stated == null ? null : terms.affineOf(b.left(), at);
-        LinearForm<FactSubject> ra = stated == null ? null : terms.affineOf(b.right(), at);
+    private boolean noCaseSatisfies(StatedComparison stated, Known k, Denotations at,
+                                    boolean positive) {
+        LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
+        LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
         if (la == null || ra == null) {
             return false;
         }
-        Piecewise cases = piecewiseOf(new NumericConstraint(la.minus(ra), stated), cond, at);
+        Piecewise cases = piecewiseOf(
+                new NumericConstraint(la.minus(ra), stated.relationUnder(positive)),
+                stated.left(), stated.right(), at);
         return cases != null && cases.refutedBy(k.numbers());
     }
 
@@ -1026,9 +1341,10 @@ final class Predicates {
      * keys as — so replacing the atom answers both, where rewriting the expression would answer the
      * first and leave the second saying nothing.
      */
-    private Piecewise piecewiseOf(NumericConstraint owed, Core inv, Denotations at) {
+    private Piecewise piecewiseOf(NumericConstraint owed, Core left, Core right, Denotations at) {
         Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
-        chosenCalls(inv, at, choosing);
+        chosenCalls(left, at, choosing);
+        chosenCalls(right, at, choosing);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
         if (choosing.size() != 1) {
             return null;

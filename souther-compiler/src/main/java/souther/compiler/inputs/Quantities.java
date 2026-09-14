@@ -1,13 +1,19 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * What the rules leave a quantity taken over several of a behavior's input positions.
+ * What the rules leave a quantity taken over several of a behavior's input positions, and what
+ * order each of its terms is measured on.
+ *
+ * <p>The second because it is the same reading asked about one term rather than a form of them: what
+ * a quantity runs between is read on the orders its terms are on, and a caller that took the orders
+ * from somewhere else would be adding up numbers this reading counts differently.
  *
  * <p><b>The relational half of {@link InputDomain}.</b> A {@link Position} answers about itself, and
  * a rule can be about no position in particular: {@code x + y <= 5} relates two of them and divides
@@ -26,10 +32,18 @@ import java.util.Optional;
  * A form is added up out of parts, and a part is the finest unit a relation survives in: the terms
  * of one parameter the reading of its declarations has a coordinate for, and the terms it has none
  * for. What a part comes to is what its terms are on their own — where each stands if it has been
- * fixed, what its own position was read to hold, and what the term guarantees of itself — and,
- * where the reading can be asked at all, those facts solved together with the rules that relate
- * them and the form projected out of that. Parts are added, and adding only ever makes an answer
- * out of answers, so a border can go away for being asked about properly and can never appear.
+ * fixed, where the values it is answered from leave it, and what the term guarantees of itself —
+ * and, where the reading can be asked at all, those facts solved together with the rules that
+ * relate them and the form projected out of that. Parts are added, and adding only ever makes an
+ * answer out of answers, so a border can go away for being asked about properly and can never
+ * appear.
+ *
+ * <p><b>Where a term's values come from is what says who answers for it, and there are two.</b> A
+ * number one position answers is answered by that position's own reading. A number taken over a run
+ * stands at no position, and is answered by what every value the run walks guarantees, put through
+ * the step the operation repeats from the value it starts at. Read as one — as a position's answer,
+ * because that was the only publisher there was — a total came back with nothing said about it, and
+ * a border on it was owed a row at a value the model admits nothing at.
  *
  * <p>Composed that way because neither meeting nor projecting distributes. Everything each term is
  * on its own, met against everything the relations leave the whole form, is wider than the sum of
@@ -67,8 +81,78 @@ import java.util.Optional;
  * is in that space, so a reading kept beside it could answer the same question over the same rules
  * renamed, and which of the two spoke would be settled by the order they were asked in — with the
  * one that cannot see across two parameters asked first.
+ *
+ * <p><b>And one space per question and not one for the input, because a position exists under
+ * conditions.</b> A field of a case is there where the value turned out to be that case, and a
+ * field of an element where the sequence holds one — so a question naming such a position is asked
+ * of the rows that meet those conditions, and the rules that reach it are the ones about those
+ * rows. Every reading met into one space instead, the cases of a sum would be rules that hold
+ * together, and one case its own rules refuse would refuse an input whose other cases are rows an
+ * author can write.
+ *
+ * <p>What those conditions come to is part of what a question is answered against and not only part
+ * of deciding whose rules to read: a question that names a position inside a container is a
+ * question about rows whose container holds something, which is a fact the rules have a word for.
+ *
+ * <p>Which leaves {@link #emptiness} asking something no one context answers. Whether a value of
+ * this input exists at all is quantified over the alternatives a value has — a sum has one wherever
+ * any case does, a container that may be empty has one whatever it would hold — so it is a fold
+ * over those and not a projection out of a space.
  */
 public sealed interface Quantities permits ReadQuantities {
+
+    /**
+     * Both orders of {@code term} as this reading has it: the one a value at its position is read
+     * on, and the one the number it names is answered on.
+     *
+     * <p><b>The answer for a term of this input, and the only thing that resolves where the term
+     * sits.</b> Which order a term is measured on follows from what stands where its number comes
+     * from, and where that is is settled once by the reading that made this. A caller working it
+     * out from a type it holds is answering with whatever walk put that type in its hand — a walk
+     * that follows a written value stops where a value is built, and a shared name of a sum is a
+     * position a number is taken at and not a place a value is composed for.
+     *
+     * <p>Both ends together, because a term that is what an operation answered has two orders and a
+     * caller handed one of them has whichever end the caller before it meant. The day the two part
+     * is the day a row is decoded on a count the value is not written in.
+     *
+     * <p><b>And so that nothing derives it from an expression.</b> A rule is written beside
+     * operands, and the type of an operand is not the type of the position the rule is about: an
+     * operation the arithmetic rewrote into a form over two positions is compared as what it
+     * answers with, so {@code Date.daysBetween(a, b) > 10} has {@code Int} on both sides and dates
+     * at both positions. Read off the comparison, every position of that rule was written back as a
+     * whole number and read off a row as one, and both directions agreed with each other and with
+     * nothing else.
+     *
+     * <p><b>A term under no position of the reading still has an order.</b> The reading stops where
+     * a path returns to a declaration already open on it, and it reports the end of a path the
+     * measurement named rather than every step on the way; nothing stops a rule from naming what is
+     * under either. What a report is about and what a declaration says are two questions, and only
+     * the first of them stops there.
+     */
+    TermOrders ordersOf(NumericTerm term);
+
+    /**
+     * How many the rules leave the container standing at {@code at}, or every number where they
+     * leave it unsaid.
+     *
+     * <p>Answered here because both halves of it are this reading's: which positions hold a
+     * container is what the reading found, and what its rules leave one of them is what the same
+     * reading says. Kept as a table beside a reading, a caller could ask what one reading's
+     * containers come to under another's rules, and the answer would be about neither.
+     *
+     * <p>Counts of containers and nothing else. What this feeds is how many elements to build, so an
+     * operation whose number is not how many the value holds has no business bounding it:
+     * {@code Time.hour(t) <= 5} would otherwise be read as a container of at most five.
+     *
+     * <p>About the positions of the input and about nothing else, which is why it takes one rather
+     * than a path. A coordinate of a construction plan is spelled with the same {@link TermPath} and
+     * is a different thing: the plan goes on past where the reading stops, and puts positions under
+     * a sum the declaration has none of. What a plan's node holds is read off that node's own type,
+     * which is where its rules are — and a reading handed one of those answers that nothing here is
+     * a position of it, rather than that no rule bounds it.
+     */
+    int mostHeldAt(PositionId at);
 
     /**
      * Where the values of {@code form} run, or null at either end where nothing bounds them.
@@ -76,7 +160,7 @@ public sealed interface Quantities permits ReadQuantities {
      * <p>The form as the rule wrote it, over this input's terms. What it comes to is asked of the
      * relations that reach its positions rather than composed from what each of them projects.
      */
-    NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form);
+    NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form);
 
     /**
      * The same, of one term.
@@ -85,7 +169,7 @@ public sealed interface Quantities permits ReadQuantities {
      * one answer is what this layer exists to stop, and a form over one position is a form.
      */
     default NumericDomain.Bounds runsBetween(NumericTerm term) {
-        return runsBetween(NumericDomain.LinearForm.atom(term));
+        return runsBetween(LinearForm.atom(term));
     }
 
     /**
@@ -97,10 +181,10 @@ public sealed interface Quantities permits ReadQuantities {
      * way. Where a fixing contradicts what is already held, what comes back proves it
      * ({@link #emptiness}) rather than answering as though nothing had been said.
      */
-    Quantities given(Map<NumericTerm, Count> fixed);
+    Quantities given(Map<NumericTerm, Place> fixed);
 
     /** The same, of one position. */
-    default Quantities given(NumericTerm term, Count fixed) {
+    default Quantities given(NumericTerm term, Place fixed) {
         return given(Map.of(term, fixed));
     }
 

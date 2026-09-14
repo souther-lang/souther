@@ -3,15 +3,17 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Contract;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -58,7 +60,7 @@ class WhatAComparisonIsARuleAboutTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         StatedContract stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("f");
         InputDomain inputs =
@@ -68,16 +70,19 @@ class WhatAComparisonIsARuleAboutTest {
         StatedContract.StatedRule rule = stated.rules().get(0);
         assertEquals(1, rule.conjuncts().size(), "the rule states one comparison");
         Core read = rule.conjuncts().get(0).stated().orNull();
-        Core.Binary comparison = assertInstanceOf(Core.Binary.class, read,
+        Core.Binary binary = assertInstanceOf(Core.Binary.class, read,
                 () -> clause + " arrives as a comparison");
+        Comparison comparison = Comparison.of(binary)
+                .orElseThrow(() -> new AssertionError(clause + " compares its two sides"));
 
         Map<BindingId, String> roots = new LinkedHashMap<>();
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        return ComparisonAssessment.of("f", comparison,
-                InputReads.ofWhatIsDeclared(inputs, roots), symbols,
-                inputs.quantities(symbols), rule.value(), false);
+        return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
+                inputs.reading(rules),
+                InputReads.ofWhatIsDeclared(roots), rule.value(),
+                souther.compiler.coverage.Arrivals.inTheTree(read), false);
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */

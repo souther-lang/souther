@@ -17,11 +17,14 @@ import java.util.List;
  * that they do: {@link SearchRegion} answers questions about values and does not say which
  * conditions it was built from, on purpose.
  *
- * <p><b>Two vocabularies, because a condition lands in one of them or in neither.</b> What a
- * comparison states is an inequality over numbers and what a fork states is which case a value
- * turned out to be, and neither says the other: a region has no word for a case, and a narrowing
- * orders nothing. So a search composing a row against this reads both, and what it still does not
- * represent is {@link #declined()}.
+ * <p><b>Three vocabularies, because a condition lands in one of them or in none.</b> What a
+ * comparison states is a relation over values and what a fork states is which case a value turned
+ * out to be, and neither says the other: a region has no word for a case, and a narrowing orders
+ * nothing. The comparisons divide again, because the values a carrier holds are not always numbers:
+ * an inequality over a form of them is the arithmetic's, and a position held against a written value
+ * on an order that counts nothing is a bound on that order ({@link TakenConstraint}). So a search
+ * composing a row against this reads them all, and what it still does not represent is
+ * {@link #declined()}.
  *
  * <p><b>This is what an answer keeps.</b> A region is a way of asking rather than something that
  * says what it is, and one kept in an answer carries the whole reading of a module's rules — down to
@@ -62,7 +65,14 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn taken) {
-                region = region.assuming(taken.cut().form(), taken.cut().rel());
+                region = switch (taken.taken()) {
+                    case TakenConstraint.Affine affine ->
+                            region.assuming(affine.form(), affine.rel());
+                    case TakenConstraint.Ordered ordered ->
+                            region.assuming(ordered.term(), ordered.at(), ordered.rel());
+                    case TakenConstraint.AwayFrom away ->
+                            region.apartFrom(away.term(), away.at());
+                };
             }
         }
         return region;

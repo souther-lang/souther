@@ -11,6 +11,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -192,15 +193,20 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      * this compile's code and the row's fixture goes through it, so what is counted covers the
      * fixtures and stops at the behavior — which is injected, has no body, and has nothing to count.
      *
-     * <p>{@code hits} is empty, so a measure reading it sees no arm this row failed to reach.
+     * <p>And nothing recorded where the row went, which is the other half and is not an empty
+     * account of one. This compile was asked to leave the recording calls out, so there is no
+     * probed body for the row to be written down by — a measure reading an empty account instead
+     * would see a row shown to have reached no arm at all.
      */
     @Test
     void aBoundRowsCountingIsReadAndCoversItsFixturesOnly() throws Exception {
         for (RowOutcome row : evaluated(ANSWERS).rows()) {
             Counting.Read read = assertInstanceOf(Counting.Read.class, row.run().counting(),
                     "the counting was read");
-            assertEquals(java.util.Set.of(), read.observation().taken(),
-                    "and lit no branch, there being no body to light one");
+            assertInstanceOf(RunRecord.NoAccount.class, read.recorded(),
+                    "and nothing recorded where the row went: the implementation is bound from"
+                            + " outside this compile, so there is no probed body to write anything"
+                            + " down — which is not the same as a run that lit no branch");
         }
     }
 
@@ -309,6 +315,42 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         assertEquals(List.of("E1930"), ran.diagnostics().stream().map(Diagnostic::code).toList());
     }
 
+    /** An implementation that stops with a throw rather than answering. */
+    private static final String THROWS = """
+            package example.todo;
+            public final class FindTodoImpl extends FindTodo {
+                public FindTodoResult apply(TodoId id) {
+                    throw new IllegalStateException("the query would not run");
+                }
+            }
+            """;
+
+    /**
+     * What the applied code ended with is read the same whether or not the application crossed back
+     * to the thread that asked for the row.
+     *
+     * <p>A binding drives its rows over the crossing and a run given a deadline of its own applies
+     * where it stands. Which of the two a row went through decides where the code ran and nothing
+     * else: the failure is the implementation's either way, and a reader deciding whose failure a
+     * row met would otherwise be told two different things about one throw.
+     */
+    @Test
+    void anImplementationThatThrowsFailsTheSameWayOnEitherSideOfTheCrossing() throws Exception {
+        BoundExamples over = SoutherExamples.ofSource(MODEL)
+                .bind(builtElsewhere(compiled(MODEL), THROWS));
+        RowOutcome crossed = over.evaluate(over.rows().get(0)).outcome();
+
+        RowOutcome stood = named(evaluated(MODEL, THROWS), crossed.identity().shown());
+
+        assertEquals(stood.disposition(), crossed.disposition());
+        assertEquals(stood.stage(), crossed.stage());
+        assertEquals(stood.failurePhase(), crossed.failurePhase());
+
+        // And what the two agree on is what a throw from the applied code means, rather than
+        // whatever the two happen to arrive at together.
+        assertEquals(Disposition.FAILED, crossed.disposition());
+        assertEquals(Stage.INVOKED, crossed.stage());
+    }
 
     private static Map<String, ClassFileImage> compiled(String model) {
         Compilation c = Compilation.ofSource(model, "Main");
@@ -349,18 +391,26 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
+                Shapes.publishedDeclarations(c.db()),
+                Shapes.declarationKinds(c.db()),
+                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 declarationsOf(c),
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 // What this instance is supplied for, said by the caller. Whether a behavior may be
                 // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
                 Answering.bound(bound, java.util.Set.of("findTodo"),
-                        c.db().ask(new Bodies.Signatures(name)).value()),
+                        c.db().ask(new Bodies.Signatures(name)).value(),
+                        // Applied where the row stands. What a binding arranges is that the
+                        // implementation answers on the thread that asked for the row, and nothing
+                        // here is that binding: this drives the seam under it, so it says outright
+                        // that the application does not cross anywhere.
+                        CallerApplication.Application::call),
                 CheckedEnsures.executableOf(
                         c.db().ask(new Bodies.ReachableContracts(name)).value()));
     }

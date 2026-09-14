@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -77,7 +77,8 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
     /** Every operation declared to answer a form of its arguments is measured here. */
     @Test
     void everyDeclaredFormIsMeasuredHere() {
-        assertEquals(OperationFacts.answersAFormOfItsArguments(), MEASURED.keySet(),
+        assertEquals(DefaultBoundOperationFacts.get().answersAFormOfItsArguments(),
+                MEASURED.keySet(),
                 "an operation declared to answer a form of its arguments has its coefficients"
                         + " measured, and one measured here is one that is declared");
     }

@@ -2,11 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -18,7 +17,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
-import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,36 +68,39 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
     private static final String POSITION = "request.interval.startsAt";
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
+    private record Read(MeasuredInput subject, RowOutcome row) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("book")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("book");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        InputDomain read = InputDomain.of(spec, sigs.get("book"), symbols,
+        CoverageSites.Plan plan = checked.plan();
+        InputDomain read = InputDomain.of(sigs.get("book"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                read.quantities(symbols),
-                GuardThresholds.of("book", body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), symbols).thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("book", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                read.quantities(rules),
+                GuardThresholds.of("book", checked.analysisBodies().get("book"), body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), rules).thresholds(),
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("book").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("book", read.reading(rules), partitioning),
                 observed.rows().get(0));
     }
 
@@ -109,9 +110,28 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Map<String, ObservedValue> fields = new LinkedHashMap<>(request.fields());
         fields.put("interval", value);
         return new RowOutcome(read.row().at(), read.row().target(), read.row().identity(),
+                read.row().expectation(),
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), fields)), read.row().run());
+                List.of(new ObservedValue.Constructed(request.type(), fields)),
+                statingTheSame(read.row(),
+                        List.of(new ObservedValue.Constructed(request.type(), fields))),
+                read.row().run());
+    }
+
+    /**
+     * What a row with {@code inputs} states, which is not always what the row it came from stated.
+     *
+     * <p>A row whose input the observation stopped in states no values — it states that one of them
+     * could not be carried — and a fixture that changed the values while keeping what the original
+     * stated would be a row saying two different things about what it handed over. Asked of what
+     * decides it rather than written out here.
+     */
+    private static souther.compiler.observe.RowStatement statingTheSame(RowOutcome row,
+                                                                        List<ObservedValue> inputs) {
+        return row.statement() instanceof souther.compiler.observe.RowStatement.Stated stated
+                ? souther.compiler.observe.RowStatements.read(List.of(), inputs, stated.expects())
+                : row.statement();
     }
 
     /** The interval the row wrote, with {@code inner} where the position's number was. */
@@ -124,7 +144,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static Incompleteness.Code why(Read read, RowOutcome row) {
-        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.axes());
         Classification where = classes.entrySet().stream()
                 .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
@@ -133,7 +153,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static TermPath position(Read read) {
-        return read.axes().stream().filter(a -> a.path().toString().equals(POSITION))
+        return read.axes().axes().stream().filter(a -> a.path().toString().equals(POSITION))
                 .findFirst().orElseThrow().path();
     }
 
@@ -190,8 +210,8 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     /**
      * What the boundary's caller sees, which is why this changes nothing for it.
      *
-     * <p>{@code valueAt} already hands back a stopped observation where the path ends on one — the
-     * loop runs out of fields and returns what it is holding — so a caller that asks it for a number
+     * <p>The walk already hands back a stopped observation where the path ends on one — the loop
+     * runs out of fields and returns what it is holding — so a caller that asks it for a number
      * already meets one and reads it as no number. Keeping the same value from one field earlier
      * gives that caller a value it already handles rather than a new one.
      */
@@ -200,12 +220,22 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())).inputs(), position(read)),
+                theOneValueAt(read, givingInterval(read, intervalHolding(read,
+                        new ObservedValue.Truncated())).inputs()),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.inputs().valueAt(
-                        givingInterval(read, new ObservedValue.Truncated()).inputs(), position(read)),
+                theOneValueAt(read,
+                        givingInterval(read, new ObservedValue.Truncated()).inputs()),
                 "the limit was reached one field above the position");
+    }
+
+    /** The value the walk to the position came to, which the model under test writes one of. */
+    private static ObservedValue theOneValueAt(Read read, List<ObservedValue> inputs) {
+        if (read.subject().inputs().valuesAt(inputs, position(read))
+                instanceof WalkResult.Reached(List<ObservedValue> values)
+                && values.size() == 1) {
+            return values.getFirst();
+        }
+        throw new AssertionError("one value stands at " + position(read));
     }
 }

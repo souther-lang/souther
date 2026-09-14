@@ -40,12 +40,20 @@ public sealed interface Membership {
      * <p>Null where there is a value to look at, so a classifier can go on to its own question. Here
      * rather than at each classifier because it is one fact about the observation and not a
      * judgement any class makes — and by the same reading it is not this layer's to state either, so
-     * which cases are a reason instead of a value is {@link ObservedValue#unread()}'s to say. What
-     * is left here is the absence a walk answers with, which is not an observation at all.
+     * which cases are a reason instead of a value is {@link ObservedValue#unread()}'s to say.
+     *
+     * <p><b>Of a value, and refused of nothing.</b> The absence a walk answers with is not an
+     * observation at all, so there is no observation's word for it and this does not reach for the
+     * nearest one. A caller that may arrive with nothing says what nothing means to its own
+     * question, where that is known: for a term reading a number it is that the walk had no value,
+     * and for a classifier it is that no class holds what is not there.
      */
     static Incomplete unread(ObservedValue value) {
-        Incompleteness.Code why = value == null
-                ? Incompleteness.Code.VALUE_UNREADABLE : value.unread();
+        if (value == null) {
+            throw new IllegalArgumentException(
+                    "no value arrived, which is not something an observation of one says");
+        }
+        Incompleteness.Code why = value.unread();
         return why == null ? null : new Incomplete(why);
     }
 }

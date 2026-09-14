@@ -2,10 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -13,8 +12,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -54,31 +52,34 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
             let read (query) = Page { n = 1 }
             """;
 
-    private record Model(Generator.Subject subject, List<Axis> axes) {}
+    private record Model(MeasuredInput subject, List<Axis> axes) {}
 
     private static Model model() {
         Compilation compilation = Compilation.ofSource(QUERIES, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("read")).findFirst().orElseThrow();
-        Sig sig = sigs.get("read");
-        InputDomain domain = InputDomain.of(spec, sig, symbols, ReadAs.THE_COMPILATION_DOES);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        InputDomain domain = InputDomain.of(sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning =
-                Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(new Generator.Subject(spec.name(),
-                new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sig.inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                partitioning.axes(), HeldCounts.of(domain, symbols)),
+                Partitions.of("read", domain, rules, ReadAs.THE_COMPILATION_DOES);
+        return new Model(
+                MeasuredInput.of("read", domain.reading(rules), partitioning),
                 partitioning.axes());
     }
 
     private static TermPath under(String leaf) {
-        return TermPath.of("query").refine(Refinement.sumCase(
-                TypeSymbols.declared(new TypeKey("example.q", leaf))));
+        return TermPath.of("query").refine(toLeaf(leaf));
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(String leaf) {
+        souther.compiler.types.TypeSymbol named =
+                TypeSymbols.declared(new TypeKey("example.q", leaf));
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named)));
     }
 
     /** Every class of every position, including the ones only one case has. */
@@ -130,9 +131,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
                 "a row that is a GlobalQuery is at the positions the case declares");
         assertFalse(tag.requirements().compatibleWith(sum.requiring(classOf(sum, "FeedQuery"))),
                 "and a row that is a FeedQuery is at none of them");
-        assertEquals(Requirements.NONE.and(TermPath.of("query"),
-                        Refinement.sumCase(
-                                TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery")))),
+        assertEquals(Requirements.NONE.and(TermPath.of("query"), toLeaf("GlobalQuery")),
                 tag.requirements(),
                 "which the path says on its own, with nothing kept beside it");
     }

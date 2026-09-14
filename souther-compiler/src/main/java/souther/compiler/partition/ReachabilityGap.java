@@ -1,5 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
+import java.util.Collection;
+
 /**
  * A condition on the way to a border that a row for it was not composed against, and which stage
  * let it go.
@@ -17,15 +22,16 @@ package souther.compiler.partition;
  */
 public sealed interface ReachabilityGap {
 
-    /** Where the condition is, as a report is entitled to say it. */
-    souther.compiler.diag.Citation at();
+    /** Which question a report about the condition asks for its place, which is the condition's own
+     *  answer and not a second one worked out here. */
+    ConditionReportAnchor anchor();
 
     /** The walk had no words for it, so nothing downstream ever saw it. */
     record Unstated(OnTheWay.Declined condition) implements ReachabilityGap {
 
         @Override
-        public souther.compiler.diag.Citation at() {
-            return condition.at();
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
         }
     }
 
@@ -40,8 +46,8 @@ public sealed interface ReachabilityGap {
     record Uncomposed(OnTheWay.TakenIn condition, Why why) implements ReachabilityGap {
 
         @Override
-        public souther.compiler.diag.Citation at() {
-            return condition.at();
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
         }
     }
 
@@ -66,12 +72,44 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
+         * The same, where a budget of this compiler's is what stopped the walk that would have
+         * placed the positions.
+         *
+         * <p>A case beside the one above rather than a field on it. The two are different news: one
+         * says nothing was found in what was walked, the other says the walking stopped, and only
+         * the second names something a reader could raise. Held as a set that is sometimes empty,
+         * every reader would decide again which of the two it had.
+         *
+         * <p>Not an {@link souther.compiler.query.EstablishmentGap}. A row was composed here; what
+         * the budget cost is one condition on the way being composed against, and reporting it as a
+         * point nothing could be established at would say more than happened.
+         */
+        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by)
+                implements Why {
+
+            public TheWalkForItsPositionsWasStopped {
+                if (by == null || by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk this compiler stopped says which budget stopped it");
+                }
+            }
+
+            /** The budgets a walk met, in the order a report says them. */
+            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met) {
+                return new TheWalkForItsPositionsWasStopped(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+            }
+        }
+
+        /**
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer
-         * both — the length of a string beside the string. Told apart from the one above because
-         * only this one is about the condition and the item meeting at a location rather than about
-         * what could be built at a position.
+         * both — the length of a string beside the string. Which other number it meets is not part
+         * of it: the row may be writing that location for the item it is composed at, or for a
+         * condition on the way that was taken in before this one. Told apart from the one above
+         * because only this one is about two demands meeting at a location rather than about what
+         * could be built at a position.
          */
         record TwoNumbersAtOneLocation() implements Why {}
     }

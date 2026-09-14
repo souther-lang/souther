@@ -2,9 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -27,8 +25,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
 
-    /** {@code hi} is ten above {@code lo}, which is a relation and places no end of its own — so
-     *  where {@code hi} starts is somewhere a declaration has to be read again to attribute. */
+    /**
+     * {@code hi} is ten above {@code lo}, which is a relation and places no end of its own — so
+     * where {@code hi} starts is somewhere a declaration has to be read again to attribute.
+     *
+     * <p>Two declarations write a lower end on the one coordinate and only one of them holds it:
+     * {@code Common} puts {@code hi} ten above {@code lo} and {@code Held} puts it five above, so
+     * ten above is where {@code hi} stops and {@code Common} is what put it there. Which is only
+     * answerable if leaving a declaration's clauses out leaves out the ones it wrote rather than the
+     * ones read where it was: {@code Common}'s rule arrives through {@code Held}'s spread, and read
+     * the second way taking {@code Common} away takes nothing away, so neither candidate moves the
+     * end on its own and both are named.
+     */
     private static final String SOURCE = """
             module demo exposing ( Held, keep )
 
@@ -51,29 +59,30 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     void readingTheEndsReadsNoDeclarationAndAskingWhoHoldsThemDoes() {
         FieldDomains reading = reading();
 
-        long beforeEnds = FieldDomains.readingsMade();
-        NarrowedBounds hi = reading.at("hi");
+        long beforeEnds = InvariantChecker.readingsMade();
+        NarrowedBounds hi = reading.at(RuleKey.of("hi"));
         assertNotNull(hi.bounds().min(), "something puts a floor under `hi`");
-        assertEquals(beforeEnds, FieldDomains.readingsMade(),
+        assertEquals(beforeEnds, InvariantChecker.readingsMade(),
                 "where the coordinate stops was settled when this reading was made");
 
-        long beforeNames = FieldDomains.readingsMade();
+        long beforeNames = InvariantChecker.readingsMade();
         assertEquals(java.util.List.of("Common"),
                 holding(hi).stream().map(TypeSymbol::name).toList(),
-                "and ten above is Common's doing");
-        assertTrue(FieldDomains.readingsMade() > beforeNames,
+                "and ten above is Common's doing: a rule a spread brought in is held by the"
+                        + " declaration that wrote it, not the one it was read at");
+        assertTrue(InvariantChecker.readingsMade() > beforeNames,
                 "which took reading the declaration again without a declaration's clauses");
     }
 
     /** Asked twice, answered once. What is kept is the answer and not the work. */
     @Test
     void whoHoldsAnEndIsWorkedOutAtMostOnce() {
-        NarrowedBounds hi = reading().at("hi");
+        NarrowedBounds hi = reading().at(RuleKey.of("hi"));
         holding(hi);
 
-        long before = FieldDomains.readingsMade();
+        long before = InvariantChecker.readingsMade();
         assertEquals(holding(hi), holding(hi), "the same answer");
-        assertEquals(before, FieldDomains.readingsMade(), "and no reading to arrive at it again");
+        assertEquals(before, InvariantChecker.readingsMade(), "and no reading to arrive at it again");
     }
 
     /**
@@ -87,7 +96,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     void theReadingThatLostIsNeverAskedWhoHeldItsEnd() {
         // The reading of `Held` puts `hi` at 110, and this other reading puts it at 200. A floor is
         // the greater of the two, so the one that read the declaration is the one that loses.
-        NarrowedBounds lost = reading().at("hi");
+        NarrowedBounds lost = reading().at(RuleKey.of("hi"));
         NarrowedBounds tighter = NarrowedBounds.of(
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         new souther.compiler.numeric.Endpoint(
@@ -96,11 +105,11 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
                 java.util.List.of());
 
         NarrowedBounds met = lost.meet(tighter);
-        long before = FieldDomains.readingsMade();
+        long before = InvariantChecker.readingsMade();
         assertEquals(java.util.List.of("Elsewhere"),
                 holding(met).stream().map(TypeSymbol::name).toList(),
                 "200 is where it starts, and only what says 200 is holding it");
-        assertEquals(before, FieldDomains.readingsMade(),
+        assertEquals(before, InvariantChecker.readingsMade(),
                 "and what the losing reading would have named was never worked out");
     }
 
@@ -112,10 +121,9 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     private static FieldDomains reading() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        Symbols symbols = Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
-                (Hir.Data) symbols.declarations().declaration(held.key()), symbols,
+                RuleReadings.of(compilation, compilation.modules().get(0)),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

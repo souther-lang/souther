@@ -653,7 +653,7 @@ final class Spacing {
 
     private static Map<Face, String> faces() {
         Map<Face, String> out = new HashMap<>();
-        for (String line : FACE_ROWS.split("\n")) {
+        for (String line : FACE_ROWS.lines().toList()) {
             if (line.isBlank() || line.strip().startsWith("#")) {
                 continue;
             }
@@ -701,7 +701,7 @@ final class Spacing {
 
     private static Set<Pair> pairs(String rows) {
         Set<Pair> out = new HashSet<>();
-        for (String line : rows.split("\n")) {
+        for (String line : rows.lines().toList()) {
             if (line.isBlank() || line.startsWith("#")) {
                 continue;
             }
@@ -714,7 +714,7 @@ final class Spacing {
 
     private static Map<Pair, Map<SyntaxKind, String>> decided() {
         Map<Pair, Map<SyntaxKind, String>> out = new HashMap<>();
-        for (String line : DECIDED_ROWS.split("\n")) {
+        for (String line : DECIDED_ROWS.lines().toList()) {
             if (line.isBlank() || line.strip().startsWith("#")) {
                 continue;
             }

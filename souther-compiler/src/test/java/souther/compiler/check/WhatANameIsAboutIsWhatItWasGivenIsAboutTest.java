@@ -7,7 +7,8 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -15,7 +16,6 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -42,8 +42,11 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
             new ValueName.Behavior("demo", "findIt");
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
-    private final PathEngine engine =
-            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    private final PathEngine engine = new PathEngine(
+            RuleReadingContext.unshared(
+                    RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+            Terms.Of.THE_DISCHARGE_TREE);
 
     @Test
     void aNameGivenAPlaceIsAboutThatPlace() {
@@ -59,7 +62,8 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
         Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
         heldOf(new Core.Binary(BinOp.ADD, new Core.Read("x", x, Type.INT, POS),
-                new Core.Int(1, Type.INT, POS), CoverageOrigin.unwritten(), Type.INT, POS), outer);
+                new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(), Type.INT, POS),
+                outer);
     }
 
     @Test
@@ -113,6 +117,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
 
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
-                new ReachName.Own(FIND)), List.of(), Type.INT, POS);
+                new ReachName.Own(FIND)), List.of(),
+                ConstructOccurrence.unwritten(), Type.INT, POS);
     }
 }

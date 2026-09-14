@@ -35,19 +35,51 @@ public sealed interface TypedClause {
     /**
      * Typing it did not finish.
      *
-     * <p>Nothing about which run it was, and that is the point. This travels inside a
-     * {@link StatedContract}, which is an answer a query keeps, and an answer is a value: what
-     * {@code equals} says of it is what stops work downstream ({@link souther.compiler.query.Db}).
-     * Carrying the exception, two runs over one unedited source answer with two objects that are
-     * never equal, so every unrelated edit re-runs everything that read the contract — for as long
-     * as the source is half-written, which is most of the time an editor is asking.
+     * <p><b>Made only where a limit was met.</b> This is the answer the discharge check falls open
+     * on — a clause with no form leaves its run-time check standing — so reaching it is exactly the
+     * outcome {@link WhatTheCheckCannotRead} exists to authorize. Buildable without one, the whole
+     * boundary is a line anybody can step around: a {@code catch} of everything answering with this
+     * falls open on whatever it caught, and neither the census of who may make a limit nor
+     * {@link InvariantChecker#gaveUp} sees it happen. So the reason is required to build one.
      *
-     * <p>Which exception it was is worth having, and it goes where the rest of this check's giving
-     * up goes: {@link InvariantChecker#gaveUp}, a channel about the run rather than about the model.
-     * That is the same split one step out from the one this type makes — a failure and its
-     * classification are not one thing either.
+     * <p><b>And is not held.</b> This travels inside a {@link StatedContract}, which is an answer a
+     * query keeps, and an answer is a value: what {@code equals} says of it is what stops work
+     * downstream ({@link souther.compiler.query.Db}). Carrying which limit it was, two runs over one
+     * unedited source answer with two objects that are never equal, so every unrelated edit re-runs
+     * everything that read the contract — for as long as the source is half-written, which is most
+     * of the time an editor is asking. Which limit it was goes where the rest of this check's
+     * stopping goes: {@link InvariantChecker#gaveUp}, a channel about the run rather than about the
+     * model.
+     *
+     * <p>Which is why this is a class and not a record: what it takes to build one and what it is
+     * worth comparing are different questions, and a record answers them with one list.
      */
-    record Stopped() implements TypedClause {}
+    final class Stopped implements TypedClause {
+
+        /** Package-private, so that a limit is what it takes to reach this answer. */
+        Stopped(WhatTheCheckCannotRead met) {
+            if (met == null) {
+                throw new IllegalArgumentException("a reading stops on a limit it met");
+            }
+        }
+
+        /** Every one of these says the same thing about the model: this reading has no form for the
+         *  clause. What it met is the run's and is not compared. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Stopped;
+        }
+
+        @Override
+        public int hashCode() {
+            return Stopped.class.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "Stopped";
+        }
+    }
 
     /**
      * The form, or {@code null} where the typing stopped.

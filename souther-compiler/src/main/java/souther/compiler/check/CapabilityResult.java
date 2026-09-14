@@ -17,9 +17,10 @@ import java.util.Set;
  * negative conclusion are both silent.
  *
  * <p>Read off what the walk that reads clauses answered, and not worked out beside it. The walk
- * normalizes before it reads — {@code Int.compare(1, 2) >= 0} is a call until it becomes
- * {@code 1 >= 2} — so a reader folding the written form first sees a call, and comes back with a
- * relation any guard implying it would discharge for a clause no value satisfies.
+ * reads the clause as the comparisons it states before it decides anything — {@code Int.compare(1,
+ * 2) >= 0} is a call to a reader folding what an author wrote, and is the order of {@code 1} and
+ * {@code 2} to this walk — so a reader folding the written form first sees a call, and comes back
+ * with a relation any guard implying it would discharge for a clause no value satisfies.
  */
 public sealed interface CapabilityResult {
 
@@ -114,7 +115,7 @@ public sealed interface CapabilityResult {
             parts.add(switch (each) {
                 case Predicates.Part.Carried it -> new RequiredPart.Routed(routesOf(it.clause()));
                 case Predicates.Part.Unread it ->
-                        new RequiredPart.OutsideTheFragment(FragmentReason.of(it.at()));
+                        new RequiredPart.OutsideTheFragment(it.why());
             });
         }
         return new Analyzed(parts);

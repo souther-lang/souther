@@ -2,17 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
+import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -37,15 +35,12 @@ class PartitionsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        assertNotNull(prepared);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -106,9 +101,9 @@ class PartitionsTest {
 
         assertEquals(List.of(), classIds(cost));
         assertFalse(cost.derivable());
-        assertTrue(cost.measurable(), "there is still an edge to reach");
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(1000L)),
-                cost.cuts().stream().map(Cut::value).toList());
+        assertTrue(cost.asksForARow(), "there is still an edge to reach");
+        assertEquals(List.of(Count.of(0L), Count.of(1000L)),
+                cost.cuts().stream().map(Cut::at).toList());
     }
 
     /**
@@ -144,13 +139,13 @@ class PartitionsTest {
                 let classify (span) = Ok { at = "x" }
                 """, "classify");
 
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(1439L)),
-                axis(span, "span.from").cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
-                axis(span, "span.to").cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(Count.of(0L), Count.of(1439L)),
+                axis(span, "span.from").cuts().stream().map(Cut::at).toList());
+        assertEquals(List.of(Count.of(1L), Count.of(1440L)),
+                axis(span, "span.to").cuts().stream().map(Cut::at).toList());
         assertEquals(List.of("invariant Minute (withinDay)", "invariant Minute (withinDay) within Span"),
                 axis(span, "span.from").cuts().stream()
-                        .map(c -> c.origins().get(0).named()).toList(),
+                        .map(c -> c.origins().get(0).saidWithoutAPlace()).toList(),
                 "the rule that drew each end is the one that wrote it, not the outermost name");
     }
 
@@ -183,13 +178,13 @@ class PartitionsTest {
                 """, "classify");
         Axis o = axis(wrapped, "o");
 
-        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
-                o.cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(Count.of(0L), Count.of(10L)),
+                o.cuts().stream().map(Cut::at).toList());
         assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
-                o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
+                o.cuts().get(0).origins().stream().map(LineOrigin::saidWithoutAPlace).toList(),
                 "one value, two rules, and a row is owed to each");
         assertEquals(List.of("invariant Outer (outerMax)"),
-                o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
+                o.cuts().get(1).origins().stream().map(LineOrigin::saidWithoutAPlace).toList());
     }
 
     /** A `Decimal` under two names reads the same way. */
@@ -211,27 +206,31 @@ class PartitionsTest {
                 let classify (s) = Ok { at = "x" }
                 """, "classify");
 
-        assertEquals(List.of(new ObservedValue.Decimal(java.math.BigDecimal.ZERO),
-                        new ObservedValue.Decimal(java.math.BigDecimal.ONE)),
-                axis(share, "s").cuts().stream().map(Cut::value).toList(),
+        assertEquals(List.of(Count.of(java.math.BigDecimal.ZERO), Count.of(java.math.BigDecimal.ONE)),
+                axis(share, "s").cuts().stream().map(Cut::at).toList(),
                 "how many places a literal was written to is not where the line is");
     }
 
     @Test
     void aTypeTheModelDrawsNoLineThroughIsNotDerivable() {
-        Axis note = axis(partitioningOf(KINDS, "submit"), "request.note");
+        Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
+        PositionMeasurements note = partitioning.measurements().stream()
+                .filter(each -> each.position().path().toString().equals("request.note"))
+                .findFirst().orElseThrow();
 
-        assertFalse(note.measurable());
-        assertEquals(List.of(), classIds(note));
+        assertEquals(List.of(), note.axes(), "a plain string is measured at nothing");
+        assertTrue(partitioning.undivided().stream()
+                        .anyMatch(each -> each.at().toString().equals("request.note")),
+                "and the position says so, which is where a report reads it");
     }
 
     @Test
     void aCutRemembersTheRuleThatDrewIt() {
         Axis cost = axis(partitioningOf(KINDS, "submit"), "request.cost");
 
-        OriginRef origin = cost.cuts().get(0).origins().get(0);
-        OriginRef.InvariantOrigin invariant =
-                org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
+        LineOrigin origin = cost.cuts().get(0).origins().get(0);
+        LineOrigin.InvariantOrigin invariant =
+                org.junit.jupiter.api.Assertions.assertInstanceOf(LineOrigin.InvariantOrigin.class,
                         origin);
         assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }
@@ -248,7 +247,7 @@ class PartitionsTest {
      */
     @Test
     void aProductIsTakenApartFieldByField() {
-        List<String> paths = partitioningOf(KINDS, "submit").axes().stream()
+        List<String> paths = partitioningOf(KINDS, "submit").positions().stream()
                 .map(a -> a.path().toString()).toList();
 
         assertEquals(List.of("request.kind", "request.cost", "request.urgent", "request.memo",
@@ -302,7 +301,7 @@ class PartitionsTest {
                 let feeFor (amount, region) = Fee { yen = 0 }
                 """, "feeFor");
 
-        assertEquals(2, shipping.derivable().size());
+        assertEquals(2, shipping.partitionAxes().size());
         assertEquals(List.of("UnderThreeThousand", "ThreeThousandOrOver"),
                 classIds(axis(shipping, "amount")));
         assertEquals(List.of("Remote", "NotRemote"), classIds(axis(shipping, "region")));
@@ -340,11 +339,11 @@ class PartitionsTest {
 
         Partitions.Partitioning partitioning = partitioningOf(wide, "run");
 
-        assertEquals(15, partitioning.derivable().size(),
-                () -> "every field is divided: " + partitioning.derivable().stream()
+        assertEquals(15, partitioning.partitionAxes().size(),
+                () -> "every field is divided: " + partitioning.partitionAxes().stream()
                         .map(each -> each.id().toString()).toList());
         assertEquals("run/wide.f14",
-                partitioning.derivable().get(14).id().toString(),
+                partitioning.partitionAxes().get(14).id().toString(),
                 "including the last, which no ordering may quietly leave out");
     }
 }

@@ -19,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A dependency ships its own documentation inside its jar, under
  * {@code META-INF/souther-docs/<set>/}: a {@code sets} registry names the set, an {@code index}
- * lists its topics. `souther doc` then answers {@code <set>/<topic>` from whatever is on its own
- * class path — raoh's docs arrive by the CLI bundling the raoh jar, with no copy kept anywhere.
+ * lists its topics. {@code souther doc} then answers {@code <set>/<topic>} from whatever is on its
+ * own class path — raoh's docs arrive by the CLI bundling the raoh jar, with no copy kept anywhere.
  */
 class ALibraryShipsItsOwnDocsTest {
 

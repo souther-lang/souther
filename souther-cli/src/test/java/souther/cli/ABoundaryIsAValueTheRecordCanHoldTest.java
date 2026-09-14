@@ -3,6 +3,8 @@ package souther.cli;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.publish.RuleHandleProse;
+
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -100,8 +102,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 // no row could stand at, and the plain measure does not compose one.
                 souther.compiler.query.Adequacy.searchedBoundariesOf(compilation.db(), module);
         assertNotNull(borders, "the model under test compiles");
-        souther.compiler.diag.SourceNameResolver names =
-                souther.compiler.diag.SourceNameResolver.identity();
+        souther.compiler.diag.SourceRendering names = new souther.compiler.diag.SourceRendering(
+                souther.compiler.diag.SourceNameResolver.identity(),
+                compilation.texts());
+        // Where each rule a line names is shown, asked of the compile that read it — which is what
+        // a sentence about a rule with no name is written from.
+        souther.compiler.publish.PublishedRuleHandle.WhereARuleIs places =
+                cited -> souther.compiler.query.Sites.placeOf(compilation.db(), cited);
         List<String> out = new java.util.ArrayList<>();
         borders.forEach((behavior, lines) -> lines.forEach(line -> {
             for (souther.compiler.query.BorderAssessment.Point point : line.points()) {
@@ -111,10 +118,10 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 out.add(point.role().againstTheLine()
                         ? "no row is at the " + point.role() + " point " + behavior + "/"
                                 + line.axis() + " = " + point.against()
-                                + " (" + line.describe(names, null) + ")"
+                                + " (" + RuleHandleProse.said(line.describe(places), names, null) + ")"
                         : "no row is at an " + point.role() + " point of " + behavior + "/"
                                 + line.axis() + ", " + point.against()
-                                + " (" + line.describe(names, null) + ")");
+                                + " (" + RuleHandleProse.said(line.describe(places), names, null) + ")");
             }
         }));
         return List.copyOf(out);
@@ -194,7 +201,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
      */
     @Test
     void aRowIsOfferedAtEachOfThem() throws Exception {
-        String report = reportOn(TIMESHEET, "--generate", "--boundaries");
+        String report = reportOn(TIMESHEET, "--generate");
 
         assertTrue(report.contains(
                         "startsAt = MinuteOfDay(1439), endsAt = MinuteOfDay(1440)"),
@@ -260,7 +267,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                     if pair.b.value >= 50
                         then Big
                         else Small
-                """, "--generate", "--boundaries");
+                """, "--generate");
 
         // Read off the values the rows are written with: a row composed only for a line carries no
         // name, so what is asked for is a row holding the value rather than a line named in the text.
@@ -322,7 +329,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         String report = reportOn(TIMESHEET.replace(
                         "interval.endsAt.value - interval.startsAt.value >= 480",
                         "interval.startsAt.value >= 720"),
-                "--generate", "--boundaries");
+                "--generate");
 
         assertFalse(report.contains("every value tried was refused"),
                 () -> "the class of the afternoon is as writable as its edge:\n" + report);
@@ -373,7 +380,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "cap stops at 1440, so a start of 1440 has nothing to be under: " + asked);
         assertFalse(asked.stream().anyMatch(l -> l.contains("input.interval.startsAt = 1440")),
                 () -> "asked for " + asked);
-        assertFalse(reportOn(nested, "--generate", "--boundaries")
+        assertFalse(reportOn(nested, "--generate")
                         .contains("every value tried was refused"),
                 "and each of them is a row that builds");
     }
@@ -454,7 +461,9 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "there is a row at it:\n" + report);
         // The row settles its own edge without anything being built for it, and the other edge is
         // settled by building one. Two kinds of witness, and the projection proves neither.
-        assertTrue(report.contains("border      borders 2   coverage items 2/4   excluded 4"),
+        // Under the declarations: both lines are the record's own clause, so the behavior carrying
+        // the type is owed nothing at them and the module's account is where the two are counted.
+        assertTrue(report.contains("declarations   obligations 2/4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
         // Under the declaration that drew it, in the terms it wrote: the line is owed once over
         // every position carrying the type (issue #1062).

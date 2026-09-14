@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 
 import java.util.List;
 

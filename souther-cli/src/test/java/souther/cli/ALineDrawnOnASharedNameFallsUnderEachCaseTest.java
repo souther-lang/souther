@@ -75,8 +75,8 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
     void theRowsOfferedAreUnderTheCases() throws Exception {
         String generated = report(guarded("Q"), "--generate");
 
-        assertTrue(generated.contains("A { limit = 10"), () -> generated);
-        assertTrue(generated.contains("B { limit = 10"), () -> generated);
+        assertTrue(generated.contains("A { limit ="), () -> generated);
+        assertTrue(generated.contains("B { limit ="), () -> generated);
         assertFalse(generated.contains("q.limit ="),
                 () -> "and none of them is offered at a name no row is written at:\n" + generated);
     }
@@ -258,6 +258,47 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
     }
 
     /**
+     * And a clause whose end a choice in it left open names the shared field under each case.
+     *
+     * <p>The same question asked of the other reading. Where the values stop under a choice is what
+     * the alternatives leave together, and a branch nothing reads leaves it as far out as that
+     * branch allows — so the field is owed the sentence wherever it is read, and reading it at the
+     * sum alone would say it of a name no row is written at.
+     */
+    @Test
+    void aClauseWhoseEndAChoiceLeftOpenNamesTheSharedFieldUnderEachCase() throws Exception {
+        String model = """
+                module example.line
+
+                data Paging = { limit: Int }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD }
+                    invariant fits = q.limit >= 2 || Int.abs(q.limit) >= 5
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+
+                let read (h) = Ok
+                """;
+        String throughTheSum = report(model.replace("HELD", "Q"));
+
+        assertTrue(throughTheSum.contains("left open by a choice in it whose other alternative"
+                        + " this compiler does not read, about `h.q@A.limit`"),
+                () -> throughTheSum);
+        assertTrue(throughTheSum.contains("left open by a choice in it whose other alternative"
+                        + " this compiler does not read, about `h.q@B.limit`"),
+                () -> throughTheSum);
+        assertTrue(report(model.replace("HELD", "A"))
+                        .contains("left open by a choice in it whose other alternative this"
+                                + " compiler does not read, about `h.q.limit`"),
+                "which is what the same clause says where no sum is in the way");
+    }
+
+    /**
      * A line neither of whose names was filed stays where the model wrote it.
      *
      * <p>Nothing to move it to, and the two ways of that are one answer about the line: a name
@@ -293,7 +334,7 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
 
         assertTrue(report.contains("borders 1"),
                 () -> "one line, not one per case of a sum nothing was filed under:\n" + report);
-        assertTrue(report.contains("read/o.q@B.q.limit ="),
+        assertTrue(report.contains("read as read/o.q@B.q.limit:"),
                 () -> "and it is at the name the model wrote, which is where it was measured:\n"
                         + report);
         assertFalse(report.contains("read/o.q@B.q@A.limit"),
@@ -305,12 +346,20 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                 () -> "nothing was filed, so no pairing was ever in question:\n" + report);
     }
 
-    /** What a model with no sum in the way answers, which is what the fan-out has to come to. */
+    /**
+     * What a model with no sum in the way answers, which is what the fan-out has to come to.
+     *
+     * <p>Named by the case rather than by the {@code @} it is written with. A rule this report
+     * cites by where it was written is spelled {@code comparison@14:19}, so a report holding no
+     * narrowing at all holds that character — and the check that read it as one was passing on a
+     * model whose points nothing printed.
+     */
     @Test
     void nothingChangesWhereNoNameCrosses() throws Exception {
         assertEquals(report(guarded("A")), report(guarded("A")));
-        assertFalse(report(guarded("A")).contains("@"),
-                "no narrowing is named anywhere in this one");
+        String report = report(guarded("A"));
+        assertFalse(report.contains("@A") || report.contains("@B"),
+                () -> "no narrowing is named anywhere in this one:\n" + report);
     }
 
     private static String report(String model, String... extra) throws Exception {

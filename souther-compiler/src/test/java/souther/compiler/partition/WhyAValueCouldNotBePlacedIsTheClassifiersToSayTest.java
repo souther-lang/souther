@@ -2,11 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -18,7 +17,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
-import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,36 +69,39 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 | (Request { kind = Domestic, cost = Amount(50), plain = 1 }) -> Submitted
             """;
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
+    private record Read(MeasuredInput subject, RowOutcome row) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("submit");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        InputDomain read = InputDomain.of(spec, sigs.get("submit"), symbols,
+        CoverageSites.Plan plan = checked.plan();
+        InputDomain read = InputDomain.of(sigs.get("submit"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                read.quantities(symbols),
-                GuardThresholds.of("submit", body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), symbols).thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("submit", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                read.quantities(rules),
+                GuardThresholds.of("submit", checked.analysisBodies().get("submit"), body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(),
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("submit", read.reading(rules), partitioning),
                 observed.rows().get(0));
     }
 
@@ -110,9 +111,27 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Map<String, ObservedValue> fields = new LinkedHashMap<>(request.fields());
         fields.put(field, value);
         return new RowOutcome(read.row().at(), read.row().target(), read.row().identity(),
+                read.row().expectation(),
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), fields)), read.row().run());
+                List.of(new ObservedValue.Constructed(request.type(), fields)),
+                statingTheSame(read.row(),
+                        List.of(new ObservedValue.Constructed(request.type(), fields))),
+                read.row().run());
+    }
+
+    /**
+     * What a row with {@code inputs} states, which is not always what the row it came from stated.
+     *
+     * <p>A row whose input the observation stopped in states no values — it states that one of them
+     * could not be carried — so a fixture that changed the values while keeping what the original
+     * stated would be a row saying two different things about what it handed over.
+     */
+    private static souther.compiler.observe.RowStatement statingTheSame(RowOutcome row,
+                                                                        List<ObservedValue> inputs) {
+        return row.statement() instanceof souther.compiler.observe.RowStatement.Stated stated
+                ? souther.compiler.observe.RowStatements.read(List.of(), inputs, stated.expects())
+                : row.statement();
     }
 
     /** The newtype the row wrote at {@code cost}, holding {@code inner} where its number was. */
@@ -125,7 +144,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     }
 
     private static Classification at(Read read, RowOutcome row, String path) {
-        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+        Map<AxisId, Classification> classes = InputClassifications.of(row.inputs(), read.axes());
         return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path));
@@ -198,7 +217,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         RowOutcome row = giving(read, "plain", new ObservedValue.Text("x"));
 
         assertThrows(IllegalStateException.class,
-                () -> InputClassifications.of(row.inputs(), read.inputs(), read.axes()));
+                () -> InputClassifications.of(row.inputs(), read.axes()));
     }
 
     /** And a value every class could read still lands where it did. */

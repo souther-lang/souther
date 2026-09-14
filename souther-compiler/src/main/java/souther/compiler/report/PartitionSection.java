@@ -59,7 +59,7 @@ sealed interface PartitionSection {
      * cases could not be counted.
      */
     static PartitionSection of(PartitionEvidence evidence) {
-        if (evidence == null || evidence.boundaryNotDerived()) {
+        if (evidence == null || evidence.notMeasurable()) {
             return new Omitted();
         }
         return new Present(evidence);

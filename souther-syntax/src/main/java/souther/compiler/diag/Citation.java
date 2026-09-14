@@ -174,11 +174,16 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * that.
      */
     default SequencedMap<String, String> writtenAtFields() {
+        return switch (this) {
+            case Written _, Unplaced _ -> hereFields();
+            case Elsewhere out -> outOfSightFields(out.provenance());
+        };
+    }
+
+    /** The same fields for code that is written where a report is pointing. */
+    static SequencedMap<String, String> hereFields() {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
-        switch (this) {
-            case Written _, Unplaced _ -> fields.put("kind", "here");
-            case Elsewhere out -> fields.putAll(outOfSightFields(out.provenance()));
-        }
+        fields.put("kind", "here");
         return fields;
     }
 
@@ -190,9 +195,16 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * uses for "the code is elsewhere" are the same whether or not there was a caret.
      */
     static SequencedMap<String, String> outOfSightFields(SourceProvenance provenance) {
+        return outOfSightFields(provenance.reachedBy());
+    }
+
+    /** The same, said of the name a reader reaches the code by rather than of the provenance that
+     *  gives it — for a place that has been projected to what a document writes and no longer
+     *  holds how this compiler came to be pointing at it. */
+    static SequencedMap<String, String> outOfSightFields(String reachedBy) {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
         fields.put("kind", "outOfSight");
-        fields.put("declaration", provenance.reachedBy());
+        fields.put("declaration", reachedBy);
         return fields;
     }
 
@@ -209,12 +221,12 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * and the numbers, which was true of a report anchored to an import line and was a line of nothing
      * for one that had not been.
      */
-    default String said(SourceNameResolver names, SourceId sectionSource) {
+    default String said(SourceRendering rendering, SourceId sectionSource) {
         return switch (this) {
-            case Written written -> place(written.at(), names, sectionSource);
-            case Unplaced unplaced -> place(unplaced.at(), names, sectionSource);
+            case Written written -> place(written.at(), rendering, sectionSource);
+            case Unplaced unplaced -> place(unplaced.at(), rendering, sectionSource);
             case Reached reached -> "`" + reached.provenance().reachedBy() + "`, reached at "
-                    + place(reached.at(), names, sectionSource);
+                    + place(reached.at(), rendering, sectionSource);
             case UnplacedElsewhere out -> "`" + out.provenance().reachedBy() + "`";
             case OutOfSight out -> "`" + out.provenance().reachedBy() + "`";
         };
@@ -223,11 +235,12 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
     /** Never handed a null: every arm that has a place requires it. The tolerance the report's own
      *  writer used to have is gone rather than carried over, and a fallback standing in for it would
      *  read as a case somebody had thought about. */
-    private static String place(SourcePos at, SourceNameResolver names, SourceId sectionSource) {
+    private static String place(SourcePos at, SourceRendering rendering, SourceId sectionSource) {
+        String sits = String.valueOf(rendering.layouts().resolve(at));
         if (!(at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))
                 || file.equals(sectionSource)) {
-            return String.valueOf(at);
+            return sits;
         }
-        return names.nameOf(file) + ":" + at;
+        return rendering.names().nameOf(file) + ":" + sits;
     }
 }

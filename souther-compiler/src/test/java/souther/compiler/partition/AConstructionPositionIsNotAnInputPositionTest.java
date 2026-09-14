@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.test.RepositoryLayout;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Refinement;
@@ -16,8 +16,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -56,40 +55,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Written flat here, the same location would have two names and the lookup would find nothing.
  *
  * <p>So what is checked here is that a path from one is not looked up in the other, and that the
- * disagreement is the design rather than a defect. The one thing they share is the step, and that is
- * checked over in {@code inputs} by
- * {@code TheReadingAndThePlanTakeOneStepDownATypeTest}.
+ * disagreement is the design rather than a defect. What they share is not a step but an answer at a
+ * record: the questions about a shape come to the same fields there and part at a sum whose cases
+ * share a spread, which is checked as a law over the answers by
+ * {@code WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest}.
  */
 class AConstructionPositionIsNotAnInputPositionTest {
+
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
 
     /** Read once: what this asks of it does not change between its checks. */
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
-    private record Read(Hir.SpecBehavior spec, Sig sig, Symbols symbols) {}
+    private record Read(DeclaredSig sig, RuleReadingSource rules) {
+
+        /** The behavior's one parameter. */
+        DeclaredSig.Input only() {
+            return sig.inputs().get(0);
+        }
+    }
 
     private static Read of(String source, String behavior) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return new Read(spec, sigs.get(behavior), symbols);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(sigs.get(behavior), rules);
     }
 
     private static InputDomain reading(Read read) {
-        return InputDomain.of(read.spec(), read.sig(), read.symbols(), ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(read.sig(), read.rules(), ReadAs.THE_COMPILATION_DOES);
     }
 
     /** The plan for the behavior's one parameter, with nothing decided and the given
      *  requirements. */
     private static ConstructionPlan plan(Read read, Requirements required) {
-        ConstructionPlan.Result planned = ConstructionPlan.of(read.sig().inputTypes().get(0),
-                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), required,
-                (_, _) -> 0);
+        ConstructionPlan.Result planned = ConstructionPlan.of(read.only().type(),
+                TermPath.of(read.only().name()), read.rules().inners(), read.rules().symbols(),
+                read.rules().published(), Set.of(),
+                required,
+                ANY);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();
     }
@@ -236,8 +247,15 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
     /** The requirement a class of {@code d} states by being the {@code Approved} case of it. */
     private static Requirements throughApproved(Read read) {
-        return Requirements.NONE.and(TermPath.of(read.spec().params().get(0).name()),
-                Refinement.sumCase(caseNamed(SUM, "probe")));
+        return Requirements.NONE.and(TermPath.of(read.only().name()),
+                toLeaf(caseNamed(SUM, "probe")));
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), java.util.List.of(leaf)));
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */
@@ -251,7 +269,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     @Test
     void theRecipeRefinesWhatIsBuiltAndNotWhatIsDeclared() {
         Read read = of(SUM, "decide");
-        Type declared = read.sig().inputTypes().get(0);
+        Type declared = read.only().type();
         assertEquals(declared, reading(read).at(TermPath.of("d")).view().declared());
 
         ConstructionPlan built = plan(read, throughApproved(read));

@@ -13,8 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The rows {@code souther examples --generate --boundaries} writes offer a value at a position that
- * is a sum of records, and say nothing about that position having none.
+ * The rows {@code souther examples --generate} writes offer a value at a position that is a sum of
+ * records, and say nothing about that position having none.
  *
  * <p>Whether a value can be composed for such a position is the compiler's question and is asked of
  * it ({@code ACaseComposedForOneReaderIsComposedForEveryReaderTest} in souther-compiler, issue
@@ -52,7 +52,8 @@ class GeneratedRowsOfferAValueAtASumOfRecordsTest {
     void aBoundaryRowIsOfferedWhereACompanionPositionIsASumOfRecords() throws Exception {
         String report = generated();
 
-        List<String> rows = report.lines().filter(line -> line.startsWith("//     | ")).toList();
+        List<String> rows = report.lines().filter(line -> line.startsWith("    | ")).toList();
+        assertFalse(rows.isEmpty(), () -> "the block offers rows to look at: " + report);
         // The value at the boundary rather than the name of the line: a row composed only for a
         // line is offered without a name, since which of the lines it sits on is still owed is what
         // an unrelated row changes.
@@ -76,7 +77,7 @@ class GeneratedRowsOfferAValueAtASumOfRecordsTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         try {
-            Main.main(new String[] {"examples", file.toString(), "--generate", "--boundaries"});
+            Main.main(new String[] {"examples", file.toString(), "--generate"});
         } finally {
             System.setOut(was);
         }

@@ -29,7 +29,7 @@ public final class CstLexer {
             Map.entry("data", SyntaxKind.DATA_KW),
             Map.entry("invariant", SyntaxKind.INVARIANT_KW),
             Map.entry("ensures", SyntaxKind.ENSURES_KW),
-            // decoder / encoder / from / intrinsic are not reserved: they lex as identifiers.
+            // `intrinsic` is not reserved: it lexes as an identifier and is read by position.
             Map.entry("as", SyntaxKind.AS_KW),
             Map.entry("let", SyntaxKind.LET_KW),
             Map.entry("guard", SyntaxKind.GUARD_KW),
@@ -335,7 +335,18 @@ public final class CstLexer {
             }
             case '=' -> take('=') ? SyntaxKind.EQ : SyntaxKind.ASSIGN;
             case '/' -> take('=') ? SyntaxKind.NE : SyntaxKind.SLASH;   // `//` is handled as a comment
-            case '<' -> take('=') ? SyntaxKind.LE : SyntaxKind.LT;
+            case '<' -> {
+                if (take('=')) {
+                    yield SyntaxKind.LE;
+                }
+                // `<?>` — where an example row's answer goes before anyone has written it. One
+                // token, so the language spells it one way.
+                if (peekIs('?') && peekIs2('>')) {
+                    pos += 2;
+                    yield SyntaxKind.UNANSWERED;
+                }
+                yield SyntaxKind.LT;
+            }
             case '>' -> {
                 if (take('=')) {
                     yield SyntaxKind.GE;

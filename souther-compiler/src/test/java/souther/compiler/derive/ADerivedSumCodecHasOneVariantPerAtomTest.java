@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.meta.ModulePath;
@@ -84,11 +85,14 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     }
 
     private Boundary.Alternatives settled(String sum) {
-        return Boundary.of(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, DefaultStdlib.get()));
+        return Boundary.of(Type.ref(sumData(sum).declares()),
+                ScopedDeclarations.kindsOf(TypeChecker.symbols(derived, DefaultStdlib.get())),
+                ScopedDeclarations.of(TypeChecker.symbols(derived, DefaultStdlib.get())));
     }
 
     private List<TypeSymbol> atomsOf(String sum) {
-        return AtomSpace.subjectAtoms(Type.ref(sumData(sum).declares()), TypeChecker.symbols(derived, DefaultStdlib.get()));
+        return AtomSpace.subjectAtoms(Type.ref(sumData(sum).declares()),
+                ScopedDeclarations.of(TypeChecker.symbols(derived, DefaultStdlib.get())));
     }
 
     private static List<String> names(List<TypeSymbol> atoms) {
@@ -107,8 +111,9 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     private static Hir.Module derive(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        Hir.Module resolved = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+        // The module as it is below the derivation, which is the resolved one: what deriving
+        // establishes is carried by the declarations and not written back into the tree.
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .db().ask(new Names.Resolved("m")).value();
-        return Deriver.derive(resolved, DefaultStdlib.get());
     }
 }

@@ -3,22 +3,21 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.ControlPointId;
-import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -73,9 +72,12 @@ class ACandidateThatMissedIsNotOfferedTest {
                 Fee(baseFee(member) + expressFee(delivery))
             """;
 
-    /** A run that did nothing at all, which is a run that missed every combination. */
-    private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(Observation.NONE);
+    /** A run that did nothing at all, which is a run that missed every combination. Of the
+     *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
+     *  any place at all and answer. */
+    private static Generator.Watched missed(Model model) {
+        return new Generator.Watched.Ran(Runs.nowhere(model.numbering()));
+    }
 
     /**
      * A combination every candidate missed is not offered, and is not called impossible.
@@ -88,7 +90,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     void aCombinationEveryCandidateMissedIsLeftUntried() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        FillResult filled = fill(model, _ -> MISSED);
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertTrue(filled.unresolved().stream().anyMatch(each -> each.reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
@@ -102,7 +104,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     @Test
     void aCandidateThatArrivedIsOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        Observation everything = doing(everyClaimOf(model));
+        AlignedObservation everything = doing(model.numbering(), everyClaimOf(model));
 
         FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
@@ -126,9 +128,9 @@ class ACandidateThatMissedIsNotOfferedTest {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<List<String>> ran = new ArrayList<>();
 
-        fill(model, inputs -> {
-            ran.add(inputs.stream().map(FixtureTemplate::text).toList());
-            return MISSED;
+        fill(model, row -> {
+            ran.add(row.inputs().stream().map(FixtureTemplate::text).toList());
+            return missed(model);
         });
 
         // The two positions the decisions read say which combination a candidate was composed for;
@@ -174,7 +176,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     /** Every claim any combination of the model makes, so that one run answers all of them. */
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
-        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation()).groups()) {
+        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {
@@ -187,22 +189,13 @@ class ACandidateThatMissedIsNotOfferedTest {
     }
 
     /** A run that did everything {@code claims} names. */
-    private static Observation doing(List<ControlClaim> claims) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        for (ControlClaim claim : claims) {
-            switch (claim.at()) {
-                case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                case ControlPointId.ComparisonPoint point -> {
-                    taken.add(point.at().emissionSite());
-                    ways.add(point.way());
-                }
-            }
-        }
-        return new Observation(taken, ways);
+    private static AlignedObservation doing(SiteNumbering numbering,
+                                           List<ControlClaim> claims) {
+        return Runs.doing(numbering, claims);
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -215,29 +208,24 @@ class ACandidateThatMissedIsNotOfferedTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared);
             assertNotNull(sigs);
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sig.inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes(), HeldCounts.of(inputs, symbols)),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    Partitions.of(spec.name(), inputs, rules,
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs,
-                            symbols));
+                            checked.plan(), inputs,
+                            rules), checked.plan().numbering());
         }
     }
 }

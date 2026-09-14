@@ -4,8 +4,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -33,7 +38,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class WhichEndABoundPlacedSurvivesBeingReadBackTest {
 
     /** One row of the law: what a line says about its own value, and the end that says it. */
-    private record Row(boolean valueBelongsBelow, boolean holdsAtTheValue, EndSide keeps) {}
+    private record Row(Towards valueBelongs, boolean holdsAtTheValue, EndSide keeps) {
+
+        /** The line these two facts are of, which is what the derivations under test read. */
+        ComparisonClaim.Cut cut() {
+            return new ComparisonClaim.Cut(valueBelongs, holdsAtTheValue);
+        }
+    }
 
     /**
      * Every way a bound's line can stand to its own value.
@@ -43,10 +54,10 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
      * not.
      */
     private static final List<Row> THE_LAW = List.of(
-            new Row(true, true, EndSide.UPPER),
-            new Row(false, false, EndSide.UPPER),
-            new Row(false, true, EndSide.LOWER),
-            new Row(true, false, EndSide.LOWER));
+            new Row(Towards.BELOW, true, EndSide.UPPER),
+            new Row(Towards.ABOVE, false, EndSide.UPPER),
+            new Row(Towards.ABOVE, true, EndSide.LOWER),
+            new Row(Towards.BELOW, false, EndSide.LOWER));
 
     /** The clause these name, which is only an identity. */
     private static RuleRef.Invariant aClause() {
@@ -59,9 +70,8 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
     @Test
     void theEndFollowsFromWhatTheLineSaysAboutItsOwnValue() {
         for (Row row : THE_LAW) {
-            assertEquals(row.keeps(),
-                    DeclaredThresholds.endKept(row.valueBelongsBelow(), row.holdsAtTheValue()),
-                    () -> "below=" + row.valueBelongsBelow() + " holds=" + row.holdsAtTheValue());
+            assertEquals(row.keeps(), DeclaredThresholds.endKept(row.cut()),
+                    () -> "belongs=" + row.valueBelongs() + " holds=" + row.holdsAtTheValue());
         }
     }
 
@@ -75,14 +85,14 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
     @Test
     void aBoundBuiltFromThatEndReadsBackAsThePairItCameFrom() {
         for (Row row : THE_LAW) {
-            OriginRef.InvariantOrigin origin = new OriginRef.InvariantOrigin(aClause(), 0,
-                    DeclaredThresholds.endKept(row.valueBelongsBelow(), row.holdsAtTheValue()),
-                    row.holdsAtTheValue());
+            LineOrigin.InvariantOrigin origin = new LineOrigin.InvariantOrigin(
+                    new DeclaredLine.OfAStatement(new InvariantStatementId(
+                            new PartId<>(aClause(), 0), 0)),
+                    DeclaredThresholds.endKept(row.cut()), row.holdsAtTheValue());
 
-            assertEquals(row.valueBelongsBelow(), origin.lineFacts().valueBelongsBelow(),
-                    () -> "which side the threshold's own value is on, read back: " + row);
-            assertEquals(row.holdsAtTheValue(), origin.lineFacts().holdsAtTheValue(),
-                    () -> "and whether the rule admits it: " + row);
+            assertEquals(row.cut(), origin.lineFacts().claim(),
+                    () -> "which side the threshold's own value is on and whether the rule admits"
+                            + " it, read back: " + row);
         }
     }
 
@@ -95,8 +105,7 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
     @Test
     void bothEndsAreReached() {
         assertEquals(2, THE_LAW.stream()
-                .map(row -> DeclaredThresholds.endKept(row.valueBelongsBelow(),
-                        row.holdsAtTheValue()))
+                .map(row -> DeclaredThresholds.endKept(row.cut()))
                 .distinct().count(),
                 "a law that answered one end for every pair would round-trip and say nothing");
     }

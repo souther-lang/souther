@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.cst.SourceLayout;
 import souther.compiler.Reserved;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Primary;
@@ -147,12 +149,22 @@ public final class Front {
          * what a scale the reading cannot read as one number already gets — which side of nought it
          * is on, and no grid.
          *
+         * <p>And the two figures a reading builds machines against: what a position's answer may
+         * cost, and what handing each of its rules on as the set it leaves may cost. What each of
+         * them bounds is written where it is declared
+         * ({@link souther.compiler.regex.PatternPlan.Budget#OF_ADMITTED_VALUES},
+         * {@link souther.compiler.regex.PatternPlan.Budget#OF_WHAT_A_RULE_LEAVES}); what is settled
+         * here is that a compilation grants them, so that no reader anywhere makes itself an
+         * allowance at the moment it wants a machine.
+         *
          * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
          * reach it: what governs a reading is handed to it, and a default it could pick up is a
          * default two readings of one declaration can differ by.
          */
         static final souther.compiler.check.ReadingPolicy STANDARD =
-                new souther.compiler.check.ReadingPolicy(64, 1000);
+                new souther.compiler.check.ReadingPolicy(64, 1000,
+                        souther.compiler.regex.PatternPlan.Budget.OF_ADMITTED_VALUES,
+                        souther.compiler.regex.PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES);
     }
 
     /**
@@ -168,7 +180,7 @@ public final class Front {
             implements Input<souther.compiler.partition.AdequacyPolicy> {
 
         /**
-         * What a compilation sets, and the one place the three numbers are written.
+         * What a compilation sets, and the one place these figures are written.
          *
          * <p>Guardrails and not precision settings, each set with room over anything observed. The
          * pair space is twenty thousand: a behavior of a dozen positions of a handful of classes
@@ -177,13 +189,21 @@ public final class Front {
          * person reads and pastes. A group's choices are capped at four thousand and ninety-six,
          * which a body reaches only by settling thirteen decisions on one value.
          *
+         * <p>What a body's rules about the strings at a position may build is the figure a reading
+         * spends on the same kind of work, and the same size for the same reason — the formats a
+         * model writes are a few hundred states, and past this one the pattern is one nobody meant
+         * to write. Its own figure all the same: a measurement is what it leaves partial, and a
+         * compilation that wanted a behavior told apart more finely than its declarations are read
+         * exactly is one this lets say so.
+         *
          * <p>Held here rather than beside the policy it makes, so that measuring a behavior cannot
          * reach it: what governs a measurement is handed to it, and a default it could pick up is a
          * default two measurements of one behavior can differ by.
          */
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
-                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000),
+                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000,
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }
 
@@ -212,6 +232,28 @@ public final class Front {
     }
 
     /**
+     * How one source is laid out: where its meaningful tokens and its lines fall.
+     *
+     * <p>Its own question and not a reading of {@link Text}. What reads this wants where a place
+     * sits — a debug table, a document that writes line numbers — and that is a narrower fact than
+     * what the file says: a comment reworded to a line of the same width lays out identically, so
+     * this comes out equal and what asked it is left alone. Read from the text instead, every such
+     * reader would move for every keystroke anywhere in the file.
+     */
+    public record LayoutOf(SourceId id) implements Key<SourceLayout> {
+        @Override
+        public SourceId sourceId() {
+            return id;
+        }
+
+        @Override
+        public Answer<SourceLayout> compute(Db db) {
+            Answer<String> text = db.ask(new Text(id));
+            return text.present() ? Answer.of(SourceLayout.of(text.value(), id)) : Answer.absent();
+        }
+    }
+
+    /**
      * Which source declares which module. An {@code examples for X} file declares no module of its
      * own — it contributes rows to X — so it is listed apart, under the module it names.
      *
@@ -222,6 +264,8 @@ public final class Front {
     public record Layout() implements Key<Layout.Of> {
 
         /**
+         * Which source each module and each of its example files is written in.
+         *
          * @param idOfModule the source each module was declared in
          * @param exampleFilesOf the {@code examples for} sources contributing to each module
          * @param exampleFileTargets the module each {@code examples for} source names, by source id
@@ -231,7 +275,7 @@ public final class Front {
                          Map<SourceId, String> exampleFileTargets) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Layout.Of> compute(Db db) {
             List<SourceId> ids = db.ask(new Ids()).value();
             if (ids == null) {
                 return Answer.absent();
@@ -252,7 +296,7 @@ public final class Front {
                 }
                 idOfModule.putIfAbsent(m.name(), id);
             }
-            return Answer.of(new Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
+            return Answer.of(new Layout.Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
                     Ordered.map(exampleFileTargets)));
         }
     }
@@ -451,6 +495,9 @@ public final class Front {
         }
 
         /**
+         * The modules this compilation can see, and the ones it can see are there and will not
+         * read.
+         *
          * @param modules the ones this compilation may read declarations from
          * @param refused the ones it will not, and knows are there all the same — a module that
          *        took a name no module may take, and one this compiler cannot read what it
@@ -462,11 +509,11 @@ public final class Front {
         public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<FromPath.Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of(), Set.of()));
+                return Answer.of(new FromPath.Of(Map.of(), Set.of()));
             }
             // Read the graph, work out where each of its modules is reached from, and only then say
             // anything. Each of the three needs the one before it finished: a module is read once
@@ -569,7 +616,7 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
-            return Answer.of(new Of(Ordered.map(found), Ordered.set(notRead)), reports);
+            return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
 

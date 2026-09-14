@@ -1,8 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -42,7 +42,7 @@ class ALineDrawnOnADateIsALineTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The position is divided, where it used to be one nothing was established about. */
@@ -59,7 +59,7 @@ class ALineDrawnOnADateIsALineTest {
     void bothSidesOfTheLineAreOwed() {
         String human = report();
 
-        assertTrue(human.contains("border      borders 1   coverage items 1/4"), human);
+        assertTrue(human.contains("border      borders 1   obligations 1/4"), human);
         assertTrue(human.contains("2026-01-01"), human);
     }
 

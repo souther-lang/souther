@@ -3,9 +3,14 @@ package souther.compiler.core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.ReferenceOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -71,7 +76,18 @@ public sealed interface Core {
      * — the backend parses it, a boundary reads its place — and the parse the checker already did is
      * what says the text is good.
      */
-    record Temporal(Type.Prim kind, String text, SourcePos pos) implements Core {
+    record Temporal(Type.Prim kind, String text, ApplicationOrigin application, SourcePos pos)
+            implements Core {
+
+        // `application` is the construction this was written as, kept because the fold is where a
+        // root goes missing. A temporal reaches here as the value it denotes rather than as the
+        // construction it was spelled with, and what is folded away is the application — not which
+        // one it was. A reader below writing the construction back out has this to write it from,
+        // and the place could not answer for it: one helper is expanded at several of its calls.
+        //
+        // The application and not the name inside it. What a temporal's construction names is a
+        // namespace rather than a declaration, and a namespace is not a thing to be a reference of,
+        // so there is no second occurrence here to keep.
 
         public Temporal {
             if (kind == null || !kind.temporal()) {
@@ -79,6 +95,13 @@ public sealed interface Core {
             }
             if (text == null) {
                 throw new IllegalArgumentException("a written temporal is written out");
+            }
+            // A temporal reaches here having been written as a construction, so there is one to
+            // name. A reader below writes the construction back out from this and has nowhere else
+            // to get it.
+            if (application == null) {
+                throw new IllegalArgumentException(
+                        "a written temporal was written as some construction: " + text);
             }
         }
 
@@ -110,6 +133,61 @@ public sealed interface Core {
         }
     }
 
+    /**
+     * Where a fork of the model stands: which fork the source wrote and which copy of it this is
+     * ({@code occurrence}), and what that copy is called where the rules a call supplied are looked
+     * up ({@code expansion}), innermost first.
+     *
+     * <p>One value because neither is true without the other. A fork is a construct the model owes
+     * coverage for and a copy the inliner made, and a reader that has one of the two is a reader
+     * that files one fork under another's name — so there is no fork here with an occurrence and no
+     * lineage, and none with a lineage and no occurrence.
+     *
+     * <p>The expansion is empty where the fork stands in the body as the author wrote it, which is a
+     * fork of the model in no copy but its own. That is a thing to say, and it is why the two are a
+     * product rather than one value derived from the other: which construct a copy is of is settled
+     * by the calls the source wrote, and what a binding belongs to is the inlining pass's own
+     * answer, which is what the table of supplied rules is keyed by.
+     */
+    record ForkPlace(ConstructOccurrence occurrence,
+                     List<souther.compiler.types.BindingOwner> expansion) {
+
+        public ForkPlace {
+            if (occurrence == null) {
+                throw new IllegalArgumentException(
+                        "a fork is some fork of the model, in some copy of the body that wrote it");
+            }
+            expansion = List.copyOf(expansion);
+        }
+
+        /** A fork standing in the body as it was written, which is in no copy but its own. */
+        public static ForkPlace asWritten(ConstructOccurrence occurrence) {
+            return new ForkPlace(occurrence, List.of());
+        }
+    }
+
+    /**
+     * Where a call a representation kept standing stands: which occurrence of the operation's name
+     * it applies ({@code reference}) and why the application is here ({@code application}).
+     *
+     * <p>Two questions and one value. The block a name used as a value was expanded into holds an
+     * application this compiler wrote applying a name the author wrote, so neither answers the
+     * other; and a reader writing the call back out has to name a name and compose an application,
+     * so it wants both. One of them alone is half a call, which is a state no producer means and
+     * the first reader to meet one would be reporting somebody else's mistake.
+     */
+    record KeptCallPlace(ReferenceOrigin reference, ApplicationOrigin application,
+                         ExpansionLineage lineage) {
+
+        public KeptCallPlace {
+            if (reference == null || application == null || lineage == null) {
+                throw new IllegalArgumentException("a call carries what it applies, why it is"
+                        + " here and which copy it stands in: " + reference + " and "
+                        + application);
+            }
+        }
+    }
+
     /** A read of something the body binds: a parameter, a {@code let}, a lambda's parameter, a
      * {@code match} arm's binding. {@code binding} is which one; {@code name} is what to call the
      * local it is emitted as, and what a diagnostic quotes. */
@@ -123,9 +201,30 @@ public sealed interface Core {
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is where the comparison was written; see {@link souther.compiler.ast.Hir.Binary}. */
-    record Binary(BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
-                  SourcePos pos) implements Core {}
+    /**
+     * {@code occurrence} is which comparison of the model this is: the construct the source wrote
+     * (see {@link souther.compiler.ast.Hir.Binary}) and the copy of the body it stands in. Both,
+     * because a helper spliced into two calls holds one written comparison twice, and a reader
+     * holding only the first would be reading one of them about the other.
+     */
+    record Binary(BinOp op, Core left, Core right, ConstructOccurrence occurrence, Type type,
+                  SourcePos pos) implements Core {
+
+        public Binary {
+            // A comparison is some comparison of the model, in some copy of the body that wrote it.
+            // Both halves are the occurrence's to say, and a comparison that is neither is one no
+            // reading of coverage can file.
+            if (occurrence == null) {
+                throw new IllegalArgumentException(
+                        "a comparison is some comparison of the model: " + op);
+            }
+        }
+
+        /** What the source wrote, for a reader whose question is about the construct alone. */
+        public SourceConstructOrigin origin() {
+            return occurrence.origin();
+        }
+    }
 
     /**
      * What a call applies.
@@ -368,13 +467,29 @@ public sealed interface Core {
      * the callee turned out to be a kernel of the standard library, the call says which one
      * ({@link Reached.OfKernel}), so an output emitting it asks the call rather than this compiler.
      */
-    record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
+    record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence, Type type,
+                SourcePos pos) implements Core {
+
+        public Call {
+            // A call is some call of the model, in some copy of the body that wrote it — or one no
+            // source wrote, which says so. A call that is neither is one no reader can file, and a
+            // reader that meets it has nothing to send an author to.
+            if (occurrence == null) {
+                throw new IllegalArgumentException(
+                        "a call is some call of the model: " + fn.rendered());
+            }
+        }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
          * spelling for one this compiler emits. What a method name is built from and what a report
          * quotes; never what a source wrote. */
         public String name() {
             return fn.rendered();
+        }
+
+        /** What the source wrote, for a reader whose question is about the construct alone. */
+        public SourceConstructOrigin origin() {
+            return occurrence.origin();
         }
     }
 
@@ -390,14 +505,76 @@ public sealed interface Core {
      * representation that analysis reads keeps the operation. The tree the backend emits from keeps
      * none, and one arriving there is this compiler having failed to expand it.
      *
-     * <p>{@code operation} is what the name was resolved to, not how it was written: two spellings
-     * that reach one operation are one of these, and having a type in common is not being the same
-     * operation. A reader with no rule for what this names types it and learns nothing from it,
-     * which is the difference between a representation keeping a call and an analysis understanding
-     * one.
+     * <p>{@code declared} is what the name was resolved to, read against the declaration it reaches
+     * — not how it was written: two spellings that reach one operation are one of these, and having
+     * a type in common is not being the same operation. A reader with no rule for what this names
+     * types it and learns nothing from it, which is the difference between a representation keeping
+     * a call and an analysis understanding one.
+     *
+     * <p><b>Its arguments are the ones that declaration takes.</b> Said here because it is a fact
+     * about the node and not about whoever built one: a reader that finds an argument by a position
+     * some rule about the operation names is reading a position the declaration has. The operation
+     * and the arguments are one component and a list beside it, so that the two cannot be paired
+     * from different declarations — what may say that a name has been read against a declaration is
+     * {@link CompleteSignature} and nothing else.
      */
-    record PreservedCall(ValueName operation, List<Core> args, Type type,
-                         SourcePos pos) implements Core {
+    record PreservedCall(DeclaredOperation declared, List<Core> args, KeptCallPlace place,
+                         Type type, SourcePos pos) implements Core {
+
+        // Not a construct of the source. A call kept for a reader to quote is not always one an
+        // author wrote: a library operation used as a value is expanded into a block, and the
+        // application inside that block is kept in the same way. Held as a construct, those arrived
+        // saying no source wrote them and nothing said what they were instead.
+
+        /** Which occurrence of the operation's name this applies. */
+        public ReferenceOrigin reference() {
+            return place.reference();
+        }
+
+        /** Why this application is here. */
+        public ApplicationOrigin application() {
+            return place.application();
+        }
+
+        /**
+         * Which call of the model this is, in the copy of the body that wrote it.
+         *
+         * <p>Read off the two halves already here rather than held beside them: which construct it
+         * is, is what the application says where an author wrote one, and which copy it stands in
+         * is the place's. Held as a third component, the construct would be written down twice and
+         * the two could come apart.
+         *
+         * <p>Nothing for an application no author wrote — a name read as a value, a size a pass
+         * composed — which is what {@link ConstructOccurrence#unwritten()} says. A reader sent to
+         * one of those would be pointed at something nobody can edit.
+         */
+        public ConstructOccurrence occurrence() {
+            return place.application()
+                    instanceof ApplicationOrigin.Written(SourceConstructOrigin wrote)
+                    ? new ConstructOccurrence(wrote, place.lineage())
+                    : ConstructOccurrence.unwritten();
+        }
+
+        public PreservedCall {
+            if (place == null) {
+                throw new IllegalArgumentException("a call kept standing stands somewhere: it"
+                        + " applies some occurrence of a name, for some reason: " + declared);
+            }
+            // Taken over rather than borrowed. Checking a list the caller goes on holding says what
+            // was true when the call was built, and every reader below reads the call afterwards —
+            // a pass that kept the list it handed over could put another argument in it and leave a
+            // node behind whose own statement about itself had stopped being true.
+            args = List.copyOf(args);
+            if (args.size() != declared.arity()) {
+                throw new IllegalStateException("`" + declared + "` is declared to take "
+                        + declared.arity() + " arguments and this call stands with " + args.size());
+            }
+        }
+
+        /** What the name was resolved to. Every rule about an operation is keyed by this. */
+        public ValueName operation() {
+            return declared.operation();
+        }
 
         /**
          * What a reader that keeps no call standing says when one reaches it: this compiler failed to
@@ -407,7 +584,7 @@ public sealed interface Core {
          */
         public IllegalStateException unexpectedIn(String reader) {
             return new IllegalStateException(
-                    "a preserved call (" + operation + ") reached " + reader + ", at " + pos);
+                    "a preserved call (" + declared + ") reached " + reader + ", at " + pos);
         }
     }
 
@@ -423,16 +600,47 @@ public sealed interface Core {
     record Apply(Read fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
     /**
-     * {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
-     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}).
+     * {@code occurrence} is which fork of the model this is: the fork the source wrote it as,
+     * carried from the AST so that the copies an expansion made of one fork are one coverage
+     * obligation ({@link SourceConstructOrigin}), and the copy of the body it stands in
+     * ({@link souther.compiler.types.ExpansionLineage}).
      *
-     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
-     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
-     * was is a fact about this copy — so it travels with the fork rather than being recovered from
-     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     * <p>{@code expansion} is what a copy is called where the rules a call supplied are looked up,
+     * innermost first, empty where the fork stands in the body as written. What settles a fork can
+     * be a rule the caller supplied, and which rule that was is recorded against the copy's bindings
+     * — so it travels with the fork rather than being recovered from whatever names the fork's own
+     * subtree happens to hold. A rewrite that keeps a fork keeps this.
+     *
+     * <p><b>Beside the occurrence and not folded into it.</b> The two say which copy in two
+     * vocabularies, and each is the vocabulary its reader already speaks: what a construct is a copy
+     * of is settled by the calls the source wrote, and what a binding belongs to is the inlining
+     * pass's own answer, which is what the table of supplied rules is keyed by. Either derived from
+     * the other would put one reader's counting inside the other's identity.
      */
-    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
-              List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    record If(Core cond, Core then, Core els, ForkPlace place, Type type, SourcePos pos)
+            implements Core {
+
+        public If {
+            if (place == null) {
+                throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
+                        + " model, in some copy of the body that wrote it");
+            }
+        }
+
+        /** Which fork of the model this is, in whichever copy of the body it stands. */
+        public ConstructOccurrence occurrence() {
+            return place.occurrence();
+        }
+
+        /** What the copy is called where the rules a call supplied are looked up. */
+        public List<souther.compiler.types.BindingOwner> expansion() {
+            return place.expansion();
+        }
+
+        /** What the source wrote, as for {@link Binary}. */
+        public SourceConstructOrigin origin() {
+            return occurrence().origin();
+        }
     }
 
     /**
@@ -446,14 +654,33 @@ public sealed interface Core {
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
      *
-     * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
-     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
-     * was is a fact about this copy — so it travels with the fork rather than being recovered from
-     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     * <p>{@code occurrence} and {@code expansion} say which fork of the model this is and what its
+     * copy is called where supplied rules are looked up, as they do for {@link If}.
      */
     record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
-                         CoverageOrigin origin, Type type, SourcePos pos,
-                         List<souther.compiler.types.BindingOwner> expansion) implements Core {
+                         ForkPlace place, Type type, SourcePos pos) implements Core {
+
+        public IfConstructed {
+            if (place == null) {
+                throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
+                        + " model, in some copy of the body that wrote it");
+            }
+        }
+
+        /** Which fork of the model this is, in whichever copy of the body it stands. */
+        public ConstructOccurrence occurrence() {
+            return place.occurrence();
+        }
+
+        /** What the copy is called where the rules a call supplied are looked up. */
+        public List<souther.compiler.types.BindingOwner> expansion() {
+            return place.expansion();
+        }
+
+        /** What the source wrote, as for {@link Binary}. */
+        public SourceConstructOrigin origin() {
+            return occurrence().origin();
+        }
     }
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
@@ -522,20 +749,52 @@ public sealed interface Core {
     /**
      * What an arm selects and what it binds, both decided by the checker.
      *
-     * <p>{@code selectors} are the cases the arm answers for, in the order they are written; more
-     * than one is an or-pattern. {@code binding} is what the value is read as once the arm is taken,
-     * and it is the arm's own rather than any one selector's: an or-pattern binds the subject,
-     * because no single case type fits all of its alternatives.
+     * <p>{@code cases} are the cases the arm answers for, in the order they are written; more than
+     * one is an or-pattern. {@code binding} is what the value is read as once the arm is taken, and
+     * it is the arm's own rather than any one case's: an or-pattern binds the subject, because no
+     * single case type fits all of its alternatives.
      *
-     * <p>Nothing here is worked out again downstream. A reader emitting this tests each selector's
+     * <p><b>As the checker resolved them, and not as they were written.</b> A case is carried here
+     * as a {@link ResolvedCase} — what the value is tested and read as, together with the atoms
+     * selecting it covers. The second half is a fact about the declarations this compile read: a
+     * case that is itself a sum stands for the leaves under it (spec §sum-data), so {@code OnceKind}
+     * selects two of them where {@code Station} selects one. Kept as a selector alone it was
+     * unrecoverable below this point — nothing downstream holds declarations to ask — and every
+     * reader that needed which case of a subject an arm picked answered from the name, which says
+     * neither how many leaves it reaches nor whether it is an optional's carrier.
+     *
+     * <p>Nothing here is worked out again downstream. A reader emitting this tests each case's
      * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
      * subject was an optional, whether the arm named one case or several, or whether a case is a
      * primitive. Those are the questions {@code Core} exists to have answered already.
      */
     sealed interface ResolvedPattern {
 
-        /** The cases the arm answers for, in the order they are written. */
-        List<CaseSelector> selectors();
+        /** The cases the arm answers for, as this compile resolved them, in the order they are
+         *  written. */
+        List<ResolvedCase> cases();
+
+        /** The same, as what tests and reads a value — which is what a backend emits. A projection
+         *  of {@link #cases()} and answered as one: what an arm selects is that value's to say. */
+        default List<CaseSelector> selectors() {
+            return cases().stream().map(ResolvedCase::selector).toList();
+        }
+
+        /**
+         * The one case this arm selects, or empty where it selects no one case.
+         *
+         * <p>Asked here rather than worked out from the shape of the pattern. A reader that decided
+         * from the pattern's shape that one case must be there, and then took its name, would be
+         * rebuilding a decision this already holds out of less than it was made from. That is how
+         * an optional's {@code Some} came to be read as a sum's case named {@code Some}.
+         *
+         * <p>Empty is an answer and not an absence of one: an or-pattern selects several cases and
+         * therefore no one of them, which is a fact about what was written and not a count standing
+         * in for one. What that selection then comes to at a position — one of the distinctions the
+         * declarations state there, or none — is the other question, and it is answered from the
+         * atoms this carries rather than from anything about the pattern.
+         */
+        Optional<ResolvedCase> selectedCase();
 
         /**
          * What the value is read as once the arm is taken.
@@ -563,22 +822,27 @@ public sealed interface Core {
         }
 
         /** An arm answering for one case, which binds what that case's carrier holds. */
-        record Single(CaseSelector selector) implements ResolvedPattern {
+        record Single(ResolvedCase selected) implements ResolvedPattern {
 
             public Single {
-                if (selector == null) {
+                if (selected == null) {
                     throw new IllegalArgumentException("an arm selects a case");
                 }
             }
 
             @Override
-            public List<CaseSelector> selectors() {
-                return List.of(selector);
+            public List<ResolvedCase> cases() {
+                return List.of(selected);
+            }
+
+            @Override
+            public Optional<ResolvedCase> selectedCase() {
+                return Optional.of(selected);
             }
 
             @Override
             public Refinement binding() {
-                return selector.refinement();
+                return selected.refinement();
             }
         }
 
@@ -586,16 +850,21 @@ public sealed interface Core {
          * An arm answering for several, which binds the subject: no one case type fits all of its
          * alternatives, and every alternative is already the subject.
          */
-        record AnyOf(List<CaseSelector> selectors, Type subject) implements ResolvedPattern {
+        record AnyOf(List<ResolvedCase> cases, Type subject) implements ResolvedPattern {
 
             public AnyOf {
-                if (selectors == null || selectors.size() < 2) {
+                if (cases == null || cases.size() < 2) {
                     throw new IllegalArgumentException("an arm answering for several names several");
                 }
                 if (subject == null) {
                     throw new IllegalArgumentException("what such an arm binds is the subject");
                 }
-                selectors = List.copyOf(selectors);
+                cases = List.copyOf(cases);
+            }
+
+            @Override
+            public Optional<ResolvedCase> selectedCase() {
+                return Optional.empty();
             }
 
             @Override
@@ -618,6 +887,12 @@ public sealed interface Core {
             return pattern.caseTypes();
         }
 
+        /** The one case this arm selects, as this compile resolved it, or empty where it selects no
+         *  one case. */
+        public Optional<ResolvedCase> selectedCase() {
+            return pattern.selectedCase();
+        }
+
         /** The type the binding takes inside this arm. */
         public Type bindType() {
             return pattern.bindType();
@@ -631,13 +906,33 @@ public sealed interface Core {
     }
 
     /**
-     * {@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
-     * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
-     * was is a fact about this copy — so it travels with the fork rather than being recovered from
-     * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
+     * {@code occurrence} and {@code expansion} say which fork of the model this is and what its copy
+     * is called where supplied rules are looked up, as they do for {@link If}.
      */
-    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
-                 List<souther.compiler.types.BindingOwner> expansion) implements Core {
+    record Match(Core scrutinee, List<Case> cases, ForkPlace place, Type type, SourcePos pos)
+            implements Core {
+
+        public Match {
+            if (place == null) {
+                throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
+                        + " model, in some copy of the body that wrote it");
+            }
+        }
+
+        /** Which fork of the model this is, in whichever copy of the body it stands. */
+        public ConstructOccurrence occurrence() {
+            return place.occurrence();
+        }
+
+        /** What the copy is called where the rules a call supplied are looked up. */
+        public List<souther.compiler.types.BindingOwner> expansion() {
+            return place.expansion();
+        }
+
+        /** What the source wrote, as for {@link Binary}. */
+        public SourceConstructOrigin origin() {
+            return occurrence().origin();
+        }
     }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
@@ -691,18 +986,19 @@ public sealed interface Core {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.origin(), b.type(), b.pos());
+                        : new Binary(b.op(), left, right, b.occurrence(), b.type(), b.pos());
             }
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);
-                yield args == c.args() ? c : new Call(c.fn(), args, c.type(), c.pos());
+                yield args == c.args() ? c
+                        : new Call(c.fn(), args, c.occurrence(), c.type(), c.pos());
             }
             // Its arguments are children like any other, so a pass that asks what a body reads
             // reaches them without knowing what was kept standing over them.
             case PreservedCall p -> {
                 List<Core> args = each(p.args(), atExpr);
                 yield args == p.args() ? p
-                        : new PreservedCall(p.operation(), args, p.type(), p.pos());
+                        : new PreservedCall(p.declared(), args, p.place(), p.type(), p.pos());
             }
             // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
@@ -716,8 +1012,7 @@ public sealed interface Core {
                 Core then = atExpr.apply(iff.then());
                 Core els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos(),
-                                iff.expansion());
+                        : new If(cond, then, els, iff.place(), iff.type(), iff.pos());
             }
             case IfConstructed ic -> {
                 Construct construct = atConstruction.apply(ic.construct());
@@ -727,8 +1022,8 @@ public sealed interface Core {
                     return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(),
-                                ic.type(), ic.pos(), ic.expansion());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.place(),
+                                ic.type(), ic.pos());
             }
             case LetIn li -> {
                 Core value = atExpr.apply(li.value());
@@ -763,95 +1058,9 @@ public sealed interface Core {
                 Core scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> c.answering(atExpr.apply(c.body())));
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos(),
-                                m.expansion());
+                        : new Match(scrutinee, cases, m.place(), m.type(), m.pos());
             }
         };
-    }
-
-    /**
-     * {@code e} with every place taken out of it: the position each node was written at, the
-     * coverage ordinal the module numbered it with, and the same of the binders and names inside.
-     *
-     * <p>For comparing two readings of one term, and for nothing else. A term says what it says
-     * wherever in a file it stands, but the tree carries where, and a module numbers its constructs
-     * from one end — so a blank line above a declaration, or a clause somewhere above gaining a
-     * term, makes every term below it a different value. A reader that depends on what a term says
-     * would be recomputed by both. Comparing this instead is what tells the two apart.
-     *
-     * <p>Every place comes out null rather than blank, so a tree that escapes here and is asked
-     * where it is says so at once. Which copy of a body a fork stands in is one of them: it is where
-     * the fork is and not what it says, and two readings of one term are the same term whichever
-     * copy each was read out of. Nothing emits one of these, reports on one, or measures one.
-     *
-     * <p>Written out a case at a time, like {@link #atSlots}: a node's place is on the node, so
-     * there is no slot to hand a rewrite. The switch is over a sealed type, so a node kind added
-     * later arrives here as a compile error rather than as a term that quietly kept its place.
-     */
-    public static Core withoutItsPlace(Core e) {
-        if (e == null) {
-            return null;
-        }
-        return switch (e) {
-            case Int x -> new Int(x.value(), x.type(), null);
-            case Decimal x -> new Decimal(x.value(), x.type(), null);
-            case Str x -> new Str(x.value(), x.type(), null);
-            case Bool x -> new Bool(x.value(), x.type(), null);
-            case Temporal x -> new Temporal(x.kind(), x.text(), null);
-            case Read x -> readWithoutItsPlace(x);
-            case UnitValue x -> new UnitValue(x.data(), x.type(), null);
-            case OptionNone x -> new OptionNone(x.type(), null);
-            case Unreachable x -> new Unreachable(x.reason(), x.type(), null);
-            case Neg n -> new Neg(withoutItsPlace(n.operand()), n.type(), null);
-            case FieldAccess fa ->
-                    new FieldAccess(withoutItsPlace(fa.target()), fa.field(), fa.type(), null);
-            case Binary b -> new Binary(b.op(), withoutItsPlace(b.left()),
-                    withoutItsPlace(b.right()), null, b.type(), null);
-            case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
-            case PreservedCall p ->
-                    new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
-            case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
-            case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
-                    withoutItsPlace(iff.els()), null, iff.type(), null, List.of());
-            case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
-                    ic.binder(), withoutItsPlace(ic.then()),
-                    ic.els().stream()
-                            .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
-                            .toList(),
-                    null, ic.type(), null, List.of());
-            case LetIn li -> new LetIn(li.binder(), withoutItsPlace(li.value()),
-                    withoutItsPlace(li.body()), li.type(), null);
-            case Block b -> new Block(b.params(),
-                    withoutItsPlace(b.body()), b.type(), null);
-            case ListLit lit -> new ListLit(allWithoutTheirPlace(lit.elements()), lit.type(), null);
-            case OptionSome so -> new OptionSome(withoutItsPlace(so.value()), so.type(), null);
-            case Tuple t -> new Tuple(allWithoutTheirPlace(t.elements()), t.type(), null);
-            case TupleGet tg -> new TupleGet(withoutItsPlace(tg.tuple()), tg.index(), tg.arity(),
-                    tg.type(), null);
-            case Construct nd -> constructWithoutItsPlace(nd);
-            case Match m -> new Match(withoutItsPlace(m.scrutinee()),
-                    m.cases().stream()
-                            .map(c -> new Case(c.pattern(), c.binder(),
-                                    withoutItsPlace(c.body()), null))
-                            .toList(),
-                    null, m.type(), null, List.of());
-        };
-    }
-
-    private static List<Core> allWithoutTheirPlace(List<Core> es) {
-        return es.stream().map(Core::withoutItsPlace).toList();
-    }
-
-    private static Read readWithoutItsPlace(Read r) {
-        return new Read(r.name(), r.binding(), r.type(), null);
-    }
-
-    private static Construct constructWithoutItsPlace(Construct nd) {
-        return new Construct(nd.typeName(),
-                nd.values().stream()
-                        .map(v -> new FieldValue(v.field(), withoutItsPlace(v.value()), null))
-                        .toList(),
-                nd.type(), null);
     }
 
     /**
@@ -860,9 +1069,8 @@ public sealed interface Core {
      * a pass rewrites it as it rewrites any other value a field is given.
      *
      * <p>Said once and read twice — by the walk above, where a construction is an expression like any
-     * other, and by {@link #mapChildren(Construct, java.util.function.UnaryOperator,
-     * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
-     * holds.
+     * other, and by the overload of {@code mapChildren} that takes a construction, which is how a
+     * pass recurses through the one an attempt holds.
      */
     private static Construct atSlots(Construct nd, java.util.function.UnaryOperator<Core> atExpr) {
         List<FieldValue> values = each(nd.values(), v -> {

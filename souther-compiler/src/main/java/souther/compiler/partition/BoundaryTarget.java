@@ -55,6 +55,11 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         return cut.at();
     }
 
+    /** Which behavior's input the line is on, which is the quantity's answer. */
+    public String behavior() {
+        return of.behavior();
+    }
+
     /** The left of the line as a report names it, which is qualified by the behavior it is an input
      *  of. Apart from {@link #left()}, which is the bare term a generated row is labelled with. */
     public String named() {

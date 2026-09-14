@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -81,6 +80,6 @@ class NumericReadingsFindTheAccountsTheLibraryDeclaresTest {
     private static NumericReadings.Resolution resolutionOf(String qualified) {
         ValueName operation = DefaultStdlib.get().operation(qualified);
         return NumericReadings.resolve(
-                DefaultStdlib.get(), OperationFacts.declarations(), operation);
+                DefaultStdlib.get(), DefaultBoundOperationFacts.get(), operation);
     }
 }

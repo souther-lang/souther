@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorContract.Clause;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.check.BehaviorContract.RuleId;
 import souther.compiler.core.Contract;
@@ -47,9 +46,11 @@ public final class BehaviorChecker {
      * {@code value} leaves every rule ambiguous about what it names, so reading the rules underneath
      * it would report one mistake as several.
      */
-    public static CheckedEnsures contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
-                                       Symbols symbols, Map<String, Type> helpers) {
-        Reading reading = read(behavior, module, sig, symbols);
+    public static CheckedEnsures contractOf(Hir.SpecBehavior behavior, String module,
+                                       DeclaredSig declared, Symbols symbols,
+                                       PublishedDeclarations published, DeclarationKinds kinds,
+                                       Map<String, Type> helpers) {
+        Reading reading = read(behavior, module, declared, published, kinds);
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
         // two things for an author to fix, and this is the reading that reports them.
@@ -59,7 +60,9 @@ public final class BehaviorChecker {
         // it (issue #1080).
         List<Contract.Rule> checked = new ArrayList<>();
         for (Rule rule : contract.rules()) {
-            collect(found, () -> checked.add(checkRule(behavior, contract, rule, helpers, symbols)));
+            collect(found, () ->
+                    checked.add(checkRule(behavior, contract, rule, helpers, symbols, published,
+                            kinds)));
         }
         if (found.size() == 1) {
             throw CompileException.of(found.get(0));
@@ -91,9 +94,11 @@ public final class BehaviorChecker {
      * @throws CompileException where any of the declaration could not be read, which the executable
      *     reading of it reports as well
      */
-    public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module, Sig sig,
-                                                  Symbols symbols) {
-        return read(behavior, module, sig, symbols).whole();
+    public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module,
+                                                  DeclaredSig declared,
+                                                  PublishedDeclarations published,
+                                                  DeclarationKinds kinds) {
+        return read(behavior, module, declared, published, kinds).whole();
     }
 
     /**
@@ -122,11 +127,11 @@ public final class BehaviorChecker {
     }
 
     /** The declaration as rules, beside what could not be read of it. */
-    private static Reading read(Hir.SpecBehavior behavior, String module, Sig sig,
-                                Symbols symbols) {
+    private static Reading read(Hir.SpecBehavior behavior, String module, DeclaredSig declared,
+                                PublishedDeclarations published, DeclarationKinds kinds) {
         List<Diagnostic> found = new ArrayList<>();
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
-        if (sig == null) {
+        if (declared == null) {
             // The signature could not be made, which is reported where that failed. A rule is
             // read against the parameters and the answer, so there is nothing to read one against
             // — said again here it would be that one mistake seen from another angle.
@@ -142,21 +147,21 @@ public final class BehaviorChecker {
 
         BindingOwner owner = BehaviorContract.ownerOf(name);
         List<Param> params = new ArrayList<>();
-        for (int i = 0; i < behavior.params().size(); i++) {
-            params.add(new Param(new BindingId(owner, i), behavior.params().get(i).name(),
-                    sig.inputTypes().get(i)));
+        int at = 0;
+        for (DeclaredSig.Input input : declared.inputs()) {
+            params.add(new Param(new BindingId(owner, at++), input.name(), input.type()));
         }
 
         // Which cases the answer can be, and what `value` is in each, come from the same place a
         // `match` over that answer reads them. A clause naming a case a caller could not match is a
         // clause a caller could never assume, so the two admit the same names by construction.
-        CaseSpace answer = CaseSpace.of(sig.outputType(), symbols);
+        CaseSpace answer = CaseSpace.of(declared.boundary().outputType(), kinds, published);
 
         // Arm by arm, and an arm this cannot read leaves the rest readable. Reading and checking are
         // one pass — what a rule states is which case it applies to and what holds there, and every
         // refusal here is this not having been able to read that — so an arm that fails contributes
         // no rule and stops nothing else.
-        List<Clause> clauses = new ArrayList<>();
+        List<BehaviorContract.Clause> clauses = new ArrayList<>();
         int armOrdinal = 0;
         for (int c = 0; c < behavior.ensures().size(); c++) {
             Hir.EnsuresClause written = behavior.ensures().get(c);
@@ -165,11 +170,14 @@ public final class BehaviorChecker {
                 int ordinal = armOrdinal++;
                 int clauseIndex = c;
                 collect(found, () -> rules.addAll(
-                        read(behavior, arm, answer, symbols, owner, params.size(), clauseIndex, ordinal)));
+                        read(behavior, arm, answer, published, owner, params.size(),
+                                clauseIndex, ordinal)));
             }
-            clauses.add(new Clause(written.name(), rules, written.pos(), written.region()));
+            clauses.add(new BehaviorContract.Clause(written.name(), rules, written.pos(),
+                    written.region()));
         }
-        return new Reading(new BehaviorContract(name, params, sig.outputType(), clauses), found);
+        return new Reading(
+                new BehaviorContract(name, params, declared.boundary().outputType(), clauses), found);
     }
 
     /**
@@ -182,7 +190,8 @@ public final class BehaviorChecker {
      * answer does not have.
      */
     private static List<Rule> read(Hir.SpecBehavior behavior, Hir.EnsuresArm arm, CaseSpace answer,
-                                   Symbols symbols, BindingOwner owner, int paramCount, int clause,
+                                   PublishedDeclarations published,
+                                   BindingOwner owner, int paramCount, int clause,
                                    int ordinal) {
         boolean hasCases = !(answer instanceof CaseSpace.Plain);
         ValueName.Behavior named = ((BindingOwner.OfSignature) owner).behavior();
@@ -214,7 +223,7 @@ public final class BehaviorChecker {
                 // the reading is abandoned instead, as a `match` arm's is.
                 throw new Unanswerable(armCase.pos());
             }
-            ResolvedCase selected = answer.selector(armCase.answered().type(), symbols);
+            ResolvedCase selected = answer.selector(armCase.answered().type(), published);
             if (selected == null) {
                 throw CompileException.of(Diagnostic.at(armCase.pos())
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(
@@ -249,10 +258,13 @@ public final class BehaviorChecker {
      * the elaboration gets better at simplifying a term away.
      */
     private static Contract.Rule checkRule(Hir.SpecBehavior behavior, BehaviorContract contract,
-                                           Rule rule, Map<String, Type> helpers, Symbols symbols) {
+                                           Rule rule, Map<String, Type> helpers, Symbols symbols,
+                                           PublishedDeclarations published,
+                                           DeclarationKinds kinds) {
         Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),
                 scopeOf(contract, rule).reaching(helpers),
-                CheckContext.executableEnsures(symbols));
+                CheckContext.executableEnsures(symbols, published, kinds,
+                        NewtypeInners.asWritten(symbols)));
         if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(

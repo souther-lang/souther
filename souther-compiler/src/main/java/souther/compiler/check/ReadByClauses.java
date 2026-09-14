@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.LinkedHashSet;
@@ -24,30 +23,143 @@ import java.util.Set;
  * <p>Working the values out is also what settles which positions this compiler could not build, and
  * that is a second thing the resolved side owes: the account of what a clause adopted is written
  * before any machine is made, so a position whose answer was not built is one it still calls taken
- * in. What arrives here has been given up on at those positions, and {@link #aboutARule} is what a
- * rule may be filed under out of everything the reading wrote down.
+ * in. What arrives here has been given up on at those positions.
+ *
+ * <p><b>What a rule is answerable for is not read off that.</b> A position says what it was left
+ * holding and says it for every reason there is, so filtering its reasons for the ones a rule could
+ * be answerable for gives a list of reasons and no rule — every rule that named the place, taken
+ * for the one that asked. Which rule asked is carried from where the asking is
+ * ({@code OfAPart.aboutARule}, filled by routing a shortfall to the part that asked for the machine
+ * it names), and there is nothing here that turns a place's reasons back into an account of a rule.
  */
-record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                     Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                     java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+record ReadByClauses(Confinement.Worked<FactSubject> confinement,
+                     Adoption<FactSubject, ReadingLanguage.Values> byValues,
+                     Adoption<FactSubject, ReadingLanguage.Order> byOrder) {
+
+    /** What every position of this reading may hold. */
+    AdmissibleValues<FactSubject> values() {
+        return confinement.values();
+    }
+
+    /**
+     * What one rule came to on its own tree, once every branch of the value is decided.
+     *
+     * <p>Its own tree is the whole of it. What a neighbouring rule of the same declaration narrowed
+     * is no part of what this rule did, so a reader asking what this rule left has to be given an
+     * answer met from this rule's clauses alone — read off the whole, {@code invariant value == 7}
+     * beside a rule that says nothing would lend the second its narrowing, and a reason filed
+     * against the second would name a rule that holds the position to nothing.
+     *
+     * @param narrowed the positions this rule leaves holding less than every value, and whose
+     *                 answer was built. Free of any allowance: what each position holds is a
+     *                 description the reading already has, and being narrowed is that description
+     *                 being one shape rather than another ({@code PlannedValues#adoptedAt}). A
+     *                 position the rule leaves holding nothing is not one of these — the rules
+     *                 leaving no value is a fact about emptiness and is said where emptiness is
+     * @param account  what the rule's own clause took in, which is the part keyed by its root
+     */
+    record OfARule(java.util.Set<FactSubject> narrowed, OfAPart account) {
+
+        public OfARule {
+            narrowed = java.util.Set.copyOf(narrowed);
+        }
+
+        /** Whether this rule leaves {@code position} holding less than every value. */
+        boolean narrows(FactSubject position) {
+            return narrowed.contains(position);
+        }
+    }
 
     /**
      * What one part of one clause came to, once every branch of the value is decided.
      *
-     * <p>A projection of the whole and not a reading of its own. The branch a part is in is dropped
-     * or kept by the rules of every clause together, so a part read again on its own answers about a
-     * branch this declaration has already dropped — and pays for machines the whole answer never
-     * needed to find out.
+     * <p>Answered over the part's own rule's tree, with the branches decided by the fates the
+     * settlement handed back ({@code Settlement}). The branch a part is in is dropped or kept by
+     * the rules of every clause together, so a part deciding that for itself would answer about a
+     * branch this declaration has already dropped — and would pay for machines the whole answer
+     * never needed to find out.
      *
-     * @param aboutARule what a rule of this part is answerable for, per position
+     * @param aboutARule what a rule of this part is answerable for, each saying the part of this
+     *                   reading's tree it was decided under. Not sifted out of what the positions
+     *                   were left
+     *                   holding: a place holds the reasons of every rule that reached it and names
+     *                   none of them, so what came back from sifting it was a list of reasons and
+     *                   no clause
+     * @param aboutStrings which strings this part admits at each position it states a rule about.
+     *                     Beside the adoptions and not among them: what a part took a position in
+     *                     at is what the readings settled, and this is what the clause states — a
+     *                     rule whose written text nothing worked out is still a rule about the
+     *                     position it names, and a reader deciding which of the position's numbers
+     *                     it is measured at wants exactly that.
+     *                     <p>The sets and not the plans that name them. Everything on this side of
+     *                     the reading builds nothing, and a reader handed a plan would be making
+     *                     the machine for a rule under an allowance of its own — a second answer to
+     *                     what the model admits at a position, made by whoever asked second
+     * @param endsLeftOpen where this part states an end the reading of ends did not work out, and
+     *                     which choice an author is sent to for it ({@link EndsLeftOpen}). Crosses
+     *                     unchanged: what a branch is left open by was settled while the branches
+     *                     were, and nothing decided since bears on it
+     * @param boundsLeftOpen the same for a line this part states on a number an operation answers
+     *                       that nothing placed, kept only where the rule's own settled reading
+     *                       still leaves it open ({@link BoundaryState})
+     * @param stopped        the positions this part's own ends leave holding less than every value
+     *                       of their order. A set and not the ranges: what a reader here asks is
+     *                       whether the part has a line at a position, the answer is worked out
+     *                       once where the carriers are, and a reader handed the ranges would be
+     *                       deciding for itself what an end means against an order
      */
-    record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                   java.util.Map<FactSubject,
-                           java.util.List<souther.compiler.values.UnreadReason>> aboutARule) {
+    record OfAPart(Adoption<FactSubject, ReadingLanguage.Values> byValues,
+                   Adoption<FactSubject, ReadingLanguage.Order> byOrder,
+                   Set<FactSubject> stopped,
+                   Set<ReadingShortfall> aboutARule,
+                   java.util.Map<FactSubject, AdmittedStrings> aboutStrings,
+                   EndsLeftOpen endsLeftOpen,
+                   java.util.Map<OpenEnd, EndsLeftOpen.Behind> boundsLeftOpen) {
+
+        public OfAPart {
+            stopped = Set.copyOf(stopped);
+        }
 
         /** The positions some reading took the whole of this part in at. */
         java.util.Set<FactSubject> adopted() {
             return ReadByClauses.adopted(byValues, byOrder);
+        }
+
+        /**
+         * Whether this part put a constraint on which values stand at {@code position}.
+         *
+         * <p>Narrower than {@link #adopted}, and the difference is the whole of what a reader
+         * asking this wants. That one is every position either reading settled what the part does
+         * to, which a dead branch settles by imposing nothing and which the ordered reading settles
+         * by placing an end. Neither of those is a rule holding the values at the position down,
+         * and a reader told they were would say a position is restricted by a clause that leaves it
+         * exactly as wide as it was.
+         */
+        boolean restricts(FactSubject position) {
+            return byValues.readAt(position);
+        }
+
+        /**
+         * Whether this part stops those values anywhere short of the position's own order.
+         *
+         * <p>Named for what it answers. Called {@code bounds}, it read as the question the ordered
+         * reading's own account answers — which positions some rule of the part was about — and
+         * that is the reading a caller acted on while the two were one method
+         * ({@link Adoption#readAt}).
+         *
+         * <p>Asked of the ordered reading, because that is what an end is read by. A part that
+         * stopped them has a line at the position and is accounted for by whoever draws lines, so
+         * it is not a part a reader is owed a second sentence about.
+         *
+         * <p><b>Of the values its ends leave and not of which positions it was about.</b>
+         * {@code (n >= 2 && n /= 5) || (n <= 0 && n /= 5)} is a rule about {@code n} on both sides
+         * of the choice and stops it nowhere: what the two alternatives leave between them is every
+         * {@code Int}. Asked which positions some rule of the part bounded, this comes back saying
+         * the part has a line at {@code n} — and the line it is credited with is one nobody draws,
+         * so the restriction the rule does state goes out unsaid.
+         */
+        boolean stops(FactSubject position) {
+            return stopped.contains(position);
         }
     }
 
@@ -81,45 +193,6 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
     }
 
     /**
-     * Everything this reading wrote down that a rule is answerable for, per position.
-     *
-     * <p>The split is here because it is one rule about the vocabulary, and a store that filed it
-     * under a rule is where getting it wrong shows. A form nothing reads, a rule relating two
-     * positions, a pattern larger than any machine this holds — each of those is a rule somebody
-     * wrote and can write differently. An allowance run down by everything a position admits is not:
-     * the same rules in another order would have been built, and there is no rule to name. A
-     * position nobody reached is not either — there is no rule in hand to be about.
-     *
-     * <p>What is left out still reaches a reader. It is a fact about the position, and the position
-     * says it ({@link AdmissibleValues#whyUnread}); what it is not is a fact about a rule.
-     */
-    java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> aboutARule() {
-        java.util.Map<FactSubject,
-                java.util.List<souther.compiler.values.UnreadReason>> out =
-                new java.util.LinkedHashMap<>();
-        values.standing().forEach((position, why) -> {
-            java.util.List<souther.compiler.values.UnreadReason> mine = why.stream()
-                    .filter(each -> each.about()
-                            == souther.compiler.values.UnreadReason.About.A_RULE)
-                    .toList();
-            if (!mine.isEmpty()) {
-                out.put(position, mine);
-            }
-        });
-        return out;
-    }
-
-    /**
-     * Whether nothing satisfies what has been read.
-     *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone.
-     */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
-    }
-
-    /**
      * The positions some reading took the whole of this clause in at.
      *
      * <p>Some, and not both: the two languages are short of different things, and a bound one of
@@ -130,8 +203,8 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
         return adopted(byValues, byOrder);
     }
 
-    static Set<FactSubject> adopted(Adoption<FactSubject> byValues,
-                                    Adoption<FactSubject> byOrder) {
+    static Set<FactSubject> adopted(Adoption<FactSubject, ReadingLanguage.Values> byValues,
+                                    Adoption<FactSubject, ReadingLanguage.Order> byOrder) {
         Set<FactSubject> out = new LinkedHashSet<>();
         // Everything either account is about, and not what it put a constraint on: a position a
         // dead branch settled is one the reading answered for and put no constraint on, which is

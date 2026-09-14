@@ -17,8 +17,8 @@ import java.util.Set;
  * {@code api Option --nope} ran as though nothing had been written. It also cannot answer the other
  * question at all. An option arrives as a local variable, and a local carries its value and not the
  * fact that somebody wrote it, so an option whose reader sits behind a condition that did not hold
- * is indistinguishable from one nobody asked for. {@code --boundaries} without {@code --generate}
- * was accepted, never read, and answered with the report it would have printed anyway.
+ * is indistinguishable from one nobody asked for. {@code --limit} without {@code --search} is that
+ * shape: accepted, never read, and answered with the listing it would have printed anyway.
  *
  * <p>So what a line wrote is kept as what it wrote — the set of options present, before any of them
  * is turned into a value — and the constraints are read off this table once, above the dispatch,
@@ -30,8 +30,8 @@ import java.util.Set;
 enum CliOption {
 
     DIRECTORY("compile/init", "<path>", "where what this command writes goes", "-d", "--dir"),
-    ADEQUACY("compile/examples", "off|witness|all|reliable-domain|classes",
-            "how much to measure and which bar to warn against (default off)", "--adequacy"),
+    ADEQUACY("compile", "off|witness|all",
+            "how much of the model to measure and warn about (default off)", "--adequacy"),
     WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
             "--warnings"),
     BEHAVIOR("run/examples", "<name>", "report only this behavior", "--behavior"),
@@ -45,8 +45,6 @@ enum CliOption {
             "how much of a model to start with (default full when creating, none when adding)",
             "--model"),
     GENERATE("examples", null, "print commented rows for what nothing covers", "--generate"),
-    BOUNDARIES("examples", null, "with --generate, add rows at the untried boundaries",
-            "--boundaries"),
     STRICT("examples", null, "exit non-zero on a gap the report names", "--strict"),
     SEARCH("doc/api", "<term>", "sections and topics that say the term, best answer first",
             "--search"),
@@ -62,16 +60,19 @@ enum CliOption {
     COLOR("compile/run/examples", "auto|always|never",
             "color the human output (default auto); not read under --format json", "--color"),
     /** Every command's, which is what the null owner means. */
-    HELP(null, null, "what this command takes, and what its options mean", "--help", "-h");
+    HELP(null, null, "what this command takes, and what its options mean", "--help", "-h"),
+    /** Every command's too: which compiler a line reached is a question about any line. */
+    VERSION(null, null, "which Souther this is", "--version");
 
     /** Why a command line is refused: a catalog key and what fills it. */
     record Refusal(String key, Object... args) {}
 
     /**
      * What one reading of a command line found: why it is refused, if it is, the language it is to
-     * be answered in, and whether it asks what the command takes.
+     * be answered in, whether it asks what the command takes, and whether it asks which compiler is
+     * answering.
      *
-     * <p>The three come from the same walk because they are answers about the same tokens. Reading
+     * <p>They come from the same walk because they are answers about the same tokens. Reading
      * the line twice — once to find {@code --lang}, once to check it — is two rules for what a token
      * is, and they part company on the lines that need them most: a value that is spelt like an
      * option is a value to one walk and an option to the other.
@@ -80,9 +81,10 @@ enum CliOption {
      * hands {@code run} the input {@code --help}; a line scanned for the token finds a request for
      * help in it, and answers a question its author did not ask instead of running what they wrote.
      * So this is true where the walk recognised {@link #HELP} in a position an option is read in,
-     * and there is no other way for it to become true.
+     * and there is no other way for it to become true. {@link #VERSION} is recognised the same way,
+     * for the same reason.
      */
-    record Reading(Refusal refusal, String lang, boolean help) {}
+    record Reading(Refusal refusal, String lang, boolean help, boolean version) {}
 
     /**
      * The commands that take the option, in the form a refusal names them, or null for an option
@@ -156,12 +158,11 @@ enum CliOption {
     /**
      * What each option needs written beside it.
      *
-     * <p>The usage text has said this all along — {@code [--generate [--boundaries]]}, {@code doc
-     * --search <term> [--limit <n>]} — as a nesting of brackets, which is a statement no program
-     * reads. Here it is the same statement in the form the check is made from.
+     * <p>The usage text has said this all along — {@code doc --search <term> [--limit <n>]} — as a
+     * nesting of brackets, which is a statement no program reads. Here it is the same statement in
+     * the form the check is made from.
      */
     private static final Map<CliOption, CliOption> NEEDS = new EnumMap<>(Map.of(
-            BOUNDARIES, GENERATE,
             LIMIT, SEARCH));
 
     /**
@@ -243,6 +244,7 @@ enum CliOption {
         Refusal token = null;
         String lang = null;
         boolean help = false;
+        boolean version = false;
         for (int i = 0; i < args.length; i++) {
             String word = args[i];
             CliOption option = BY_SPELLING.get(word);
@@ -263,6 +265,9 @@ enum CliOption {
             if (option == HELP) {
                 help = true;   // recognised where an option is read, which is the whole of the rule
             }
+            if (option == VERSION) {
+                version = true;
+            }
             if (option.takesAValue()) {
                 // Whatever follows is this option's value, option-shaped or not: `--module
                 // --generate` names a module, which is what the command's own parser reads it as.
@@ -281,7 +286,7 @@ enum CliOption {
                 }
             }
         }
-        return new Reading(token != null ? token : unmet(written, asWritten), lang, help);
+        return new Reading(token != null ? token : unmet(written, asWritten), lang, help, version);
     }
 
     /**
@@ -294,6 +299,17 @@ enum CliOption {
      */
     static boolean isHelp(String token) {
         return BY_SPELLING.get(token) == HELP;
+    }
+
+    /**
+     * Whether this token is a spelling of {@link #VERSION}.
+     *
+     * <p>For the position {@link #isHelp} is for, and for the reader who reaches it first: what a
+     * package manager just installed is asked with {@code souther --version} before anything else
+     * has been written on the line, so there is no command yet whose options could be read.
+     */
+    static boolean isVersion(String token) {
+        return BY_SPELLING.get(token) == VERSION;
     }
 
     /** The first constraint between options this line does not meet, or null where it meets them. */

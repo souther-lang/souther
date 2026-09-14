@@ -434,24 +434,20 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 if (newSub == sub) {
                     return this;
                 }
-                switch (sizePredicate(newSub)) {
-                    case 0:
-                        return copyAndRemoveNode(bitpos);
-                    case 1:
-                        // The sub-node collapsed to a single entry: inline it here so the trie stays
-                        // canonical (a HashCollisionNode that dropped to one pair, or a sub-node whose
-                        // sole surviving key belongs one level up). When this node is itself just that
-                        // one sub-node, bubble the entry up instead so this node does not become a
-                        // non-canonical lone-entry inner node — re-keyed to this level's bit, since the
-                        // surviving key shares the removed key's chunk here and only diverged deeper.
-                        if (payloadArity() == 0 && nodeArity() == 1) {
-                            return new BitmapIndexedNode(bitpos, 0,
-                                    new Object[]{newSub.keyAt(0), newSub.valAt(0)});
-                        }
-                        return copyAndMigrateNodeToInline(bitpos, newSub);
-                    default:
-                        return copyAndSetNode(bitpos, newSub, false);
-                }
+                return switch (sizePredicate(newSub)) {
+                    case 0 -> copyAndRemoveNode(bitpos);
+                    // The sub-node collapsed to a single entry: inline it here so the trie stays
+                    // canonical (a HashCollisionNode that dropped to one pair, or a sub-node whose
+                    // sole surviving key belongs one level up). When this node is itself just that
+                    // one sub-node, bubble the entry up instead so this node does not become a
+                    // non-canonical lone-entry inner node — re-keyed to this level's bit, since the
+                    // surviving key shares the removed key's chunk here and only diverged deeper.
+                    case 1 -> payloadArity() == 0 && nodeArity() == 1
+                            ? new BitmapIndexedNode(bitpos, 0,
+                                    new Object[]{newSub.keyAt(0), newSub.valAt(0)})
+                            : copyAndMigrateNodeToInline(bitpos, newSub);
+                    default -> copyAndSetNode(bitpos, newSub, false);
+                };
             }
             return this;
         }

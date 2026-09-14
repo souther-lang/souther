@@ -2,14 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +58,17 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
                 match (if p.n > 5 then Plain else Special) with
                     | Plain   -> p.n > 0
                     | Special -> p.n > 10
+
+            data Wrap = { held: Kind }
+
+            behavior onAProjectedConstruction : (kind: Kind, n: Int) -> Bool
+                constructs Wrap
+            let onAProjectedConstruction (kind, n) = {
+                let wrapped = Wrap { held = kind }
+                match wrapped.held with
+                    | Plain   -> n > 0
+                    | Special -> n > 10
+            }
             """;
 
     /** A narrowing is what a fork on a case states, named by the position it narrows. */
@@ -70,6 +81,22 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
     @Test
     void aForkOnAFieldNarrowsThatField() {
         assertEquals(List.of("p.kind@Plain", "p.kind@Special"), narrowingsIn("onAField"));
+    }
+
+    /**
+     * And a fork on a field read back out of a construction narrows where the construction was given
+     * it.
+     *
+     * <p>The construction and the projection cancel: the case an arm selects is a case of the values
+     * standing at the parameter, since that is what the construction was handed. Read as a path of
+     * the construction, the scrutinee stands nowhere and both arms are declined — so a search
+     * composes rows for the comparisons inside them believing nothing stood in the way, which is the
+     * answer it gets for a comparison at the top of a body.
+     */
+    @Test
+    void aForkOnAFieldReadOutOfAConstructionNarrowsWhereItWasGivenIt() {
+        assertEquals(List.of("kind@Plain", "kind@Special"),
+                narrowingsIn("onAProjectedConstruction"));
     }
 
     /**
@@ -138,17 +165,17 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, () -> "the model under test writes " + behavior);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Map<String, souther.compiler.inputs.InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
         GuardThresholds.Guards guards =
-                GuardThresholds.of(behavior, body, plan, inputs.get(behavior), symbols);
+                GuardThresholds.of(behavior, checked.analysisBodies().get(behavior), body, plan,
+                        inputs.get(behavior), rules);
         return List.copyOf(guards.reaching().byComparison().values());
     }
 }

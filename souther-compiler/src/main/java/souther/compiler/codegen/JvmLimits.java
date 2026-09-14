@@ -8,7 +8,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -86,9 +85,7 @@ final class JvmLimits {
                 }
                 // the record constructor takes them all, and it is an instance method
                 if (slots > INSTANCE_SLOTS) {
-                    throw tooWide(Wide.DATA, data.written(), slots, INSTANCE_SLOTS,
-                            "data `" + data.name() + "` needs " + slots + " JVM parameter slots, but the"
-                                    + " constructor generated for it takes at most " + INSTANCE_SLOTS);
+                    throw tooWide(Wide.DATA, data.written(), slots, INSTANCE_SLOTS);
                 }
             }
         }
@@ -106,25 +103,19 @@ final class JvmLimits {
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
             if (sig != null && sig.inputTypes().size() > INSTANCE_SLOTS) {
                 throw tooWide(Wide.BEHAVIOR_PARAMETERS, bd.written(), sig.inputTypes().size(),
-                        INSTANCE_SLOTS, "behavior `" + bd.name() + "` takes " + sig.inputTypes().size()
-                                + " parameters, but the `apply` generated for it takes at most "
-                                + INSTANCE_SLOTS);
+                        INSTANCE_SLOTS);
             }
             int dependencies = dependencyCount(bd, implemented, requirements);
             // the $Impl constructor holds one field per dependency, and it is an instance method
             if (dependencies > INSTANCE_SLOTS) {
                 throw tooWide(Wide.BEHAVIOR_DEPENDENCIES, bd.written(), dependencies,
-                        INSTANCE_SLOTS, "behavior `" + bd.name() + "` is built with " + dependencies
-                                + " dependencies, but the constructor generated for it takes at most "
-                                + INSTANCE_SLOTS);
+                        INSTANCE_SLOTS);
             }
         }
         for (Hir.FnDef helper : recursiveHelpers.values()) {
             // a recursive helper is a static method on $Fns, so nothing is spent on `this`
             if (helper.params().size() > SLOTS) {
-                throw tooWide(Wide.HELPER, helper.written(), helper.params().size(),
-                        SLOTS, "let `" + helper.name() + "` takes " + helper.params().size()
-                                + " parameters, but the method generated for it takes at most " + SLOTS);
+                throw tooWide(Wide.HELPER, helper.written(), helper.params().size(), SLOTS);
             }
         }
     }
@@ -152,15 +143,9 @@ final class JvmLimits {
      * wanted, and refusing to write the pool out says how many entries there are.
      */
     enum Limit {
-        CODE_SIZE(DiagnosticCode.E2102),
-        CONSTANT_POOL_INDEX(DiagnosticCode.E2103),
-        CONSTANT_POOL_SIZE(DiagnosticCode.E2103);
-
-        private final DiagnosticCode code;
-
-        Limit(DiagnosticCode code) {
-            this.code = code;
-        }
+        CODE_SIZE,
+        CONSTANT_POOL_INDEX,
+        CONSTANT_POOL_SIZE
     }
 
     /**
@@ -231,8 +216,7 @@ final class JvmLimits {
     /** Which definition ran out of parameter slots. */
     private enum Wide { DATA, BEHAVIOR_PARAMETERS, BEHAVIOR_DEPENDENCIES, HELPER }
 
-    private static CompileException tooWide(Wide what, WrittenName written, int needed,
-                                            int limit, String message) {
+    private static CompileException tooWide(Wide what, WrittenName written, int needed, int limit) {
         String name = written.canonical();
         String has = String.valueOf(needed);
         String holds = String.valueOf(limit);

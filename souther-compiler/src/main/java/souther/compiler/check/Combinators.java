@@ -64,15 +64,42 @@ final class Combinators {
      * on which bindings it is under, so it is asked per call and not once per body.
      */
     static Handed handedTo(Core.PreservedCall call, Denotations at) {
-        Combinator rule = of(call.operation());
-        if (rule == null) {
+        return handedTo(call, closure -> Terms.blockOf(closure, at));
+    }
+
+    /**
+     * The same, told how to reach the block a closure is.
+     *
+     * <p>What a closure is written as is the one thing a reader of this needs that differs between
+     * readers: a walk inside a check has the denotations it built, and a reading of the input has
+     * its own answer about what a name stands for. What the operation hands over does not differ, so
+     * it is read once here and the difference is a parameter.
+     */
+    static Handed handedTo(Core.PreservedCall call,
+                           java.util.function.Function<Core, Core.Block> blockOf) {
+        return handedTo(call.operation(), call.args(), blockOf);
+    }
+
+    /**
+     * The same, of an application named by the operation it applies and the arguments it passes.
+     *
+     * <p>Which of the two shapes a representation gives an application is not a difference this
+     * table has anything to say about: the rule is about the operation, and the arguments are the
+     * arguments. So the question is asked once, of the two things it is about, and a reader holding
+     * either shape hands over the operation it resolved to and the arguments it carries.
+     */
+    static Handed handedTo(ValueName operation, List<Core> args,
+                           java.util.function.Function<Core, Core.Block> blockOf) {
+        Combinator rule = of(operation);
+        if (rule == null || rule.closureArg() >= args.size()
+                || rule.containerArg() >= args.size()) {
             return null;
         }
-        Core closure = call.args().get(rule.closureArg());
-        Core.Block step = Terms.blockOf(closure, at);
-        return step == null ? null
+        Core closure = args.get(rule.closureArg());
+        Core.Block step = blockOf.apply(closure);
+        return step == null || rule.elementParam() >= step.params().size() ? null
                 : new Handed(closure, step, step.params().get(rule.elementParam()),
-                        call.args().get(rule.containerArg()));
+                        args.get(rule.containerArg()));
     }
 
     /**
@@ -88,9 +115,12 @@ final class Combinators {
      * then this has already read it. Nothing about arguments or parameters a call does not have is
      * true, so nothing is said, and the arity is reported by the check whose question it is.
      *
-     * <p>The tree a representation keeps standing needs no such answer: a {@code PreservedCall} is
-     * built only where the signature it was applied to accepted the arguments and typed the block it
-     * was handed, so one that exists has both.
+     * <p>The tree a representation keeps standing needs the first of those answers and not the
+     * second, and the two come from different places. A {@code PreservedCall} has the arguments its
+     * declaration takes, so the argument positions this table names are positions it has — that is
+     * the node's own and holds however one was built. What stands in the closure argument having as
+     * many parameters as the rule reaches for is a separate matter, settled where the block was
+     * typed against the signature; nothing about a call says it.
      */
     static Written handedTo(Hir.Apply call) {
         // A call applying a name nothing declares hands its closure to no operation this table
@@ -146,9 +176,9 @@ final class Combinators {
                 read(DefaultStdlib.get());
     }
 
-    /* A pure function of the library, so the holder above is the only thing here that reaches for
-     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
-     * may not. */
+    /** A pure function of the library, so the holder above is the only thing here that reaches for
+     *  the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     *  may not. */
     private static Map<ValueName, Combinator> read(Stdlib stdlib) {
         Map<ValueName, Combinator> rules = new LinkedHashMap<>();
         stdlib.entries().forEach((operation, entry) -> {

@@ -1,7 +1,14 @@
 package souther.compiler.partition;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * What one run of the generator did about one class it was asked for.
+ * What the generator did about one class it was asked for.
+ *
+ * <p>One run's answer or what several runs came to, the same way an arm's is. A run makes one of
+ * these; {@link #acrossRuns} makes the answer the runs give together, and a single run is that
+ * answer already.
  *
  * <p>Which class is the key it is filed under and is not repeated here. Carried inside as well, a
  * map could hold an entry filed under one class whose value named another, and the identity a
@@ -14,10 +21,10 @@ package souther.compiler.partition;
 public sealed interface ClassDisposition {
 
     /** A row was composed for it, which is this row. */
-    record Built(RowId row) implements ClassDisposition {
+    record Built(RowId rowId) implements ClassDisposition {
 
         public Built {
-            if (row == null) {
+            if (rowId == null) {
                 throw new IllegalArgumentException("a class a row was composed for names the row");
             }
         }
@@ -39,5 +46,100 @@ public sealed interface ClassDisposition {
                 throw new IllegalArgumentException("a class nothing came of says what happened");
             }
         }
+    }
+
+    /**
+     * What the runs of one plan say about one class together.
+     *
+     * <p>A behavior whose dependencies a way leaves open is searched once per way of standing them
+     * in, and the answer about the model is what all of those came to. Which payload survives that
+     * is decided here, beside the answers a run gives, rather than wherever the runs happen to be
+     * walked — so a case added below has to say what it is over the runs before anything compiles.
+     *
+     * <p>No row of this is a row of the fill. A run numbers its rows among its own, so the row a
+     * witness names means something only beside the run that composed it; the number a reader is
+     * offered it under is given when the witnesses are materialised.
+     */
+    sealed interface AcrossRuns {
+
+        /**
+         * Some run composed a row, which is the answer about the model however many did.
+         *
+         * @param witnesses every run that composed one, in the order the runs were made. Which of
+         *                  them a reader is offered is settled where they are materialised, so this
+         *                  holds all of them and chooses none
+         */
+        record Built(List<Witness> witnesses) implements AcrossRuns {
+
+            public Built {
+                witnesses = List.copyOf(witnesses);
+                if (witnesses.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a class answered by a row names the run that composed it");
+                }
+            }
+        }
+
+        /**
+         * No run composed one, and the reason they all give.
+         *
+         * <p>One reason and not a list of them, because what a run stands the dependencies in with
+         * reaches a composed row and decides nothing about whether a value builds or what a refusal
+         * says. The runs agree here or the search has come to depend on something this says it does
+         * not, which is why {@link #acrossRuns} refuses a disagreement rather than picking.
+         */
+        record Unresolved(Generator.UnresolvedCombination why) implements AcrossRuns {
+
+            public Unresolved {
+                if (why == null) {
+                    throw new IllegalArgumentException("a class nothing came of says what happened");
+                }
+            }
+        }
+
+        /** A run that composed a row, and the row it composed, kept together as one answer. */
+        record Witness(int run, ClassDisposition.Built built) {
+
+            public Witness {
+                if (built == null) {
+                    throw new IllegalArgumentException("a witness is a run and what it composed");
+                }
+            }
+        }
+    }
+
+    /**
+     * The answer the runs of one plan give about one class.
+     *
+     * <p>A row wherever any run composed one. Where none did, the reason every one of them gives,
+     * and they have to be the same reason: a run reaching a different one would mean what it stood
+     * the dependencies in with had decided whether a value can be built, and a reader would be
+     * shown whichever way the ways were enumerated.
+     *
+     * @param runs what each run did, in the order the runs were made
+     */
+    static AcrossRuns acrossRuns(List<ClassDisposition> runs) {
+        if (runs.isEmpty()) {
+            throw new IllegalArgumentException("no run was asked about this class");
+        }
+        List<AcrossRuns.Witness> witnesses = new ArrayList<>();
+        ClassDisposition.Unresolved agreed = null;
+        for (int run = 0; run < runs.size(); run++) {
+            switch (runs.get(run)) {
+                case ClassDisposition.Built built ->
+                        witnesses.add(new AcrossRuns.Witness(run, built));
+                case ClassDisposition.Unresolved none -> {
+                    if (agreed != null && !agreed.equals(none)) {
+                        throw new IllegalStateException(
+                                "two runs of one plan give a class different reasons for having no"
+                                        + " row: " + agreed.why() + " and " + none.why());
+                    }
+                    agreed = none;
+                }
+            }
+        }
+        return witnesses.isEmpty()
+                ? new AcrossRuns.Unresolved(agreed.why())
+                : new AcrossRuns.Built(witnesses);
     }
 }

@@ -12,8 +12,12 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Primary;
+import souther.compiler.diag.DiagnosticView;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.Repair;
 import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
@@ -26,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -322,6 +327,7 @@ public final class Compilation {
             db.ask(new Output.ConstConstructions(module));
             for (SourceId id : exampleSourcesOf(module)) {
                 db.ask(new Front.RowNames(id));
+                db.ask(new Names.StandInBlocks(id));
                 db.ask(Output.Examples.asked(db, module, id));
             }
             db.ask(new Output.SaidDisagreements(module));
@@ -389,13 +395,15 @@ public final class Compilation {
      * them: it states the terms, and this states one of them.
      *
      * @throws IllegalArgumentException if {@code budget} is not positive; a row that is given no time
-     *     at all would report every behavior as one that does not terminate.
+     *     at all is given up on before it starts, and every behavior is reported as one this
+     *     compiler could not answer for.
      */
     public Compilation withExampleBudget(java.time.Duration budget) {
-        if (budget.toMillis() <= 0) {
-            throw new IllegalArgumentException("an example budget has to be positive: " + budget);
-        }
-        db.set(new Front.Policy(), Output.policyOf(db).withOuterTimeout(budget));
+        // Refused by the terms rather than here. What a positive wait is is the policy's to say —
+        // it takes any positive length, down to below a millisecond — and a second reading of it
+        // here was a stricter one: a wait of a few hundred microseconds is a wait, and this said it
+        // was none at all.
+        db.set(new Front.Policy(), Output.policyOf(db).withCompilerTimeout(budget));
         return this;
     }
 
@@ -409,12 +417,12 @@ public final class Compilation {
      * it is offered as the implementation's seam rather than as an input of this compilation's, and
      * it is reached the way {@link #jvmProgramImages} is.
      *
-     * <p>Two callers say one. A Java binding runs a row on a worker and hands what the row reaches
-     * outside back to the thread that asked, because that is the world a supplied implementation
-     * answers out of. A test asking what the compiler says about work that did not come back says an
-     * arrangement under which the work it picks out does not come back — otherwise it has to write a
-     * model that does not terminate and race a clock to see it reported, and a loaded host loses that
-     * race in the direction that matters.
+     * <p>One caller says one. A test asking what the compiler says about work that did not come back
+     * says an arrangement under which the work it picks out does not come back — otherwise it has to
+     * write a model that does not terminate and race a clock to see it reported, and a loaded host
+     * loses that race in the direction that matters. Nothing this compiler ships says one: a row
+     * driven from Java runs under the machine a build runs under, differing in that what it hands
+     * outside is serviced rather than never arriving.
      *
      * <p>Said before any row is run, for the reason {@link Db#running} takes what runs a
      * compilation's programs once: what runs one is beside the memos rather than in them, so a row
@@ -471,11 +479,33 @@ public final class Compilation {
     public Adequacy.Of adequacy(String module) {
         return new Adequacy.Of(db.ask(new Adequacy.Witnesses(module)).value(),
                 db.ask(new Adequacy.Coverage(module)).value(),
+                db.ask(new Adequacy.BodyBorders(module)).value(),
                 db.ask(new Adequacy.BranchCoverage(module)).value());
     }
 
     public Db db() {
         return db;
+    }
+
+    /**
+     * The texts this compilation holds, for turning the places in its answers into lines and
+     * columns.
+     *
+     * <p>What a renderer needs beside a report. An answer says which of the things written in a
+     * source a place is, and where that sits is what the source now says — so a caller writing a
+     * document, quoting a line or sending a reader somewhere asks this, and asks it again after the
+     * next edit.
+     *
+     * <p>Made fresh on each call and not kept here. What it reads is the store as it now stands, and
+     * one held on to would go on answering about sources that have since been written in again.
+     */
+    public SourceLayouts texts() {
+        return new TheTextsThisCompileHolds(db);
+    }
+
+    /** What makes a walk of this compilation stop short of an answer — {@link Db#abandonWhen}. */
+    public void abandonWhen(Abandonment abandonment) {
+        db.abandonWhen(abandonment);
     }
 
     /** The names of the modules these sources declare, in the order the sources were given. */
@@ -572,6 +602,76 @@ public final class Compilation {
         Map<SourceId, List<Located>> published = new LinkedHashMap<>();
         byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
         return published;
+    }
+
+    /**
+     * A repair as a reader of {@code source} meets it: the stretch of that file the problem is
+     * marked over, and the edit that answers it.
+     *
+     * <p>Three questions and not two. Where the problem is marked is where a reader looks and so
+     * where an offer has to stand; where the edit writes is the characters that make the problem go
+     * away; what it writes is the third. The first two are the same stretch often enough to be
+     * mistaken for one, and a qualified name nothing denotes is where they part — marked over the
+     * whole of {@code up.Amuont}, because which of its parts is wrong is what the message settles,
+     * and answered by rewriting one part. An offer that compared a caret against the part would not
+     * be there where the reader is looking.
+     *
+     * <p>Which file the edit is applied to is not said here. The edit's own place answers it, and it
+     * may be another of this compilation's files: an offer is made where a reader meets the problem
+     * and applied where the characters are.
+     *
+     * @param offeredAt where this file marks the problem — {@link #diagnostics()} draws its marker
+     *        over the same stretch, both being what {@link DiagnosticView} says this file anchors
+     * @param repair the edit itself
+     */
+    public record RepairOffer(Region offeredAt, Repair.AnEdit repair) {}
+
+    /**
+     * Every repair a reader of {@code source} is in a position to be offered.
+     *
+     * <p>Every report in the workspace is walked, and most of them are about other files. Whether
+     * this one is a report {@code source} reads at all is asked before it is read
+     * ({@link #asReadIn}), because reading it is refused for a file it says nothing about rather
+     * than answered emptily — and a walk that asked anyway lost the whole request, this file's own
+     * offers with it.
+     *
+     * <p>A report this file reads and anchors nothing of is left out too. It has no marker here, so
+     * there is nowhere for an offer to stand: {@link #diagnostics()} falls back to the head of the
+     * document for such a report, which is a place to put a marker and not a place to offer an edit.
+     *
+     * <p>So is a finding that knows the word and no place to write it ({@link Repair.AWord}). What
+     * it has to say is said in the message; there is no edit to offer, and one made up from where
+     * the report points would rewrite whatever happens to be there.
+     */
+    public List<RepairOffer> repairs(SourceId source) {
+        answerEverything();
+        List<RepairOffer> offers = new ArrayList<>();
+        for (Db.Found found : reports()) {
+            if (!(found.report().diagnostic().repair() instanceof Repair.AnEdit edit)) {
+                continue;
+            }
+            asReadIn(found, source).flatMap(DiagnosticView::anchor).ifPresent(
+                    shown -> offers.add(new RepairOffer(shown.spot().region(), edit)));
+        }
+        return List.copyOf(offers);
+    }
+
+    /**
+     * How {@code source} reads {@code found}, or empty where it is not one of the files that report
+     * is said in.
+     *
+     * <p>The two together because the second is only a question inside the first.
+     * {@link DiagnosticView} answers where a marker goes for a file the report reaches, and refuses
+     * a file it does not — being asked about an unrelated file is a caller that did not look, not a
+     * file with nothing to show. So the looking is here, where the view is made, and no caller holds
+     * a view it had to earn separately.
+     */
+    private Optional<DiagnosticView> asReadIn(Db.Found found, SourceId source) {
+        if (!publishSourceIdsOf(found).contains(source)) {
+            return Optional.empty();
+        }
+        return Optional.of(DiagnosticView.of(found.report().diagnostic(),
+                ReportContext.of(filedUnderOf(found), source)));
     }
 
     /**
@@ -751,9 +851,8 @@ public final class Compilation {
         if (errors.isEmpty()) {
             return null;
         }
-        errors.sort(Comparator.comparingInt(this::orderOf)
-                .thenComparingInt(f -> lineOf(f.report().diagnostic()))
-                .thenComparingInt(f -> columnOf(f.report().diagnostic())));
+        errors.sort(Comparator.<Db.Found>comparingInt(this::orderOf)
+                .thenComparing(f -> orderingPositionOf(f.report().diagnostic()), IN_FILE_ORDER));
         Db.Found first = errors.get(0);
         List<Located> rest = new ArrayList<>();
         for (Db.Found f : errors.subList(1, errors.size())) {
@@ -788,15 +887,14 @@ public final class Compilation {
         };
     }
 
-    private static int lineOf(Diagnostic diagnostic) {
-        SourcePos pos = orderingPositionOf(diagnostic);
-        return pos == null ? -1 : pos.line();
-    }
-
-    private static int columnOf(Diagnostic diagnostic) {
-        SourcePos pos = orderingPositionOf(diagnostic);
-        return pos == null ? -1 : pos.column();
-    }
+    /** Two reports of one file in the order an author reads them, with the one pointing at no part
+     *  of the file before them all. */
+    private static final Comparator<SourcePos> IN_FILE_ORDER = (one, other) -> {
+        if (one == null || other == null) {
+            return one == other ? 0 : one == null ? -1 : 1;
+        }
+        return SourcePos.IN_WRITTEN_ORDER.compare(one, other);
+    };
 
     /**
      * Which of this compilation's sources a report is listed under: the one it claims

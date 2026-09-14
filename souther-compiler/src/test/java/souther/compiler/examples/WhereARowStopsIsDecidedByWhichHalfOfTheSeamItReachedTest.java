@@ -306,6 +306,9 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
+                Shapes.publishedDeclarations(c.db()),
+                Shapes.declarationKinds(c.db()),
+                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The answerers here apply this compile's own classes, so there is no second set of
@@ -316,7 +319,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
                 CheckedEnsures.executableOf(

@@ -1,5 +1,7 @@
 package souther.compiler.doc;
 
+import souther.compiler.meta.ModuleMetadata;
+
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -357,8 +359,10 @@ public final class McpServer {
         result.putObject("capabilities").putObject("tools");
         ObjectNode server = result.putObject("serverInfo");
         server.put("name", "souther");
-        String built = McpServer.class.getPackage().getImplementationVersion();
-        server.put("version", built == null ? "dev" : built);
+        // The reading every face of this compiler answers with, and not a second one of its own:
+        // read here, this server picked its own word for the run that has no manifest, so which
+        // Souther this is depended on which face was asked.
+        server.put("version", ModuleMetadata.compilerVersion());
         return result;
     }
 

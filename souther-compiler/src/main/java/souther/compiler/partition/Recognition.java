@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.util.List;
 
@@ -39,10 +40,21 @@ public sealed interface Recognition {
     record Held(boolean present) implements Recognition {}
 
     /** One case of a sum, told by the construction the row wrote. */
-    record OfCase(TypeSymbol leaf) implements Recognition {}
+    record OfCase(TypeSymbol leaf, Place at) implements Recognition {}
 
-    /** The one value a reading singled out, told by reading the value itself. */
-    record AtAValue(Value value) implements Recognition {}
+    /**
+     * The one value a reading singled out, told by reading the value itself.
+     *
+     * @param value what the class holds, which is what a row is read against
+     * @param at    where that value sits on the order of what stands at the position, or null where
+     *              nothing places it there. The one crossing between the two ways a class is asked
+     *              about, made where the position's type and the value are both in hand: a reader
+     *              holding a place on that order has no value to read, and one that placed the value
+     *              itself would be placing it on whatever order it had reached for. Null is "nothing
+     *              placed it" and never "it is nowhere" — a position with no order has no places to
+     *              be asked about at all
+     */
+    record AtAValue(Value value, Place at) implements Recognition {}
 
     /**
      * Where a count sits, read out of the row through the carrier that says how its values step.
@@ -55,6 +67,14 @@ public sealed interface Recognition {
     record OfACount(NumericTerm.FromOnePosition term,
                     souther.compiler.inputs.TermOrders orders, CountIs is)
             implements Recognition {
+
+        public OfACount {
+            // The term is here because a class of one position's count is asked about a position,
+            // which is the narrower of the two kinds of term; the orders say which number they are
+            // of. Two spellings of one thing, so the second is refused here rather than read as a
+            // class of a number the row is not asked about.
+            orders.areOf(term);
+        }
 
         /** What the count is compared on, which is what the class was written in. */
         public Carrier carrier() {
@@ -107,6 +127,103 @@ public sealed interface Recognition {
         }
     }
 
+    /**
+     * The values a rule told apart from the rest, as the set of them.
+     *
+     * <p>The first arm that is a set rather than a place. Every other class about what stands at the
+     * position is one value, one case, or somewhere on an order — and a rule a behavior writes about
+     * a string need be none of those: {@code String.startsWith("JP", code)} admits strings without
+     * end and leaves out strings without end, and the two are what the behavior treats differently.
+     * Written as a place it would have to be a run, which the strings a pattern admits are not; left
+     * out, the position comes back divided nowhere by a body that plainly divides it.
+     *
+     * <p><b>Both sides are one of these.</b> What a rule admits and what it leaves are two classes
+     * of the position, and each is a set — so the far side is the set of the values on it, and never
+     * this class under a denial. A class that meant "not that one" would be a second way of saying
+     * what a set already says, and two of them could not be met with anything.
+     *
+     * <p>And the one arm that is asked about a value rather than about a place. The strings a
+     * behavior tells apart need not be an interval of the order they are written on, so there is no
+     * place a line could fall in this and it says so ({@link #answersAboutAPlace}).
+     */
+    record OfASet(ValueSet values) implements Recognition {
+
+        public OfASet {
+            if (values == null) {
+                throw new IllegalArgumentException("a class of a set of values holds a set");
+            }
+            // A class holds something, and a class of the empty set holds nothing: it is not a
+            // class of the position at all, and among the classes of a measure it would be one a
+            // report counts, tells an author no row is in, and asks the generator for. What
+            // composes these leaves the cells that hold nothing out; one arriving here is that
+            // reader having passed one on, and it is refused where the value is made.
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a class holding no value is not a class of the position");
+            }
+        }
+    }
+
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
+
+    /**
+     * Whether this can be asked about a place on the order the position's values are counted on.
+     *
+     * <p>Two things a "no" from such a question could mean — the place is not in the class, or the
+     * class has no way of being asked — and only the first is an answer. This is the second said on
+     * its own, so that an axis carrying lines can refuse a class that could never hold one of them
+     * rather than let every line fall in no class at all. A class about a count is asked on that
+     * count's order; a case of an ordered enumeration and a value the rules named are asked at the
+     * place written down when the class was built; a truth, an absence and a class nothing tells
+     * apart are on no order.
+     */
+    default boolean answersAboutAPlace() {
+        return switch (this) {
+            case OfACount ignored -> true;
+            case Under under -> under.inner().answersAboutAPlace();
+            case OfCase one -> one.at() != null;
+            case AtAValue one -> one.at() != null;
+            case Truth ignored -> false;
+            case Held ignored -> false;
+            // A set of values is not a run of them, so no place is inside it or outside it in the
+            // way a line asks about. Answered yes, a line would fall in whichever of these
+            // happened to hold the one value the place stands for, which is an answer about a
+            // value where the question was about an order.
+            case OfASet ignored -> false;
+            case Nothing ignored -> false;
+        };
+    }
+
+    /**
+     * Whether a class meaning this can be a class of {@code number}.
+     *
+     * <p>Not which measure a class of this divides — that is said where the class is built and is
+     * never read off a meaning, because a truth means the same thing at every position. What this
+     * answers is whether the two are in one vocabulary. A meaning about a count carries the number
+     * it counts, and is a class of that number and of no other. Every other meaning is about the
+     * value standing at the position — a case, a truth, a value the rules named, and the place any
+     * of them was given is on the order that value is written on — so it is a class of the
+     * position's own value and of nothing taken of it. Said to be of a number taken of the
+     * position, such a class would hold a place on one order and be asked about places on another,
+     * which a {@code Place} on its own cannot tell apart.
+     *
+     * <p>Exhaustive with no {@code default}: a meaning added later says which vocabulary it is in.
+     */
+    default boolean canBeAClassOf(NumericTerm.FromOnePosition number) {
+        return switch (this) {
+            case OfACount count -> count.term().equals(number);
+            case Under under -> under.inner().canBeAClassOf(number);
+            case Truth ignored -> number instanceof NumericTerm.ValueOf;
+            case Held ignored -> number instanceof NumericTerm.ValueOf;
+            case OfCase ignored -> number instanceof NumericTerm.ValueOf;
+            case AtAValue ignored -> number instanceof NumericTerm.ValueOf;
+            // The values are the position's own, which is what the sets a rule about them names
+            // hold. A count taken of the position is a number, and a set of the position's values
+            // said to be a class of it would answer membership by reading a value of one where the
+            // other was owed.
+            case OfASet ignored -> number instanceof NumericTerm.ValueOf;
+            case Nothing ignored -> number instanceof NumericTerm.ValueOf;
+        };
+    }
 }

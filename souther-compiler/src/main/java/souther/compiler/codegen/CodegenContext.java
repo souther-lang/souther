@@ -1,5 +1,7 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
@@ -7,8 +9,15 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.core.ValueShape;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.PhysicalPos;
+import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
@@ -24,6 +33,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -38,7 +48,18 @@ import static souther.compiler.codegen.Descriptors.*;
 final class CodegenContext {
 
     final String pkg;
-    final Symbols symbols;
+    final DerivedSymbols symbols;
+    /** What the declarations an emitted class names say about themselves. Beside {@link #symbols}
+     *  and not read off it, for the reason {@code PublishedDeclarations} gives. */
+    final PublishedDeclarations published;
+
+    /** Which form each declaration was written in, for the emissions that only have to tell a sum
+     *  from anything else. */
+    final DeclarationKinds kinds;
+
+    /** What each declaration that wears one value wraps, for the readings that go through the
+     *  name. */
+    final NewtypeInners inners;
 
     /**
      * What the language declares of its kernels: what each takes and answers, as the compilation
@@ -72,6 +93,35 @@ final class CodegenContext {
      */
     final Map<String, Type> standingCalls;
 
+    /**
+     * The texts this module's code was read from, for the debug table.
+     *
+     * <p>Handed in for the run and not asked for. What line an instruction's code is at is what its
+     * file is laid out as at the moment, and a backend that could go and find that out would be a
+     * backend that reads the workspace; what it has business knowing is the texts the compilation
+     * it is emitting for was given.
+     */
+    private final SourceLayouts layouts;
+
+    /**
+     * Which text the classes generated here are of.
+     *
+     * <p>A class carries one {@code SourceFile}, and it is this module's. So this is the one text
+     * whose line numbers a class generated here can be read against: a place in any other text has
+     * no line to contribute, because whatever line that place is at is a line of a file the class
+     * does not name, and the file it does name may be shorter than it.
+     */
+    private final QuotedFrom home;
+
+    /** Where a place sits in the text this module's classes name, or null where it sits in another
+     *  text or this compilation holds none. */
+    PhysicalPos sits(SourcePos place) {
+        if (place == null || !home.equals(place.quotedFrom())) {
+            return null;
+        }
+        return layouts.resolve(place);
+    }
+
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
     private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
@@ -94,11 +144,15 @@ final class CodegenContext {
 
     /**
      * This module's declarations' invariant clauses in the representation the language's own operations
-     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}), keyed by declaration. The
-     * constraint mapping a derived decoder does is written against those operations, so it reads this
-     * rather than the settled form the rest of the backend emits from.
+     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}). The constraint mapping a
+     * derived decoder does is written against those operations, so it reads this rather than the
+     * settled form the rest of the backend emits from.
+     *
+     * <p>Null until it is set, and not an empty one. A module reading as stating nothing and a module
+     * whose representation never arrived are the same empty map and opposite facts, and a decoder
+     * built from the second would silently constrain nothing.
      */
-    private Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
+    private ExpandedClauseLookup dischargeInvariants;
 
     /**
      * Where each behavior's declared relation is checked, as it was decided before emission.
@@ -125,11 +179,39 @@ final class CodegenContext {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
     }
 
-    void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
+    /**
+     * What each conjunct of this module's declarations states, statement by statement.
+     *
+     * <p>The reading the front end made, handed over rather than repeated. What a rule states is
+     * settled where the clause's shape was read — a binding crossed, a denial spent — and a backend
+     * that read the tree for itself would recognise a rule written out and decline the same rule
+     * named through a helper, which is a difference in what a decoder reports and not in the model.
+     *
+     * <p>Null until it is set, for the reason {@link #dischargeInvariants} gives.
+     */
+    private InvariantStatements invariantStatements;
+
+    void setInvariantStatements(InvariantStatements statements) {
+        this.invariantStatements = statements;
+    }
+
+    InvariantStatements invariantStatements() {
+        if (invariantStatements == null) {
+            throw new IllegalStateException(
+                    "what " + pkg + "'s clauses state was never handed over");
+        }
+        return invariantStatements;
+    }
+
+    void setDischargeInvariants(ExpandedClauseLookup clauses) {
         this.dischargeInvariants = clauses;
     }
 
-    Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants() {
+    ExpandedClauseLookup dischargeInvariants() {
+        if (dischargeInvariants == null) {
+            throw new IllegalStateException(
+                    "the analysis representation of " + pkg + "'s clauses was never handed over");
+        }
         return dischargeInvariants;
     }
 
@@ -231,8 +313,13 @@ final class CodegenContext {
      * other nodes; a comparison it does not hold is any comparison written outside a condition, which
      * is most of them.
      */
-    java.util.OptionalInt comparisonSiteOf(souther.compiler.core.Core comparison) {
-        return coverage.comparisonSiteOf(comparison);
+    java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> comparisonSiteOf(
+            souther.compiler.core.Core comparison) {
+        // Which comparison the node is, then where a run through it is written down: the catalog
+        // answers the first for every comparison the bodies hold, and the plan the second for the
+        // ones it instruments. The emitter is walking the tree, so the node is how it gets in.
+        return coverage.comparisons().occurrenceAt(comparison)
+                .flatMap(coverage::emissionSiteOf);
     }
 
     /** Records that one planned arm was emitted. */
@@ -252,8 +339,11 @@ final class CodegenContext {
     List<Integer> plannedButNotEmitted() {
         List<Integer> missing = new java.util.ArrayList<>();
         for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
-            if (!emittedSites.contains(site.index())) {
-                missing.add(site.index());
+            // By the number, because what was emitted is what was written into the code: this is
+            // the side of the boundary where a place is a constant in a call, and both families
+            // are written the same way there.
+            if (!emittedSites.contains(site.index().raw())) {
+                missing.add(site.index().raw());
             }
         }
         return missing;
@@ -359,12 +449,32 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    CodegenContext(String pkg, Symbols symbols, KernelSignatures kernels,
+    /** The same, for an emitter that has not been handed what the declarations wrap — read off the
+     *  scope it is emitting against instead. */
+    CodegenContext(String pkg, DerivedSymbols symbols, PublishedDeclarations published,
+                   DeclarationKinds kinds,
+                   KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Type> standingCalls) {
+                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home) {
+        this(pkg, symbols, published, kinds, NewtypeInners.asWritten(symbols), kernels, caseToSums,
+                typePackage, exposeAll, exposed, standingCalls, layouts, home);
+    }
+
+    CodegenContext(String pkg, DerivedSymbols symbols, PublishedDeclarations published,
+                   DeclarationKinds kinds,
+                   NewtypeInners inners,
+                   KernelSignatures kernels,
+                   Map<String, List<GeneratedClass>> caseToSums,
+                   Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
+                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home) {
+        this.layouts = layouts;
+        this.home = Objects.requireNonNull(home, "the classes of a module are of the text it was read from");
         this.pkg = pkg;
         this.symbols = symbols;
+        this.published = published;
+        this.kinds = kinds;
+        this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;
         this.typePackage = typePackage;
@@ -468,7 +578,7 @@ final class CodegenContext {
             return List.of();
         }
         List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, symbols)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
             if (member.isDeclaredByLanguage()
                     || !(member instanceof TypeSymbol.AtModule at)
                     || !at.module().equals(module)) {

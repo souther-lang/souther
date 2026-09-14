@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 import souther.compiler.report.AdequacyReport;
 
@@ -69,7 +70,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
 
     private static JsonNode behaviorOf(AdequacyReport report, String name) {
         JsonNode root = JSON.readTree(
-                report.json(souther.compiler.diag.SourceNameResolver.identity()));
+                report.json(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         for (JsonNode each : root.get("modules").get(0).get("behaviors")) {
             if (name.equals(each.get("name").asString())) {
                 return each;
@@ -128,7 +129,8 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         assertEquals(BoundaryForMeasurement.NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 partition.partitioned().why());
         assertEquals(BoundaryForMeasurement.NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED,
-                partition.owes().why());
+                compilation.db().ask(new Adequacy.BodyBorders("probe.unresolved")).value()
+                        .get("issue").why());
 
         // The arms are measured off the bodies and not off the boundary, so they say what happened
         // to them. Two measures short of two different things is two sentences, and a behavior
@@ -184,10 +186,16 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         AdequacyReport report = AdequacyReport.of(compilation);
         for (AdequacyReport.ModuleReport module : report.modules()) {
             for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
+                // One fact per behavior, and which of the two it is follows from which half of the
+                // boundary was missing. `receipt` has a signature and an input nothing read, so it
+                // carries the other word — and it carries one, not none: a behavior in a module
+                // with a hole in it was not measured over an input it could read.
+                Class<? extends Weakening> owed = "receipt".equals(behavior.name())
+                        ? Weakening.InputNotRead.class : Weakening.BoundaryNotDerived.class;
                 long said = behavior.evidence().weakening().causes().stream()
-                        .filter(each -> each instanceof Weakening.BoundaryNotDerived)
+                        .filter(owed::isInstance)
                         .count();
-                assertEquals("receipt".equals(behavior.name()) ? 0 : 1, said,
+                assertEquals(1, said,
                         () -> "what " + behavior.name() + " went without: "
                                 + behavior.evidence().weakening());
             }
@@ -205,6 +213,11 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     /**
      * The document says what could not be read, in the words it promises, and leaves out the
      * sections it has nothing to fill in.
+     *
+     * <p>Two words and not one, because a reader acts on them differently. {@code issue} has a name
+     * in its own declaration that resolved to nothing, and that is where the author looks;
+     * {@code receipt}'s declaration is whole and the hole is elsewhere in the module, so an author
+     * sent to {@code receipt} would find nothing wrong with it.
      */
     @Test
     void theDocumentLeavesOutWhatItCouldNotRead() {
@@ -217,41 +230,78 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
                             .filter("behavior_boundary_not_derived"::equals).count(),
                     () -> "what " + name + " went without: " + weakeningOf(behavior));
         }
-        assertTrue(behaviorOf(report, "receipt").has("signature"),
-                "and the behavior whose boundary did work out is written in full");
+        JsonNode receipt = behaviorOf(report, "receipt");
+        assertFalse(receipt.has("signature"),
+                "the boundary of `receipt` was worked out and its input was not read, so the cases"
+                        + " at its positions were never seen");
+        assertEquals(1, weakeningOf(receipt).stream()
+                        .filter("behavior_input_not_read"::equals).count(),
+                () -> "what receipt went without: " + weakeningOf(receipt));
 
         // The three states apart, in the document. `issue` has no section because nothing derived
         // what the model divides it into — the axes come off the boundary and no declaration gives
         // them, so an empty array would say the model divides none of its positions; `whole` has
         // one saying the measure has no subject, which is true of a composition whatever else is
-        // wrong with it; `receipt` has one with numbers in it.
+        // wrong with it; `receipt` has none either, and for the other reason.
         assertFalse(behaviorOf(report, "issue").has("partition"),
                 "no section where nothing derived what the model divides it into");
         assertEquals("no_subject", behaviorOf(report, "whole")
                         .get("partition").get("axesMeasure").get("reason").asString(),
                 "a composition is measured at its stages, and the document says so");
-        assertTrue(behaviorOf(report, "receipt").has("partition"),
-                "and a behavior that was measured carries its measurement");
+        assertFalse(receipt.has("partition"),
+                "nor where the input the model would divide was never read");
     }
 
     /**
      * And the line a person reads says which of the ways it has no number, rather than the words
      * of another.
      *
-     * <p>Both halves are held. The sentence a reason is given is worth nothing on its own — the
-     * line said {@code no row names this behavior} for every reason nobody had written a word for,
-     * which is a sentence about a state this behavior is not in — so what this fixes is fixed by
-     * the second assertion.
+     * <p>Held per behavior and not over the report. The two states reach this line from one
+     * behavior each, so a sentence found anywhere in the text is a sentence some behavior may not
+     * have been given: the report said the signature could not be read under {@code receipt}, whose
+     * signature was read, and the assertion that the sentence appears passed on {@code issue}.
+     *
+     * <p>The last assertion holds the other half. The sentence a reason is given is worth nothing on
+     * its own — the line said {@code no row names this behavior} for every reason nobody had written
+     * a word for, which is a sentence about a state none of these behaviors is in.
      */
     @Test
     void theLineSaysWhichOfTheWaysItHasNoNumber() {
         String text = AdequacyReport.of(measured())
-                .human(souther.compiler.diag.SourceNameResolver.identity());
-        assertTrue(text.contains("signature   not measured (this behavior's signature could not be"
-                        + " read)"),
-                () -> "the line names the state it is in:\n" + text);
+                .human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        assertEquals("not measured (this behavior's signature could not be read)",
+                signatureLineOf(text, "issue"),
+                () -> "a name in its own declaration resolved to nothing:\n" + text);
+        assertEquals("not measured (what this behavior takes was not read)",
+                signatureLineOf(text, "receipt"),
+                () -> "its signature was read and its input was not, so the author is not sent"
+                        + " back to this declaration:\n" + text);
         assertFalse(text.contains("no row names this behavior"),
-                () -> "and not the state of a behavior nobody wrote a row for:\n" + text);
+                () -> "and neither is the state of a behavior nobody wrote a row for:\n" + text);
+    }
+
+    /**
+     * What the signature line of one behavior says, which is not what the report says somewhere.
+     *
+     * <p>The behavior's own block: a measure is printed under the behavior it is of, so a sentence
+     * is that behavior's only where it is found under its name.
+     */
+    private static String signatureLineOf(String report, String behavior) {
+        String opening = "    signature   ";
+        List<String> lines = List.of(report.split("\n"));
+        for (int i = 0; i < lines.size(); i++) {
+            if (!lines.get(i).startsWith("  " + behavior + " ")) {
+                continue;
+            }
+            for (int j = i + 1; j < lines.size() && lines.get(j).startsWith("    "); j++) {
+                if (lines.get(j).startsWith(opening)) {
+                    return lines.get(j).substring(opening.length());
+                }
+            }
+            throw new AssertionError("`" + behavior + "` says nothing about its signature:\n"
+                    + report);
+        }
+        throw new AssertionError("no behavior `" + behavior + "` in:\n" + report);
     }
 
     /** And no measure the bar rests on could be finished, so the verdict is undetermined. Not a

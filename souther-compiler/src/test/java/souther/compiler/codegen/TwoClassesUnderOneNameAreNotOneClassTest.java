@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.Emitted;
 import souther.compiler.EmittedBytes;
 import org.junit.jupiter.api.Test;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
@@ -42,7 +43,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
 
     @Test
     void aDataAndABehaviorThatCapitalizesOntoItAreOneClass() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.put(QUOTE_BEHAVIOR, EmittedBytes.of(QUOTE_BEHAVIOR, "second")));
@@ -61,7 +62,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  and this ABI has one name for them. */
     @Test
     void twoMembersBridgedUnderOneNameAreOneClass() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         GeneratedClass.BridgeCase fromA =
                 new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo")));
         out.put(fromA, EmittedBytes.of(fromA));
@@ -80,7 +81,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      */
     @Test
     void oneIdentityCannotRewriteAnotherThatHasTheSameName() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_BEHAVIOR, _ -> EmittedBytes.of(QUOTE_BEHAVIOR)));
@@ -94,7 +95,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     /** The control: the identity that was emitted may rewrite what it holds, and stays what it is. */
     @Test
     void andTheIdentityThatWasEmittedMayRewriteIt() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA, "rewritten"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -110,7 +111,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     /** A rewrite of something nothing emitted is refused rather than becoming the emission of it. */
     @Test
     void andNothingCanBeRewrittenThatWasNeverEmitted() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA)));
         assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
@@ -121,7 +122,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  escaping lambdas are added. */
     @Test
     void andSoIsOneArrivingWithOthers() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         Map<GeneratedClass, byte[]> more = new LinkedHashMap<>();
         GeneratedClass.Lambda lambda = new GeneratedClass.Lambda("demo", 0);
@@ -134,7 +135,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  in. Without it the refusals above would pass on a registry that refused everything. */
     @Test
     void andEveryOtherIdentityIsWritten() {
-        Emissions out = new Emissions("demo");
+        Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         GeneratedClass.Encoder encoder = new GeneratedClass.Encoder(QUOTE_DATA);
         GeneratedClass.Decoder decoder = new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON);

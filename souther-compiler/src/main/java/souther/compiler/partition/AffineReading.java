@@ -1,14 +1,21 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.inputs.PathResolution;
+import souther.compiler.numeric.LinearForm;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -36,18 +43,6 @@ import java.util.Map;
  * @param claim what the operator states about the threshold's own value
  */
 record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonClaim claim) {
-
-    /**
-     * {@code comparison} as this form, or null where nothing here reads it.
-     *
-     * <p>Null where the arithmetic names no position, where an operand is outside the affine
-     * fragment, and where the comparison places nothing — an operand of a variable product is one
-     * value and the rule about it is one this does not model.
-     */
-    static AffineReading of(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        return read(comparison, reads, symbols) instanceof OfAComparison.Cuts cuts
-                ? cuts.read() : null;
-    }
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -102,10 +97,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /** The same, saying which of the three it is. */
-    static OfAComparison read(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        if (!comparison.op().compares()) {
-            return new OfAComparison.CutsNothing(java.util.Set.of());
-        }
+    static OfAComparison read(StatedComparison comparison, InputDomain inputs, InputReads reads,
+                              RuleReadingSource ruleSource) {
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
@@ -113,7 +106,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(symbols, named));
+                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped.node(), stopped.at());
             }
@@ -127,13 +120,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
-                        whole.constant().negate(), ComparisonClaim.of(comparison.op()));
+                        whole.constant().negate(), comparison.claim());
                 // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one
                 // rule, and a reader that met the first without turning it round drew its border on
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
                 return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison, left, reads, symbols))
+                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource))
                                 ? here.mirrored() : here);
             }
         }
@@ -178,11 +171,6 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 .distinct().toList();
     }
 
-    /** {@code e} as an affine form over the behavior's positions, or null where it is not one. */
-    static LinearForm<NumericTerm> affine(Core e, InputReads reads, Symbols symbols) {
-        return AffineForms.of(e, reads, reading(symbols, new java.util.LinkedHashSet<>()));
-    }
-
     /**
      * What this reader answers about its own environment, which is what tells its atoms from
      * another reader's.
@@ -191,19 +179,38 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * becomes a term of the input. Collected here rather than recovered afterwards: what a rule is
      * about is what the reading of it named, and a reader working that out again from the operands
      * is a second account of it.
+     *
+     * <p>{@code inputs} is held here and not threaded through the walk. What the environment
+     * answers changes at every binding the walk goes under; the reading of the input is one value
+     * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            Symbols symbols, java.util.Set<NumericTerm> named) {
+            InputDomain inputs, RuleReadingSource ruleSource, java.util.Set<NumericTerm> named) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
             public Symbols symbols() {
-                return symbols;
+                return ruleSource.symbols();
+            }
+
+            @Override
+            public PublishedDeclarations published() {
+                return ruleSource.published();
+            }
+
+            @Override
+            public DeclarationKinds kinds() {
+                return ruleSource.kinds();
+            }
+
+            @Override
+            public NewtypeInners inners() {
+                return ruleSource.inners();
             }
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, at, symbols);
+                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource);
                 if (term == null) {
                     return null;
                 }
@@ -229,7 +236,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
              */
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
-                return NameAnswers.denoting(read, at, symbols);
+                return NameAnswers.denoting(read, at, ruleSource.symbols(),
+                        ruleSource.newtypes());
             }
 
             /**
@@ -240,20 +248,32 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             @Override
             public java.util.List<AffineForms.ReadThrough<InputReads>> alternativesOf(
                     Core.Read read, InputReads at) {
-                return NameAnswers.alternativesOf(read, at, symbols);
+                return NameAnswers.alternativesOf(read, at, ruleSource.symbols(),
+                        ruleSource.newtypes());
             }
 
             @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
-                return at.pathOf(fa.target(), symbols) == null
-                        && !Location.isStep(fa.target().type(), fa.field(), symbols);
+                // Read through where the target is at no position of the input: a field of a value
+                // that stands nowhere is arithmetic's to walk into, since it is no place a row
+                // writes at.
+                boolean stands = switch (at.pathOf(fa.target(), ruleSource.newtypes())) {
+                    case PathResolution.At _ -> true;
+                    case PathResolution.NotAPosition _ -> false;
+                    // A target that may stand at a position of the input does, on some run, and
+                    // which is not for arithmetic to decide by walking into it. Read through, a
+                    // field of it would be a term over a place it may never stand at.
+                    case PathResolution.MayStandAt _ -> true;
+                };
+                return !stands
+                        && !Location.isStep(fa.target().type(), fa.field(), ruleSource.newtypes());
             }
         };
     }
 
     /** The one position this cuts where it cuts one with a coefficient of one, or null. A form
-     *  written {@code -x} has already been turned round by {@link #of}, so this asks about the
-     *  coefficient as the canonical form has it. */
+     *  written {@code -x} has already been turned round by the reading that made it
+     *  ({@link #read}), so this asks about the coefficient as the canonical form has it. */
     NumericTerm oneCoordinate() {
         if (form.coefs().size() != 1) {
             return null;
@@ -292,7 +312,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * whichever way the author wrote the subtraction, and it is not a difference between two rules.
      */
     private AffineReading mirrored() {
-        return new AffineReading(form.negate(), cut.negate(), turned(claim));
+        return new AffineReading(form.negate(), cut.negate(), claim.turned());
     }
 
     /**
@@ -315,13 +335,18 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** The position the comparison's left side names first, or null where it names none. Handed the
      *  reading of that side rather than walking it again: one comparison is read once. */
-    private static NumericTerm subjectOf(Core.Binary comparison, LinearForm<NumericTerm> left,
-                                         InputReads reads, Symbols symbols) {
+    private static NumericTerm subjectOf(Core leftSide, LinearForm<NumericTerm> left,
+                                         InputReads reads, RuleReadingSource ruleSource) {
         if (left == null || left.coefs().isEmpty()) {
             return null;
         }
         for (souther.compiler.inputs.TermPath named
-                : GuardThresholds.mentionedIn(comparison.left(), reads, symbols)) {
+                : GuardThresholds.mentionedIn(leftSide, reads, ruleSource.symbols(),
+                        ruleSource.newtypes(),
+                        // A side of a comparison and not a clause: what this is handed is the side
+                        // alone, and rooting a reading of arrivals at it would read it as a tree of
+                        // its own and lose whatever bound a name above it.
+                        souther.compiler.coverage.Arrivals.everyArmIsTakenForAValue())) {
             for (NumericTerm atom : left.coefs().keySet()) {
                 if (atom.subjectPath().equals(named)) {
                     return atom;
@@ -329,19 +354,6 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             }
         }
         return null;
-    }
-
-    /** What the operator states once both sides are turned round. */
-    private static ComparisonClaim turned(ComparisonClaim claim) {
-        return switch (claim) {
-            // Turning the sides round moves the threshold's own value to the other class and leaves
-            // whether the rule holds there alone: `x <= c` and `-x >= -c` are one statement.
-            case ComparisonClaim.Cut cut ->
-                    new ComparisonClaim.Cut(!cut.valueBelongsBelow(), cut.holdsAtTheValue());
-            // An equality names a value and orders nothing, so there is nothing to turn round.
-            case ComparisonClaim.Singled singled -> singled;
-            case ComparisonClaim.Nothing nothing -> nothing;
-        };
     }
 
     /**
@@ -365,14 +377,14 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * it: a position with no number is one a sum has nothing to add.
      */
     java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> carriers(
-            InputReads reads, Symbols symbols) {
+            souther.compiler.inputs.Quantities quantities) {
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
                 new java.util.LinkedHashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
             // Both ends of the term, because a reader of a row wants the one it is decoded on and a
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).
-            souther.compiler.inputs.TermOrders here = reads.read().ordersOf(term, symbols);
+            souther.compiler.inputs.TermOrders here = quantities.ordersOf(term);
             if (here.answered() == null || !here.answered().counts()) {
                 return null;
             }

@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The line is where the two are equal. A guard's arms are above the line and below-or-on it, so a
  * row on the line takes the same arm as one well below it, and the arms cannot stand in for it — a
  * row on the line is the one thing that tells a rule written {@code >} from one written {@code >=}
- * (spec §every-border-has-a-row-against-its-line).
+ * (spec §every-obligation-against-its-line-has-a-row).
  *
  * <p>Nothing asked for it. The reader that turns a comparison into a line wants a constant on one
  * side, and where there is none it produced nothing at all: no line, no obligation, and a note saying
@@ -279,8 +279,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aComparisonOfTwoPositionsAsksForARowWhereTheyAreEqual() {
         String report = report(TWO_NEWTYPES);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 3   coverage items 6/8   excluded 4"), report);
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
+        assertTrue(report.contains("border      borders 3   obligations 2/4"), report);
     }
 
     /**
@@ -297,10 +297,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 3   coverage items 7/8   excluded 4"), report);
-        assertFalse(report.contains("no row is at the OFF point benefitOf/charge = ceiling ("),
+        assertTrue(report.contains("border      borders 3   obligations 3/4"), report);
+        assertFalse(report.contains("read as benefitOf/charge: = ceiling\n"),
                 report);
-        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1"),
                 report);
     }
 
@@ -315,8 +315,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aBehaviorWithNoAxisStillDrawsALineBetweenItsPositions() {
         String report = report(NO_AXIS);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling"), report);
-        assertTrue(report.contains("border      borders 1   coverage items 2/4"), report);
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
+        assertTrue(report.contains("border      borders 1   obligations 2/4"), report);
     }
 
     /** An enumeration counts on the place its cases are declared at, so it reaches this by the same
@@ -325,7 +325,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anEnumerationDrawsOneToo() {
         String report = report(ENUMERATION);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /** A carrier whose values are strings reaches this the way one whose values count does. Nothing
@@ -334,7 +334,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aCarrierOfStringsDrawsOneToo() {
         String report = report(TEXT);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/a = b"), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /**
@@ -354,6 +354,26 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
+     * And what each position is left with is the carrier, which is what was found.
+     *
+     * <p>The word beside the one above, because that one holds over any way of drawing no line and
+     * this one says which. Both positions stand on an order this counts nothing on, so a sum over
+     * them has nothing to be spaced by — and that is established where the orders are asked for
+     * rather than left over when three readings declined.
+     *
+     * <p>Paired with {@link #aCarrierOfStringsDrawsOneToo}, which is the same question answered the
+     * other way: two strings also count nothing and the place they meet is a line, so a reader
+     * asking for counting orders before the narrower readings would refuse a line the model draws.
+     * Together they hold the question to "is there an order this quantity can be realized on" and
+     * away from "is this domain numeric".
+     */
+    @Test
+    void aCarrierNoOrderCountsOnSaysThatAtEachPositionOfTheQuantity() {
+        assertEquals(List.of("a: UNSUPPORTED_DOMAIN", "b: UNSUPPORTED_DOMAIN"),
+                notRead(NO_CARRIER));
+    }
+
+    /**
      * An offset on one side moves the line rather than taking it away.
      *
      * <p>{@code charge > ceiling + 1000} is {@code charge - ceiling > 1000}: a line on the same
@@ -368,9 +388,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void anOffsetOnOneSideMovesTheLineRatherThanTakingItAway() {
         String report = report(NOT_A_TERM);
 
-        assertTrue(report.contains("no row is at the OFF point benefitOf/charge = ceiling + 1000"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1000"),
                 report);
-        assertTrue(report.contains("no row is at the ON point benefitOf/charge = ceiling + 1001"),
+        assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1001"),
                 report);
         assertTrue(notReadAbout(report, "charge"), report);
     }
@@ -435,27 +455,31 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A line on a measure of two positions is drawn and read, and nothing here promises it.
+     * A line on a measure of two positions is drawn, read, and written for.
      *
-     * <p>Three answers and not one. The line is where the two lengths are equal and the rows can be
-     * read against it; nothing here writes a value from a length — four is not what goes at the
-     * position, it is four characters somebody has to choose — so no witness is found; and with no
-     * witness nothing is counted.
+     * <p>Three answers and not one. The line is where the two lengths are equal, the rows can be
+     * read against it, and a row is composed at it — four is not what goes at the position, it is
+     * four characters somebody has to choose, and choosing them is what a realizer does. So the
+     * points are counted and an author with no row at them is short of one.
      *
-     * <p>What is said about that matters more than the absence. Two strings of one length are the
-     * easiest row in the file to write by hand, so a sentence saying no value can be written there
-     * would be false, and the one written says what this could not do.
+     * <p>Two strings of one length are the easiest row in the file to write by hand, and the row
+     * this offers is that row.
      */
     @Test
-    void aLineOnAMeasureIsReadAndPromisedByNothing() {
+    void aLineOnAMeasureIsDrawnAndWrittenFor() {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at the OFF point cmp/String.length(a) = String.length(b)"), report);
-        assertTrue(report.contains(
-                "not known to be writable: the OFF point cmp/String.length(a) = String.length(b)"), report);
-        assertTrue(rows.contains("nothing here could build a representative for it"), rows);
-        assertTrue(rows.contains("does not make one unwritable"), rows);
+        // The point is at a distance of nothing, which is what a level of a distance is — how far
+        // the row stands from the other position, and which position that is is each reading's.
+        assertTrue(report.contains("no row is at the OFF point ("), report);
+        assertFalse(report.contains(
+                "nothing could show a row can be written at the OFF point ("), report);
+        assertTrue(report.contains("read as cmp/String.length(a): = String.length(b)"), report);
+        assertTrue(rows.contains("(\"\", \"\")"),
+                () -> "two strings of one length, which is what the line is: " + rows);
+        assertTrue(rows.contains("(\"x\", \"\")"),
+                () -> "and one longer by a character, which is the point beside it: " + rows);
     }
 
     /**
@@ -472,9 +496,11 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at the OFF point cmp/a = b"),
+        assertFalse(report.contains("no row is at the OFF point ("),
                 "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains("not known to be writable: the OFF point cmp/a = b"), report);
+        assertTrue(report.contains(
+                "nothing could show a row can be written at the OFF point ("), report);
+        assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
     /**
@@ -516,15 +542,15 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
         String report = report(ALLOWED_BY_THE_RECORD);
 
-        assertTrue(report.contains("no row is at the OFF point cmp/p.a = p.b"), report);
-        assertTrue(report.contains("border      borders 2   coverage items 1/3"), report);
+        assertTrue(report.contains("read as cmp/p.a: = p.b"), report);
+        assertTrue(report.contains("border      borders 2   obligations 1/2"), report);
     }
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**
@@ -558,8 +584,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return souther.compiler.report.GeneratedRows.of(compilation, null, null, true,
-                SourceNameResolver.identity()).text();
+        return souther.compiler.report.GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     /** Held here so a rename of the report's own words does not quietly turn every assertion above

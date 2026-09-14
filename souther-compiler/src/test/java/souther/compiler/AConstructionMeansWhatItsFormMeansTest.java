@@ -135,7 +135,7 @@ class AConstructionMeansWhatItsFormMeansTest {
         Diagnostic d = only(rows);
         assertEquals(code, d.code(), d.said().toString());
         for (String name : names) {
-            assertTrue(d.toString().contains(name) || d.said().toString().contains(name),
+            assertTrue(d.said().toString().contains(name),
                     "`" + name + "` is said: " + d.said());
         }
     }

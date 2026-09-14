@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
@@ -90,10 +91,14 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
                         + " class of any of them");
         String report = report();
         for (String point : List.of("ON", "OFF", "IN", "OUT")) {
-            assertTrue(report.contains("the " + point + " point overASequenceFromOutsideTheClosure/"
-                            + "List.sum(lines[*].amount)"),
-                    () -> "a " + point + " point is owed against the total: " + report);
+            assertTrue(report.contains("the " + point + " point "),
+                    () -> "a " + point + " point is owed: " + report);
         }
+        // And what each of them is owed against is the total, which is the reading's word: the
+        // point itself names no quantity, since a line is owed once wherever it is read.
+        assertTrue(report.contains("read as overASequenceFromOutsideTheClosure/"
+                        + "List.sum(lines[*].amount)"),
+                () -> "and the points are owed against the total: " + report);
     }
 
     /**
@@ -151,7 +156,7 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
     }
 
     private static String report() {
-        return AdequacyReport.of(measured()).human(SourceNameResolver.identity());
+        return AdequacyReport.of(measured()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static Compilation measured() {

@@ -2,18 +2,16 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -68,7 +66,7 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         // And on its own the third is exactly what the caller said and no more, so a reader meeting
         // that onto the answer above would still have no floor for the sum.
         SearchRegion withAFloorUnderTheThird =
-                rules.assuming(NumericDomain.LinearForm.atom(Z), NumericDomain.Rel.GE);
+                rules.assuming(LinearForm.atom(Z), Rel.GE);
         assertEquals(Endpoint.inclusive(Count.of(0)), withAFloorUnderTheThird.runsBetween(Z).min());
 
         assertEquals(Endpoint.inclusive(Count.of(1)), withAFloorUnderTheThird.runsBetween(sum()).min(),
@@ -81,17 +79,17 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     void aFactAboutAPositionTheRulesDoNotNameChangesNothing() {
         SearchRegion rules = region();
 
-        assertEquals(rules.runsBetween(NumericDomain.LinearForm.atom(X)),
-                rules.assuming(NumericDomain.LinearForm.atom(Z), NumericDomain.Rel.GE)
-                        .runsBetween(NumericDomain.LinearForm.atom(X)));
+        assertEquals(rules.runsBetween(LinearForm.atom(X)),
+                rules.assuming(LinearForm.atom(Z), Rel.GE)
+                        .runsBetween(LinearForm.atom(X)));
     }
 
-    private static NumericDomain.LinearForm<NumericTerm> sum() {
+    private static LinearForm<NumericTerm> sum() {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(X, BigDecimal.ONE);
         coefs.put(Y, BigDecimal.ONE);
         coefs.put(Z, BigDecimal.ONE);
-        return new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(BigDecimal.ZERO, coefs);
     }
 
     private static NumericTerm value(String field) {
@@ -102,12 +100,10 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         Compilation compilation = Compilation.ofSource(TWO_RELATED_AND_A_THIRD, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("take"), symbols, ReadAs.THE_COMPILATION_DOES)
-                .quantities(symbols).region();
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get("take"), rules, ReadAs.THE_COMPILATION_DOES)
+                .quantities(rules).region();
     }
 }

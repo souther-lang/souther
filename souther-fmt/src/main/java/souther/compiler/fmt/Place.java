@@ -5,7 +5,6 @@ import souther.compiler.cst.SyntaxKind;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * One place of the canonical form: somewhere it has, told apart from every other place by being
@@ -68,19 +67,20 @@ final class Place {
      * <p>Asked of the document before the carriers are answered, since a slot names the place it
      * belongs to and an answered one does not.
      */
-    static Map<Place, Integer> orderedIn(TokenDoc doc) {
+    static IdentityHashMap<Place, Integer> orderedIn(TokenDoc doc) {
         List<Place> written = new ArrayList<>();
-        Map<Place, Boolean> seen = new IdentityHashMap<>();
+        IdentityHashMap<Place, Boolean> seen = new IdentityHashMap<>();
         collect(doc, written, seen);
-        Map<Place, Integer> counts = new IdentityHashMap<>();
-        Map<Place, Integer> out = new IdentityHashMap<>();
+        IdentityHashMap<Place, Integer> counts = new IdentityHashMap<>();
+        IdentityHashMap<Place, Integer> out = new IdentityHashMap<>();
         for (Place p : written) {
             out.put(p, counts.merge(p.parent(), 1, Integer::sum) - 1);
         }
         return out;
     }
 
-    private static void collect(TokenDoc doc, List<Place> written, Map<Place, Boolean> seen) {
+    private static void collect(TokenDoc doc, List<Place> written,
+                                IdentityHashMap<Place, Boolean> seen) {
         switch (doc) {
             case TokenDoc.At a -> {
                 first(a.place(), written, seen);
@@ -98,7 +98,8 @@ final class Place {
         }
     }
 
-    private static void first(Place place, List<Place> written, Map<Place, Boolean> seen) {
+    private static void first(Place place, List<Place> written,
+                              IdentityHashMap<Place, Boolean> seen) {
         if (place != null && seen.put(place, true) == null) {
             written.add(place);
         }

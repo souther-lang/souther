@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.coverage.ControlPointId;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.Reachability;
@@ -51,10 +51,13 @@ class AGuardsArmsAreNotItsThresholdTest {
         Compilation c = Compilation.ofSource(MODEL.formatted(guard), "demo");
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("demo")).value();
+        // In the order the emitter numbered them, which is the order the walk made them: every arm
+        // of a guard is one a run can be recorded in, so the probe numbers put all four in that
+        // order and there is nothing here for the reading's own answer to decide.
         List<Reachability> arms = byBehavior.get("pick").found().entrySet().stream()
-                .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
-                .sorted(Map.Entry.comparingByKey(
-                        java.util.Comparator.comparingInt(ControlPointId::controlId)))
+                .filter(each -> each.getKey() instanceof ControlPlace.Arm)
+                .sorted(java.util.Comparator.comparingInt(each ->
+                        ((ControlPlace.Arm) each.getKey()).probe().orElseThrow().raw()))
                 .map(Map.Entry::getValue)
                 .toList();
         assertEquals(4, arms.size(), "two guards, two arms each");

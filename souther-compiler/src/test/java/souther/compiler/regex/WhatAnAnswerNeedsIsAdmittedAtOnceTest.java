@@ -34,7 +34,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     }
 
     private static Language language(String regex) {
-        Language said = plan(regex).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+        Language said = plan(regex).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(said, regex + " is one a rule may be answered about");
         return said;
     }
@@ -90,21 +90,21 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     @Test
     void aPlanOfSeveralIsWhatTheyComeTo() {
         Language both = plan("[0-9]+").and(plan("[0-4]{2}"))
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(both);
         assertTrue(both.has("00"));
         assertTrue(both.has("44"));
         assertFalse(both.has("55"));
         assertFalse(both.has("0"));
 
-        Language either = plan("a+").or(plan("b+")).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+        Language either = plan("a+").or(plan("b+")).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(either);
         assertTrue(either.has("aa"));
         assertTrue(either.has("bb"));
         assertFalse(either.has("ab"));
 
         Language less = plan("[0-9]{2}").less(plan("00"))
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(less);
         assertTrue(less.has("01"));
         assertFalse(less.has("00"));
@@ -121,8 +121,8 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     void aPlanPastWhatItIsAllowedComesToNothing() {
         PatternPlan big = plan("[0-9]{5000}");
 
-        assertNull(big.compile(new PatternPlan.Budget(100, 100)));
-        assertNotNull(big.compile(PatternPlan.Budget.OF_ADMITTED_VALUES), "and is built where there is room");
+        assertNull(big.compile(new PatternPlan.Budget(100, 100).meter()));
+        assertNotNull(big.compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()), "and is built where there is room");
     }
 
     /**
@@ -139,9 +139,9 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
 
         PatternPlan.Budget roomForOne = new PatternPlan.Budget(1_000, 100);
 
-        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000)),
+        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000).meter()),
                 "each of them is small, and together they fit where there is room for them");
-        assertNull(several.compile(roomForOne),
+        assertNull(several.compile(roomForOne.meter()),
                 "and not where there is room for one of them at a time");
     }
 

@@ -3,6 +3,7 @@ package souther.compiler.values;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,21 +23,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatTwoRulesAboutOnePositionLeaveItTest {
 
-    private static final String POSITION = "value";
+    private static final Sameness.Block<String> POSITION = Sameness.Block.of("value");
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
     private static final Value C = Value.text("C");
 
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
     /** What both leave, read as the set it is. */
     private ValueSet met(ValueSet one, ValueSet other) {
         return sets.meet(POSITION, one, other).set();
     }
 
-    /** And what either leaves. */
+    /** And what either leaves, said as one plan over the alternatives — which is how a block holds
+     *  what its alternatives leave it. */
     private ValueSet joined(ValueSet one, ValueSet other) {
-        return sets.join(POSITION, one, other).set();
+        return sets.joining(POSITION, List.of(one, other)).set();
     }
 
     /** Two equalities naming different values leave nothing, which is the whole of the refusal. */

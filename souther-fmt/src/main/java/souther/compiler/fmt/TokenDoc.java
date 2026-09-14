@@ -37,7 +37,7 @@ sealed interface TokenDoc {
     /** A boundary the layout may break, and which holds the rule's answer where it does not. */
     TokenDoc SOFT_GAP = new Gap(Break.MAY, null, true);
 
-    /** Writes nothing, and the group holding it is never laid out flat — {@link Doc#MUST_BREAK}.
+    /** Writes nothing, and the group holding it is never laid out flat — {@link Doc.MustBreak}.
      *  What refuses is a comment, so it is that obligation this discharges. */
     TokenDoc MUST_BREAK = new MustBreak(Obligation.NOTHING_SHARES_A_COMMENTS_LINE);
 

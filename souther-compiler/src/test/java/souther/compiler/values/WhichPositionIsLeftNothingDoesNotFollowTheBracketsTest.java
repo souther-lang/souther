@@ -39,23 +39,33 @@ class WhichPositionIsLeftNothingDoesNotFollowTheBracketsTest {
     private static final Value ZERO = Value.number(0);
     private static final Value ONE = Value.number(1);
 
-    private static AdmissibleValues<String> at(String atom, Value value) {
-        return AdmissibleValues.at(atom, ValueSet.just(value));
-    }
-
     /** What puts the sets of one reading together. Every set here is written out, so nothing is
      *  built and no allowance is spent. */
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
+
+    /** One rule about one position, worked out. */
+    private AdmissibleValues<String> at(String atom, Value value) {
+        return PlannedValues.at(atom, AdmittedPlan.of(ValueSet.just(value)))
+                .resolve(sets).values();
+    }
 
     private AdmissibleValues<String> pair(Value a, Value b) {
         return at(A, a).meet(at(B, b), sets);
+    }
+
+    /** The same pair while it is still a description, which is where a choice between two of them
+     *  is taken. */
+    private static PlannedValues<String> planned(Value a, Value b) {
+        return PlannedValues.at(A, AdmittedPlan.of(ValueSet.just(a)))
+                .meet(PlannedValues.at(B, AdmittedPlan.of(ValueSet.just(b))));
     }
 
     /** The three above, in the orders a conjunction of them can be written in. */
     private List<AdmissibleValues<String>> everyOrder() {
         AdmissibleValues<String> x = pair(ZERO, ZERO);
         AdmissibleValues<String> y = at(A, ZERO);
-        AdmissibleValues<String> z = pair(ONE, ZERO).joinApart(pair(ZERO, ONE), sets);
+        AdmissibleValues<String> z = planned(ONE, ZERO).joinLiveApart(planned(ZERO, ONE))
+                .resolve(sets).values();
         List<AdmissibleValues<String>> out = new ArrayList<>();
         out.add(x.meet(y, sets).meet(z, sets));
         out.add(x.meet(z, sets).meet(y, sets));

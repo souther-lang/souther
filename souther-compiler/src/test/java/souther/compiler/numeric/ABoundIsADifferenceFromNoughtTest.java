@@ -3,7 +3,6 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.AffineConstraint.Read;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;

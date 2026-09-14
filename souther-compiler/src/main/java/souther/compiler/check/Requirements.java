@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -212,7 +213,7 @@ public final class Requirements {
             ValueName.Behavior name, Map<ValueName.Behavior, Hir.BehaviorDef> byName,
             Set<ValueName.Behavior> injected,
             Map<ValueName.Behavior, Map<ValueName.Behavior, List<String>>> memo,
-            LinkedHashSet<ValueName.Behavior> inProgress) {
+            SequencedSet<ValueName.Behavior> inProgress) {
         if (injected.contains(name)) {
             return Map.of();
         }

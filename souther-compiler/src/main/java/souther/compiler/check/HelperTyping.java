@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -10,8 +11,7 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
-import souther.compiler.source.SourceId;
-import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -48,15 +48,16 @@ public final class HelperTyping {
      * repeated here.
      */
     static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
+                                     PublishedDeclarations published, DeclarationKinds kinds,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Map<ValueName, Type> settledTypes = new HashMap<>();
+        Preserved.Settling settledSignatures = new Preserved.Settling();
         Map<ValueName, Object> settledConstants = new HashMap<>();
-        Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
+        Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
@@ -129,7 +130,8 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, reachable, recursiveHelperFns);
+                typeFromBody(h, inferred, env, body, symbols, published, kinds, reachable,
+                        recursiveHelperFns);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
@@ -143,7 +145,7 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, reachable, inliner);
+            checkFunctionArgs(h.writtenBody(), tenv, symbols, published, kinds, reachable, inliner);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
@@ -161,7 +163,8 @@ public final class HelperTyping {
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, null, reachable)
+                    new CheckContext(symbols, published, kinds,
+                            NewtypeInners.asWritten(symbols), null, reachable)
                             .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
@@ -183,7 +186,11 @@ public final class HelperTyping {
             }
             elaborated.definitionTypes.put(h.name(), bodyType);
             if (settled != null) {
-                settledTypes.put(settled, bodyType);
+                // Both halves of what a reference to it is held to, said where both are in hand:
+                // the empty parameter list is why this is a value at all, and the result is what
+                // checking its body just answered. A reader given the type alone would have to
+                // decide for itself that a value takes no arguments.
+                settledSignatures.settled(CompleteSignature.ofSettledValue(settled, bodyType));
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
@@ -200,7 +207,7 @@ public final class HelperTyping {
             // and reporting that disagreement is what the row is for.
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
-                if (!TypeOps.assignable(bodyType, declared, symbols)) {
+                if (!TypeOps.assignable(bodyType, declared, published)) {
                     // A definition standing at a position carries a claim the position made, so
                     // what is said leans on the place and quotes no name the author never wrote.
                     // A definition is named, whoever wrote it: one this module took on is another
@@ -317,7 +324,9 @@ public final class HelperTyping {
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
     private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
-            Hir.Expr body, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs,
+            Hir.Expr body, Symbols symbols, PublishedDeclarations published,
+            DeclarationKinds kinds,
+            Map<ValueName.Behavior, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
         // combinator determines its type; the inliner also needs the annotation to tell a function
@@ -334,13 +343,14 @@ public final class HelperTyping {
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
-        HelperParams.determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, openUses);
+        HelperParams.determine(h, open, env, body, symbols, published, kinds, reqSigs,
+                recursiveHelperFns, openUses);
         // What the body reaches for decides whether an annotation is what is missing. A helper does
         // not reach a behavior at all, and the type of an argument to a call that cannot be written is
         // nothing for the author to supply, so that call is what is reported.
         if (open.stream().anyMatch(idx -> !env.holds(h.params().get(idx).binder().id()))) {
             callToABehavior(body).ifPresent(call -> {
-                throw CallElaborator.noCallee(call);
+                throw CallElaborator.noCallee(call, symbols);
             });
         }
         for (int idx : open) {
@@ -389,14 +399,14 @@ public final class HelperTyping {
      * of one declaration would agree only until one of them was edited.
      */
     static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
-        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols, inliner.moduleName());
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, inliner.moduleName());
     }
 
     /** The same, read off a table rather than off an inliner over it. */
     static Map<String, Type> recursiveCallSigs(
             HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
-        return sigsOf(references, table::reached, symbols, table.module());
+        return sigsOf(references, table::reached, table.module());
     }
 
     /**
@@ -411,7 +421,7 @@ public final class HelperTyping {
             java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
                     declaring,
-            Symbols symbols, String ownModule) {
+            String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
         for (souther.compiler.types.ReachName.Declaration reference : references) {
             // Which declaration each is, the reference answers. What comes out is a scope — the
@@ -472,7 +482,7 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1).rendered();
         String rendered = "invariant -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.applied().reportedAt())
                 .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
                 .build());
     }
@@ -487,7 +497,7 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1).rendered();
         String rendered = "ensures -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.applied().reportedAt())
                 .say(new BehaviorMessage.TheEnsuresReachesAPartialHelper(
                         behavior, reached, rendered)).build());
     }
@@ -532,7 +542,7 @@ public final class HelperTyping {
                             ? new InvariantMessage.TheInvariantConstructsAData(data, constructed)
                             : new InvariantMessage.TheNamedClauseConstructsAData(data, constructed,
                                     named));
-            if (!onOneLine(nd.pos(), clause.pos())) {
+            if (!writtenInside(nd.pos(), clause.region())) {
                 b.secondary(clause.reportedAt(),
                         named == null
                                 ? new InvariantMessage.ThisClauseReachesThatConstruction()
@@ -553,7 +563,7 @@ public final class HelperTyping {
                             ? new BehaviorMessage.TheEnsuresConstructsAData(behavior, constructed)
                             : new BehaviorMessage.TheNamedEnsuresConstructsAData(
                                     behavior, constructed, named));
-            if (!onOneLine(nd.pos(), clause.pos())) {
+            if (!writtenInside(nd.pos(), clause.region())) {
                 b.secondary(clause.reportedAt(),
                         named == null
                                 ? new InvariantMessage.ThisClauseReachesThatConstruction()
@@ -565,16 +575,19 @@ public final class HelperTyping {
     }
 
     /**
-     * Whether two places are the one line a reader is being shown.
+     * Whether the construction is written inside the clause that reaches it, which is when naming
+     * the clause a second time says nothing.
      *
-     * <p>A line number on its own is not a place. Line 10 of the file a helper is written in and line
-     * 10 of the file the declaration is in are two lines, and reading the numbers alone drops the
-     * second marker from a report whose whole point is that the two are far apart. A position that
-     * was read from no source is nowhere and shares a line with nothing.
+     * <p>Asked of the stretch the clause covers and not of a line number. What the report is deciding
+     * is whether there are two places to show, and two places are two places whether or not they
+     * happen to share a line — a clause written over three lines holds everything in it, and a
+     * construction expanded in from a helper is elsewhere however the two files are laid out. A
+     * clause with no stretch to compare against is not somewhere a construction can be shown to be
+     * inside, so it is named.
      */
-    private static boolean onOneLine(SourcePos here, SourcePos there) {
-        return here.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
-                && there.isIn(file) && here.line() == there.line();
+    private static boolean writtenInside(SourcePos construction, Region clause) {
+        return clause != null && clause.start() != null
+                && Region.encloses(clause, Region.point(construction));
     }
 
     /**
@@ -629,14 +642,18 @@ public final class HelperTyping {
      * skipped and the ordinary inlined check still applies.
      */
     static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
+                                          PublishedDeclarations published, DeclarationKinds kinds,
                                           Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         if (e instanceof Hir.Apply call) {
-            checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
+            checkHelperCallFnArgs(call, env, symbols, published, kinds, reqs, inliner);
         }
-        TypeChecker.forEachChild(e, sub -> checkFunctionArgs(sub, env, symbols, reqs, inliner));
+        TypeChecker.forEachChild(e, sub ->
+                checkFunctionArgs(sub, env, symbols, published, kinds, reqs, inliner));
     }
 
     private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
+                                              PublishedDeclarations published,
+                                              DeclarationKinds kinds,
                                               Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
@@ -665,8 +682,9 @@ public final class HelperTyping {
             }
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
-                        env, new CheckContext(symbols, null, reqs));
-                if (TypeOps.unify(declared.get(i), at, bind, symbols) instanceof Fit.Disagrees) {
+                        env, new CheckContext(symbols, published, kinds,
+                                NewtypeInners.asWritten(symbols), null, reqs));
+                if (TypeOps.unify(declared.get(i), at, bind, published) instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
             } catch (CompileException _) {
@@ -684,7 +702,7 @@ public final class HelperTyping {
                     continue;
                 }
                 checkFunctionArg(h, h.params().get(i).name(), want,
-                        call.args().get(i), env, symbols, reqs, inliner, bind);
+                        call.args().get(i), env, symbols, published, kinds, reqs, inliner, bind);
             }
         }
     }
@@ -725,6 +743,7 @@ public final class HelperTyping {
 
     private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
                                          Scope env, Symbols symbols,
+                                         PublishedDeclarations published, DeclarationKinds kinds,
                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
         if (arg instanceof Hir.Block lambda) {
@@ -745,7 +764,8 @@ public final class HelperTyping {
             Type got;
             try {
                 got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
-                        new CheckContext(symbols, null, reqs));
+                        new CheckContext(symbols, published, kinds,
+                                NewtypeInners.asWritten(symbols), null, reqs));
             } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }
@@ -754,12 +774,12 @@ public final class HelperTyping {
                 // what there is to check: `'b?` accepts a block answering with an optional and rejects
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
-                if (TypeOps.unify(want.result(), got, bind, symbols) instanceof Fit.Disagrees) {
+                if (TypeOps.unify(want.result(), got, bind, published) instanceof Fit.Disagrees) {
                     throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
                 }
                 return;
             }
-            if (!TypeOps.assignable(got, want.result(), symbols)) {
+            if (!TypeOps.assignable(got, want.result(), published)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
         } else if (arg instanceof Hir.Var.Denoting v
@@ -774,7 +794,7 @@ public final class HelperTyping {
     /**
      * The data each recursive helper constructs, transitively. A recursive helper is lowered to a
      * method rather than inlined, so its constructions do not appear in a caller's body; this map lets
-     * {@link #collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
+     * {@link DataChecker#collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */

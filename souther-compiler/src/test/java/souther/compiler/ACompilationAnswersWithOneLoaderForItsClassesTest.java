@@ -70,7 +70,7 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
         compilation.withExampleBudget(Duration.ofMillis(12_345));
         compilation.withEvaluationPolicy(new EvaluationPolicy(999_999L,
                 EvaluationPolicy.DEFAULT_RECURSION_DEPTH_LIMIT,
-                EvaluationPolicy.DEFAULT_OUTER_TIMEOUT));
+                EvaluationPolicy.DEFAULT_COMPILER_TIMEOUT));
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
 
         assertSame(before, compilation.loader(), "the loader after an input the classes do not read");

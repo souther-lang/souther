@@ -89,11 +89,6 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         return read;
     }
 
-    private static ModuleUniverse.InSight.Read read(Map<String, ModuleUniverse.InSight> readings,
-                                                    String module) {
-        return assertInstanceOf(ModuleUniverse.InSight.Read.class, readings.get(module));
-    }
-
     /** The module a scope is assembled for, as this compilation puts it together. */
     private static Scoping.Subject subject(Db db, String module) {
         Scoping.Subject subject = CompilationUniverse.subject(db, module);

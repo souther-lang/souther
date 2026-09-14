@@ -4,9 +4,13 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
@@ -52,8 +56,11 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given,
-                ConstructionOrigin.own(), POS, null);
+        return Hir.Apply.synthetic(name.qualified(), new ReachName.OfLibrary(name),
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0),
+                new ApplicationOrigin.Written(SourceConstructOrigin.written(
+                        new WrittenOwner.Body("m", "b"), 0, SourceConstruct.CALL)),
+                given, POS, null);
     }
 
     /** The library's helpers as a table is keyed: under the operation each is the body of, which
@@ -87,8 +94,8 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
             Set<String> reached = callsIn(callTo(sugar, rewrite.keptArgs()));
 
             assertEquals(Set.of(rewrite.target().qualified()), reached,
-                    sugar + " is " + rewrite.target().qualified() + " with "
-                            + rewrite.supplied().size() + " argument(s) supplied");
+                    sugar + " is " + rewrite.target().qualified()
+                            + " with the rest of its arguments supplied");
         });
     }
 

@@ -5,6 +5,7 @@ import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Locale;
 
 /**
@@ -26,7 +27,7 @@ public final class ArmVocabulary {
      * The short word a table prints and a document writes under {@code label}.
      *
      * <p>One function for both, because the document's {@code subject} joins a finding to the entry
-     * in {@code branch.unreached} that names the same arm: spelled twice, the two would join to
+     * in {@code branch.obligations} that names the same arm: spelled twice, the two would join to
      * nothing the day one of them was reworded.
      */
     public static String label(CoverageSites.Site arm) {
@@ -45,7 +46,7 @@ public final class ArmVocabulary {
 
     private static String namesOf(List<TypeSymbol> cases) {
         return cases.stream().map(TypeSymbol::name)
-                .collect(java.util.stream.Collectors.joining(" | "));
+                .collect(Collectors.joining(" | "));
     }
 
     private ArmVocabulary() {}

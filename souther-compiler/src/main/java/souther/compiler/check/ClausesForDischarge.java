@@ -30,7 +30,7 @@ import java.util.Map;
  * makes the wrong position unwritable rather than merely wrong.
  *
  * <p>What is <em>not</em> here is the reading the check itself does of a whole clause
- * ({@link ClauseHelpers#invariantsForDischarge}). That answers a different question — what a
+ * ({@link ClauseHelpers}). That answers a different question — what a
  * construction owes — and is read against the values a construction hands over rather than placed in
  * front of an author.
  */
@@ -54,8 +54,10 @@ public final class ClausesForDischarge {
      * scope where it is written, and an imported definition is in scope there as it is in a body.
      */
     public static ClausesForDischarge of(Expandable expandable, Symbols symbols,
+                                         PublishedDeclarations declarations, DeclarationKinds kinds,
                                          Map<String, Hir.FnDef> published) {
-        Hir.Module settled = ClauseHelpers.settled(expandable.module(), symbols);
+        Hir.Module settled =
+                ClauseHelpers.settled(expandable.module(), symbols, declarations, kinds);
         return new ClausesForDischarge(settled, HelperInliner.forHelpers(settled.name(),
                 HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE,
                 symbols.library()));
@@ -97,8 +99,9 @@ public final class ClausesForDischarge {
      */
     public List<ClauseReading> conjunctsOf(Hir.Expr written, BindingOwner owner) {
         List<ClauseReading> out = new ArrayList<>();
-        for (Hir.Expr each : ClauseHelpers.conjunctsOf(written)) {
-            out.add(new ClauseReading(each, expansion.inline(each, owner)));
+        for (ClauseHelpers.AuthoredPart each : ClauseHelpers.conjunctsOf(written)) {
+            Expansion<Hir.Expr> read = expansion.expanding(each.written(), owner);
+            out.add(new ClauseReading(each, read.value(), CallsLeftStanding.of(read.standing())));
         }
         return out;
     }
@@ -109,18 +112,40 @@ public final class ClausesForDischarge {
      * <p>Where it is comes from what was written and from nothing else, so it is asked of this rather
      * than carried beside it: a position that can be passed is a position that can be passed wrongly,
      * and the one thing every reader of this got wrong was which tree they took it from.
+     *
+     * <p>The part and not the tree alone, so that the place this conjunct holds among the parts of
+     * its clause travels with it. That place was assigned where the clause was split, two lines up;
+     * dropped here, the readers below counted the conjuncts again to get it back, and a count made
+     * where a reading stands is a count that moves with what that reading managed.
+     *
+     * @param part     the conjunct as the split issued it, which is what a caller holding the rule
+     *                 asks for the name of this part ({@link ClauseHelpers.AuthoredPart#idFor})
+     * @param standing which calls the expansion that produced {@code read} left standing — the
+     *                 fourth of the facts this file exists to hand over together, and the one a
+     *                 reader looking at {@code read} alone cannot recover
      */
-    public record ClauseReading(Hir.Expr written, Hir.Expr read) {
+    public record ClauseReading(ClauseHelpers.AuthoredPart part, Hir.Expr read,
+                                CallsLeftStanding standing) {
+
+        /** The tree and what its expansion left standing, which is what a reading of it takes. */
+        ClauseAsExpanded asExpanded() {
+            return new ClauseAsExpanded(read, standing);
+        }
+
+        /** The conjunct as the author wrote it, before anything was expanded into it. */
+        public Hir.Expr written() {
+            return part.written();
+        }
 
         /** Where the author wrote it — the earliest position anything written carries. */
         public SourcePos at() {
-            return ClauseHelpers.beginsAt(written);
+            return ClauseHelpers.beginsAt(written());
         }
 
         /** The stretch of source it is written over, for a reader holding it against the clause it
          *  came from. */
         public Region region() {
-            return written.region();
+            return written().region();
         }
     }
 }

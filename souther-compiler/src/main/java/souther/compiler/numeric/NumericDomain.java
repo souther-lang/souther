@@ -2,7 +2,6 @@ package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,47 +40,6 @@ import java.util.Set;
  */
 public final class NumericDomain<A> {
 
-    /** A comparison of a {@link LinearForm} against zero. */
-    public enum Rel { GE, GT, LE, LT, EQ, NE }
-
-    /** An affine form {@code const + Σ coef·atom} over the domain's atoms. */
-    public record LinearForm<A>(BigDecimal constant, Map<A, BigDecimal> coefs) {
-        public static <A> LinearForm<A> constant(BigDecimal c) {
-            return new LinearForm<>(c, Map.of());
-        }
-
-        public static <A> LinearForm<A> atom(A a) {
-            return new LinearForm<>(BigDecimal.ZERO, Map.of(a, BigDecimal.ONE));
-        }
-
-        public LinearForm<A> plus(LinearForm<A> o) {
-            Map<A, BigDecimal> m = new HashMap<>(coefs);
-            o.coefs.forEach((k, v) -> m.merge(k, v, BigDecimal::add));
-            m.values().removeIf(v -> v.signum() == 0);
-            return new LinearForm<>(constant.add(o.constant), m);
-        }
-
-        public LinearForm<A> negate() {
-            Map<A, BigDecimal> m = new HashMap<>();
-            coefs.forEach((k, v) -> m.put(k, v.negate()));
-            return new LinearForm<>(constant.negate(), m);
-        }
-
-        public LinearForm<A> minus(LinearForm<A> o) {
-            return plus(o.negate());
-        }
-
-        /** This form scaled by a constant {@code k} (a scalar multiply). */
-        public LinearForm<A> times(BigDecimal k) {
-            if (k.signum() == 0) {
-                return constant(BigDecimal.ZERO);
-            }
-            Map<A, BigDecimal> m = new HashMap<>();
-            coefs.forEach((key, v) -> m.put(key, v.multiply(k)));
-            return new LinearForm<>(constant.multiply(k), m);
-        }
-    }
-
     /**
      * How many digits a bound is written out to where it is not a decimal at all.
      *
@@ -92,20 +50,34 @@ public final class NumericDomain<A> {
      */
     private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
-    private final List<AffineConstraint<A>> rules;
+    private final StatedRules<A> stated;
     private final Map<A, Granularity> kinds;
     private final boolean readARuleNothingSatisfies;
+    private List<AffineConstraint<A>> distinctRules;
     private ClosedState<A> closed;
 
-    private NumericDomain(List<AffineConstraint<A>> rules, Map<A, Granularity> kinds,
+    private NumericDomain(StatedRules<A> stated, Map<A, Granularity> kinds,
                           boolean readARuleNothingSatisfies) {
-        this.rules = rules;
+        this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
     }
 
     public static <A> NumericDomain<A> top() {
-        return new NumericDomain<>(List.of(), Map.of(), false);
+        return new NumericDomain<>(StatedRules.none(), Map.of(), false);
+    }
+
+    /**
+     * The rules said, each of them once, derived on the first question asked of them and kept.
+     *
+     * <p>Here rather than at each saying, for the reason {@link StatedRules} gives. Everything below
+     * reads this and not what was said, so what any of them sees is a rule said twice said once.
+     */
+    private List<AffineConstraint<A>> rules() {
+        if (distinctRules == null) {
+            distinctRules = stated.distinct();
+        }
+        return distinctRules;
     }
 
     /**
@@ -141,7 +113,7 @@ public final class NumericDomain<A> {
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> ignored ->
-                    new NumericDomain<>(List.of(), knowing.kinds, true);
+                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> ignored -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -153,15 +125,12 @@ public final class NumericDomain<A> {
      *
      * <p>Kept and not merged into anything. A rule said twice is the same rule and the same key, so
      * the second saying adds nothing — which is what makes the answer a function of which rules were
-     * said rather than of how often each was.
+     * said rather than of how often each was. Which is settled where the rules are read
+     * ({@link #rules}) and not here: looked for here, saying a rule would cost a walk of every rule
+     * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        if (rules.contains(rule)) {
-            return this;
-        }
-        List<AffineConstraint<A>> next = new ArrayList<>(rules);
-        next.add(rule);
-        return new NumericDomain<>(List.copyOf(next), kinds, false);
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false);
     }
 
     /**
@@ -214,7 +183,7 @@ public final class NumericDomain<A> {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain<>(rules, Map.copyOf(next), readARuleNothingSatisfies);
+                : new NumericDomain<>(stated, Map.copyOf(next), readARuleNothingSatisfies);
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -247,15 +216,11 @@ public final class NumericDomain<A> {
         Renaming<A, B> called = Renaming.of(kinds.keySet(), naming);
         Map<B, Granularity> spacing = new LinkedHashMap<>();
         kinds.forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
-        List<AffineConstraint<B>> out = new ArrayList<>();
-        for (AffineConstraint<A> rule : rules) {
-            AffineConstraint<B> renamed = rule.over(called);
-            if (!out.contains(renamed)) {
-                out.add(renamed);
-            }
+        StatedRules<B> out = StatedRules.none();
+        for (AffineConstraint<A> rule : rules()) {
+            out = out.and(StatedRules.of(rule.over(called)));
         }
-        return new NumericDomain<>(List.copyOf(out), Map.copyOf(spacing),
-                readARuleNothingSatisfies);
+        return new NumericDomain<>(out, Map.copyOf(spacing), readARuleNothingSatisfies);
     }
 
     /**
@@ -274,7 +239,7 @@ public final class NumericDomain<A> {
      * would answer about a position neither reading was about.
      */
     public NumericDomain<A> meet(NumericDomain<A> other) {
-        if (other == null || (other.rules.isEmpty() && other.kinds.isEmpty()
+        if (other == null || (other.stated.isNothing() && other.kinds.isEmpty()
                 && !other.readARuleNothingSatisfies)) {
             return this;
         }
@@ -285,13 +250,7 @@ public final class NumericDomain<A> {
                 throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + spacing);
             }
         });
-        List<AffineConstraint<A>> out = new ArrayList<>(rules);
-        for (AffineConstraint<A> rule : other.rules) {
-            if (!out.contains(rule)) {
-                out.add(rule);
-            }
-        }
-        return new NumericDomain<>(List.copyOf(out), Map.copyOf(both),
+        return new NumericDomain<>(stated.and(other.stated), Map.copyOf(both),
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies);
     }
 
@@ -306,7 +265,7 @@ public final class NumericDomain<A> {
      */
     private ClosedState<A> closed() {
         if (closed == null) {
-            closed = ClosedState.of(rules, kinds::get);
+            closed = ClosedState.of(rules(), kinds::get);
         }
         return closed;
     }
@@ -360,7 +319,7 @@ public final class NumericDomain<A> {
         if (!everyRelatedPositionIsSpacedAlike()) {
             return new ProjectionCertification.PositionsSpacedDifferently();
         }
-        for (AffineConstraint<A> rule : rules) {
+        for (AffineConstraint<A> rule : rules()) {
             if (!proven(rule, false)) {
                 return new ProjectionCertification.NotEveryRuleIsProven();
             }
@@ -385,7 +344,7 @@ public final class NumericDomain<A> {
      */
     private boolean everyRelatedPositionIsSpacedAlike() {
         Map<A, A> reaches = new LinkedHashMap<>();
-        for (AffineConstraint<A> rule : rules) {
+        for (AffineConstraint<A> rule : rules()) {
             A first = null;
             for (A atom : rule.form().coefs().keySet()) {
                 if (first == null) {
@@ -493,23 +452,11 @@ public final class NumericDomain<A> {
      * Whether the rules prove {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated on
      * this path, which is a compile error rather than an undischarged obligation.
      *
-     * <p>Which is proving the opposite comparison, and the opposite of each is one fact written
-     * once. It had been a second switch over the relations, and a third reading of what they mean.
+     * <p>Which is proving the comparison that holds exactly where this one does not, and which one
+     * that is belongs to the relation ({@link Rel#denied}).
      */
     public boolean refutes(LinearForm<A> f, Rel rel) {
-        return !isBottom() && entails(f, opposite(rel), true);
-    }
-
-    /** The comparison that holds exactly where {@code rel} does not. */
-    private static Rel opposite(Rel rel) {
-        return switch (rel) {
-            case LE -> Rel.GT;
-            case LT -> Rel.GE;
-            case GE -> Rel.LT;
-            case GT -> Rel.LE;
-            case EQ -> Rel.NE;
-            case NE -> Rel.EQ;
-        };
+        return !isBottom() && entails(f, rel.denied(), true);
     }
 
     /** A written form's weights, as the exact arithmetic holds them, with the positions it does not
@@ -622,7 +569,7 @@ public final class NumericDomain<A> {
     /** The one reading of what the rules leave a form, over the state they have been worked out to. */
     private FormReach<A> reading() {
         ClosedState<A> state = closed();
-        return FormReach.over(rules, state.box(), state.differences());
+        return FormReach.over(rules(), state.box(), state.differences());
     }
 
 
@@ -643,6 +590,44 @@ public final class NumericDomain<A> {
         }
         Box<A> box = closed().box();
         return new Bounds(written(box.leastOf(atom), false), written(box.mostOf(atom), true));
+    }
+
+    /**
+     * What this domain says about where one atom's values lie, for a reader meeting it with an
+     * answer of its own.
+     *
+     * <p>Three answers, because {@link Bounds} alone cannot tell them apart. A rule naming an atom
+     * and narrowing neither end leaves the same pair of nulls as an atom no rule ever mentioned, and
+     * the two say opposite things to whoever is meeting them: the first is this domain speaking and
+     * placing no edge, the second is this domain having nothing to say at all. Which of them it is
+     * is {@link #atomsSpokenOf}'s answer and is not readable off the ends.
+     *
+     * <p>And the rules holding nothing is neither. An atom of a domain that admits no assignment is
+     * not at every value, which is what a pair of nulls would say; there is no value for it to be
+     * at. Said as {@link Projection.NothingIsLeft}, so that a caller cannot reach a range out of a
+     * domain whose rules contradict — read as open, it would widen whatever it was met with and the
+     * contradiction would leave with it.
+     */
+    public Projection projectionOf(A atom) {
+        if (isBottom()) {
+            return new Projection.NothingIsLeft();
+        }
+        return atomsSpokenOf().contains(atom)
+                ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
+    }
+
+    /** What a domain says about one atom: nothing, where its values lie, or that it has none. */
+    public sealed interface Projection {
+
+        /** No rule here names the atom, so nothing about it follows from these rules. */
+        record NotSpokenOf() implements Projection {}
+
+        /** The rules name it and prove it lies here — which is every value where they place no
+         *  edge. */
+        record Within(Bounds bounds) implements Projection {}
+
+        /** The rules admit no assignment at all, so the atom is at no value rather than at any. */
+        record NothingIsLeft() implements Projection {}
     }
 
     /**

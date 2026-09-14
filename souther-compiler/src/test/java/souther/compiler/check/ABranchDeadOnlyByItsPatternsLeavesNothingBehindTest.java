@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -56,14 +55,14 @@ class ABranchDeadOnlyByItsPatternsLeavesNothingBehindTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Pair"));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declarations().declaration(name.key()), symbols,
+                RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     /** The choice is the branch anybody can be in, which names one string. */
     @Test
     void theSurvivingBranchIsTheWholeOfWhatTheChoiceLeaves() {
-        AdmissibleSet code = read().admits("code");
+        AdmissibleSet code = read().admits(RuleKey.of("code"));
 
         assertEquals(AdmissibleSet.READ_IN_FULL, code.completeness(),
                 "the dead branch's unread rule is not this declaration's to answer for");

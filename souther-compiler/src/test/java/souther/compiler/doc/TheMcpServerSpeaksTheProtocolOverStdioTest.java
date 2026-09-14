@@ -1,5 +1,7 @@
 package souther.compiler.doc;
 
+import souther.compiler.meta.ModuleMetadata;
+
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -38,6 +40,10 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
         assertEquals(1, answers.size());
         JsonNode result = answers.getFirst().get("result");
         assertEquals("souther", result.get("serverInfo").get("name").asString());
+        // The version this compiler reads of itself, and not one this face states for itself: an
+        // agent harness asking here is asking what a reader on the command line asks.
+        assertEquals(ModuleMetadata.compilerVersion(),
+                result.get("serverInfo").get("version").asString());
         assertTrue(result.has("protocolVersion"));
         assertTrue(result.get("capabilities").has("tools"));
     }

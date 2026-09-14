@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -259,9 +260,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesAPositionInsideARecord() {
         Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped #1", lines.get("onHeld/v.w.n = 1").origin().named());
+        assertEquals("invariant Wrapped #1", lines.get("onHeld/v.w.n = 1").origin().saidWithoutAPlace());
         assertEquals("invariant NonEmptyBag #1",
-                lines.get("onHeldBag/List.length(v.b.xs) = 1").origin().named());
+                lines.get("onHeldBag/List.length(v.b.xs) = 1").origin().saidWithoutAPlace());
     }
 
     /** And through as many names as are worn, since a name wrapped round a value is not a step. */
@@ -269,7 +270,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesThroughAStackOfNames() {
         Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant W2 #1", lines.get("onStacked/v.w.n = 2").origin().named());
+        assertEquals("invariant W2 #1", lines.get("onStacked/v.w.n = 2").origin().saidWithoutAPlace());
     }
 
     /**
@@ -288,9 +289,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aNameWrappedRoundARecordReachesItsPositions() {
         Map<String, BorderAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped #1", lines.get("onWrapped/v.n = 1").origin().named());
+        assertEquals("invariant Wrapped #1", lines.get("onWrapped/v.n = 1").origin().saidWithoutAPlace());
         assertEquals("invariant NonEmptyBag #1",
-                lines.get("onNonEmpty/List.length(v.xs) = 1").origin().named());
+                lines.get("onNonEmpty/List.length(v.xs) = 1").origin().saidWithoutAPlace());
     }
 
     /**
@@ -315,7 +316,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
                       · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
-                    border      borders 1   coverage items 1/2   excluded 2
+                    border      borders 1   obligations 0/0
                       · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
                       · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
                 """), report);
@@ -340,7 +341,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
                       · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
-                    border      borders 1   coverage items 1/2   excluded 2
+                    border      borders 1   obligations 0/0
                       · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
                       · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
                 """), report);
@@ -451,31 +452,37 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
         assertTrue(report.contains("no row is at the ON point value = m (invariant Name #1)"),
                 report);
-        assertFalse(report.contains("String.length(v.name"),
-                "the record's clause states an end on a coordinate this position is not measured at:\n"
-                        + report);
     }
 
     /**
-     * And where the type chose nothing, two such rules choose nothing either.
+     * A rule about the length of a name draws its line on the length, beside the name's own.
      *
-     * <p>Both coordinates of `s` are bounded and neither by `s`'s own type, so which of them this
-     * position is measured at is a question with no answer here (ADR-0090). Nothing is divided and
-     * nothing is claimed about the model either: two rules are written about this position and what
-     * a report says is that they were not read, which sends the author to a limit of this compiler
-     * rather than to a distinction their model does not draw. Taking whichever was looked at first
-     * would put a line the author can read beside one they cannot see.
-     *
-     * <p>Both clauses are named, since both are rules the author would have to rewrite. One line
-     * said the position was short of something and left them to find which two of their clauses
-     * were in the way — and said it in the words of a form this compiler cannot read, which is a
-     * cause it was never observed to have.
+     * <p>`Name`'s clause is about the order its values sit on and the record's is about how long
+     * one is. Two numbers of one place, and neither rule is in the other's way — so both are read
+     * and both leave a line, and nothing is reported as unread.
      */
     @Test
-    void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
-        assertEquals(List.of("v.s: COMPETING_COORDINATES", "String.length(v.s): COMPETING_COORDINATES"),
-                notReadIn(TWO_WAYS, "onR"),
-                "both rules are named, each at the coordinate it is about");
+    void aRuleAboutTheLengthDrawsItsLineBesideTheOneAboutTheOrder() {
+        assertEquals(List.of("String.length(v.name) = 3", "v.name = m"),
+                linesUnder(TWO_WAYS, "onPerson"),
+                "the record's clause stops the length and the name's own stops the order");
+        assertEquals(List.of(), notReadIn(TWO_WAYS, "onPerson"),
+                "and neither clause is reported as one nothing could read");
+    }
+
+    /** And where a record bounds both numbers of a bare string, both are measured too. */
+    @Test
+    void rulesAboutBothNumbersAreBothRead() {
+        assertEquals(List.of("String.length(v.s) = 3", "v.s = m"), linesUnder(TWO_WAYS, "onR"),
+                "both clauses are the record's own, and each is on the number it is about");
+        assertEquals(List.of(), notReadIn(TWO_WAYS, "onR"));
+    }
+
+    /** The lines {@code behavior} draws, by the label a report shows each under. */
+    private static List<String> linesUnder(String source, String behavior) {
+        return linesOf(source, "twoways").keySet().stream()
+                .filter(each -> each.startsWith(behavior + "/"))
+                .map(each -> each.substring(behavior.length() + 1)).sorted().toList();
     }
 
     /**
@@ -647,7 +654,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(lines.containsKey("onWrapped/v.a = 9"),
                 "and one step lower under the wrapper's clause: " + lines.keySet());
         assertEquals("invariant A #1 within Wrapped",
-                lines.get("onWrapped/v.a = 9").origin().named(),
+                lines.get("onWrapped/v.a = 9").origin().saidWithoutAPlace(),
                 "the wrapper moved the edge `A` drew and did not draw one");
     }
 
@@ -658,14 +665,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * `Wrapped`'s clause that took it in, so that is what the line says — read off the value the
      * position sits in, it named a declaration with no clause about the pair at all, and a reader
      * following it finds nothing there. The name is part of what tells one line from another
-     * ({@link OriginRef.Line}) and not only what is printed.
+     * ({@link LineOrigin.Line}) and not only what is printed.
      */
     @Test
     void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {
         Map<String, BorderAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
         assertEquals("invariant A #1 within Wrapped",
-                lines.get("onHeld/v.w.a = 9").origin().named(),
+                lines.get("onHeld/v.w.a = 9").origin().saidWithoutAPlace(),
                 "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
 
@@ -728,7 +735,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRelationThatMovedNoEndDoesNotNameOne() {
         Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A #1 within Inner", lines.get("onOuter/v.a = 7").origin().named(),
+        assertEquals("invariant A #1 within Inner", lines.get("onOuter/v.a = 7").origin().saidWithoutAPlace(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
     }
 
@@ -748,7 +755,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
         assertEquals("invariant A #1 within Again or Twice",
-                lines.get("onIdle/v.a = 7").origin().named(),
+                lines.get("onIdle/v.a = 7").origin().saidWithoutAPlace(),
                 "`Idle`'s clause moves this end nowhere");
     }
 
@@ -757,8 +764,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
         Map<String, BorderAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant N #1 within Both", lines.get("onBoth/v.n = 3").origin().named());
-        assertEquals("invariant N #2 within Upper", lines.get("onBoth/v.n = 7").origin().named());
+        assertEquals("invariant N #1 within Both", lines.get("onBoth/v.n = 3").origin().saidWithoutAPlace());
+        assertEquals("invariant N #2 within Upper", lines.get("onBoth/v.n = 7").origin().saidWithoutAPlace());
     }
 
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
@@ -805,15 +812,15 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void onlyAStringsLengthIsACountEveryValueHas() {
-        assertTrue(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(
+        assertTrue(DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(
                         ValueName.Stdlib.operation("String", "length")),
                 "a string of any length is a character repeated");
-        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(
+        assertFalse(DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(
                         ValueName.Stdlib.operation("List", "length")),
                 "a list of one needs an element, and a type nothing inhabits has none");
-        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Set", "size")),
+        assertFalse(DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Set", "size")),
                 "a set of three needs three that differ");
-        assertFalse(souther.compiler.semantics.OperationFacts.everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Map", "size")),
+        assertFalse(DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(ValueName.Stdlib.operation("Map", "size")),
                 "and a map of three needs three keys that differ");
     }
 
@@ -833,7 +840,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**

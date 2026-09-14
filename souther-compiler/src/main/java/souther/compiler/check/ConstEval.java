@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -92,7 +93,8 @@ public final class ConstEval {
         // condition down with it — so a construction the language calls constant would be checked
         // where it was written one way and not the other.
         if (l.orElse(null) instanceof Boolean settled
-                && (bin.op() == BinOp.AND && !settled || bin.op() == BinOp.OR && settled)) {
+                && ((bin.op() == BinOp.AND && !settled)
+                        || (bin.op() == BinOp.OR && settled))) {
             return Optional.of(settled);
         }
         Optional<Object> r = eval(bin.right());
@@ -101,14 +103,17 @@ public final class ConstEval {
         }
         Object a = l.get();
         Object b = r.get();
+        // A comparison folds through what its operator placed, and this is where the operator's
+        // words are left behind: what such an expression comes to is the relation it states of its
+        // two sides, which is the one answer a reading that never had an operator asks for as well.
+        if (ComparisonPlacement.of(bin.op()) instanceof ComparisonClaim placed) {
+            return Optional.ofNullable(stands(placed.statedRelation(), a, b));
+        }
         return switch (bin.op()) {
             case AND -> a instanceof Boolean x && b instanceof Boolean y
                     ? Optional.of(x && y) : Optional.empty();
             case OR -> a instanceof Boolean x && b instanceof Boolean y
                     ? Optional.of(x || y) : Optional.empty();
-            case EQ -> Optional.of(equal(a, b));
-            case NE -> Optional.of(!equal(a, b));
-            case LT, LE, GT, GE -> compare(bin.op(), a, b);
             case ADD, SUB, MUL -> arith(bin.op(), a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
             // the string case folds, and a list is not a constant here to begin with.
@@ -116,35 +121,50 @@ public final class ConstEval {
                     ? Optional.of(x + y) : Optional.empty();
             // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).
             case DIV -> Optional.empty();
+            // Answered above as what it placed. Written out rather than left to a default, because
+            // what would arrive here is the partition above having admitted a comparison into the
+            // arms that compute a value, and an arm inventing an answer for that is how a fold
+            // comes to disagree with every other reader of the same comparison.
+            case EQ, NE, LT, LE, GT, GE -> throw new IllegalStateException(
+                    "a comparison is folded from what it placed, not from " + bin.op());
         };
     }
 
-    private static Optional<Object> compare(BinOp op, Object a, Object b) {
-        Integer c = order(a, b);
-        if (c == null) {
-            return Optional.empty();
-        }
-        return Optional.of(switch (op) {
-            case LT -> c < 0;
-            case LE -> c <= 0;
-            case GT -> c > 0;
-            case GE -> c >= 0;
-            default -> throw new IllegalStateException();
-        });
-    }
-
-    /** Total order over two constants of the same ordered kind, or null if they are not comparable. */
-    private static Integer order(Object a, Object b) {
+    /**
+     * Whether {@code rel} holds between two folded constants, or {@code null} where these two
+     * cannot answer it.
+     *
+     * <p>The whole of what a comparison of written values comes to, whichever words the caller has
+     * it in. A reading that composed a comparison out of what the rules proved has no operator and
+     * no node — it has what the comparison places and its two sides — and an expression written with
+     * an operator arrives with the relation that operator placed
+     * ({@link ComparisonClaim#statedRelation}). One fold under the crossing, rather than one on
+     * either side of it agreeing about every pair of constants there is until somebody edits one.
+     *
+     * <p>An ordering answers where the two are of one ordered kind, and an equality answers of any
+     * two constants at all: {@code true == true} is decided where {@code true < true} is not
+     * something to decide.
+     *
+     * <p><b>Which way the two stand is worked out here and goes nowhere.</b> A sign handed back to a
+     * caller is what a second table of six is written over — {@code c < 0} and the three beside it
+     * are the same table as {@link Rel#holds} in another hand — so the order of two constants is
+     * taken and answered in the one place, and there is nothing to call for the sign alone.
+     */
+    static Boolean stands(Rel rel, Object a, Object b) {
         if (a instanceof Long x && b instanceof Long y) {
-            return Long.compare(x, y);
+            return rel.holds(Long.compare(x, y));
         }
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return x.compareTo(y);
+            return rel.holds(x.compareTo(y));
         }
         if (a instanceof String x && b instanceof String y) {
-            return x.compareTo(y);
+            return rel.holds(x.compareTo(y));
         }
-        return null;
+        return switch (rel) {
+            case EQ -> equal(a, b);
+            case NE -> !equal(a, b);
+            case GE, GT, LE, LT -> null;
+        };
     }
 
     private static Optional<Object> arith(BinOp op, Object a, Object b) {
@@ -194,10 +214,13 @@ public final class ConstEval {
      *
      * <p>A backtracking engine can take exponential time on a pattern written to make it, and can
      * exhaust the stack on one written to make that. Neither is this compiler's to survive by luck:
-     * the walk that asks fails open on a {@code RuntimeException} and a {@code StackOverflowError} is
-     * not one, so an unbounded attempt here ends the compilation rather than the fold. The subject is
-     * handed over through a reader that stops the engine past a budget, and what the engine spends
-     * before answering is what decides whether the answer is worth having.
+     * an unbounded attempt would end the compilation rather than this fold, and what would end is a
+     * compile of a program nothing is wrong with. So the subject is handed over through a reader
+     * that stops the engine past a budget, and what the engine spends before answering is what
+     * decides whether the answer is worth having.
+     *
+     * <p>What each of the three refusals answers is the same thing: this fold does not settle the
+     * match, and the run-time check does. None of them is about the program.
      */
     private static Optional<Object> matches(String pattern, String s) {
         try {

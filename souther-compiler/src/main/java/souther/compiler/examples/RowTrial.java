@@ -4,14 +4,21 @@ import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.FakeTables;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.Contract;
+import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.Probe;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.observe.FieldTypes;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,11 +34,14 @@ import java.util.Optional;
  *
  * <p>The same classes an evaluation runs against, reached the same way a written row reaches them —
  * the values are built through this module's own decoders and handed to the answerer this compile
- * emitted. What differs is that there is no row: no expectation to hold the answer to, no fakes, no
- * stand-ins. So a behavior that depends on another cannot be applied this way, and neither can one
- * whose implementation is out of reach. Both are said outright by the layer that would have applied
- * it, and both come back as nothing having run — which is asked of that layer rather than worked out
- * here from what a behavior declares, there being one question and no reason for two answers to it.
+ * emitted, and a dependency the module states a table for is answered by that table exactly as it is
+ * for a row somebody wrote. What differs is that there is no row: no expectation to hold the answer
+ * to. What a candidate stands them in with travels
+ * with the candidate, because which answer a rule takes is part of what the candidate is; a
+ * behavior whose implementation is out of reach still cannot be applied, which is said outright by
+ * the layer that would have applied it and comes back as nothing having run — asked of that layer
+ * rather than worked out here from what a behavior declares, there being one question and no reason
+ * for two answers to it.
  *
  * <p>A run that aborts still went where it went. An invariant refusing the answer, a budget running
  * out, an {@code unreachable} being reached — each of them happens after the row has passed whatever
@@ -55,40 +65,58 @@ public final class RowTrial {
      * went nowhere — so a caller with unmeasured classes must not build one of these, and every
      * combination would otherwise come back missed.
      *
+     * @param signatures what each behavior this module reaches takes and answers, and
+     *                   {@code contracts} what it states of its answer. Both are what a module's
+     *                   tables are held to before one stands anything in, which is the same holding
+     *                   a written row's run is under — a search running against a table a written
+     *                   row is refused would be certifying rows in an environment nothing else has
      * @param steps how many counted points a row may pass, and how deep a recursive helper may go.
      *              A composed row is not a row anyone wrote, so a model that loops on it is this
      *              search's problem to stop rather than an author's to be told about
      */
-    public static RowTrials over(souther.compiler.check.Prepared.Examples module,
-                              Symbols symbols, Map<String, ClassFileImage> classes,
+    public static RowTrials over(Prepared.ForExamples module,
+                              Symbols symbols,
+                              souther.compiler.check.PublishedDeclarations published,
+                              souther.compiler.check.DeclarationKinds kinds,
+                              FieldTypes fields,
+                              Map<String, ClassFileImage> classes,
                               ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
+                              Map<ValueName.Behavior, Sig> signatures,
+                              Map<ValueName.Behavior, Contract> contracts,
+                              ProbeImage probes,
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
-        return (behavior, sig) -> inputs -> {
+        EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
+        return (behavior, sig) -> (inputs, answers) -> {
             if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
                 return Optional.empty();   // nothing applies this behavior, so nothing ran
             }
             // One reader per row, the way a written row has one: what a reading builds up while it
             // expands a value is that row's, and a reader kept between them would be a session
             // spanning every candidate of every combination.
-            return went(new FixtureReader(module, symbols, values, loader), applies, behavior, sig,
-                    inputs, steps);
+            return went(new FixtureReader(module, symbols, published, kinds, fields, values, loader),
+                    module, ensures,
+                    applies, behavior, sig, inputs, answers, probes, steps);
         };
     }
 
     /**
      * One row, built and applied, and what the probe saw while it was.
      *
-     * <p>The recording is begun and read on this thread because the run is on this thread. Both it
-     * and the budget are let go on every way out, a worker being something the next row would
-     * otherwise start inside of.
+     * <p>The recording is begun and read on this thread because the run is on this thread, and it
+     * is begun only where there is something to record: classes generated without the calls that
+     * write a run down leave no account, which is not the same as an account of a run that reached
+     * nothing.
      */
     private static Optional<Observation> went(FixtureReader fixtures,
+                                              Prepared.ForExamples module,
+                                              EnsuresChecks ensures,
                                               Answerer.Answer.Something applies, String behavior,
                                               Sig sig, List<Hir.Expr> inputs,
-                                              EvaluationPolicy steps) {
+                                              List<RowTrials.AnsweredWith> answers,
+                                              ProbeImage probes, EvaluationPolicy steps) {
         List<BoundaryInput> ins = sig.ins();
         if (inputs.size() != ins.size()) {
             return Optional.empty();   // not a row of this behavior, so this is not the thing to run
@@ -106,7 +134,14 @@ public final class RowTrial {
                 String what = "input " + (i + 1) + " of `" + behavior + "`";
                 over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
             }
-            applying = applies.applying(List.of());
+            List<DependencyStandin> standins = standingIn(fixtures, module, ensures, answers);
+            if (standins == null) {
+                // A table the row leans on is not one to stand in with, so there was nothing to
+                // apply the behavior with and nothing ran. What is wrong with it is wrong about
+                // what the module wrote and is said where the block is.
+                return Optional.empty();
+            }
+            applying = applies.applying(standins);
         } catch (StandinNotBuilt | LinkageError e) {
             // Nothing was applied, and these are the two ways that happens before an application:
             // a stand-in that could not be made, and this compiler's own output not linking. Named
@@ -115,33 +150,126 @@ public final class RowTrial {
             // went is how a defect in the runner comes back as a defect in the model.
             return Optional.empty();
         }
-        Probe.begin();
-        try {
-            EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
-            try {
-                applying.to(over);
-            } catch (ImplementationNotReached e) {
-                // Not a run at all: the implementation could not be reached to apply. Saying the
-                // row did nothing would be saying it went nowhere, and those are different facts.
-                return Optional.empty();
-            } catch (InvocationFailure e) {
-                // It ran and stopped. Where it had got to is what is being asked for, and what
-                // stopped it is not: nothing here is judging the row.
-                //
-                // This one and no wider. What the applied code ends with arrives as this, so a
-                // throwable that is not one is this compiler failing to reach or drive its own
-                // output — and swallowed here it would come back as a candidate that ran and
-                // missed, which is a statement about the model. The seam says which failures it
-                // has ({@link Answerer.Applying#to}) and those are the ones read.
-            } finally {
-                EvaluationContext.end();
+        // Under the numbering the classes about to be run were emitted with, or not at all where
+        // they record nothing. Asked once and answered by the shape: the recording is begun, read
+        // and let go inside one arm, so there is no way to end one that was never begun — and what
+        // comes back where nothing was watching is no account of a run rather than an account of
+        // one that went nowhere.
+        return switch (probes) {
+            case ProbeImage.Uninstrumented _ -> {
+                applied(applying, over, steps);
+                yield Optional.empty();
             }
-            return Optional.of(Probe.snapshot());
-        } finally {
-            // On every way out, including one nothing here catches. A recording left installed is
-            // where the next reader on this thread would start.
-            Probe.end();
+            case ProbeImage.Instrumented(NumberingIdentity numbering) -> {
+                Probe.begin(numbering);
+                try {
+                    yield applied(applying, over, steps)
+                            ? Optional.of(Probe.snapshot()) : Optional.empty();
+                } finally {
+                    // On every way out, including one nothing here catches. A recording left
+                    // installed is where the next reader on this thread would start.
+                    Probe.end();
+                }
+            }
+        };
+    }
+
+    /**
+     * What the candidate stands its target's dependencies in with, built.
+     *
+     * <p>The values go through the reader this row is being built by, so a dependency's answer is
+     * one of this module's own values exactly as an input of the row is. Built here rather than
+     * where the candidate was composed, for the reason a row's inputs are: what a search chose is
+     * text and a tree, and what an implementation is constructed with is of the loader it came
+     * from.
+     *
+     * <p>One answer for every call where the candidate wrote a value, which is what a row's
+     * {@code with} states. A candidate is run to find out where it goes, so a call this reading did
+     * not foresee is answered rather than refused — a run that stopped at one would say nothing
+     * about that.
+     *
+     * <p>And the module's table where the candidate leaned on it, dispatching call by call the way
+     * it does under a row somebody wrote. Which answer a call gets is then the table's, which is
+     * the point: a candidate leaning on the table is a candidate whose way through the body the
+     * module's own environment decides, and running it against anything else would certify a row
+     * that goes somewhere else once it is pasted in.
+     *
+     * <p>Null where a table the candidate leans on is not one to stand in with, which is a row that
+     * cannot be run rather than one that ran and reached nothing.
+     */
+    private static List<DependencyStandin> standingIn(FixtureReader fixtures,
+                                                      Prepared.ForExamples module,
+                                                      EnsuresChecks ensures,
+                                                      List<RowTrials.AnsweredWith> answers) {
+        List<DependencyStandin> out = new ArrayList<>(answers.size());
+        for (RowTrials.AnsweredWith each : answers) {
+            switch (each) {
+                case RowTrials.AnsweredWith.OnTheRow(var dependency, var signature, var written) -> {
+                    Object value = fixtures.buildFixture(written, signature.out()).value();
+                    out.add(StandingIn.by(dependency, signature.ins().size(), _ -> value));
+                }
+                case RowTrials.AnsweredWith.InTheModule(var dependency, var signature) -> {
+                    StandingIn.OffATable stood = statedFor(fixtures, module, ensures, dependency,
+                            signature);
+                    if (stood == null) {
+                        return null;
+                    }
+                    out.add(stood.applies());
+                }
+            }
         }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The stand-in the module's table gives for {@code dependency}, or null where there is none to
+     * give.
+     *
+     * <p>Asked of the module here rather than carried on the candidate. What a module states is one
+     * table however many candidates lean on it, and a candidate carrying a copy would be running
+     * against whatever the table said when it was composed.
+     */
+    private static StandingIn.OffATable statedFor(FixtureReader fixtures,
+                                                  Prepared.ForExamples module,
+                                                  EnsuresChecks ensures,
+                                                  ValueName.Behavior dependency, Sig signature) {
+        return module.fakes().declaredFor(dependency)
+                instanceof FakeTables.Declaration.One(var stated)
+                ? StandingIn.byTheTable(fixtures, ensures, stated, dependency, signature) : null;
+    }
+
+    /**
+     * Applies the behavior, and says whether it was applied at all.
+     *
+     * <p>A run that aborts still went where it went, so what stopped it is dropped: nothing here is
+     * judging the row, and a generator has no expectation for it to have failed against. What is
+     * not a run at all is the implementation being out of reach, and that is the false answer.
+     *
+     * <p>The budget is let go on every way out, a worker being something the next row would
+     * otherwise start inside of.
+     */
+    private static boolean applied(Answerer.Applying applying, List<Handed> over,
+                                   EvaluationPolicy steps) {
+        EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
+        try {
+            applying.to(over);
+        } catch (ImplementationNotReached e) {
+            // Not a run at all: the implementation could not be reached to apply. Saying the row
+            // did nothing would be saying it went nowhere, and those are different facts.
+            return false;
+        } catch (InvocationFailure e) {
+            // It ran and stopped. Where it had got to is what is being asked for, and what stopped
+            // it is not.
+            //
+            // This one and no wider. What the applied code ends with arrives as this, so a
+            // throwable that is not one is this compiler failing to reach or drive its own output —
+            // and swallowed here it would come back as a candidate that ran and missed, which is a
+            // statement about the model. The seam says which failures it has
+            // ({@link Answerer.Applying#to}) and those are the ones read.
+        } finally {
+            EvaluationContext.end();
+        }
+        return true;
     }
 
     private RowTrial() {}

@@ -2,15 +2,19 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.NarrowedBounds;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.PositionBounds;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,31 +41,51 @@ final class LocalInspection {
      * widening that hands the declared ones back belongs to the position, so a reader applying one
      * of its own here would be making that decision a second time and in another place.
      */
-    static LocalPartition of(Position position, Symbols symbols,
-                             souther.compiler.check.ReadingPolicy policy) {
+    static LocalPartition of(Position position, RuleReadingContext reading) {
+        // What stands at the position, which is the number the type's own distinctions divide. Said
+        // here because here is where it is known: the cases come from the reading of what may stand
+        // at this place, so a class made from one of them is a class of that value and of nothing
+        // taken of it. Read back off the class's meaning, or taken from a number the position was
+        // said to be measured at, this is the same answer arrived at by guessing.
+        NumericTerm.FromOnePosition standing = new NumericTerm.ValueOf(position.path());
+        // Nothing is being built here: a position is being inspected, so no value's own name is
+        // already open.
         List<PartitionClass> classes =
-                PartitionClasses.of(position.obligationCases(), position.view(), symbols, policy);
-        DeclaredBounds.Bounds axis = position.nothingExists() ? null
-                : axisBounds(position.ownEnds(), position.rangeLeft());
-        List<Cut> cuts = position.nothingExists() ? List.of()
-                : cutsOf(axis, position.ownEnds(), position.narrowedEnds());
-        if (classes.isEmpty() && cuts.isEmpty()) {
-            // Nothing divides the position, and what may be concluded from that is what the reading
-            // knows about itself. A set of values arrived at from part of the rules names no
-            // division; a rule that went unread can divide the position as easily as one that was
-            // read, so an absence does not follow from this reading having found none.
-            return position.valuesUnread() == null ? new LocalPartition.Open()
-                    : new LocalPartition.Blocked(position.valuesUnread());
+                PartitionClasses.of(position.obligationCases(), position.view(), reading,
+                                java.util.Set.of())
+                        .stream().map(each -> each.ofTheNumber(standing)).toList();
+        List<DeclaredMeasure> measures = new ArrayList<>();
+        // One measure per number, each built from the evidence that names that number. A number the
+        // classes are not about and no rule drew a line on is a number nothing measured, and it is
+        // left out rather than published as a measure of nothing.
+        for (PositionBounds at : position.bounds()) {
+            List<PartitionClass> here = at.term().equals(standing) ? classes : List.of();
+            List<Cut> cuts = position.nothingExists() ? List.of()
+                    : cutsOf(axisBounds(at.ownEnds(), at.rangeLeft()), at.ownEnds(),
+                            at.narrowedEnds());
+            if (here.isEmpty() && cuts.isEmpty()) {
+                continue;
+            }
+            // Whether a row can be written at an edge is a question about the whole value the
+            // position sits in, so it is answered once for the parameter. A rule this could not
+            // read is a way that value can be refused, wherever in it the rule is written.
+            measures.add(new DeclaredMeasure(at.term(), here,
+                    cuts.isEmpty() ? new CutEvidence.None()
+                            : new CutEvidence.Present(cuts, position.projection()),
+                    at.narrowedEnds()));
         }
-        // Whether a row can be written at an edge is a question about the whole value the position
-        // sits in, so it is answered once for the parameter. A rule this could not read is a way
-        // that value can be refused, wherever in it the rule is written.
-        CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
-                : new CutEvidence.Present(cuts, position.projection());
+        if (measures.isEmpty()) {
+            // Nothing this reading found divides the position, which is all this says. Whether an
+            // absence follows is answered where the position's standing questions and the body's
+            // rules are, and a widening this reading recorded about its own set is no part of it —
+            // read here, one reader being short of a rule another reader took in was written down
+            // as the position being one nothing could read.
+            return new LocalPartition.Open();
+        }
         // What the reading was short of is not restated here. It is the position's own answer and
         // travels as one value from there (`ReadingResidue`), so a local inspection copying half of
         // it would be a second place the pair could come apart.
-        return new LocalPartition.Divided(classes, drawn);
+        return new LocalPartition.Divided(measures);
     }
 
     /**
@@ -86,10 +110,10 @@ final class LocalInspection {
         return new DeclaredBounds.Bounds(
                 own.min() == null ? null
                         : new DeclaredBounds.End(Endpoint.lower(own.min().at(), left.min()),
-                                own.min().from()),
+                                own.min().found()),
                 own.max() == null ? null
                         : new DeclaredBounds.End(Endpoint.upper(own.max().at(), left.max()),
-                                own.max().from()),
+                                own.max().found()),
                 own.carrier());
     }
 
@@ -169,21 +193,20 @@ final class LocalInspection {
         // was settled where the clause was read and arrives as it was. What is added is a
         // boundary's own answer about that rule — that a reading of it drew this cut, taken in by
         // these declarations — which is nothing the rule says about itself.
-        for (DeclaredBounds.Drawn from : end.from()) {
+        for (DeclaredLine drawn : end.drawn()) {
             put(into, carrier, end.value(),
-                    new OriginRef.InvariantOrigin(from.rule(), from.conjunct(), side,
-                            end.at().inclusive()),
+                    new LineOrigin.InvariantOrigin(drawn, side, end.at().inclusive()),
                     end.at(), took);
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at,
-                            OriginRef.InvariantOrigin drawnBy, Endpoint cutAt,
+                            LineOrigin.InvariantOrigin drawnBy, Endpoint cutAt,
                             MatchedEndAttribution took) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is
         // said about the rule rather than in place of it: which declarations took the end in is a
         // fact about this reading of the position, and what drew the end is not.
-        OriginRef origin = OriginRef.NarrowedOrigin.of(drawnBy, cutAt, took);
+        LineOrigin origin = LineOrigin.NarrowedOrigin.of(drawnBy, cutAt, took);
         Cut cut = Cut.at(carrier, at, origin);
         into.merge(cut.key(), cut, (had, _) -> had.and(origin));
     }

@@ -1,8 +1,11 @@
 package souther.compiler.regex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The strings a pattern accepts, as states to walk between.
@@ -52,6 +55,113 @@ final class Automaton {
     /** How many states it has, which is what a caller bounding its work counts. */
     int size() {
         return steps.size();
+    }
+
+    /**
+     * A machine written out state by state, for a builder in this package that has one to write.
+     *
+     * <p>Beside {@link #of} and not instead of it. That one is handed a pattern and works out the
+     * states; a builder here holds a machine whose states follow from something that is not a
+     * pattern — where a string sits against another on the runtime's order, which no pattern says —
+     * and has nothing to be read from. Both end in the same three tables, which is what keeps a
+     * machine made this way answerable to everything below.
+     *
+     * <p>No free steps: a builder writing its own states writes what each one leads to, so a step
+     * costing no symbol is a state it did not need. One that wants them builds through {@link #of}.
+     */
+    static Automaton madeOf(List<List<Step>> steps, BitSet accepting) {
+        List<int[]> free = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            free.add(new int[0]);
+        }
+        return new Automaton(steps, free, accepting);
+    }
+
+    /**
+     * The steps out of one state, for a reader in this package walking a canonical machine.
+     *
+     * <p>Only ever asked of one that is canonical, where a walk is the whole of what there is to do:
+     * the machine is deterministic and complete, so every symbol leads somewhere and where it leads
+     * is a fact about the symbol. Asked of a machine that is not, a reader would be walking one of
+     * the ways the pattern happened to be written.
+     */
+    List<Step> stepsFrom(int state) {
+        return steps.get(state);
+    }
+
+    /** Whether a walk may stop at {@code state}. */
+    boolean stopsAt(int state) {
+        return accepting.get(state);
+    }
+
+    /**
+     * Whether a walk over this may stop having read a high surrogate and a low one in turn.
+     *
+     * <p>That pair of symbols is the one thing no string is read as, so a machine that stops on no
+     * sequence holding them already accepts nothing but strings and taking them out would change
+     * nothing.
+     *
+     * <p><b>Whether it stops, and not whether it has a step.</b> A canonical machine is complete —
+     * every symbol leads somewhere from every state — so every one of them has a step over a high
+     * surrogate and asking that says only that the machine is complete. Where such a step leads is
+     * the question: a pattern naming no surrogate leads to the state nothing stops at, and the
+     * sequence is refused there as it always was.
+     *
+     * <p>A walk over the states and nothing built. What it saves is a product every language would
+     * otherwise be put through.
+     */
+    boolean mayStopHavingReadALoneSurrogatePair() {
+        CodePoints high = CodePoints.between(0xD800, 0xDBFF);
+        CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
+        boolean[] reaches = reachingSomewhereItStops();
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step first : steps.get(at)) {
+                if (first.over().and(high).isEmpty()) {
+                    continue;
+                }
+                for (Step second : steps.get(first.to())) {
+                    if (!second.over().and(low).isEmpty() && reaches[second.to()]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * For each state, whether a walk from it may still reach one it stops at.
+     *
+     * <p>Here because it is a fact about the machine and about nothing else, and because more than
+     * one reader wants it: what a walk looking for a string does with a step is settled by whether
+     * anything is stopped at past it, and so is whether a shape the machine has is one a string
+     * ever reaches. Worked out by each of them, the two would be one walk written twice.
+     */
+    boolean[] reachingSomewhereItStops() {
+        List<List<Integer>> back = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            back.add(new ArrayList<>());
+        }
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step each : steps.get(at)) {
+                back.get(each.to()).add(at);
+            }
+        }
+        boolean[] out = new boolean[steps.size()];
+        List<Integer> waiting = new ArrayList<>();
+        for (int at = accepting.nextSetBit(0); at >= 0; at = accepting.nextSetBit(at + 1)) {
+            out[at] = true;
+            waiting.add(at);
+        }
+        for (int at = 0; at < waiting.size(); at++) {
+            for (int from : back.get(waiting.get(at))) {
+                if (!out[from]) {
+                    out[from] = true;
+                    waiting.add(from);
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -193,71 +303,143 @@ final class Automaton {
      * moves for nothing is the same pair with that side further on, which is exactly what a step
      * costing no symbol means.
      *
-     * <p>The states are the product, and nothing here says whether that is a price worth paying:
-     * both sizes are known before this is called, so a caller that has to answer for its work asks
-     * them rather than being told afterwards.
+     * <p><b>The pairs a walk reaches, and not every pair there is.</b> Grown from the pair a walk
+     * begins at, so a pair nothing leads to is never made. One that is made costs a state, the
+     * steps out of it worked out over both machines' labels, and an allowance charged for both —
+     * and a pair no string is ever in is all of that spent on a state the minimisation afterwards
+     * would throw away.
+     *
+     * <p>Which is why nothing is asked of the meter before the first state is made. The two sizes
+     * multiplied is what a product could come to and hardly ever what it comes to, so a caller
+     * refused on that number is refused an answer it could have afforded.
      */
     Automaton and(Automaton other, Meter meter) {
-        int wide = other.size();
-        // The pairs, asked for before the first of them is made. This is the operation the whole
-        // allowance is about: two machines that cost nothing on their own have a product that is
-        // the two multiplied, and allocating it to find that out is paying the price to learn it.
-        if (!meter.making().states((long) size() * wide)) {
-            return null;
-        }
-        int count = size() * wide;
-        List<List<Step>> steps = new ArrayList<>(count);
-        List<int[]> free = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
-            steps.add(new ArrayList<>());
-            free.add(null);
-        }
-        for (int mine = 0; mine < size(); mine++) {
-            for (int theirs = 0; theirs < wide; theirs++) {
-                int pair = mine * wide + theirs;
+        try {
+            Pairs pairs = new Pairs(other.size(), meter.making());
+            List<List<Step>> steps = new ArrayList<>();
+            List<int[]> free = new ArrayList<>();
+            BitSet accepting = new BitSet();
+            pairs.at(START, START);
+            // Grows while it is walked: a pair first reached here is one more to take the steps
+            // out of, and the walk is over when nothing new has been reached.
+            for (int at = 0; at < pairs.count(); at++) {
+                int mine = pairs.mine(at);
+                int theirs = pairs.theirs(at);
+                List<Step> out = new ArrayList<>();
                 for (Step one : this.steps.get(mine)) {
                     for (Step two : other.steps.get(theirs)) {
                         CodePoints over = one.over().and(two.over());
                         if (!over.isEmpty()) {
-                            steps.get(pair).add(new Step(over, one.to() * wide + two.to()));
+                            out.add(new Step(over, pairs.at(one.to(), two.to())));
                         }
                     }
                 }
                 List<Integer> freely = new ArrayList<>();
                 for (int to : this.free.get(mine)) {
-                    freely.add(to * wide + theirs);
+                    freely.add(pairs.at(to, theirs));
                 }
                 for (int to : other.free.get(theirs)) {
-                    freely.add(mine * wide + to);
+                    freely.add(pairs.at(mine, to));
                 }
-                int[] out = new int[freely.size()];
-                for (int i = 0; i < out.length; i++) {
-                    out[i] = freely.get(i);
+                int[] freeOut = new int[freely.size()];
+                for (int i = 0; i < freeOut.length; i++) {
+                    freeOut[i] = freely.get(i);
                 }
-                free.set(pair, out);
+                steps.add(out);
+                free.add(freeOut);
+                if (this.accepting.get(mine) && other.accepting.get(theirs)) {
+                    accepting.set(at);
+                }
             }
+            return new Automaton(steps, free, accepting);
+        } catch (TooMany _) {
+            return null;
         }
-        BitSet accepting = new BitSet();
-        for (int mine = this.accepting.nextSetBit(0); mine >= 0;
-                mine = this.accepting.nextSetBit(mine + 1)) {
-            for (int theirs = other.accepting.nextSetBit(0); theirs >= 0;
-                    theirs = other.accepting.nextSetBit(theirs + 1)) {
-                accepting.set(mine * wide + theirs);
+    }
+
+    /**
+     * The pairs of states a walk over two machines is in at once, numbered as they are reached.
+     *
+     * <p>Where a meet's states come from and where they are counted. A pair asked for twice is the
+     * same state both times, which is what makes the walk finish; a pair asked for the first time
+     * is a state, and it is charged for there — so what a meet spends is the pairs it reached.
+     */
+    private static final class Pairs {
+
+        private final int wide;
+        private final Meter.Making making;
+        private final Map<Long, Integer> known = new HashMap<>();
+        private final List<Integer> mine = new ArrayList<>();
+        private final List<Integer> theirs = new ArrayList<>();
+
+        Pairs(int wide, Meter.Making making) {
+            this.wide = wide;
+            this.making = making;
+        }
+
+        /** Which state the pair is, making it where it has not been reached before. */
+        int at(int mine, int theirs) {
+            // A long, because the two sizes multiplied is what this could run to and nothing has
+            // been asked about that: a key that overflowed would put two pairs in one state.
+            Long key = (long) mine * wide + theirs;
+            Integer had = known.get(key);
+            if (had != null) {
+                return had;
             }
+            if (!making.state()) {
+                throw new TooMany();
+            }
+            int made = this.mine.size();
+            this.mine.add(mine);
+            this.theirs.add(theirs);
+            known.put(key, made);
+            return made;
         }
-        return new Automaton(steps, free, accepting);
+
+        int count() {
+            return mine.size();
+        }
+
+        int mine(int state) {
+            return mine.get(state);
+        }
+
+        int theirs(int state) {
+            return theirs.get(state);
+        }
     }
 
     /**
      * Everything it does not accept.
      *
-     * <p>The one operation that has to make the machine deterministic first, because what a walk
-     * ends in has to be one answer before the answer can be turned over. Acceptance never needs it,
-     * and neither do the two questions about holding nothing and holding everything: a language is
-     * kept as {@link #canonical}, where being deterministic has already been paid for, and both are
-     * read off the one state such a machine has.
+     * <p><b>The states a walk may stop at, turned over.</b> Which is the whole of it where a walk
+     * is only ever in one state and every symbol takes it somewhere: a string ends in one state and
+     * every string ends somewhere, so the ones this does not accept are the ones ending where it
+     * does not stop. The steps do not move and neither does what each is numbered, so nothing is
+     * built and nothing is charged.
+     *
+     * <p><b>And a caller holding the one machine for its strings ({@link #canonical}) gets the one
+     * machine for the rest.</b> A string tells two states apart when a walk from one of them stops
+     * on it and a walk from the other does not. Turning the states over turns both of those answers
+     * over together, so a string that told two states apart tells them apart still and a string
+     * that told them nothing tells them nothing still — the strings a walk from a state stops on
+     * become the strings it does not, and which states no string separates is not a question those
+     * answers changed. A machine no two of whose states a string could tell apart still has none.
+     * The steps do not move, so the walk that numbers them meets the same states in the same order,
+     * and being smallest and being numbered that way are the whole of what makes a machine the one
+     * machine.
+     *
+     * <p><b>And why anything else has to be made deterministic first.</b> What a walk ends in has
+     * to be one answer before the answer can be turned over, and a machine that steps for nothing
+     * or twice over a symbol has not said what a string ends in. That is the one place this
+     * construction is needed — acceptance never needs it, and neither do the two questions about
+     * holding nothing and holding everything, both of which are read off the one state a canonical
+     * machine has.
      */
     Automaton not(Meter meter) {
+        if (everySymbolLeadsOneWay()) {
+            return turnedOver();
+        }
         try {
             Subsets subsets = new Subsets(meter.making());
             Meter.Making making = meter.making();
@@ -281,6 +463,57 @@ final class Automaton {
         } catch (TooMany _) {
             return null;
         }
+    }
+
+    /**
+     * Whether a walk over this is only ever in one state, and every symbol takes it somewhere.
+     *
+     * <p>Asked of the machine and not of where it came from. A machine carries no account of what
+     * was done to it, and a reader that took one operation's word for the shape of its answer would
+     * be reading the caller rather than the thing in front of it.
+     *
+     * <p>The labels out of a state say both. Together they are every symbol there is, so nothing
+     * leads nowhere; and they are as wide apart as they are wide, so no symbol is on two of them.
+     * A step costing no symbol is a second state to be in and there are none of those either.
+     *
+     * <p>Those steps are looked for first, over the whole machine. A machine that has one is one
+     * this is going to say no about, and finding that out costs a length where the labels cost
+     * every symbol they hold — so what a pattern's machine pays to be turned down is a walk over
+     * the states and nothing more.
+     */
+    private boolean everySymbolLeadsOneWay() {
+        for (int[] each : free) {
+            if (each.length > 0) {
+                return false;
+            }
+        }
+        for (int at = 0; at < steps.size(); at++) {
+            CodePoints together = CodePoints.NONE;
+            long apart = 0;
+            for (Step each : steps.get(at)) {
+                together = together.or(each.over());
+                apart += each.over().size();
+            }
+            if (!together.isEverything() || apart != together.size()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The same machine with the states it stops at turned over — see {@link #not}.
+     *
+     * <p>Nothing is asked of an allowance, because no state is made. The steps are the steps that
+     * were already there and so is what each one is numbered, and what is built is the answer to
+     * one question about each of them. A meter counts the states a construction makes, and a
+     * construction that shares the ones it was handed made none.
+     */
+    private Automaton turnedOver() {
+        BitSet stops = new BitSet();
+        stops.set(0, size());
+        stops.andNot(accepting);
+        return new Automaton(steps, free, stops);
     }
 
     /**
@@ -332,31 +565,78 @@ final class Automaton {
      * symbols lead: two states in one block that step into different blocks are two states, and
      * asking that over and over until nothing moves is what leaves the blocks a string could tell
      * apart and no others.
+     *
+     * <p>What a round asks of a state is a row — the block it is in, and then the block each symbol
+     * leads to — and what it groups is the states whose rows are equal. A row is as wide as the runs
+     * the labels cut, and two rows are equal exactly when their cells are, so the grouping is an
+     * open table read off those cells: the hash below is the cells, and a collision is settled by
+     * comparing them.
+     *
+     * <p>What is kept is a row per block and not a row per state. Every row a state is compared
+     * against is the first row of some block, so a row per state would be holding what the grouping
+     * has already brought together — as many rows as the machine has states, each as wide as its
+     * alphabet. A state's row is written where the next block's would begin and stays there only if
+     * it opened one, which is why nothing is copied to keep it. The table of slots is the one thing
+     * sized for the states there are, because a round can put that many rows in it, and it never
+     * grows.
+     *
+     * <p>Blocks are numbered in the order a row is first seen; which numbers they get is nothing
+     * {@link #numbered} reads, since it renames them by walking the machine.
      */
     private static int[] smallest(List<int[]> table, BitSet accepting) {
-        int[] block = new int[table.size()];
-        for (int state = 0; state < block.length; state++) {
+        int states = table.size();
+        int width = 1 + table.get(0).length;
+        int[] block = new int[states];
+        for (int state = 0; state < states; state++) {
             block[state] = accepting.get(state) ? 1 : 0;
         }
+        int[] shown = new int[width];
+        int[] next = new int[states];
+        // A power of two, so a hash is brought into range by masking, and twice the rows a round
+        // can have, so the slots a probe walks past stay few.
+        int slots = 4;
+        while (slots < states * 2) {
+            slots <<= 1;
+        }
+        int[] seen = new int[slots];
         for (int blocks = 2, was = 0; blocks != was;) {
             was = blocks;
-            java.util.Map<List<Integer>, Integer> found = new java.util.LinkedHashMap<>();
-            int[] next = new int[block.length];
-            for (int state = 0; state < block.length; state++) {
-                List<Integer> tells = new ArrayList<>();
-                tells.add(block[state]);
-                for (int to : table.get(state)) {
-                    tells.add(block[to]);
+            Arrays.fill(seen, 0);
+            int found = 0;
+            for (int state = 0; state < states; state++) {
+                if (shown.length < (found + 1) * width) {
+                    shown = Arrays.copyOf(shown, shown.length * 2);
                 }
-                Integer had = found.get(tells);
-                if (had == null) {
-                    had = found.size();
-                    found.put(tells, had);
+                int at = found * width;
+                shown[at] = block[state];
+                int[] out = table.get(state);
+                for (int over = 0; over < out.length; over++) {
+                    shown[at + 1 + over] = block[out[over]];
                 }
-                next[state] = had;
+                int hash = 1;
+                for (int cell = at; cell < at + width; cell++) {
+                    hash = 31 * hash + shown[cell];
+                }
+                int probe = (hash ^ (hash >>> 16)) & (slots - 1);
+                while (true) {
+                    // A slot holds the block whose first row is there, counted from one so that
+                    // nought is a slot nothing has been put in.
+                    int held = seen[probe];
+                    if (held == 0) {
+                        seen[probe] = found + 1;
+                        next[state] = found++;
+                        break;
+                    }
+                    if (Arrays.equals(shown, (held - 1) * width, held * width,
+                            shown, at, at + width)) {
+                        next[state] = held - 1;
+                        break;
+                    }
+                    probe = (probe + 1) & (slots - 1);
+                }
             }
-            block = next;
-            blocks = found.size();
+            System.arraycopy(next, 0, block, 0, states);
+            blocks = found;
         }
         return block;
     }
@@ -647,10 +927,10 @@ final class Automaton {
     /**
      * The machine read as one where a walk is only ever in one state, made as it is asked for.
      *
-     * <p>Every question that needs a walk's end to be one answer comes through here: what a language
-     * leaves out, and whether it leaves anything out. Grown a subset at a time, because both of them
-     * usually have their answer within a step or two and the whole of a deterministic machine is
-     * what the worst case costs.
+     * <p>Where a machine has not already said what a string ends in, this is what says it: a
+     * complement of one that steps for nothing or twice over a symbol, and the one machine any
+     * language is kept as. Grown a subset at a time, because the whole of a deterministic machine
+     * is what the worst case costs and a walk usually meets far fewer.
      *
      * <p><b>Complete, the subset of no states among them.</b> A symbol with nowhere to go is a walk
      * that ends outside the language, and a machine that simply had no step there would leave every
@@ -675,10 +955,30 @@ final class Automaton {
          *  a machine — one this throws away, and one whose states were made all the same. */
         private final Meter.Making making;
 
+        /**
+         * Whether anything here steps for nothing, which is whether the closure has anything to
+         * add.
+         *
+         * <p>Asked once, of the machine. Where nothing does, the states reachable without spending
+         * a symbol are the states themselves, and the closure of a subset is that subset — so what
+         * it comes to is a copy of what it was handed, made for every symbol out of every state.
+         */
+        private final boolean anyFree;
+
         Subsets(Meter.Making making) {
             this.making = making;
+            boolean found = false;
+            for (int[] each : free) {
+                found = found || each.length > 0;
+            }
+            this.anyFree = found;
             cutTheAlphabet();
-            at(closure(only(START)));
+            at(reached(only(START)));
+        }
+
+        /** The subset a walk is in, having got to {@code these}. */
+        private BitSet reached(BitSet these) {
+            return anyFree ? closure(these) : these;
         }
 
         int count() {
@@ -713,7 +1013,7 @@ final class Automaton {
                         }
                     }
                 }
-                out.add(new Move(run, at(closure(next))));
+                out.add(new Move(run, at(reached(next))));
             }
             moves.set(state, out);
             return out;

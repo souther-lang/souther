@@ -1,11 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -33,26 +34,38 @@ class AStandingQuestionSaysWhatItStandsForTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /**
+     * The models here with their stand-in for a rule nothing reads written out.
+     *
+     * <p>Named rather than written, because which spelling this compiler cannot read is a fact
+     * about this compiler and moves ({@link ARuleNoReadingTakesIn}).
+     */
+    private static String unreadable(String source) {
+        return source.replace("UNREAD_A", ARuleNoReadingTakesIn.about("a"))
+                .replace("UNREAD_VALUE", ARuleNoReadingTakesIn.about("value"));
+    }
+
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
     }
 
     private static String reportOf(String source) {
-        return measured(source).human(SourceNameResolver.identity());
+        return measured(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** What the document says stopped the one question of {@code source}. */
     private static List<String> stoppedInDocument(String source) {
         JsonNode document =
-                JSON.readTree(measured(source).json(SourceNameResolver.identity()));
+                JSON.readTree(measured(source).json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         JsonNode standing = document.get("modules").get(0).get("behaviors").get(0)
                 .get("partition").get("unanswered");
         assertEquals(1, standing.size(), "one question, so one entry: " + standing);
         List<String> out = new ArrayList<>();
-        standing.get(0).get("stopped").forEach(each -> out.add(each.asString()));
+        standing.get(0).get("stopped")
+                .forEach(each -> out.add(each.get("reason").asString()));
         return out;
     }
 
@@ -100,8 +113,8 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * Two parts of one clause stopped in two ways, and the line says both.
      *
-     * <p>{@code a /= b} relates the position to another, which this reading recognised and has no
-     * set of one position's values for; {@code String.startsWith} is a form it does not take apart.
+     * <p>{@code a < b} relates the position to another, which this reading recognised and has no
+     * set of one position's values for; the other is a form it does not take apart.
      * The two are lifted by different work, so an author told only one of them lifts it and finds
      * the question still standing.
      *
@@ -118,7 +131,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.startsWith("x", a)
+                            invariant both = a < b && UNREAD_A
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"));
@@ -131,7 +144,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.startsWith("x", a) && a /= b
+                            invariant both = UNREAD_A && a < b
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"),
@@ -141,9 +154,13 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * Two conjuncts stopped by one limit are one thing to lift, so the line says it once.
      *
-     * <p>Both halves of the same rule draw the line on {@code x} and neither was read. What a
-     * reader is owed is what to lift, and the two want the same reader written — said twice, an
+     * <p>Both halves of the same rule draw the line on {@code x} and neither number was folded. What
+     * a reader is owed is what to lift, and the two want the same reader written — said twice, an
      * author would be shown their own rule as two things.
+     *
+     * <p>Two products of constants, so that the limit is one. A half whose other side is an
+     * operation on the position is a different thing to lift — what it says about the values there
+     * takes inverting that operation — and two limits are two entries by design.
      *
      * <p>Which is the projection saying they are one thing and not the report dropping one of them:
      * each reason is put into the words the document promises on its own, and the words are made
@@ -155,7 +172,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 module probe.line
 
                 data N = { x: Int, y: Int }
-                    invariant said = x <= 10 * 2 && x <= Int.abs(x)
+                    invariant said = x <= 10 * 2 && x <= 3 * 7
 
                 behavior read : (n: N) -> Ok
                 """), "invariant N (said)");
@@ -166,36 +183,49 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
-     * A question no reading claimed says what is known of it, and no more.
+     * A question a rule reaching through a helper leaves says what the same rule written out says.
      *
-     * <p>The invariant is a call, and what it comes to is a rule about a field of the value its
-     * helper was handed — a position none of the readings here is filed under, so none of them
-     * claimed the rule and none recorded why.
+     * <p>The invariant is a call, and what it comes to is a rule about a field of the value the
+     * helper was handed. The reading goes inside the binding the expansion made (ADR-0106), so the
+     * position is named and the rule is read at it — and what stands is the reading's own word for
+     * the form it could not take apart, which is the word the rule written where the clause is
+     * would leave.
      *
-     * <p>Neither of the words beside it is true of that. One promises a rule was read and could not
-     * be used, which sends an author after the form they wrote and nothing here complained of the
-     * form; the other promises the rule was never arrived at, and it was. What is known is that the
-     * rule is here, that a question of it stands, and that nothing worked out what it says — so
-     * that is the word, and it claims nothing about which capability would lift it.
+     * <p>Held as one line and not as two readings agreeing, because the line is what a person is
+     * shown: a word that turned on which of the two spellings an author reached for would be
+     * reporting this compiler's arrangement rather than their model.
      */
     @Test
-    void aQuestionNoReadingClaimedSaysWhatIsKnownOfIt() {
+    void aQuestionARuleThroughAHelperLeavesSaysWhatTheRuleWrittenOutSays() {
+        String throughAHelper = about(reportOf("""
+                module probe.helper
+
+                data Range = { min: String, max: String }
+
+                data Checked = { range: Range }
+                    invariant valid(range)
+
+                behavior read : (c: Checked) -> Ok
+
+                let valid (r: Range) : Bool = UNREAD_MAX
+                """.replace("UNREAD_MAX", ARuleNoReadingTakesIn.about("r.max"))),
+                "invariant Checked #1");
+
         assertEquals("      · not accounted for: invariant Checked #1"
                         + " — which values may stand at c.range.max:"
-                        + " it was reached, and nothing worked out what it says about the values"
-                        + " here",
-                about(reportOf("""
-                        module probe.helper
+                        + " written in a form this compiler does not read",
+                throughAHelper);
+        assertEquals(about(reportOf("""
+                module probe.helper
 
-                        data Range = { min: Int, max: Int }
+                data Range = { min: String, max: String }
 
-                        data Checked = { range: Range }
-                            invariant valid(range)
+                data Checked = { range: Range }
+                    invariant UNREAD_MAX
 
-                        behavior read : (c: Checked) -> Ok
-
-                        let valid (r: Range) : Bool = r.max >= 0
-                        """), "invariant Checked #1"));
+                behavior read : (c: Checked) -> Ok
+                """.replace("UNREAD_MAX", ARuleNoReadingTakesIn.about("range.max"))),
+                "invariant Checked #1"), throughAHelper);
     }
 
     /**
@@ -214,7 +244,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 module probe.regex
 
                 data Number = String
-                    invariant String.startsWith("T", value)
+                    invariant UNREAD_VALUE
 
                 data Held = { n: Number }
 
@@ -226,7 +256,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.startsWith("x", a)
+                            invariant both = a < b && UNREAD_A
 
                         behavior read : (p: Pair) -> Ok
                         """));
@@ -236,7 +266,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.startsWith("x", a) && a /= b
+                            invariant both = UNREAD_A && a < b
 
                         behavior read : (p: Pair) -> Ok
                         """),

@@ -1,7 +1,26 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.numeric.Towards;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
+
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.RuleRef;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -182,7 +201,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     void aComparisonAndABoundAtOneValueAreTwoDebts() {
         Border guard = Border.at(aLineAt(100), readAt(1), ANYWHERE);
         Border bound = Border.at(aLineAt(100),
-                new OriginRef.InvariantOrigin(aClause(), 0,
+                new LineOrigin.InvariantOrigin(aStatementOf(aClause()),
                         souther.compiler.numeric.EndSide.LOWER, true),
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         souther.compiler.numeric.Endpoint.inclusive(
@@ -201,30 +220,47 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     private static BoundaryTarget aLineAt(int at) {
         souther.compiler.check.Carrier carrier = new souther.compiler.check.Carrier.Whole();
         AxisId axis = new AxisId("twice", "a.value");
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
     }
+
+    /** The numbering this fixture's places are of. One of them, so that two readings written here
+     *  as the same occurrence address one place. */
+    private static final SiteNumbering WHERE = Numberings.ofComparisons(8);
 
     /**
      * One reading of one comparison: the same rule and the same place it is written, at the
      * occurrence the call it was spliced into was numbered.
      */
-    private static OriginRef readAt(int occurrence) {
-        souther.compiler.check.RuleRef.Comparison rule =
-                new souther.compiler.check.RuleRef.Comparison("twice",
-                        new souther.compiler.types.CoverageOrigin("example.banding", 2, 0,
-                                souther.compiler.types.CoverageConstruct.BINARY));
-        return new OriginRef.ComparisonOrigin(rule,
-                new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence(occurrence),
-                        new souther.compiler.check.RuleCitation.WrittenAt(
-                                souther.compiler.diag.Citation.of(
-                                        new souther.compiler.diag.SourcePos(15, 16)))),
-                true, true);
+    private static LineOrigin readAt(int occurrence) {
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.banding", "twice"), 2, 0, SourceConstruct.BINARY);
+        return new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("twice", wrote),
+                        // The construct of the model the reading is of. One comparison written in a
+                        // helper spliced into two calls is one rule and two constructs, which is
+                        // what these two readings are of.
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL.copiedInto(
+                                new ValueName.Helper("example.banding", "twice"),
+                                new ExpansionSite.Written(SourceConstructOrigin.written(
+                                        new WrittenOwner.Body("example.banding", "caller"),
+                                        occurrence, SourceConstruct.CALL)))),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(WHERE.comparison(occurrence))),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
+    }
+
+    /** The one statement of the first conjunct of {@code clause}, which is only an identity
+     *  here. */
+    private static DeclaredLine aStatementOf(RuleRef.Invariant clause) {
+        return new DeclaredLine.OfAStatement(
+                new InvariantStatementId(new PartId<>(clause, 0), 0));
     }
 
     /** The clause the bound in these tests names, which is only an identity here. */
@@ -386,25 +422,20 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        souther.compiler.check.Prepared prepared =
-                compilation.db().ask(new souther.compiler.query.Shapes.Prepared(module)).value();
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
-        Map<String, souther.compiler.check.Sig> sigs = compilation.db()
-                .ask(new souther.compiler.query.Bodies.Signatures(module)).value();
-        souther.compiler.ast.Hir.SpecBehavior spec =
-                (souther.compiler.ast.Hir.SpecBehavior) prepared.behaviors().stream()
-                        .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, souther.compiler.check.DeclaredSig> sigs = compilation.db()
+                .ask(new souther.compiler.query.Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         souther.compiler.inputs.InputDomain domain =
-                souther.compiler.inputs.InputDomain.of(spec, sigs.get(behavior), symbols,
+                souther.compiler.inputs.InputDomain.of(sigs.get(behavior), rules,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols,
+        Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
-        return Partitions.bordersOf(axis, symbols,
-                domain.quantities(symbols).runsBetween(axis.term()), new LinesRead());
+        souther.compiler.inputs.Quantities reading = domain.quantities(rules);
+        return Partitions.bordersOf(axis, reading,
+                reading.runsBetween(axis.term()), new LinesRead());
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

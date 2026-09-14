@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 
 /**
- * A clause tree read into one state, the connectives being the same whatever the leaves are read as.
+ * A clause tree read into one state, the connectives being the same whatever the parts are read as.
  *
  * <p>What a clause is written out of — a conjunction, a choice, a denial — is the clause's own shape
  * and not a fact about the language it is read in. Written once per language, that shape is the same
@@ -17,58 +17,132 @@ import souther.compiler.core.Core;
  * between a branch no order admits and a branch no set of values admits came out open, each language
  * having found nothing wrong with the branch the other one refused.
  *
+ * <p><b>What a clause states is answered upward and what its names mean is handed downward.</b> A
+ * reading composes its parts into one answer, and that answer is a function of the parts; the
+ * environment a part is read in is a function of the bindings above it, which is the other
+ * direction. Carried only upward, there was nowhere for a binding to be, so a clause under one was
+ * a shape every reading had no word for — and since almost every binding this check meets is one a
+ * helper's expansion made, a rule stated through a helper was read less than the same rule written
+ * out.
+ *
+ * <p>So {@code E} is handed down and {@code S} comes back up, and a part is read at the environment
+ * it stands in. What a binding does to that environment is not asked of a reading: the fold finds
+ * the boundary and {@link ClauseScope} answers it, which is what keeps a binder's meaning the
+ * environment's (ADR-0106) rather than something each of three readings works out again.
+ *
+ * <p><b>A part is not the same thing for every reading.</b> Where a reading stops is its own answer
+ * ({@link Descent}), so the node an author wrote a connective at is a part to a reading that takes
+ * it whole and is none to a reading that descends. What every reading shares is the shape below it,
+ * not the depth it reads to.
+ *
  * @param <S> what a reading of a clause comes to
+ * @param <E> what the reading carries into a binding — what its parts are read at
  */
-interface ClauseReading<S> {
-
-    /** What a clause this reading has no word for leaves, which is everything it had. */
-    S nothingSaid();
+interface ClauseReading<S, E> {
 
     /**
-     * What one clause of no connective says, stated where {@code positive} and denied where it is
-     * not.
+     * What one part of the clause says, read at the environment {@code at} it stands in.
+     *
+     * <p>A part of no connective, or a connective this reading takes whole — the two are one case,
+     * and {@link ClauseExpr.Part} is that case. What is inside a part is the part language's to
+     * ask, and a binding standing there is crossed by each question it asks about its own inside
+     * (ADR-0106); a connective taken whole is a part on exactly those terms.
+     *
+     * <p>Handed the shape and not the node. What the part is ({@link ClauseExpr.Part#of}), how it
+     * stands ({@link ClauseExpr#positive}), what the author wrote it as ({@link ClauseExpr#written})
+     * and, for a connective taken whole, which two halves it composes
+     * ({@link ClauseExpr.Joined#writtenHalves}) are all answers the shape already holds. A reading
+     * given the node alone works whichever of them it needs out of the tree again, which is the
+     * shape being read twice.
      *
      * <p>Reached with the denials already counted, so a reading of a comparison is a reading of the
-     * comparison it states rather than of the one that was written.
+     * comparison it states rather than of the one that was written. And reached with the bindings
+     * above it entered, so a name a helper's expansion introduced denotes what it was given — a
+     * reading that answered from the environment the whole clause began in would be reading one
+     * value's rule at another value's names.
      */
-    S leaf(Core e, boolean positive);
-
-    /** Both readings holding at once. */
-    S both(S one, S other);
-
-    /** Either reading holding. */
-    S either(S one, S other);
+    S whole(ClauseExpr.Part part, E at);
 
     /**
-     * What {@code e} leaves, stated where {@code positive} and denied where it is not.
+     * How far this reading goes into {@code join}, and what holding both of its parts comes to.
      *
-     * <p>A denial is carried to the leaves rather than applied to what a branch came to. What a
+     * <p>Asked of the shape and not of the operator, so what a connective composes is settled in
+     * one place. The whole shape is handed over because a reading with something to say about the
+     * choice has nowhere else to learn where it stands: which choice two readings are the branches
+     * of is known here and at no call after it, so a reading not given it works it out from
+     * whichever place a walk happened to reach, which is a fact about the walk.
+     */
+    Descent<S> at(ClauseExpr.Joined join);
+
+    /**
+     * What {@code e} leaves, stated where {@code positive} and denied where it is not, read from
+     * {@code at} with {@code scope} answering for the bindings inside it.
+     *
+     * <p>A denial is carried down to the parts rather than applied to what a branch came to. What a
      * state says is a fact per position, and the denial of that is not one — the values a
      * conjunction rules out are a choice between the positions it named, which no map of positions
-     * holds. Carried down, every denial meets a leaf, where it is one.
+     * holds. Carried down, every denial meets a part, where it is one.
      */
-    default S read(Core e, boolean positive) {
-        return read(e, positive, null);
+    default S read(Core e, boolean positive, E at, ClauseScope<E> scope) {
+        return read(e, positive, at, scope, null);
+    }
+
+    /**
+     * What one part of a clause came to, told as it is read.
+     *
+     * <p>The shape and the node. The shape says which occurrence of the clause this is
+     * ({@link ClauseExpr#at}) and holds every other question about the part already answered; the
+     * node is what was read, for a reader that has something to do with it.
+     */
+    interface PerPart<S> {
+
+        void read(ClauseExpr of, Core part, S came);
+    }
+
+    /**
+     * The same over a shape a caller already read the clause into.
+     *
+     * <p>For a reader whose part of a clause is a subtree of a shape somebody else read out of the
+     * tree. Read again from the part, the occurrences under it would be numbered afresh from the
+     * part rather than from the clause, and what two readers said about one of them would be said
+     * in two numberings.
+     *
+     * <p>The shape as written: which parts a world holds was settled where the caller chose the
+     * shapes it reads, so there is nothing under one of them for a view to leave out.
+     */
+    default S read(ClauseExpr shape, E at, ClauseScope<E> scope, PerPart<S> per) {
+        return from(shape, shape.written(),
+                over(shape, at, scope, per, ClauseView.asWritten()));
     }
 
     /**
      * The same, telling {@code per} what each part of the clause came to as it is read.
      *
-     * <p>Keyed by the part as the tree holds it, so a reader that walks the same clause afterwards
-     * finds what this reading made of the very node it is looking at. Asked again instead, that
-     * reader is a second reading of the part, and two readings of one conjunct agree only for as
-     * long as nobody changes one of them.
+     * <p>Told as the reading makes it, so that whoever keeps the reading keeps what it made of
+     * each part beside it. Asked again afterwards, that reader is a second reading of the part,
+     * and two readings of one conjunct agree only for as long as nobody changes one of them.
      */
-    default S read(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        S out = from(e, readInto(e, positive, per));
-        if (per != null) {
-            per.accept(e, out);
-        }
-        return out;
+    default S read(Core e, boolean positive, E at, ClauseScope<E> scope, PerPart<S> per) {
+        return read(e, positive, at, scope, per, ClauseView.asWritten());
     }
 
-    private S readInto(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        return over(ClauseExpr.of(e, positive), per);
+    /**
+     * The same, read in the world {@code view} describes rather than in the one the author wrote.
+     *
+     * <p>What a reader asking what one conjunct was holding compares against. A part outside that
+     * world is not read, is not composed with what is read, and is told to nothing: the tree walked
+     * here is the tree of the rules that world has, so honouring the omission is not something a
+     * reading is asked to remember to do.
+     */
+    default S read(Core e, boolean positive, E at, ClauseScope<E> scope, PerPart<S> per,
+                   ClauseView view) {
+        // The clause is named once more here, on the outside of everything its shape was written
+        // as, which is where a caller holding the clause and nothing under it looks. What it came
+        // to is not told to {@code per} a second time: the walk below has already said it of the
+        // very same node, and a reader counting what it was told would count the whole clause
+        // twice and every part of it once.
+        ClauseExpr shape = ClauseExpr.of(e, positive);
+        return from(shape, e, over(shape, at, scope, per, view));
     }
 
     /**
@@ -79,34 +153,67 @@ interface ClauseReading<S> {
      * place and every reading agrees about it by having been given the answer. Two readings that
      * each recognised {@code &&} for themselves agreed until one of them learned something.
      */
-    private S over(ClauseExpr shape, java.util.function.BiConsumer<Core, S> per) {
+    private S over(ClauseExpr shape, E at, ClauseScope<E> scope, PerPart<S> per,
+                   ClauseView view) {
         S out = switch (shape) {
-            case ClauseExpr.Leaf it -> leaf(it.of(), it.positive());
-            case ClauseExpr.Both it -> both(over(it.left(), per), over(it.right(), per));
-            case ClauseExpr.Either it -> either(over(it.left(), per), over(it.right(), per));
+            case ClauseExpr.Leaf it -> whole(it, at);
+            // A side holding no rule of this world is not read, whatever any reading would have
+            // made of it. What a conjunction of one rule and no rule comes to is that rule, and
+            // reading the missing side as a state saying nothing would be the same answer arrived
+            // at by having read a rule that is not there — which a walk collecting parts, and every
+            // account made of one, can tell apart.
+            //
+            // Above how far this reading goes, because which rules there are is not a reading's to
+            // decide. Asked under it, a reading that takes a conjunction whole would be handed the
+            // node with the conjunct still under it, and the world would hold for the readings that
+            // descend and for no others.
+            case ClauseExpr.Joined it when view.omits(it.left()) ->
+                    over(it.right(), at, scope, per, view);
+            case ClauseExpr.Joined it when view.omits(it.right()) ->
+                    over(it.left(), at, scope, per, view);
+            // How far this reading goes is its own answer, and taking the connective whole is
+            // reading the node an author wrote it at as a part. A reading told to descend and
+            // unable to compose what it found had nowhere to say so.
+            case ClauseExpr.Joined it -> switch (at(it)) {
+                case Descent.Whole<S> _ -> whole(it, at);
+                case Descent.Into<S> into -> into.compose().apply(
+                        over(it.left(), at, scope, per, view),
+                        over(it.right(), at, scope, per, view));
+            };
+            // The one place the environment changes, and it changes for what is under the binding
+            // alone. What the binding means is not worked out here and not by the reading either.
+            case ClauseExpr.Scoped it ->
+                    over(it.body(), scope.inside(it.binding(), at), scope, per, view);
         };
         // Every node that was written as this shape, so a reader asking about the node it is
         // holding finds what this made of it — the denial as well as what is under it, since the
-        // two are one shape.
+        // two are one shape, and the binding as well as the clause under it, since a binding states
+        // what the clause under it states.
         for (Core each : shape.spelled()) {
-            out = from(each, out);
+            out = from(shape, each, out);
             if (per != null) {
-                per.accept(each, out);
+                per.read(shape, each, out);
             }
         }
         return out;
     }
 
     /**
-     * The same reading, remembering that it is what {@code e} came to.
+     * The same reading, remembering that it is what {@code e} came to, which {@code shape} says
+     * which occurrence of the clause it is.
      *
      * <p>For a reading that has to answer about the parts of a clause afterwards. Kept in what the
      * reading carries rather than handed to somebody who keeps it: a part of a branch that turns
      * out dead is answered differently from the same part in a branch that stands, and everything
      * that decides which of those it was happens above here. Kept outside, the part would be read
      * again against a tree the decision had not reached.
+     *
+     * <p>The occurrence beside the node, so that a reading filing what it made of a part files it
+     * under where in the clause the part is. A clause is read once per place the walk opens a
+     * value at, over whatever tree a substitution built for that reading, and the node is that
+     * tree's; the occurrence is the clause's and is the same in every reading of it.
      */
-    default S from(Core e, S out) {
+    default S from(ClauseExpr shape, Core e, S out) {
         return out;
     }
 }

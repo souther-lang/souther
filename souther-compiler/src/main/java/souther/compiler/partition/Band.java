@@ -257,7 +257,7 @@ public record Band(BandEnd lower, BandEnd upper) {
             return ruleLow + " <= " + tail(ruleHigh);
         }
         String plain = (nullToEmpty(low) + left + nullToEmpty(high)).trim();
-        boolean anyPlain = low != null && !low.isEmpty() || high != null && !high.isEmpty();
+        boolean anyPlain = (low != null && !low.isEmpty()) || (high != null && !high.isEmpty());
         java.util.List<String> said = new java.util.ArrayList<>();
         if (ruleLow != null) {
             said.add(ruleLow);
@@ -370,6 +370,31 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static boolean keepsItsOwnValueBelow(Seam seam) {
         return seam.keepsItsOwnValueBelow();
+    }
+
+    /**
+     * The same run on the quantity read the other way round.
+     *
+     * <p>Both ends change places along with their places. A run above a line is a run below it once
+     * the quantity is measured backwards, and what stopped it at the low end is what stops it at
+     * the high one — so the ends are negated and then exchanged, and a caller that negated without
+     * exchanging would hold a run whose ends have crossed.
+     *
+     * <p>What an end of the order is moves too. Nothing stops the run that way, and which way that
+     * is is the order's low end read as its high one.
+     */
+    Band reflected() {
+        return new Band(reflected(upper), reflected(lower));
+    }
+
+    private static BandEnd reflected(BandEnd end) {
+        return switch (end) {
+            case BandEnd.AtParting(Seam parted, Bound reaches) ->
+                    new BandEnd.AtParting(parted.reflected(), reaches.reflected());
+            case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(reaches.reflected());
+            case BandEnd.AtOrderEnd(Towards towards) ->
+                    new BandEnd.AtOrderEnd(towards.opposite());
+        };
     }
 
     /**

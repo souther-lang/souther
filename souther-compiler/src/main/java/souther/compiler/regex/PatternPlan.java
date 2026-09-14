@@ -61,17 +61,111 @@ public final class PatternPlan {
         public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
 
         /**
-         * What writing one value out of a pattern is allowed to cost.
+         * What handing each of a position's rules on as the set it admits is allowed to cost.
          *
-         * <p>Its own and not the one above, because it bounds a different thing: one pattern,
-         * built to take a string out of, and nothing met with it. A caller here is offering a
-         * value for a row and has no answer to compose — where the allowance runs out it offers
-         * nothing, which is what it does for a pattern it cannot read either.
+         * <p>Its own and not the one above, because the two are about different sets. That one is
+         * what a position finally admits, which is every rule of it met together; this is what each
+         * of them admits on its own, which a reading promises to whoever draws lines and offers
+         * rows. A rule met with its neighbours can be settled without its own machine — a pattern
+         * beside a value the rules write out is a question about that value — so the sets handed on
+         * are not the sets the answer needed, and charging them to the answer would let what a
+         * position is read to admit turn on what somebody downstream was promised.
+         *
+         * <p>Per position and spent on the whole of it, for the reason the first is: the sets are
+         * published as a group or not at all, so an allowance per rule would be one nobody could
+         * hold the group to.
+         *
+         * <p>A machine that already exists is not made again out of this. What the answer built is
+         * read where it was built, and what is charged here is only what the answer had no use for.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000);
+
+        /**
+         * What composing one value somebody can write into a row is allowed to cost.
+         *
+         * <p>Its own and not the one above, because it bounds a different thing: what a caller here
+         * is after is a string for a row and never an answer about a position. So nothing about how
+         * a model is read turns on this number: what running out costs is a value to paste, and a
+         * position is read to admit what it admits either way.
+         *
+         * <p><b>What it costs is said as itself, and not as a pattern nothing read.</b> Both leave
+         * the row composed out of the rules beside the one that gave nothing, and there they part:
+         * an author meeting this raises a figure or writes a smaller machine, and one meeting an
+         * unreadable rule has a rule to rewrite. Reported alike, half of them are sent to look at
+         * something that is not the matter.
+         *
+         * <p><b>The whole of what arriving at that string costs, and not one pattern.</b> Which
+         * strings a class is left is what the position admits met with the run of the order it is
+         * bounded to, less the values a body singled out, and each of those is a machine. Read as
+         * one pattern taken a string out of, the figure would be tuned for the cheapest of the
+         * questions it actually pays for.
          *
          * <p>The same numbers today, and that is a coincidence rather than a fact. Written as one
          * constant, the day either question wants a different size the other would move with it.
          */
         public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000);
+
+        /**
+         * What working out where one rule's strings stop on the order is allowed to cost.
+         *
+         * <p>One rule's and not one position's. What is being asked is where the strings a single
+         * conjunct admits begin and end, and the answer is a line that conjunct drew — so a rule
+         * whose language is expensive taking the allowance the rule beside it needed would leave a
+         * line standing or going by the order the two happened to be read in.
+         *
+         * <p>Apart from what the values cost for the same reason {@link #OF_A_WITNESS} is: this is
+         * a question asked to write a report, and paying for it out of what the position's own
+         * answer is allowed would let a diagnostic decide what the model is read to admit.
+         *
+         * <p>The same numbers as the two above, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000);
+
+        /**
+         * What deciding whether a set of values and a range on an order share one is allowed to
+         * cost.
+         *
+         * <p>Its own, and here rather than out of what the position's answer is allowed, because
+         * this is what decides whether a declaration has a value. Spent from the position's
+         * allowance, the same rules would be decided differently depending on what the readings
+         * before them had already built — so a model would be accepted or refused by the order its
+         * clauses were walked in.
+         *
+         * <p>The same numbers as the rest, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000);
+
+        /**
+         * What working out the classes a behavior's rules about the strings at one position divide
+         * it into is allowed to cost.
+         *
+         * <p>Its own and not {@link #OF_WHAT_A_RULE_LEAVES}, and the two are told apart by what
+         * moving one would do to the other's answer. That one bounds how exactly a declaration's
+         * rules are handed on, and this one bounds which classes a behavior draws; a model whose
+         * type states a plain rule and whose body states an expensive one must not have the second
+         * become answerable because the first was allowed more, and a model the other way round
+         * must not have what its declaration is read to admit turn on how much its body was allowed
+         * to distinguish. Held as one figure, each of those is what raising it does.
+         *
+         * <p>Per position and spent on the whole of it. A rule about the strings there divides them
+         * from the rest, so what is built is the set it admits and the set it leaves, and the
+         * classes are the cells every such rule together leaves — which is one answer, made or not
+         * made. An allowance per rule would let the rule read first take what the rule beside it
+         * needed, and the position would come back divided one way or the other by the order the
+         * body happened to be walked in.
+         *
+         * <p>A machine that already exists is not made again out of this. What the values a
+         * position admits were answered with is read where it was built, and only what that answer
+         * had no use for is charged here — which is what borrowing is, and it is not the two
+         * questions sharing an allowance: a position whose own answer stopped short still has its
+         * body's distinctions read, because what a behavior tells apart is not a projection of what
+         * the position admits.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */
@@ -146,7 +240,7 @@ public final class PatternPlan {
      */
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof PatternPlan it && step.equals(it.step);
+        return this == other || (other instanceof PatternPlan it && step.equals(it.step));
     }
 
     @Override
@@ -280,8 +374,8 @@ public final class PatternPlan {
     }
 
     /**
-     * The language this plan comes to, or null where building it would cost more than
-     * {@code budget} allows.
+     * The language this plan comes to, spending {@code meter}, or null where building it would
+     * cost more than the meter has left.
      *
      * <p>Null and never a smaller language. What a plan says is which strings the answer is about,
      * and a language of fewer states is a different set — handed one, a reader would be measuring a
@@ -289,14 +383,12 @@ public final class PatternPlan {
      *
      * <p>Everything is built here, the intermediate machines among them. A caller holding what comes
      * back may ask it anything, because the asking is what has already been paid for.
-     */
-    public Language compile(Budget budget) {
-        return compile(new Meter(budget.mostStates(), budget.mostBuilt()));
-    }
-
-    /**
-     * The same, spending {@code meter} — for a caller building more than this plan out of one
-     * allowance.
+     *
+     * <p>A meter and never a budget. A budget is an allowance somebody was granted and a meter is
+     * what is left of one, so a caller here is spending an allowance that exists rather than
+     * minting itself a fresh one at the moment of asking — which is what makes what a question
+     * costs a fact about the question and not about how many times it was asked. Whose allowance
+     * each of them is, is written where the budgets are ({@link Budget}).
      *
      * <p>What is counted is what was made, and it is counted where it is made ({@link Meter}). This
      * used to work out what each step would cost from the sizes of its operands, which is a guess
@@ -311,9 +403,7 @@ public final class PatternPlan {
         // accepts its strings, and turning a machine into that one is the largest thing this does —
         // left to the reader, it would happen inside whichever question was asked first, where
         // there is no allowance and nobody counting.
-        Automaton made = built(step, meter);
-        Automaton one = made == null ? null : made.canonical(meter);
-        return one == null ? null : new Language(one);
+        return Language.canonical(built(step, meter), meter);
     }
 
     /**

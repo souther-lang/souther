@@ -138,12 +138,13 @@ final class AnswerClosure {
 
     /** What was compiled for it to be met in. */
     enum Scenario {
-        /** The conformance corpus, analysed with everything measured. */
-        VALID_CORPUS,
-        /** A module the compiler has something to say about, so the reports half of an answer is not
-         *  empty. Its own scenario because a corpus of valid models cannot reach it: an answer is
-         *  what it holds and what was said getting there, and only one of those is exercised by a
-         *  model nothing is said about. */
+        /** The conformance corpora, analysed with everything measured. Not all of them hold up:
+         *  one is a model on the way there, so what a compile says on the way to an answer is
+         *  reached here as well as in the scenario beside it. */
+        THE_CORPORA,
+        /** A module the compiler has something to say about, held to one mistake. What it is for is
+         *  a stimulus of its own: a difference between the two walks over one input is a difference
+         *  of walk, and over one input alone there is nothing to say it is not the input's. */
         A_MODULE_SPOKEN_ABOUT
     }
 
@@ -242,6 +243,50 @@ final class AnswerClosure {
                     + "the library has on every comparison, and writing \"any library equals any "
                     + "other\" would be true only while there is one of them");
 
+    /**
+     * An index onto the very objects the answer holding it is made of.
+     *
+     * <p>Filed by which objects were put in it, so it answers for one graph and returns nothing for
+     * anybody else's. That is what it is for — a number addresses a place in a tree, and two checks
+     * of one source build trees a record compares as equal, so a value-keyed index would answer for
+     * either with the same confidence and be right about one of them.
+     *
+     * <p>Permitted where it is because its life is that graph's life. Carried into another derived
+     * answer the two would be kept apart by the store — one answer recomputed while the other is
+     * held — and the index would go on addressing objects nobody is emitting, which no reader of it
+     * can see. So this is registered at one place and every further one is a finding.
+     *
+     * <p>What outlives the graph is {@link souther.compiler.coverage.NumberingIdentity}, which is a
+     * value: the same places under the same numbers over the same executable, and two builds of one
+     * module come to one. The equality of the answer above rests on that and never on this.
+     */
+    private static final Reading AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH =
+            new Reading("AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH", MISSING_EQUALITY,
+                    "a plan is filed by which Core objects were put in it, so it is worth what the "
+                            + "graph the answer holds is worth and says nothing about an equal one. "
+                            + "Comparing it would deny every check its own recomputation; what the "
+                            + "answer is compared by is what the plan is a numbering of, which is a "
+                            + "value");
+
+    /**
+     * Where a reading of a declaration borrows what has already been made of it.
+     *
+     * <p>Held by a reading of an input so that a later reader of the same declarations is not made
+     * to read them again: what a search asks about the record a parameter is is asked long after
+     * the walk that read it, and asked with nothing to borrow it pays every reading over.
+     *
+     * <p>Two of them built from one store answer alike and compare unlike, so the answers holding
+     * one are compared without it — a reading taken again would otherwise come back as another
+     * reading and put every measure through again. What it lends is dropped when the revision moves
+     * and it is the store's own, so an answer kept across one hands out nothing of the world it was
+     * read from.
+     */
+    private static final Reading A_LENDING_OF_READINGS =
+            new Reading("A_LENDING_OF_READINGS", CAPABILITY,
+                    "where a reading of a declaration borrows what somebody has already made of it,"
+                            + " which is a way of asking the store rather than an answer, and never"
+                            + " equals the same way of asking built again");
+
     /** How a module is found, which is something run rather than something said. */
     private static final Reading MODULE_PATH = new Reading("MODULE_PATH", CAPABILITY,
             "a module path resolves a module by running something, and a function never equals the "
@@ -264,9 +309,10 @@ final class AnswerClosure {
     /** What a generation is asked for on behalf of, carrying what it takes to go on asking. */
     private static final Reading GENERATION_READERS = new Reading("GENERATION_READERS", CAPABILITY,
             "the subject a row would be written for carries the means to ask further questions — "
-                    + "the symbols a name is read against, and the reading a quantity over several "
-                    + "positions is asked of. Both are built where they are used and neither is "
-                    + "what a plan says, so what belongs in the subject is what the row is about");
+                    + "the symbols a name is read against, where a declaration's expanded clauses "
+                    + "are answered from, and the reading a quantity over several positions is "
+                    + "asked of. Each is built where it is used and none of them is what a plan "
+                    + "says, so what belongs in the subject is what the row is about");
 
     /**
      * What was raised where a name resolved to nothing.
@@ -323,11 +369,11 @@ final class AnswerClosure {
                     + "meets it under whichever question declares reports of its own");
 
     private static final Set<Observation> BOTH_EVERYWHERE = Set.of(
-            walked(Scenario.VALID_CORPUS), compared(Scenario.VALID_CORPUS),
+            walked(Scenario.THE_CORPORA), compared(Scenario.THE_CORPORA),
             walked(Scenario.A_MODULE_SPOKEN_ABOUT), compared(Scenario.A_MODULE_SPOKEN_ABOUT));
 
     private static final Set<Observation> ONLY_WALKED = Set.of(
-            walked(Scenario.VALID_CORPUS), walked(Scenario.A_MODULE_SPOKEN_ABOUT));
+            walked(Scenario.THE_CORPORA), walked(Scenario.A_MODULE_SPOKEN_ABOUT));
 
     /** A place, written the way a walk writes one. */
     private static Locus.Place at(String question, String offender, Locus.Step... steps) {
@@ -362,7 +408,55 @@ final class AnswerClosure {
                 Set.of(met));
     }
 
+    /**
+     * The machine under the language a class of a measure holds, on the way down to it.
+     *
+     * <p>Reached wherever a body's rules divide a position into sets of its strings: the class
+     * means that set, the set is the language, and the language is walked as one machine. Under the
+     * names the position wears, because that is how a class of such a position is written down.
+     *
+     * <p>{@code steps} is the way to the measures of the question this is under, and the rest of
+     * the way is the same wherever it is reached from — a class is a class, and what hangs under
+     * one does not turn on which question asked for the measure it is in.
+     */
+    private static Known machineInAClass(String question, Observation met, Locus.Step... steps) {
+        List<Locus.Step> way = new java.util.ArrayList<>(List.of(steps));
+        way.addAll(List.of(
+                m("souther.compiler.partition.Partitions$Partitioning", "measurements"), ELEMENT,
+                m("souther.compiler.partition.PositionMeasurements", "axes"), ELEMENT,
+                m("souther.compiler.partition.Axis", "classes"), ELEMENT,
+                m("souther.compiler.partition.PartitionClass", "recognises"),
+                m("souther.compiler.partition.Recognition$Under", "inner"),
+                m("souther.compiler.partition.Recognition$OfASet", "values"),
+                m("souther.compiler.values.ValueSet$Matching", "language"),
+                m("souther.compiler.regex.Language", "machine")));
+        return new Known(at(question, "souther.compiler.regex.Automaton",
+                way.toArray(new Locus.Step[0])), A_MACHINE_UNDER_A_LANGUAGE, Set.of(met));
+    }
+
+    /**
+     * The machine under a language, wherever the walk arrives at one.
+     *
+     * <p>{@code steps} is the way to the language; what hangs under it is the same wherever it is
+     * reached from, because a language is a language and what it is walked as does not turn on
+     * which answer happened to hold it.
+     */
+    private static Known machineUnderALanguage(String question, Observation met,
+                                               Locus.Step... steps) {
+        List<Locus.Step> way = new java.util.ArrayList<>(List.of(steps));
+        way.addAll(List.of(
+                m("souther.compiler.values.ValueSet$Matching", "language"),
+                m("souther.compiler.regex.Language", "machine")));
+        return new Known(at(question, "souther.compiler.regex.Automaton",
+                way.toArray(new Locus.Step[0])), A_MACHINE_UNDER_A_LANGUAGE, Set.of(met));
+    }
+
     private static final String Q = "souther.compiler.query.";
+
+    /** What the reading of a body left of the model's own divisions, which is the half of it the
+     *  measurement asks for. */
+    private static final TypePath.Step THE_GEOMETRY_THE_READING_LEFT =
+            part(Q + "Adequacy$BodyDivided", "geometry");
 
     private static final List<Known> KNOWN = List.of(
             new Known(at(Q + "Names$ModuleScope", Q + "Db",
@@ -375,32 +469,88 @@ final class AnswerClosure {
                     m(ANSWER, "value")), MODULE_PATH, ONLY_WALKED),
             new Known(at(Q + "Front$Library", "souther.compiler.stdlib.Stdlib",
                     m(ANSWER, "value")), STDLIB, ONLY_WALKED),
+            // Where a module's places are, on the answer that walked its bodies for them. Only the
+            // walk that asks each object what it is meets this: what the check answers with is
+            // compared without it, and two answers that hold equal bodies come out equal, so the
+            // pair walk never reaches here to find two indexes into two graphs.
+            new Known(at(Q + "Bodies$Checked", "souther.compiler.coverage.CoverageSites$Plan",
+                    m(ANSWER, "value"), m(Q + "Bodies$Elaborated", "plan")),
+                    AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, ONLY_WALKED),
             new Known(at(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
                     m(ANSWER, "value"), m("souther.compiler.query.Bodies$Expanding$Of", "table"), m("souther.compiler.check.HelperTable", "stdlib")),
                     STDLIB, ONLY_WALKED),
-            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.VALID_CORPUS),
+            // What the declarations a reading of an input reached have already been made into,
+            // borrowed by the reading for the readers of those declarations that come after it. The
+            // walk of the declarations stops at the way of asking, which nothing closes; this is
+            // the object a compile put there, which is the same allowance one step further down.
+            new Known(at(Q + "Adequacy$Inputs", "souther.compiler.check.LentReadings",
+                    m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "machines")),
+                    A_LENDING_OF_READINGS, ONLY_WALKED),
+            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.THE_CORPORA),
                     m(ANSWER, "value"), VALUE,
                     m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
-                    m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
+                    m("souther.compiler.inputs.ReadPosition", "bounds"), ELEMENT,
+                    m("souther.compiler.inputs.PositionBounds", "narrowedEnds"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
-            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.VALID_CORPUS),
+            narrowedEnd(Q + "Adequacy$Inputs", walked(Scenario.THE_CORPORA),
                     m(ANSWER, "value"), VALUE,
                     m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
-                    m("souther.compiler.inputs.ReadPosition", "narrowedEnds"),
+                    m("souther.compiler.inputs.ReadPosition", "bounds"), ELEMENT,
+                    m("souther.compiler.inputs.PositionBounds", "narrowedEnds"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
             // The partition's own copy. An axis carries what the reading left the position rather
             // than the names it came to, so that a border can ask whether they are about the end it
             // has — and the walk that asks each object what it is meets the end on the way.
-            narrowedEnd(Q + "Adequacy$Divided", walked(Scenario.VALID_CORPUS),
+            narrowedEnd(Q + "Adequacy$Divided", walked(Scenario.THE_CORPORA),
                     m(ANSWER, "value"),
-                    m("souther.compiler.partition.Partitions$Partitioning", "axes"), ELEMENT,
+                    m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                    ELEMENT, m("souther.compiler.partition.PositionMeasurements", "axes"), ELEMENT,
                     m("souther.compiler.partition.Axis", "narrowed"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            // And the same end again through the reading the geometry is a projection of. Two
+            // questions are asked of one reading of a body — what the model divides, and where that
+            // reading met each condition it places itself — so a walk arrives at everything the
+            // geometry holds by both names. One thing to fix, met twice.
+            narrowedEnd(Q + "Adequacy$Dividing", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m(Q + "Adequacy$BodyDivided", "geometry"),
+                    m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                    ELEMENT, m("souther.compiler.partition.PositionMeasurements", "axes"), ELEMENT,
+                    m("souther.compiler.partition.Axis", "narrowed"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            // And the machines the classes of those measures hold, by both names the reading a
+            // body's geometry comes off answers to.
+            machineInAClass(Q + "Adequacy$Divided", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value")),
+            machineInAClass(Q + "Adequacy$Dividing", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m(Q + "Adequacy$BodyDivided", "geometry")),
+            // What a position admits, which is a language wherever a rule about a number taken of
+            // it leaves a run of its values. Held twice by the reading that found it — in the order
+            // the positions were read, and under the paths they were read at — and again by the
+            // account each measure carries of the location it is of.
+            machineUnderALanguage(Q + "Adequacy$Inputs", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
+                    m("souther.compiler.inputs.ReadPosition", "admitted"),
+                    m("souther.compiler.values.AdmissibleSet", "approximation")),
+            machineUnderALanguage(Q + "Adequacy$Inputs", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
+                    m("souther.compiler.inputs.ReadPosition", "admitted"),
+                    m("souther.compiler.values.AdmissibleSet", "approximation")),
+            machineUnderALanguage(Q + "Adequacy$Divided", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"),
+                    m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                    ELEMENT, m("souther.compiler.partition.PositionMeasurements", "position"),
+                    m("souther.compiler.partition.PositionAccount", "admits")),
+            machineUnderALanguage(Q + "Adequacy$Dividing", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m(Q + "Adequacy$BodyDivided", "geometry"),
+                    m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                    ELEMENT, m("souther.compiler.partition.PositionMeasurements", "position"),
+                    m("souther.compiler.partition.PositionAccount", "admits")),
             new Known(at(EVERY_ANSWER, "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
-                    A_REPORT,
-                    Set.of(walked(Scenario.A_MODULE_SPOKEN_ABOUT),
-                            compared(Scenario.A_MODULE_SPOKEN_ABOUT))));
+                    A_REPORT, BOTH_EVERYWHERE));
 
     /**
      * One place, what is wrong with what is there, and what the walk of the declarations stopped on.
@@ -427,6 +577,7 @@ final class AnswerClosure {
     /** What a container the JDK declares was written to hold. */
     private static final TypePath.Step HELD = new TypePath.Step.Argument("held");
     private static final TypePath.Step MAP_VALUE = new TypePath.Step.Argument("value");
+    private static final TypePath.Step MAP_KEY = new TypePath.Step.Argument("key");
 
     /** One arm of a sum, which a walk of types takes all of. */
     private static TypePath.Step arm(String named) {
@@ -446,11 +597,27 @@ final class AnswerClosure {
             part("souther.compiler.partition.FillResult", "plan"),
             part("souther.compiler.partition.GenerationPlan", "subject")};
 
+    /** The measurement a subject holds, down to the axes of one position. A subject is a reading
+     *  and the whole of what was measured against it, so an axis is reached through the
+     *  measurement rather than off a list beside it. */
+    private static final TypePath.Step[] A_MEASUREMENT = {
+            part("souther.compiler.partition.MeasuredInput", "divided"),
+            part("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+            HELD,
+            part("souther.compiler.partition.PositionMeasurements", "axes")};
+
     /** What a generation's subject carries to go on asking with, under the plan that holds it. */
     private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
+        return generationReader(offender, Traversal.Why.SAYS_NOTHING_OF_ITSELF, under);
+    }
+
+    /** The same, where the walk stops for another reason — a capability is closed by nothing at all,
+     *  where a carrier that says nothing of itself could have said something. */
+    private static KnownDeclared generationReader(String offender, Traversal.Why why,
+                                                  TypePath.Step... under) {
         return new KnownDeclared(
                 declared(Q + "Adequacy$Generated", offender, then(A_SUBJECT, under)),
-                GENERATION_READERS, Traversal.Why.SAYS_NOTHING_OF_ITSELF);
+                GENERATION_READERS, why);
     }
 
     /** The machine a language is held as, under the class that denotes a pattern's strings. */
@@ -531,6 +698,21 @@ final class AnswerClosure {
                     Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             new KnownDeclared(declared(Q + "Front$Path", "souther.compiler.meta.ModulePath"),
                     MODULE_PATH, Traversal.Why.NOTHING_CLOSES_IT),
+            // Where the declarations a reading of an input reached borrow what has already been
+            // made of them, kept by the reading for the readers of those declarations that come
+            // after the walk.
+            new KnownDeclared(declared(Q + "Adequacy$Inputs",
+                    "souther.compiler.check.DeclarationReadings", MAP_VALUE,
+                    part("souther.compiler.inputs.InputDomain", "machines")),
+                    A_LENDING_OF_READINGS, Traversal.Why.NOTHING_CLOSES_IT),
+            // Where the places of a module's bodies are, held by the check that walked them. One
+            // place and not the maps under it: the plan says nothing of itself, so the walk stops
+            // here — which is the whole of what is being allowed, and the maps under it are what
+            // it is being allowed for.
+            new KnownDeclared(declared(Q + "Bodies$Checked",
+                    "souther.compiler.coverage.CoverageSites$Plan",
+                    part(Q + "Bodies$Elaborated", "plan")),
+                    AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, Traversal.Why.SAYS_NOTHING_OF_ITSELF),
             // The way of asking, which is where the declarations stop. What a walk of a store goes
             // on to reach through it is the store itself, written down above.
             new KnownDeclared(declared(Q + "Names$ModuleScope",
@@ -538,13 +720,96 @@ final class AnswerClosure {
                     part("souther.compiler.check.Scoping$Scoped", "values"),
                     part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
                     Traversal.Why.NOTHING_CLOSES_IT),
-            generationReader("souther.compiler.check.Symbols",
-                    part("souther.compiler.partition.Generator$Subject", "inputs"),
-                    part("souther.compiler.partition.BehaviorInputs", "symbols")),
+            // The way of asking is declared as the reader that does not name a stage, so the two
+            // worlds under it are two places rather than one. Both for the same reason: what is
+            // held is how to go on asking, not an answer that has to compare as one.
+            generationReader("souther.compiler.check.ResolvedSymbols",
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "symbols"),
+                    arm("souther.compiler.check.ResolvedSymbols")),
+            generationReader("souther.compiler.check.DerivedSymbols",
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "symbols"),
+                    arm("souther.compiler.check.DerivedSymbols")),
+            // Where the clauses of a declaration are answered from, beside the symbols above. It is
+            // a capability and not a table: which declaration is being asked about is the only input
+            // there is, and holding the answers instead would be this reading's copy of what the
+            // declaring module said.
+            generationReader("souther.compiler.check.ExpandedClauseLookup",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "invariants")),
+            // Where a clause of a declaration is written, beside the clauses above and for the same
+            // reason: a capability, whose only input is which clause is being asked about. Held as
+            // an answer here it would be this reading's copy of where the declaring module wrote
+            // its text, which is the copy that goes on pointing at where the clause used to be.
+            generationReader("souther.compiler.check.ClauseLocations",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "written")),
+            // What a declaration says, beside where its clauses are written and for the same
+            // reason: a capability, whose only input is which declaration is being asked about.
+            // Held as an answer here it would be this reading's copy of what the declaring module
+            // made of its own declaration, which is the copy that goes on saying what the clause
+            // used to state.
+            generationReader("souther.compiler.check.PublishedDeclarations",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "published")),
+            // Which form each declaration is, beside what it says and for the same reason. Its one
+            // input is which declaration is being asked about, and the answer was settled when the
+            // module was indexed — so a reading holding it holds a way to ask, not a copy of the
+            // forms as they stood when the reading was made.
+            generationReader("souther.compiler.check.DeclarationKinds",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "kinds")),
+            // And whether each wears one value, beside the form for the reason it is beside it: one
+            // input, settled where the module was indexed, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.DeclarationNewtypes",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "newtypes")),
+            // And what each of them wraps. One input, and the answer is read off the declaration
+            // with its names resolved, so what a reading holds is a way to ask rather than a copy.
+            generationReader("souther.compiler.check.NewtypeInners",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "inners")),
+            // And which binding each field they reach is. One input, and a closure over the
+            // declarations a walk from it reaches — so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.FieldBindings",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "bindings")),
+            // And what each of those fields holds. The same shape again: one input, and a closure
+            // over the declarations the spreads reach.
+            generationReader("souther.compiler.check.EffectiveFieldTypes",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "fieldTypes")),
             generationReader("souther.compiler.inputs.ReadQuantities",
-                    part("souther.compiler.partition.Generator$Subject", "held"),
-                    part("souther.compiler.partition.HeldCounts", "counts"),
+                    part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),
+            // Where the declarations this subject reaches borrow what has already been made of
+            // them. A search chooses a value by reading those declarations with a coordinate fixed,
+            // which is a reading of its own every time; what their string rules come to is not, and
+            // is what the walk that read the input already worked out.
+            new KnownDeclared(
+                    declared(Q + "Adequacy$Generated", "souther.compiler.check.DeclarationReadings",
+                            then(A_SUBJECT,
+                                    part("souther.compiler.partition.MeasuredInput", "machines"))),
+                    A_LENDING_OF_READINGS, Traversal.Why.NOTHING_CLOSES_IT),
             new KnownDeclared(declared(Q + "Names$Resolution",
                     "souther.compiler.diag.CompileException",
                     part("souther.compiler.check.Resolve$Resolution", "unresolved"), HELD),
@@ -560,25 +825,111 @@ final class AnswerClosure {
         // exposes it.
         for (TypePath.Step[] positions : List.of(EVERY_POSITION, BY_PATH)) {
             bothEndsOfARange(out, Q + "Adequacy$Inputs",
-                    then(positions, part("souther.compiler.inputs.ReadPosition", "narrowedEnds")));
+                    then(positions, part("souther.compiler.inputs.ReadPosition", "bounds"), HELD,
+                            part("souther.compiler.inputs.PositionBounds", "narrowedEnds")));
             whatATermHolds(out, positions);
+            // What the position's own rules leave it, which travels with the position because it is
+            // what a behavior's rules have left to divide.
+            theMachineUnderALanguage(out, Q + "Adequacy$Inputs",
+                    then(positions, part("souther.compiler.inputs.ReadPosition", "admitted"),
+                            part("souther.compiler.values.AdmissibleSet", "approximation")));
         }
         // The machine a class denotes where what it denotes is a pattern's strings, reached at each
         // of the two places an axis is carried from.
         theMachineUnderALanguage(out, Q + "Adequacy$Divided",
-                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "classes"), HELD,
                 part("souther.compiler.partition.PartitionClass", "denotes"));
+        // And the same machines again through the reading the geometry is a projection of. Two
+        // questions are asked of one reading of a body — what the model divides, and where that
+        // reading met each condition it places itself — so the walk arrives at everything the
+        // geometry holds by both names. One thing to fix, met twice.
+        theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
+                THE_GEOMETRY_THE_READING_LEFT,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "classes"), HELD,
+                part("souther.compiler.partition.PartitionClass", "denotes"));
+        theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
+                THE_GEOMETRY_THE_READING_LEFT,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "classes"), HELD,
+                part("souther.compiler.partition.PartitionClass", "recognises"),
+                arm("souther.compiler.partition.Recognition$OfASet"),
+                part("souther.compiler.partition.Recognition$OfASet", "values"));
+        theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
+                THE_GEOMETRY_THE_READING_LEFT,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "position"),
+                part("souther.compiler.partition.PositionAccount", "admits"));
+        bothEndsOfARange(out, Q + "Adequacy$Dividing",
+                THE_GEOMETRY_THE_READING_LEFT,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "narrowed"));
         theMachineUnderALanguage(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                then(then(A_SUBJECT, A_MEASUREMENT), HELD,
                         part("souther.compiler.partition.Axis", "classes"), HELD,
                         part("souther.compiler.partition.PartitionClass", "denotes")));
+        // The machines a declaration's rules come to, filed under what each is a fact about: the
+        // plan it realized, both where the plan is a set written out and where the set is what it
+        // came to; the set whose extent was taken; and the language met with a stretch.
+        String facts = "souther.compiler.values.StringFacts";
+        theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
+                part(facts, "realized"), MAP_KEY,
+                arm("souther.compiler.values.AdmittedPlan$Of"),
+                part("souther.compiler.values.AdmittedPlan$Of", "set"));
+        theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
+                part(facts, "realized"), MAP_VALUE);
+        theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
+                part(facts, "extents"), MAP_KEY);
+        out.add(new KnownDeclared(declared(Q + "Machines$OfDeclaration",
+                "souther.compiler.regex.Automaton",
+                part(facts, "inside"), MAP_KEY,
+                part(facts + "$Stretch", "language"),
+                part("souther.compiler.regex.Language", "machine")),
+                A_MACHINE_UNDER_A_LANGUAGE, Traversal.Why.SAYS_NOTHING_OF_ITSELF));
+        // And the same machine reached through what the class means rather than through what it
+        // writes out. A class whose meaning is a set of values holds one, so the strings are on the
+        // meaning as well as on the denotation — two routes to one machine and not a second one,
+        // and both are places the walk arrives at.
+        for (String question : List.of(Q + "Adequacy$Divided", Q + "Adequacy$Generated")) {
+            TypePath.Step[] toTheAxes = question.endsWith("Divided")
+                    ? new TypePath.Step[] {
+                            part("souther.compiler.partition.Partitions$Partitioning",
+                                    "measurements"), HELD,
+                            part("souther.compiler.partition.PositionMeasurements", "axes")}
+                    : then(A_SUBJECT, A_MEASUREMENT);
+            theMachineUnderALanguage(out, question,
+                    then(toTheAxes, HELD,
+                            part("souther.compiler.partition.Axis", "classes"), HELD,
+                            part("souther.compiler.partition.PartitionClass", "recognises"),
+                            arm("souther.compiler.partition.Recognition$OfASet"),
+                            part("souther.compiler.partition.Recognition$OfASet", "values")));
+        }
+        // And through what the position itself was left holding, which is what a behavior's rules
+        // divide: an invariant restricts and a behavior divides what is left, so the values the
+        // declarations leave travel with the position and are reached wherever it is.
+        theMachineUnderALanguage(out, Q + "Adequacy$Divided",
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "position"),
+                part("souther.compiler.partition.PositionAccount", "admits"));
+        theMachineUnderALanguage(out, Q + "Adequacy$Generated",
+                then(A_SUBJECT,
+                        part("souther.compiler.partition.MeasuredInput", "divided"),
+                        part("souther.compiler.partition.Partitions$Partitioning", "measurements"),
+                        HELD,
+                        part("souther.compiler.partition.PositionMeasurements", "position"),
+                        part("souther.compiler.partition.PositionAccount", "admits")));
         // The same ends, reached where an axis carries what the reading left the position.
         bothEndsOfARange(out, Q + "Adequacy$Divided",
-                part("souther.compiler.partition.Partitions$Partitioning", "axes"), HELD,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
                 part("souther.compiler.partition.Axis", "narrowed"));
         bothEndsOfARange(out, Q + "Adequacy$Generated",
-                then(A_SUBJECT, part("souther.compiler.partition.Generator$Subject", "axes"), HELD,
+                then(then(A_SUBJECT, A_MEASUREMENT), HELD,
                         part("souther.compiler.partition.Axis", "narrowed")));
         return List.copyOf(out);
     }
@@ -618,41 +969,66 @@ final class AnswerClosure {
                 "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
                         + " in A_MODULE_SPOKEN_ABOUT",
                 "WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD .Answer#value.Scoped#values"
-                        + " in VALID_CORPUS",
+                        + " in THE_CORPORA",
                 // What a lookup with an answer for a name it has no entry for keeps from extending
                 // what the JDK ships: two caches the language fills in and opens to nobody. The
                 // walk asks, is refused, and says so — reading it as one of the JDK's own maps
                 // instead would read it for its entries and never meet what it answers with.
-                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "", "keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
-                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.VALID_CORPUS),
-                fieldOfAJdkParent("Adequacy$Rows", "", "values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "keySet",
+                        Scenario.THE_CORPORA),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "keySet",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "values",
+                        Scenario.THE_CORPORA),
+                fieldOfAJdkParent(Adequacy.RowReadings.class, "", "values",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
                 // The correspondence between a row's operand and the method it runs as, keyed on
                 // the very nodes this answer hands out — so what it means it means inside the
                 // answer that holds it, and what the answer says it is leaves it out on purpose.
                 // Which is why it is read as a thing of its own: a map that compares by which
                 // objects were put in it keeps none of what makes reading a map its entries enough.
-                operandMethodsOf("AbstractMap#keySet", Scenario.VALID_CORPUS),
+                operandMethodsOf("AbstractMap#keySet", Scenario.THE_CORPORA),
                 operandMethodsOf("AbstractMap#keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
-                operandMethodsOf("AbstractMap#values", Scenario.VALID_CORPUS),
+                operandMethodsOf("AbstractMap#values", Scenario.THE_CORPORA),
                 operandMethodsOf("AbstractMap#values", Scenario.A_MODULE_SPOKEN_ABOUT),
-                operandMethodsOf("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
+                operandMethodsOf("IdentityHashMap#entrySet", Scenario.THE_CORPORA),
                 operandMethodsOf("IdentityHashMap#entrySet", Scenario.A_MODULE_SPOKEN_ABOUT),
-                operandMethodsOf("IdentityHashMap#table", Scenario.VALID_CORPUS),
-                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT));
+                operandMethodsOf("IdentityHashMap#table", Scenario.THE_CORPORA),
+                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.THE_CORPORA),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.THE_CORPORA),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet", Scenario.THE_CORPORA),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#table", Scenario.THE_CORPORA),
+                operandMethodsUnderPrepared("IdentityHashMap#table",
+                        Scenario.A_MODULE_SPOKEN_ABOUT));
     }
 
-    /** A field of what the JDK ships, under something of this compiler's own that holds it. */
-    private static String fieldOfAJdkParent(String question, String under, String named,
+    /**
+     * A field of what the JDK ships, under something of this compiler's own that holds it.
+     *
+     * <p>The question is named by its class rather than spelled, so that renaming it is a thing
+     * javac says here. Spelled, this would go on standing above a question nothing asks any more.
+     */
+    private static String fieldOfAJdkParent(Class<?> question, String under, String named,
                                             Scenario scenario) {
-        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + question + ".Answer#value" + under
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + question.getName() + ".Answer#value" + under
                 + ".AbstractMap#" + named + " in " + scenario;
     }
 
     /** And the same, under the correspondence a prepared module keeps. */
     private static String operandMethodsOf(String named, Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$CheckSurface.Answer#value"
+                + ".CheckSurface#operandMethods." + named + " in " + scenario;
+    }
+
+    /** The same table, reached through the state the assembly is half of. */
+    private static String operandMethodsUnderPrepared(String named, Scenario scenario) {
         return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$Prepared.Answer#value"
-                + ".Prepared#operandMethods." + named + " in " + scenario;
+                + ".Prepared#surface.CheckSurface#operandMethods." + named + " in " + scenario;
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

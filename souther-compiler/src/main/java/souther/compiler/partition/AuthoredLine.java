@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DeclaredBorders;
 import souther.compiler.check.RuleRef;
 import souther.compiler.types.TypeSymbol;
 
@@ -13,7 +12,7 @@ import java.util.Set;
  *
  * <p>What the author wrote, with nothing about the reading that reached it. A rule is read once per
  * position of every behavior carrying it and once per call of every helper holding it; which
- * position, and which call of which helper, are {@link OriginRef}'s, and this is what several
+ * position, and which call of which helper, are {@link LineOrigin}'s, and this is what several
  * readings of one line share.
  *
  * <p><b>How far that reaches is the rule's own answer and is not restated here.</b> {@link RuleRef}
@@ -24,11 +23,16 @@ import java.util.Set;
  * is one. Said again here as "no behavior", this would be a second answer to a question the rule
  * already answers, and the two would differ for whichever kind of rule was added next.
  *
- * <p><b>Not the rule alone.</b> One clause places as many lines as it has conjuncts with an end in
- * them: {@code invariant within = value >= 1 && value <= 10} is one {@link RuleRef.Invariant} and
- * two lines, and a row at the bottom of the range is no evidence about the top. So which conjunct
- * drew it is part of this, and it is the clause's own text rather than the number it was written
- * about ({@link souther.compiler.check.DeclaredBounds.Drawn}).
+ * <p><b>Not the rule alone.</b> One clause places as many lines as the readings of it draw:
+ * {@code invariant within = value >= 1 && value <= 10} is one {@link RuleRef.Invariant} and two
+ * lines, and a row at the bottom of the range is no evidence about the top. So which line of the
+ * clause it is is part of this, and it is the clause's own text rather than the number it was
+ * written about ({@link souther.compiler.check.DeclaredLine}).
+ *
+ * <p><b>And which line of a clause is not which conjunct of it.</b> A conjunct states as many
+ * comparisons as a reading arrives at inside it, and it can leave the values somewhere none of them
+ * states: {@code Bool.not(String.length(name) < 1 || String.length(code) < 1)} is one conjunct
+ * placing an end on each of two numbers. Read as the conjunct, those two are one line.
  *
  * <p><b>And what the line is.</b> Two lines of one rule at one value are told apart by what each
  * says about its own value ({@link LineFacts}) — {@code value >= 5 && value <= 5} places a minimum
@@ -37,11 +41,10 @@ import java.util.Set;
  * of the model, so an identity read off it would be worked back out of what the rules happened to
  * leave rather than read from what this rule says.
  *
- * @param rule           which rule of the model drew it
- * @param conjunct       which of that rule's lines this is, counted over the conjuncts the author
- *                       wrote. Zero for a comparison, which is a rule apiece: a condition holding
- *                       three of them is three rules, so there is no second line of one to tell
- *                       this from
+ * @param which          which of that rule's lines this is, said as what named it: a part of a
+ *                       declaration's clause, a statement of a part of a behavior's, or the rule
+ *                       alone where a body's comparison drew it and there is nothing under the rule
+ *                       to be one of ({@link WhichLine})
  * @param facts          what the rule says about its own line
  * @param narrowedWithin the declarations that took a bound's end in, kept so that a narrowed line
  *                       stays apart from the bare one it narrows: {@code MinuteOfDay}'s maximum is
@@ -50,27 +53,23 @@ import java.util.Set;
  *                       drawn alone. These are also who owes the line, which the bound is not once
  *                       something took its end in ({@link #obligationOwners})
  */
-public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
+public record AuthoredLine(WhichLine which, LineFacts facts,
                            List<TypeSymbol.AtModule> narrowedWithin) {
 
     public AuthoredLine {
-        if (rule == null || facts == null) {
+        if (which == null || facts == null) {
             throw new IllegalArgumentException("a line of the model is some rule's, and says what it"
-                    + " is: " + rule + " " + facts);
-        }
-        if (conjunct < 0) {
-            throw new IllegalArgumentException(
-                    "a conjunct of a rule is counted from zero: " + conjunct);
+                    + " is: " + which + " " + facts);
         }
         narrowedWithin = List.copyOf(narrowedWithin);
         // An end is something a clause of a `data` places, so those are the only lines a declaration
         // can take in. Said here rather than left to whoever reads the pair: a line answering that
         // a body's rule was narrowed has an owner that owes a row for a comparison, and every reader
         // of it would be deciding what to do about a line the language cannot write.
-        if (!narrowedWithin.isEmpty() && !(rule instanceof RuleRef.Invariant)) {
+        if (!narrowedWithin.isEmpty() && !(which.rule() instanceof RuleRef.Invariant)) {
             throw new IllegalArgumentException(
-                    "a rule written in a body places no end for a declaration to take in: " + rule
-                            + " within " + narrowedWithin);
+                    "a rule written in a body places no end for a declaration to take in: "
+                            + which.rule() + " within " + narrowedWithin);
         }
         // One entry per declaration. Several of these are one answer about one end, so a
         // declaration written twice would be one owner counted twice — and what counts them is what
@@ -83,29 +82,49 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
     }
 
     /**
-     * What a report calls this line.
+     * What a report calls this line where it has no place to point at.
      *
-     * <p>The rule's own name, and the declarations that took it in beside it. A narrowing is not
-     * part of the rule, so the rule does not say it and this does.
+     * <p>The author's word for the rule where they wrote one and what the rule is where they did
+     * not, with the declarations that took it in beside it. A narrowing is not part of the rule, so
+     * the rule does not say it and this does.
      *
-     * <p>A name and not a place, because a debt is not at one: a line an {@code invariant} drew is
-     * met wherever the type is carried, so any place to print would be the position of whichever
-     * behavior a walk reached first. Where a reading of it is being named rather than the line, the
-     * place is said by {@link OriginRef#describe}.
+     * <p>Not a place, because a debt is not at one: a line an {@code invariant} drew is met wherever
+     * the type is carried, so any place to print would be the position of whichever behavior a walk
+     * reached first. Where a reading of it is being said rather than the line, the place is there to
+     * point at and {@link LineOrigin#describe} says it.
+     *
+     * <p>The two halves of the seal, spelled here because this is the sentence being written. Which
+     * of the two a rule is found by is the rule's own answer and it says nothing about what a
+     * sentence with no place in it should read; a fold over both that lived on the rule would be one
+     * word for a question only a caller writing a sentence has.
      */
-    public String named() {
-        return said(rule.named());
+    public String saidWithoutAPlace() {
+        return said(switch (which.rule()) {
+            case RuleRef.Named it -> it.citedName();
+            case RuleRef.Written it -> "the " + it.whatItIs();
+        });
     }
 
     /**
      * The same about a rule a reader is calling something else.
      *
      * <p>A comparison has no name, so a reading of one is said by where it is written
-     * ({@link OriginRef#describe}) — and what the narrowing adds is the same words either way. Said
+     * ({@link LineOrigin#describe}) — and what the narrowing adds is the same words either way. Said
      * in both places, the two spellings of one narrowing read as two.
      */
     public String said(String rule) {
-        return rule + (narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin));
+        return rule + narrowing();
+    }
+
+    /**
+     * What this reading adds after the rule, which is nothing where no declaration took an end in.
+     *
+     * <p>The words on their own, for a reader putting them after a handle it renders itself. A rule
+     * has one spelling and it is not this one's to write, so what is offered here is the rest of the
+     * sentence rather than the whole of it.
+     */
+    public String narrowing() {
+        return narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin);
     }
 
     /**
@@ -139,7 +158,7 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * they are the ones who owe a row at it — which is {@link #obligationOwners} and not this.
      */
     public Optional<TypeSymbol> owedToTheDeclaration() {
-        return rule instanceof RuleRef.Invariant i
+        return which.rule() instanceof RuleRef.Invariant i
                 ? Optional.of(i.clause().id().declaredOn())
                 : Optional.empty();
     }
@@ -147,13 +166,14 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
     /**
      * Which authored line of a declaration this is, where it is a declaration's line.
      *
-     * <p>The clause and the conjunct that drew the end, which together name one line the author
-     * wrote — what a report reads the declaration's own words for the line by
-     * ({@link DeclaredBorders}).
+     * <p>The part that drew it, which is what a report reads the declaration's own words for the
+     * line by ({@link souther.compiler.check.DeclaredBorders}). Taken off the line rather than put
+     * together from a rule and a number: the part carries both, and a caller assembling the pair
+     * would be naming a part nobody issued.
      */
-    public Optional<DeclaredBorders.Key> declaredLine() {
-        return rule instanceof RuleRef.Invariant i
-                ? Optional.of(new DeclaredBorders.Key(i, conjunct))
+    public Optional<souther.compiler.check.DeclaredBorders.Key> declaredLine() {
+        return which instanceof WhichLine.OfADeclarationsLine it
+                ? Optional.of(new souther.compiler.check.DeclaredBorders.Key(it.drawnBy()))
                 : Optional.empty();
     }
 
@@ -182,7 +202,7 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
         if (!narrowedWithin.isEmpty()) {
             return narrowedWithin;
         }
-        return rule instanceof RuleRef.Invariant i
+        return which.rule() instanceof RuleRef.Invariant i
                 ? List.of(i.clause().id().declaredOn())
                 : List.of();
     }

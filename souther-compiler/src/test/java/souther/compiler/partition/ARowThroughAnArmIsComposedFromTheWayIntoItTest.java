@@ -1,30 +1,29 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -161,8 +160,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     @Test
     void anotherArmIsTakenOffTheListByWhatTheRunWasSeenDoing() {
         Model model = Model.of(NESTED, "press");
-        Set<Integer> everyArm = model.read().arms().keySet();
-        Observation everywhere = doing(model.read());
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
+        AlignedObservation everywhere = doing(model);
 
         FillResult watched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
@@ -198,7 +197,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     @Test
     void anArmWithNoWayIntoItSaysWhichKindOfSilenceItIs() {
         Model model = Model.of(NESTED, "press");
-        Set<Integer> everyArm = model.read().arms().keySet();
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 // Refuses every value, so every way in is a search that ran and composed nothing.
@@ -206,7 +205,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(everyArm),
                 Budgets.generation());
 
-        for (int probe : everyArm) {
+        for (ArmProbe probe : everyArm) {
             assertInstanceOf(ArmDisposition.Unresolved.class, filled.discharge().at(new Generator.ArmOwed(probe)),
                     "a way in this tried and composed nothing at is not one it never had: " + probe);
         }
@@ -224,36 +223,27 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
     /** A run that was seen taking every arm the reading names, which is what a row through the
      *  outer arm and one of the inner ones is seen doing. */
-    private static Observation doing(CoverageRead.Read read) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        for (PathAccess each : read.arms().values()) {
-            if (each instanceof PathAccess.Ways ways0) {
-                for (souther.compiler.reading.WayIn way : ways0.ways()) {
-                    for (ControlClaim claim : way.claims()) {
-                        switch (claim.at()) {
-                            case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                            case ControlPointId.ComparisonPoint point -> {
-                                taken.add(point.at().emissionSite());
-                                ways.add(point.way());
-                            }
-                        }
-                    }
+    private static AlignedObservation doing(Model model) {
+        List<ControlClaim> claims = new java.util.ArrayList<>();
+        for (PathAccess each : model.read().arms().values()) {
+            if (each instanceof PathAccess.Ways ways) {
+                for (souther.compiler.reading.WayIn way : ways.ways()) {
+                    claims.addAll(way.claims());
                 }
             }
         }
-        return new Observation(taken, ways);
+        return Runs.doing(model.numbering(), claims);
     }
 
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.answerEverything();
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-            Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
@@ -263,15 +253,12 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             assertNotNull(inputs, "the behavior's inputs were read");
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                    checked.supplied());
+            CoverageSites.Plan plan = checked.plan();
             Partitions.Partitioning partitioning =
-                    Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sigs.get(behavior).inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    CoverageRead.of(spec.name(), body, plan, inputs, symbols));
+                    Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    partitioning),
+                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
         }
     }
 }

@@ -53,6 +53,24 @@ public final class Meter {
         this.left = mostBuilt;
     }
 
+    private Meter() {
+        this.mostStates = 0;
+        this.left = 0;
+    }
+
+    /**
+     * A meter that pays for nothing, for an operation that builds nothing and says so.
+     *
+     * <p>Not an allowance and not written as one: an allowance is something a compilation granted,
+     * and every one of those allows a machine. This is the other thing — a caller whose table has
+     * cases that build and whose own pairs reach none of them, saying that as a capability rather
+     * than as a comment. The day a pair that builds arrives, the state it asks for is refused where
+     * it is asked for, rather than made out of an allowance nobody granted and charged to nobody.
+     */
+    public static Meter refusing() {
+        return new Meter();
+    }
+
     /** How much of the whole allowance is left, which is what a caller reports having spent. */
     public int left() {
         return left;
@@ -121,9 +139,10 @@ public final class Meter {
         /**
          * The same for {@code many} at once, for a builder that knows its size before it starts.
          *
-         * <p>Asked before the first of them is made. A product of two machines knows how many
-         * states it will have, and allocating them to find out that they were too many is the
-         * thing this exists to stop.
+         * <p>Asked before the first of them is made. A machine put beside another is the two of
+         * them and a state to step into either, which is a count and not a guess about what will
+         * be reached — and allocating that many to find out they were too many is the thing this
+         * exists to stop.
          */
         boolean states(long many) {
             if (many < 0) {

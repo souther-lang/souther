@@ -80,7 +80,7 @@ class CompileFakeExampleDisagreementTest {
 
     @Test
     void aFakeAndARowThatAnswerOneInputDifferentlyAreSaidAtBoth() {
-        List<Located> found = disagreements(BASE + """
+        String source = BASE + """
 
                 example findMember
                     | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
@@ -90,15 +90,19 @@ class CompileFakeExampleDisagreementTest {
 
                 example place
                     | "m-1 cannot order" : (Order { by = MemberId("m-1") }) -> Refused { why = "unknown" }
-                """);
+                """;
+        List<Located> found = disagreements(source);
 
         // One disagreement, one warning. It is anchored at the row and points at the fake row:
         // both are written statements, and which of them is right is not what this reports.
         assertEquals(1, found.size(), found.toString());
         Diagnostic one = found.get(0).diagnostic();
-        assertEquals(22, ((Primary.InSource) one.primary()).place().region().start().line(), "anchored at the recorded row");
+        assertEquals(22, WhereItSits.in(source,
+                ((Primary.InSource) one.primary()).place().region()).start().line(), "anchored at the recorded row");
         assertEquals(1, one.secondary().size(), one.secondary().toString());
-        assertEquals(25, ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).region().start().line(), "pointing at the fake row");
+        assertEquals(25, WhereItSits.in(source,
+                ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place())
+                        .region()).start().line(), "pointing at the fake row");
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).source()), ((Primary.InSource) one.primary()).place().region().start().quotedFrom(),
                 "both are in this source, and the second region says so rather than leaving a"
                         + " reader to work it out from where the diagnostic was filed");
@@ -181,10 +185,17 @@ class CompileFakeExampleDisagreementTest {
                 """));
     }
 
+    /**
+     * Two blocks naming one behavior are compared with nothing.
+     *
+     * <p>What this comparison holds against a recorded row is a stand-in, and a behavior more than
+     * one block names has none (E1933). Neither of them is a second statement about the input the
+     * row states, and reporting one as disagreeing with the row would name a table that stands in
+     * for nothing as one of the two the model is to be held to.
+     */
     @Test
-    void aSecondTableForOneDependencyStandsInForNothing() {
-        // The first table is the one that answers, so the second states nothing to disagree with.
-        List<Located> found = disagreements(BASE + """
+    void twoTablesForOneBehaviorAreHeldAgainstNoRow() {
+        List<String> codes = allCodesOf(BASE + """
 
                 example findMember
                     | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
@@ -196,7 +207,7 @@ class CompileFakeExampleDisagreementTest {
                     | (MemberId("m-1")) -> Missing { why = "no such member" }
                 """);
 
-        assertEquals(0, found.size(), found.toString());
+        assertEquals(List.of("E1933", "E1933"), codes, codes.toString());
     }
 
     /**
@@ -286,10 +297,6 @@ class CompileFakeExampleDisagreementTest {
                             | (N(1)) -> Missing { why = "none" }
                         """, DoesNotComeBack.everythingAboutRowsOf("find")));
 
-        List<String> codes = new ArrayList<>();
-        for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
-            codes.add(d.code());
-        }
         assertTrue(codesOf(e).contains("E1923"), codesOf(e).toString());
         assertFalse(codesOf(e).contains("E1919"), codesOf(e).toString());
     }
@@ -328,17 +335,21 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aTableThatDidNotFinishIsSaidOnceAtTheFake() {
-        List<Located> said = only("E1920", warningsOf(UNUSED_FAKE + """
+        String spinning = UNUSED_FAKE + """
 
                 fake find
                     | (N(spin(1))) -> Missing { why = "none" }
                     | (N(spin(2))) -> Missing { why = "none" }
-                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
+                """;
+        List<Located> said = only("E1920", warningsOf(spinning,
+                DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
 
         assertEquals(1, said.size(), said.toString());
         Diagnostic one = said.get(0).diagnostic();
-        assertEquals(17, ((Primary.InSource) one.primary()).place().region().start().line(), "anchored where the fake names the behavior");
-        assertEquals(6, ((Primary.InSource) one.primary()).place().region().start().column());
+        assertEquals(17, WhereItSits.in(spinning,
+                ((Primary.InSource) one.primary()).place().region()).start().line(), "anchored where the fake names the behavior");
+        assertEquals(6, WhereItSits.in(spinning,
+                ((Primary.InSource) one.primary()).place().region()).start().column());
         // What could not be done, then what stopped: the table is what did not answer, and the
         // comparison is what that cost. The number is read off the wait this compile was given
         // rather than written in, so the line still holds if that wait changes — and it is read as
@@ -456,12 +467,15 @@ class CompileFakeExampleDisagreementTest {
         return ExampleStatements.disagreements(
                 prepared.forExamples(),
                 souther.compiler.query.Scopes.derived(c.db(), name).value(),
+                souther.compiler.query.Shapes.publishedDeclarations(c.db()),
+                souther.compiler.query.Shapes.declarationKinds(c.db()),
+                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new souther.compiler.query.Bodies.Reachable(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
                         name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
-                JvmDeadlines.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 CheckedEnsures.executableOf(c.db().ask(
                         new souther.compiler.query.Bodies.ReachableContracts(name)).value()),
@@ -764,7 +778,7 @@ class CompileFakeExampleDisagreementTest {
     void aWithDoesNotSettleWhatTheTableStates() {
         // The `with` takes precedence while this row runs. That is dispatch: the table is still a
         // statement about the same behavior, written for every other row and every other run.
-        List<Located> found = disagreements(BASE + """
+        String source = BASE + """
 
                 example findMember
                     | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
@@ -775,7 +789,8 @@ class CompileFakeExampleDisagreementTest {
                 example place
                     | "placed" : (Order { by = MemberId("m-1") })
                         with findMember = Found { id = MemberId("m-1") } -> Placed { by = MemberId("m-1") }
-                """);
+                """;
+        List<Located> found = disagreements(source);
 
         // The table disagrees. The `with` beside it is not compared and does not stop the table
         // from being.

@@ -1,14 +1,18 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -24,11 +28,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -63,6 +67,53 @@ class CompilePartialAdequacyTest {
             example go
                 | (Draft { n = 1 }) -> Done { n = 1 }
             """;
+
+    /**
+     * Two rows of one behavior, one of which does not come back.
+     *
+     * <p>The row that finishes goes through the guard and comes out of it, so the arm it went
+     * through is settled by a run nothing stopped; the row that loops was on its way through the
+     * other arm when it was dropped, so that arm is what nobody can say. A model where nothing
+     * comes back leaves every arm alike and cannot tell an account that answers per arm from one
+     * that answers once for the measure.
+     */
+    private static final String ONE_ROW_OF_TWO_STOPS = """
+            module example.mix
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Domestic
+            data Overseas
+            data Kind = Domestic | Overseas
+
+            data Draft = { kind: Kind, cost: Amount }
+            data Ok = { n: Int }
+            data Big = { n: Int }
+
+            partial let spin (n: Int): Int = spin(n)
+
+            behavior take : (request: Draft) -> Ok | Big
+                constructs Ok, Big
+
+            let take (request) = {
+                guard request.cost.value <= 100 else Big { n = spin(request.cost.value) }
+                Ok { n = request.cost.value }
+            }
+
+            example take
+                | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
+                | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
+            """;
+
+    /** {@link #ONE_ROW_OF_TWO_STOPS}, measured, with the row named "over it" the one that does not
+     *  come back. */
+    private static Compilation oneRowOfTwoStops() {
+        return measured("mix", ONE_ROW_OF_TWO_STOPS,
+                DoesNotComeBack.overrunningOn(
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")),
+                Adequacy.Asked.fullReport());
+    }
 
     /**
      * An input whose observation is cut short before the position a rule is about.
@@ -199,9 +250,13 @@ class CompilePartialAdequacyTest {
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
-        assertEquals(2, branch.arms().all().size(), "the arms are there");
+        assertEquals(2, branch.arms().counted(), "the arms are there");
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(branch.measured()));
-        assertEquals(List.of(), branch.arms().covered().stream().sorted().toList());
+        assertEquals(0, branch.arms().covered());
+        assertEquals(2, branch.arms().undecided().size(),
+                "and each of them is a question rather than a gap");
+        assertEquals(List.of(), branch.arms().unmet(),
+                "nothing is asserted over a run nobody let finish");
     }
 
     /** And nothing is warned about from it. */
@@ -243,7 +298,7 @@ class CompilePartialAdequacyTest {
      * <p>Two different pieces of news. A search that ran out of room leaves a class still owed and
      * a row still writable by this compiler; a position held back leaves a class nothing was ever
      * going to look for, and a row offered there may be one already sitting in the file. Said the
-     * first way, the block printed `the search stopped before reaching it` two lines under the
+     * first way, the block printed `the search left something untried before reaching it` two lines under the
      * line saying the position had been withheld.
      *
      * <p>What made this possible: the finding's answer is read off there being no attempt recorded
@@ -289,8 +344,8 @@ class CompilePartialAdequacyTest {
                 "and the position that could not be read is named");
         String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.budget", true)),
-                Map.of(), SourceNameResolver.identity()).text();
+                                "example.budget")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -335,14 +390,13 @@ class CompilePartialAdequacyTest {
                 .findings();
 
         List<Adequacy.Finding> undecided = findings.stream()
-                .filter(f -> Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN.refuses(f.kind())).toList();
+                .filter(f -> f.kind().isAboutAnObligation()).toList();
 
         assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
         for (Adequacy.Finding f : undecided) {
             assertFalse(f.weakenedBy().isEmpty(), f::toString);
-            assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                    f.disposition(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
-            assertFalse(f.isAdequacyGap(Adequacy.AdequacyBar.SIMPLIFIED_DOMAIN), f::toString);
+            assertEquals(Adequacy.Finding.Disposition.UNDECIDED, f.disposition(), f::toString);
+            assertFalse(f.isAdequacyGap(), f::toString);
         }
     }
 
@@ -390,12 +444,12 @@ class CompilePartialAdequacyTest {
         // behavior may have more than one that did not — and the position of its guard whose value
         // that row was the only one to write.
         assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
-                whole.modules().get(0).incompleteness().stream()
-                        .map(souther.compiler.observe.Incompleteness::subject).toList());
+                whole.modules().get(0).incompleteness().written().stream()
+                        .map(gap -> gap.fact().subject()).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
-        assertEquals(List.of(), one.modules().get(0).incompleteness());
+        assertEquals(List.of(), one.modules().get(0).incompleteness().written());
         assertTrue(one.modules().get(0).behaviors().stream()
                 .allMatch(b -> b.name().equals("submit")));
     }
@@ -487,8 +541,8 @@ class CompilePartialAdequacyTest {
         assertEquals(List.of(), generated.get("take").boundaries().rows());
         String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.split", true)),
-                Map.of(), SourceNameResolver.identity()).text();
+                                "example.split")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),
@@ -507,9 +561,9 @@ class CompilePartialAdequacyTest {
         AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
-        assertEquals(1, one.modules().get(0).incompleteness().size());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                one.modules().get(0).incompleteness().get(0).code());
+        assertEquals(1, one.modules().get(0).incompleteness().written().size());
+        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
+                one.modules().get(0).incompleteness().written().iterator().next().fact().code());
     }
 
     /**
@@ -520,7 +574,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aSignatureLineUnderPartialDoesNotAssert() {
-        String human = AdequacyReport.of(split()).human(SourceNameResolver.identity());
+        String human = AdequacyReport.of(split()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
         assertFalse(human.contains("· no row expects"), human);
@@ -553,73 +607,74 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
 
-        List<souther.compiler.observe.Incompleteness> why =
-                report.modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report.modules().get(0).incompleteness().written();
         assertEquals(1, why.size(), why.toString());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED,
-                why.get(0).code());
-        assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why.get(0).fact().code());
+        assertEquals(Optional.of("take"), why.get(0).fact().behavior(),
                 "a position is inside one behavior");
-        String human = report.human(SourceNameResolver.identity());
+        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertTrue(human.contains("the observation at"), human);
     }
 
     /**
-     * What the human report suppresses, the JSON suppresses.
+     * The JSON names every arm and says of each what became of it.
      *
-     * <p>A field named `unreached` holding an arm nothing watched says something that is not so, and
-     * reading `status` beside it does not undo the name.
-     *
-     * <p>Absent rather than empty, which is the second of the two things this document says with a
-     * missing key. The counts are there — the measurement has a value — and the negative claim over
-     * them is not, because a row that did not come back may have gone through any of the arms this
-     * would otherwise name. Written as `[]` the key said "no arm goes unreached", which is a finding
-     * nobody made (issue #997).
+     * <p>A reading that did not finish leaves each arm it might have lit undecided, and that is what
+     * the entry says: the arm is there, it is counted, and no row was seen to go through it. What
+     * used to be here was a field named `unreached` that went absent whenever anything at all
+     * weakened the measurement, so a consumer was handed two counts and no way to tell which arms
+     * the difference between them was.
      */
     @Test
-    void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
+    void theJsonSaysOfEachArmWhatBecameOfItUnderPartial() throws Exception {
         JsonNode branch = JsonMapper.builder().build().readTree(
                 AdequacyReport.of(measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
-                        .json(souther.compiler.diag.SourceNameResolver.identity()))
+                        .json(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)))
                 .get("modules").get(0).get("behaviors").get(0).get("branch");
 
         assertEquals("partial", branch.get("status").asString());
-        assertEquals(2, branch.get("arms").asInt());
-        assertNull(branch.get("unreached"),
-                () -> "the counts stand and the negative claim over them does not: " + branch);
+        assertEquals(2, branch.get("obligations").size());
+        for (JsonNode arm : branch.get("obligations")) {
+            assertEquals("undecided", arm.get("disposition").asString(),
+                    () -> "a row that did not come back may have gone through it: " + branch);
+            // What left it open, and no second way of saying that it is open. An arm says where it
+            // stands once; a status and a hit beside the word would be the same answer again.
+            assertEquals(1, arm.get("weakening").size(),
+                    () -> "and the reading that stopped is why: " + branch);
+        }
     }
 
     /**
-     * And what the JSON suppresses, the human report suppresses — which nothing checked.
+     * And what the JSON says of each arm, the human report says of each arm.
      *
-     * <p>The test above has said since it was written that these two surfaces answer alike, and only
-     * one of them was ever rendered under a reading that did not finish. So the line a person reads
-     * here — the counts, the word qualifying them, and no arm named — was carried by nobody, while
-     * the measure behind it was moved twice (issues #955 and #997).
+     * <p>The pair of tests has said since they were written that these two surfaces answer alike,
+     * and only one of them was ever rendered under a reading that did not finish. So the line a
+     * person reads here was carried by nobody while the measure behind it was moved twice.
      *
-     * <p>The two halves are the point. A count under a reading that did not finish is worth printing
-     * to a person, because there is room beside it for the word that says how far to trust it; an arm
-     * named as unreached is not, because no word beside it undoes the name. That is one surface
-     * making its own decision about what to show, over the same measure the JSON reads.
+     * <p>What is printed is the counts and, under them, the arms the difference is made of. A word
+     * qualifying the whole measure is not enough for a person either: it says the number cannot be
+     * trusted, which is true and is not the same as saying which arms it is about.
      */
     @Test
-    void theHumanReportPrintsTheCountsAndNamesNoArmUnderPartial() {
+    void theHumanReportNamesTheArmsNobodyCouldDecideUnderPartial() {
         String human = AdequacyReport.of(measured("loop", TIMES_OUT,
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
-                .human(SourceNameResolver.identity());
+                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
-        assertTrue(human.contains("branch      "), () -> "the counts are printed: " + human);
-        assertTrue(human.contains("(undecided: a row was not read)"),
-                () -> "and said to be over a reading that did not finish: " + human);
+        assertTrue(human.contains("branch      0/2"), () -> "the counts are printed: " + human);
+        assertEquals(2, human.lines()
+                        .filter(line -> line.strip().startsWith("? undecided whether a row goes"))
+                        .count(),
+                () -> "and both arms are named as the ones nobody could decide: " + human);
         assertFalse(human.contains("no row goes through"),
-                () -> "no arm is named, the way the JSON writes no `unreached`: " + human);
+                () -> "none of them is named as a gap: " + human);
     }
 
     /**
-     * A combination an unread row may sit in has not been left untried by anybody.
+     * A combination an unread row may sit in is unknown over the rows that were read, and says so.
      *
      * <p>The other measures each say whether their numbers are over all the rows or some of them; the
-     * pair space was the one that could not, so its count of untried combinations read as a finding.
+     * pair space was the one that could not, so its count read as a count over all of them.
      */
     @Test
     void thePairSpaceSaysWhetherItSawEveryRow() {
@@ -648,8 +703,9 @@ class CompilePartialAdequacyTest {
         assertEquals(4, partition.pairs().total());
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
-        assertFalse(AdequacyReport.of(compilation).human(SourceNameResolver.identity()).contains("untried"),
-                AdequacyReport.of(compilation).human(SourceNameResolver.identity()));
+        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(human.contains("unknown of the rows that were read"),
+                () -> "the count is over the rows that came back, and the line says so: " + human);
     }
 
     /**
@@ -699,36 +755,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBoundaryARowDemonstrablyMetStaysMet() {
-        Compilation compilation = measured("mix", """
-                module example.mix
-
-                data Amount = Int
-                    invariant value >= 0
-
-                data Domestic
-                data Overseas
-                data Kind = Domestic | Overseas
-
-                data Draft = { kind: Kind, cost: Amount }
-                data Ok = { n: Int }
-                data Big = { n: Int }
-
-                partial let spin (n: Int): Int = spin(n)
-
-                behavior take : (request: Draft) -> Ok | Big
-                    constructs Ok, Big
-
-                let take (request) = {
-                    guard request.cost.value <= 100 else Big { n = spin(request.cost.value) }
-                    Ok { n = request.cost.value }
-                }
-
-                example take
-                    | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
-                    | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowNamed("over it")),
-                Adequacy.Asked.fullReport());
+        Compilation compilation = oneRowOfTwoStops();
         List<BorderAssessment> lines =
                 Adequacy.readingsOf(compilation.db(), "example.mix").get("take");
 
@@ -742,6 +769,88 @@ class CompilePartialAdequacyTest {
                 .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
                 "and the one nothing was found at is undecided, not missed");
+    }
+
+    /**
+     * An arm a row went through, beside an arm nobody could decide.
+     *
+     * <p>A row that ran through an arm ran through it, whatever became of the row beside it — so an
+     * account that answers per arm has one of these two settled and one of them open, and the two
+     * are told apart in the block that counts them. Answered once for the measure, the four arms a
+     * larger body is short of are one word with nothing under it, and the arm that was settled is
+     * qualified by something that has nothing to do with it.
+     */
+    @Test
+    void anArmARowWentThroughIsToldFromOneNobodyCouldDecide() {
+        String human = AdequacyReport.of(oneRowOfTwoStops()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+
+        assertTrue(human.contains("branch      1/2"),
+                () -> "one of the two arms was gone through: " + human);
+        assertTrue(human.contains("? undecided whether a row goes through `else`"),
+                () -> "and the other is named as the one nobody could decide: " + human);
+        assertFalse(human.contains("(undecided: a row was not read)"),
+                () -> "no word for the whole measure stands in for naming them: " + human);
+    }
+
+    /**
+     * A build refuses over the arm it can, whatever it could not decide beside it.
+     *
+     * <p>One behavior's rows all ran and leave an arm nothing goes through; the behavior next to it
+     * has a row that never came back, so its arms are questions. The first is a gap and a build held
+     * to the arms refuses over it — the second holds nothing open, because what a build refuses over
+     * is what a measure established and not how far the measure beside it got.
+     *
+     * <p>What this holds is the gate staying where it belongs. Each behavior's arms are answered for
+     * by its own reading, so a reading that stopped in one behavior settles nothing about the
+     * behavior next to it — raised to the module, a run with one unfinished row anywhere would let
+     * every gap in it through. What settles an arm within one behavior is held where an arm and the
+     * measure over it can come apart, which no model reaches
+     * ({@code AGapIsRefusedOverByWhatSettledItTest}).
+     */
+    @Test
+    void aGapIsRefusedOverBesideAnArmNobodyCouldDecide() {
+        AdequacyReport report = AdequacyReport.of(measured("both", """
+                module example.both
+
+                data Draft = { n: Int }
+                data Done = { n: Int }
+                data Small = { n: Int }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior go : (request: Draft) -> Done | Small
+                    constructs Done, Small
+
+                let go (request) = {
+                    guard request.n <= 0 else Done { n = spin(request.n) }
+                    Small { n = request.n }
+                }
+
+                behavior gate : (request: Draft) -> Done | Small
+                    constructs Done, Small
+
+                let gate (request) = {
+                    guard request.n <= 0 else Done { n = 1 }
+                    Small { n = request.n }
+                }
+
+                example go
+                    | (Draft { n = 1 }) -> Done { n = 1 }
+
+                example gate
+                    | (Draft { n = 0 }) -> Small { n = 0 }
+                """, DoesNotComeBack.overrunningOn(
+                        DoesNotComeBack.everythingAboutRowsOf("go")),
+                Adequacy.Asked.fullReport()));
+
+        List<String> refused = report.adequacyGaps().stream()
+                .filter(f -> f.about() instanceof About.AnArmNoRowGoesThrough)
+                .map(f -> f.subject().toString()).toList();
+        assertEquals(1, refused.size(),
+                () -> "the arm of the behavior every row of was read: " + refused);
+        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
+                () -> "and one gap settles the verdict, whatever is undecided beside it: "
+                        + report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /** The points a row is owed at against a line, which is what a value names. */
@@ -833,16 +942,17 @@ class CompilePartialAdequacyTest {
     /**
      * One reason is one entry, however many sources went looking.
      *
-     * <p>These are structured rather than written out so that a build can count them, and a count that
-     * grows with the number of attached files is counting the looking rather than the failure.
+     * <p>These are structured rather than written out so that a build can count them, and a count
+     * that grows with the number of attached files is counting the looking rather than the failure.
      */
     @Test
     void oneReasonIsReportedOnce() {
-        List<souther.compiler.observe.Incompleteness> gaps =
-                AdequacyReport.of(split()).modules().get(0).incompleteness();
+        List<PublishedIncompleteness> gaps =
+                AdequacyReport.of(split()).modules().get(0).incompleteness().written();
 
-        assertEquals(gaps.stream().map(souther.compiler.observe.Incompleteness::identity)
-                        .distinct().count(), gaps.size(), gaps.toString());
+        assertFalse(gaps.isEmpty(), "a split model leaves something unread");
+        assertEquals(gaps.stream().map(PublishedIncompleteness::fact).distinct().count(),
+                gaps.size(), gaps.toString());
     }
 
     /** The row that did not finish is still there to be counted, and still says it did not. */

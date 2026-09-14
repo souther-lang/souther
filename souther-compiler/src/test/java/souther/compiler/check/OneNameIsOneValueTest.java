@@ -9,7 +9,6 @@ import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -39,7 +38,7 @@ class OneNameIsOneValueTest {
 
     @Test
     void oneKeyIsRefusedASecondKindOfNumber() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId binding = binding();
         Denotations at = Denotations.none().location(binding, AsPlaces.of(binding), AsPlaces.term(binding));
         FactSubject whole = terms.atomOf(new Core.Read("n", binding, Type.INT, POS), at);
@@ -62,7 +61,7 @@ class OneNameIsOneValueTest {
      */
     @Test
     void twoValuesThatOnceWroteOneNameAreTwoTerms() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Denotations at = Denotations.none();
         Core.Str awkward = new Core.Str("a\", \"b", Type.STRING, POS);
 
@@ -76,18 +75,4 @@ class OneNameIsOneValueTest {
         assertNotEquals(one, two, "a list of one element and a list of two are two values");
     }
 
-    @Test
-    void theCheckDoesNotSwallowItsOwnContradiction() {
-        assertThrows(Terms.OneTermTwoKinds.class,
-                () -> InvariantChecker.gaveUp("analyze",
-                        new Terms.OneTermTwoKinds("atom `n` is DISCRETE and DENSE")),
-                "recording it would leave a behavior looking like one with nothing to report");
-    }
-
-    @Test
-    void andStillGivesUpOnAShapeItHasNoRuleFor() {
-        assertDoesNotThrow(() -> InvariantChecker.gaveUp("analyze",
-                        new IllegalStateException("something the walk has no rule for")),
-                "which is what fail-open is for");
-    }
 }

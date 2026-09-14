@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
 
 /**
  * The build asked for no measurement at all, so this measure was not made.
@@ -15,5 +16,12 @@ package souther.compiler.query;
  * (issue #955).
  */
 public enum NothingWasAsked implements NotMeasuredReason {
-    NOT_ASKED
+    NOT_ASKED;
+
+    /** The run's, which is the whole of what this reason is: what a build asked for is an input to
+     *  the run, and every measure of every behavior says the same one. */
+    @Override
+    public MeasureReason.About about() {
+        return MeasureReason.About.THE_RUN;
+    }
 }

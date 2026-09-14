@@ -1,9 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -145,9 +145,9 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
      *  a behavior was asked for one. */
     @Test
     void aLineIsDrawnOnlyWhereADateIsWritten() {
-        assertTrue(report(CONSTRUCTED).contains("border      borders 1   coverage items 0/0   (4 not measured"),
+        assertTrue(report(CONSTRUCTED).contains("border      borders 1   obligations 0/4"),
                 report(CONSTRUCTED));
-        assertFalse(report(ANSWERS_ONE).contains("coverage items 0/0"), report(ANSWERS_ONE));
+        assertFalse(report(ANSWERS_ONE).contains("obligations 0/4"), report(ANSWERS_ONE));
         assertTrue(report(ANSWERS_ONE).contains(
                         "written in a form this compiler does not read, about `on`"),
                 report(ANSWERS_ONE));
@@ -157,6 +157,6 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -34,22 +34,33 @@ import java.util.List;
  * outside in. A precedence between rules would be a second thing to state and to keep true; the
  * traversal is one thing, and it is the one the author reads their own declaration in.
  *
- * <p>Reached only from {@link PipelineSigs#signatures}: this is how a {@link Sig} is made, not a
- * question about a type that anything may ask again.
+ * <p>Reached from {@link SignatureDeclarations} for a written declaration and from
+ * {@link PipelineSigs} for what a composition answers: this is how a signature is made, not a
+ * question about a type that anything may ask again. Those are the two origins there are, and each
+ * is admitted once.
  */
 final class SignatureBoundary {
 
     private SignatureBoundary() {}
 
-    /** The signature a declared behavior publishes — every parameter and its answer. */
-    static Sig of(Hir.SpecBehavior spec, Symbols symbols) {
-        List<BoundaryInput> ins = new ArrayList<>(spec.params().size());
+    /**
+     * The signature a declared behavior publishes — every parameter and its answer.
+     *
+     * <p>Each parameter leaves the walk beside the shape it was admitted as. One parameter makes one
+     * shape or the walk refuses, so which shape belongs to which parameter is settled here, where
+     * both are in hand, rather than by a reader holding the two lists afterwards.
+     */
+    static DeclaredSig of(Hir.SpecBehavior spec, Symbols symbols, DeclarationKinds kinds,
+                          PublishedDeclarations published) {
+        List<DeclaredSig.Input> ins = new ArrayList<>(spec.params().size());
         for (Hir.Param p : spec.params()) {
             Type t = TypeOps.successType(p.type());
-            ins.add(input(t, t, Where.param(p, spec.pos()), symbols));
+            ins.add(new DeclaredSig.Input(p.name(),
+                    input(t, t, Where.param(p, spec.pos()), symbols, kinds, published)));
         }
         Type out = TypeOps.successType(spec.ret());
-        return new Sig(ins, output(out, out, Where.output(spec.name(), spec.pos()), symbols));
+        return new DeclaredSig(ins,
+                output(out, out, Where.output(spec.name(), spec.pos()), symbols, kinds, published));
     }
 
     /**
@@ -57,8 +68,10 @@ final class SignatureBoundary {
      * already admitted; its output is a type nobody wrote — the last stage's answer merged with the
      * cases that left the main line — and is asked here for the first time.
      */
-    static BoundaryOutput composedOutput(String behavior, SourcePos at, Type out, Symbols symbols) {
-        return output(out, out, Where.output(behavior, at), symbols);
+    static BoundaryOutput composedOutput(String behavior, SourcePos at, Type out, Symbols symbols,
+                                         DeclarationKinds kinds,
+                                         PublishedDeclarations published) {
+        return output(out, out, Where.output(behavior, at), symbols, kinds, published);
     }
 
     /**
@@ -67,14 +80,18 @@ final class SignatureBoundary {
      * <p>{@code whole} is the parameter's own type, which the report about a function names: what is
      * refused is carrying one, and where in the type it sits is not what the author has to change.
      */
-    private static BoundaryInput input(Type t, Type whole, Where where, Symbols symbols) {
+    private static BoundaryInput input(Type t, Type whole, Where where, Symbols symbols,
+                                       DeclarationKinds kinds,
+                                       PublishedDeclarations published) {
         return switch (t) {
             case Type.Prim p -> new BoundaryInput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryInput.Nominal(nominal(r.name(), where, symbols));
-            case Type.ListOf l -> new BoundaryInput.ListOf(input(l.element(), whole, where, symbols));
-            case Type.SetOf s -> new BoundaryInput.SetOf(input(s.element(), whole, where, symbols));
-            case Type.MapOf m -> new BoundaryInput.MapOf(mapKey(m.key(), where, symbols),
-                    input(m.value(), whole, where, symbols));
+            case Type.ListOf l ->
+                    new BoundaryInput.ListOf(input(l.element(), whole, where, symbols, kinds, published));
+            case Type.SetOf s ->
+                    new BoundaryInput.SetOf(input(s.element(), whole, where, symbols, kinds, published));
+            case Type.MapOf m -> new BoundaryInput.MapOf(mapKey(m.key(), where, symbols, kinds, published),
+                    input(m.value(), whole, where, symbols, kinds, published));
             // A parameter names a single type, a named sum included, so the members of a union have
             // no name the far side can hold onto: the input and the output are separate for this.
             case Type.Union u -> throw union(u, where);
@@ -87,15 +104,19 @@ final class SignatureBoundary {
     }
 
     /** What a behavior's answer can leave as. */
-    private static BoundaryOutput output(Type t, Type whole, Where where, Symbols symbols) {
+    private static BoundaryOutput output(Type t, Type whole, Where where, Symbols symbols,
+                                         DeclarationKinds kinds,
+                                         PublishedDeclarations published) {
         return switch (t) {
             case Type.Prim p -> new BoundaryOutput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryOutput.Nominal(nominal(r.name(), where, symbols));
             case Type.Union u -> new BoundaryOutput.Cases(members(u, where, symbols));
-            case Type.ListOf l -> new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols));
-            case Type.SetOf s -> new BoundaryOutput.SetOf(output(s.element(), whole, where, symbols));
-            case Type.MapOf m -> new BoundaryOutput.MapOf(mapKey(m.key(), where, symbols),
-                    output(m.value(), whole, where, symbols));
+            case Type.ListOf l ->
+                    new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols, kinds, published));
+            case Type.SetOf s ->
+                    new BoundaryOutput.SetOf(output(s.element(), whole, where, symbols, kinds, published));
+            case Type.MapOf m -> new BoundaryOutput.MapOf(mapKey(m.key(), where, symbols, kinds, published),
+                    output(m.value(), whole, where, symbols, kinds, published));
             case Type.OptionOf o -> throw optional(o, where);
             case Type.TupleOf _ -> throw tuple(where);
             case Type.FnOf _ -> throw function(whole, where);
@@ -169,8 +190,11 @@ final class SignatureBoundary {
      * <p>A key that classifies is still the boundary's, so a name the language declares is refused
      * here as it is anywhere else in the shape.
      */
-    private static CrossingMapKey mapKey(Type key, Where where, Symbols symbols) {
-        MapKeyRepresentation representation = TypeOps.classifyConcreteMapKey(key, symbols);
+    private static CrossingMapKey mapKey(Type key, Where where, Symbols symbols,
+                                         DeclarationKinds kinds,
+                                         PublishedDeclarations published) {
+        MapKeyRepresentation representation =
+                TypeOps.classifyConcreteMapKey(key, symbols, kinds, published);
         if (representation == null) {
             throw notAKey(key, where);
         }
@@ -283,13 +307,5 @@ final class SignatureBoundary {
                     (region == null ? builder.at(pos) : builder.at(region)).build());
         }
 
-        /** What the subject is called, then whatever the rule adds. Every one of these messages
-         *  names the parameter or the behavior first. */
-        private Object[] args(Object[] rest) {
-            Object[] args = new Object[rest.length + 1];
-            args[0] = name;
-            System.arraycopy(rest, 0, args, 1, rest.length);
-            return args;
-        }
     }
 }

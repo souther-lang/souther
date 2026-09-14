@@ -1,10 +1,16 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.partition.GenerationReason;
+import souther.compiler.regex.PatternPlan;
+import souther.compiler.DocumentShape;
+import souther.compiler.report.AdequacyReport;
+
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -77,7 +83,11 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void aBudgetBelowOneIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(0), "a pair space of nought");
+                () -> new AdequacyPolicy.OfTheMeasures(0,
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS), "a pair space of nought");
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, null),
+                "nothing to build a behavior's distinctions with");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheGeneration(0, 4096), "no rows");
         assertThrows(IllegalArgumentException.class,
@@ -112,9 +122,57 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void theStandardBudgetIsWhatACompilationSets() {
         assertTrue(Budgets.measures().pairSpace() > 0);
-        assertTrue(Budgets.generation().rows() > 0);
+        assertTrue(Budgets.generation().rowLimit() > 0);
         assertTrue(Budgets.generation().cellsPerGroup() > 0);
     }
+
+    /**
+     * And the document a measure held to a small budget comes out in is shaped the way the schema
+     * says.
+     *
+     * <p>The word for what a behavior's distinctions cost is one no model reaches on its own: every
+     * default is set with room over anything in this repository, so the way to the state is to say
+     * what the measure may spend, and saying that is this package's to do.
+     *
+     * <p>What is asked of the document here is its shape, which is the walk's question and not the
+     * word's. Whether every reason this compiler may write in that field is one some compilation
+     * writes is asked of the whole of them in one place
+     * ({@link EveryNotReadReasonIsWrittenBySomeCompilationTest}), and that table says down an
+     * allowance for this word as this does — so the two are told apart by what they ask rather than
+     * by what their models are allowed.
+     *
+     * <p>The walk is the one that reads every document this compiler writes
+     * ({@link DocumentShape}); what is added here is a document it cannot make, because saying what
+     * a measure may spend is this package's to do.
+     */
+    @Test
+    void aDocumentWrittenWhereTheDistinctionsCostTooMuchIsShapedTheWayTheSchemaSays() {
+        Compilation compilation = Compilation.ofSource(TELLS_STRINGS_APART, "Main")
+                .withAdequacyPolicy(new AdequacyPolicy(
+                        new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
+                                new PatternPlan.Budget(1, 1)),
+                        Budgets.generation()));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String document = AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertTrue(document.contains("behavior_distinctions_too_costly"),
+                "the measure was held to less than the rule's two sides take: " + document);
+        DocumentShape.assertShapedLikeTheSchema(JsonMapper.builder().build().readTree(document));
+    }
+
+    /** A behavior whose rule about the strings at a position tells a set of them from the rest,
+     *  which is what the allowance above cannot afford to build. */
+    private static final String TELLS_STRINGS_APART = """
+            module example.strings
+
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior route : (code: String) -> Answer
+            let route (code) = if String.startsWith("JP", code) then Yes else No
+            """;
 
     /** What the generation said about groups it did not offer, over a model of two decisions
      *  meeting on one value, compiled under a budget of {@code cells} choices per group. */
@@ -122,7 +180,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(TWO_DECISIONS, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         Budgets.measures(),
-                        new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells)));
+                        new AdequacyPolicy.OfTheGeneration(Budgets.generation().rowLimit(), cells)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling =
@@ -174,7 +232,9 @@ class ABudgetIsTheCompilationsToSetTest {
     private static PartitionEvidence evidenceFor(String source, int pairSpace) {
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
-                        new AdequacyPolicy.OfTheMeasures(pairSpace), Budgets.generation()));
+                        new AdequacyPolicy.OfTheMeasures(pairSpace,
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                        Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> partitions = compilation.db()

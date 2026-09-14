@@ -22,8 +22,8 @@ public enum SyntaxKind {
     // --- keywords ---
     // `example` / `examples` / `for` are NOT reserved (they would collide with the `example.*`
     // package/module names): the parser recognizes them by text at top-level position, like the
-    // contextual `intrinsic` / `decoder` / `from`. `on`, the second word of `depends on`, is read
-    // the same way, so a field or parameter may still be named on.
+    // contextual `intrinsic`. `on`, the second word of `depends on`, is read the same way, so a
+    // field or parameter may still be named on.
     MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
     TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
     UNREACHABLE_KW,
@@ -34,8 +34,12 @@ public enum SyntaxKind {
     // --- punctuation ---
     // `_` is punctuation and not a name: it carries a name on (`foo_bar`) and begins none, so where
     // it stands alone it is the discard the language writes and has a token of its own.
+    //
+    // `<?>` is one token and not `<` `?` `>`. It stands where an example row's answer goes and is
+    // written one way: lexed as three, `< ? >` would be a second spelling of it, and a formatter
+    // would be free to put the halves anywhere it puts an operator.
     LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD, ASSIGN, PIPE,
-    ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE,
+    ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE, UNANSWERED,
 
     // --- operators ---
     EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH,
@@ -173,7 +177,7 @@ public enum SyntaxKind {
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW, UNREACHABLE_KW,
                  LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD,
-                 ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE,
+                 ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE, UNANSWERED,
                  EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH -> Lexis.FIXED_TOKEN;
 
             case SOURCE_FILE, MODULE_HEADER, EXPOSING_CLAUSE, EXPOSED_ENTRY, IMPORT_DECL,
@@ -234,6 +238,7 @@ public enum SyntaxKind {
             case QUESTION -> "?";
             case PLUSPLUS -> "++";
             case UNDERSCORE -> "_";
+            case UNANSWERED -> "<?>";
             case EQ -> "==";
             case NE -> "/=";
             case LT -> "<";

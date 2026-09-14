@@ -46,8 +46,8 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
     /** {@code flatMap}: the element is inside what the closure answered of an input element. */
     @Test
     void anElementFromInsideWhatAClosureAnswered() {
-        OutputLineage said = new OutputLineage(ResultPath.elements(),
-                new ElementLineage.InsideClosureResult(new Source(CONTAINER, 1)));
+        OutputLineage<ArgumentRef> said = new OutputLineage<>(ResultPath.elements(),
+                new ElementLineage.InsideClosureResult<>(new Source<>(CONTAINER, 1)));
 
         assertEquals("result[*]", said.at().toString());
         assertEquals(CONTAINER, said.origin().source().argument());
@@ -61,8 +61,8 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void anElementFromTwoStepsInsideAnArgument() {
-        OutputLineage said = new OutputLineage(ResultPath.elements(),
-                new ElementLineage.SameAs(new Source(FIRST, 2)));
+        OutputLineage<ArgumentRef> said = new OutputLineage<>(ResultPath.elements(),
+                new ElementLineage.SameAs<>(new Source<>(FIRST, 2)));
 
         assertEquals(2, said.origin().source().elements());
     }
@@ -70,13 +70,13 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
     /** {@code partition}: two runs of elements, each the input's own. */
     @Test
     void anAnswerHoldingTwoRunsOfElements() {
-        List<OutputLineage> said = List.of(
-                new OutputLineage(new ResultPath(List.of(new ResultPath.Step.Component(0),
+        List<OutputLineage<ArgumentRef>> said = List.of(
+                new OutputLineage<>(new ResultPath(List.of(new ResultPath.Step.Component(0),
                                 new ResultPath.Step.Element())),
-                        new ElementLineage.SameAs(new Source(CONTAINER, 1))),
-                new OutputLineage(new ResultPath(List.of(new ResultPath.Step.Component(1),
+                        new ElementLineage.SameAs<>(new Source<>(CONTAINER, 1))),
+                new OutputLineage<>(new ResultPath(List.of(new ResultPath.Step.Component(1),
                                 new ResultPath.Step.Element())),
-                        new ElementLineage.SameAs(new Source(CONTAINER, 1))));
+                        new ElementLineage.SameAs<>(new Source<>(CONTAINER, 1))));
 
         assertEquals(List.of("result.0[*]", "result.1[*]"),
                 said.stream().map(each -> each.at().toString()).toList());
@@ -90,11 +90,11 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void anAnswerWhosePartsCameFromDifferentArguments() {
-        List<OutputLineage> said = List.of(
-                new OutputLineage(elementThen(new ResultPath.Step.Component(0)),
-                        new ElementLineage.SameAs(new Source(FIRST, 1))),
-                new OutputLineage(elementThen(new ResultPath.Step.Component(1)),
-                        new ElementLineage.SameAs(new Source(SECOND, 1))));
+        List<OutputLineage<ArgumentRef>> said = List.of(
+                new OutputLineage<>(elementThen(new ResultPath.Step.Component(0)),
+                        new ElementLineage.SameAs<>(new Source<>(FIRST, 1))),
+                new OutputLineage<>(elementThen(new ResultPath.Step.Component(1)),
+                        new ElementLineage.SameAs<>(new Source<>(SECOND, 1))));
 
         assertEquals(List.of("result[*].0", "result[*].1"),
                 said.stream().map(each -> each.at().toString()).toList());
@@ -105,9 +105,9 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
     /** {@code append}: the element came from one of two arguments, and nothing says which. */
     @Test
     void anElementFromOneOfSeveralArguments() {
-        ElementLineage said = new ElementLineage.OneOf(List.of(
-                new ElementLineage.SameAs(new Source(FIRST, 1)),
-                new ElementLineage.SameAs(new Source(SECOND, 1))));
+        ElementLineage<ArgumentRef> said = new ElementLineage.OneOf<>(List.of(
+                new ElementLineage.SameAs<>(new Source<>(FIRST, 1)),
+                new ElementLineage.SameAs<>(new Source<>(SECOND, 1))));
 
         assertEquals(null, said.source(),
                 "which argument is not settled, so there is no one argument to answer with");
@@ -127,10 +127,10 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void andNoShapeIsReadOffElementsFromMoreThanOnePlace() {
-        BuiltFrom built = new BuiltFrom(
-                new ElementLineage.OneOf(List.of(
-                        new ElementLineage.SameAs(new Source(FIRST, 1)),
-                        new ElementLineage.SameAs(new Source(SECOND, 1)))),
+        BuiltFrom<ArgumentRef>built = new BuiltFrom<>(
+                new ElementLineage.OneOf<>(List.of(
+                        new ElementLineage.SameAs<>(new Source<>(FIRST, 1)),
+                        new ElementLineage.SameAs<>(new Source<>(SECOND, 1)))),
                 SizeAgainstItsSource.AT_MOST);
 
         assertThrows(IllegalStateException.class, built::shape);
@@ -145,11 +145,11 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void anElementThatIsOneOfSeveralThingsAtOnePlace() {
-        ElementLineage said = new ElementLineage.OneOf(List.of(
-                new ElementLineage.SameAs(new Source(CONTAINER, 1)),
-                new ElementLineage.ClosureResult(new Source(CONTAINER, 1))));
+        ElementLineage<ArgumentRef> said = new ElementLineage.OneOf<>(List.of(
+                new ElementLineage.SameAs<>(new Source<>(CONTAINER, 1)),
+                new ElementLineage.ClosureResult<>(new Source<>(CONTAINER, 1))));
 
-        assertEquals(new Source(CONTAINER, 1), said.source(),
+        assertEquals(new Source<>(CONTAINER, 1), said.source(),
                 "they came from one place, whatever happened to them there");
     }
 
@@ -164,10 +164,10 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void aRunHoldingSomeOfEachIsProjectedToTheWordThatLicensesNothing() {
-        BuiltFrom updated = new BuiltFrom(
-                new ElementLineage.OneOf(List.of(
-                        new ElementLineage.SameAs(new Source(CONTAINER, 1)),
-                        new ElementLineage.ClosureResult(new Source(CONTAINER, 1)))),
+        BuiltFrom<ArgumentRef>updated = new BuiltFrom<>(
+                new ElementLineage.OneOf<>(List.of(
+                        new ElementLineage.SameAs<>(new Source<>(CONTAINER, 1)),
+                        new ElementLineage.ClosureResult<>(new Source<>(CONTAINER, 1)))),
                 SizeAgainstItsSource.SAME);
 
         assertEquals(ElementShape.COLLAPSES, updated.shape());
@@ -185,11 +185,11 @@ class WhereAnAnswersElementsCameFromCanBeSaidTest {
      */
     @Test
     void aShapeIsCoarserThanTheLineageItIsReadOff() {
-        BuiltFrom collapsingMap = new BuiltFrom(
-                new ElementLineage.ClosureResult(new Source(CONTAINER, 1)),
+        BuiltFrom<ArgumentRef>collapsingMap = new BuiltFrom<>(
+                new ElementLineage.ClosureResult<>(new Source<>(CONTAINER, 1)),
                 SizeAgainstItsSource.AT_MOST);
-        BuiltFrom collapsingInside = new BuiltFrom(
-                new ElementLineage.InsideClosureResult(new Source(CONTAINER, 1)),
+        BuiltFrom<ArgumentRef>collapsingInside = new BuiltFrom<>(
+                new ElementLineage.InsideClosureResult<>(new Source<>(CONTAINER, 1)),
                 SizeAgainstItsSource.AT_MOST);
 
         assertEquals(collapsingMap.shape(), collapsingInside.shape(),

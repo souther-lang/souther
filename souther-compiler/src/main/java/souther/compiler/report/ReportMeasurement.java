@@ -4,9 +4,11 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
+import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.WeakeningSet;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * One measurement as a document says it.
@@ -86,7 +88,7 @@ final class ReportMeasurement<T> {
     }
 
     /** What the measure made, handed over only where it made anything. */
-    void ifMade(java.util.function.Consumer<? super T> then) {
+    void ifMade(Consumer<? super T> then) {
         value.ifPresent(then);
     }
 
@@ -99,6 +101,26 @@ final class ReportMeasurement<T> {
      */
     static MeasurementStatus statusOf(WeakeningSet weakenedBy) {
         return weakenedBy.isEmpty() ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+    }
+
+    /**
+     * The word for an obligation, which is what its readings came to together.
+     *
+     * <p>Here beside the other two, because what these words mean is one thing to decide. An
+     * obligation is not a measure — it has what the readings went without and no status of its own —
+     * so it needs its own arm, and an arm written where the obligation is printed would be a second
+     * place saying how far a thing got.
+     *
+     * <p>No {@code NOT_APPLICABLE}: an obligation exists because a row is owed at the point, and
+     * there is no obligation for a question that does not apply.
+     */
+    static MeasurementStatus statusOf(ObligationCoverage coverage) {
+        return switch (coverage) {
+            case ObligationCoverage.Witnessed _, ObligationCoverage.Missed _ ->
+                    MeasurementStatus.COMPLETE;
+            case ObligationCoverage.Undecided _ -> MeasurementStatus.PARTIAL;
+            case ObligationCoverage.NotMeasured _ -> MeasurementStatus.NOT_MEASURED;
+        };
     }
 
     private static MeasurementStatus statusOf(Measure<?> measure) {

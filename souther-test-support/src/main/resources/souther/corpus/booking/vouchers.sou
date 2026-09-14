@@ -1,0 +1,26 @@
+// A condition the arithmetic reads nothing of, written where a reader can open it.
+//
+// The line here is the one the second guard draws, and the way to it runs through the first. That
+// one is a string equality: two strings have no sum, so the reading stops and the rule is taken in
+// as a bound on the order the voucher stands on. Its denial is not: failing it leaves every string
+// but one, which is a hole and not an end, and no region is narrowed by one. So the way carries the
+// equality, nothing composes a value where it bounds, and the page names it at the line.
+module conformance.vouchers exposing ( Voucher, Party, Redeemed, redeem )
+
+data Voucher = String
+    invariant String.length(value) >= 1
+
+data Party = Int
+    invariant value >= 1 && value <= 8
+
+data Redeemed = { voucher: Voucher, party: Party }
+
+behavior redeem : (voucher: Voucher, party: Party)
+    -> Redeemed | NotThisVoucher | TooManyForOneVoucher
+    constructs Redeemed
+
+let redeem (voucher, party) = {
+    guard voucher.value == "spring" else NotThisVoucher
+    guard party.value <= 4 else TooManyForOneVoucher
+    Redeemed { voucher = voucher, party = party }
+}

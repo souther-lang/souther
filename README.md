@@ -52,6 +52,28 @@ The example introduces Souther's central ideas:
 
 The complete runnable example is [`businesstrip`](https://github.com/souther-lang/examples/tree/main/businesstrip), in the [examples repository](https://github.com/souther-lang/examples).
 
+## Install
+
+Every release attaches its artifacts to the [GitHub Release](https://github.com/souther-lang/souther/releases), and the `SHA256SUMS` beside them covers all of them: download it too, and `sha256sum -c SHA256SUMS` in the directory the assets were downloaded into says which arrived intact.
+
+On Unix the asset named `souther` is the whole of the command line — a launcher prepended to an uber jar. Put it somewhere on `PATH` and it runs on a Java 25 it finds there.
+
+On Windows there are two archives, and which one to take is a question of whose Java runs Souther. `souther-<version>-windows-x64.zip` carries a Java runtime of its own, so nothing has to be installed beside it, and the command in it is `souther\souther.exe`. That executable is not a native form of Souther: it is what WinGet's portable package is able to name, which has to be an executable, and `jpackage` writes it from the same jar the other archive runs. `souther-<version>-windows-x64-nojdk.zip` is that same command line without the runtime, for a machine that already has a JDK 25 and for a CI image that would rather not carry a second one, and the command in it is `souther\souther.cmd`, which reads `JAVA_HOME` and otherwise takes `java` from `PATH`. Either way the launcher is at the root of what you unpacked, so the directory to put on `PATH` is the same one.
+
+A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
+
+Neither archive puts it there itself, and `install.ps1` is what does: it takes a release, holds it against the `SHA256SUMS` beside it, unpacks it under `%LOCALAPPDATA%\Programs\souther` with a `current` link at the version it just wrote, and adds that link to the user's `PATH`. It installs for one user, needs no administrator, and owns that directory — an uninstall removes it and the one `PATH` entry it added, and leaves everything else on `PATH` alone.
+
+```powershell
+irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1 | iex
+```
+
+That installs the latest release with its runtime. The script's own header says how to ask it for the other distribution, for a version of your choosing, and for an uninstall — piping into `iex` is a form that passes no arguments, so each of those names the script block instead.
+
+The Java that runs Souther and the Java a Souther project's build runs on are separate questions, and the bundled runtime answers only the first. A project consuming Souther's output still needs JDK 25, for the reason the next section gives.
+
+Neither Windows distribution keeps the class-data archive described below, so a compile there costs what a first compile costs on Unix. Writing one is only sound for the commands that reach the compiler, and the bundled launcher's options are fixed before it is handed a command line; the other Windows distribution holds none either, so the two behave alike.
+
 ## Try it
 
 Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see the [examples repository](https://github.com/souther-lang/examples)), so a project using it as an annotation processor needs JDK 25 for that too.
@@ -65,13 +87,13 @@ mvn install
 ./souther-cli/target/souther compile hello.sou -d /tmp/out
 ```
 
-That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed.
+That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed. Most of what a small compile from the command line costs is the JVM loading and verifying the compiler's classes, so the first compile leaves an archive of them under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, named for the version, and the compiles after it start from that. Deleting it costs one slower compile; where it cannot be written, nothing is written and every compile is that one. An archive belongs to the binary that wrote it and to the JDK that wrote it, so one whose binary has been rebuilt or copied elsewhere, or which the JDK now running will not take, may be left unusable rather than rewritten — deleting it is what puts the next compile back to the faster one.
 
-`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin, a model, the `example` rows covering it, and a Java test that reaches the generated types, so `mvn test` and `souther examples` both answer on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin and one `.sou` holding a model with the `example` rows covering it, so the first compile checks those rows and `souther examples` answers on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
 
 ```sh
 souther init com.example:hello
-cd hello && mvn test
+cd hello && mvn compile
 ```
 
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
@@ -89,7 +111,7 @@ mvn -pl souther-cli -am -DskipTests install
 
 `run` runs a behavior that is both runnable and exposed. It is runnable when it has a `let` and depends on nothing, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one with injected dependencies, or a pipeline with such a stage is refused with a reason. It is exposed when the module's `exposing` list names it — the runner reaches a behavior the way any reader outside the module does — and a file with no `exposing` list exposes everything in it. `--behavior` may be omitted when the module holds exactly one behavior that is both, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). The runner drives one file: stdlib imports resolve, and an import of another user module resolves against `-cp`, the same class path `compile` takes (`souther compile catalog.sou -d out` then `souther run enrollment.sou -cp out …`).
 
-The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
+The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows the build output to run is the plain jar beside it (`java -jar souther-cli/target/souther.jar …`), and `bin/package-windows.ps1` is what turns that jar into the distributions a release publishes.
 
 `souther-bench` measures what the compiler costs, and what the code it generates costs to run. It carries the sources it measures, so a number means the same thing on any machine, and it checks that they still compile before it times anything.
 
@@ -157,6 +179,7 @@ The `souther` binary answers questions about the language and its libraries itse
 person nor a coding agent has to hunt through a workspace or disassemble jars:
 
 ```sh
+souther --version              # which Souther this is
 souther help                   # every command, with a line saying what it is for
 souther help compile           # one command's arguments and every option it takes
 souther doc                    # every specification section and shipped topic, name<TAB>title

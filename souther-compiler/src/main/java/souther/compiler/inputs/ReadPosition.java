@@ -1,10 +1,7 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -23,28 +20,43 @@ import java.util.Set;
  *
  * <p>The fields are what the reading saw on the way; {@link #reading} and {@link #obligations} are
  * what follows from them. Held together because they are one reading: copied apart, the day
- * somebody works out {@link #numericDomain} differently for a position that has distinctions is a
- * day the compiler contradicts itself about where the same values stop.
+ * somebody works out {@link #bounds} differently for a position that has distinctions is a day the
+ * compiler contradicts itself about where the same values stop.
  *
  * @param declared what the position's type states before any rule was crossed with it, kept so that
  *                 a widening can hand it back and so that a distinction this position does not have
  *                 can be told from one the rules refused
  */
-record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition term,
-                    NumericDomain.Bounds numericDomain, DeclaredBounds.Bounds ownEnds,
-                    NarrowedBounds narrowedEnds, NumericDomain.Bounds rangeLeft,
+record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
-                    ObligationDomain obligations, AdmissibleSet.Completeness completeness,
-                    BlockReason.ReadingStopReason valuesUnread,
+                    ObligationDomain obligations, AdmissibleSet admitted,
                     List<RuleWithoutALine> rulesWithoutALine,
+                    List<EndLeftOpen> endsLeftOpen,
                     List<StandingQuestion> unansweredQuestions,
                     Set<RulesLeftUnread> rulesLeftUnread,
                     StructuralInspection structure) implements Position {
 
     ReadPosition {
+        bounds = List.copyOf(bounds);
+        // The numbers are what a reader looks these up by, so two of them under one name is one
+        // silently standing for the other. And every one of them is a number of this position:
+        // bounds of somewhere else held here would answer a question about this place with a range
+        // read off another.
+        Set<NumericTerm.FromOnePosition> named = new LinkedHashSet<>();
+        for (PositionBounds each : bounds) {
+            if (!each.term().position().equals(path)) {
+                throw new IllegalArgumentException(each.term() + " is a number of "
+                        + each.term().position() + ", and is held under " + path);
+            }
+            if (!named.add(each.term())) {
+                throw new IllegalArgumentException(
+                        path + " has two answers about " + each.term());
+            }
+        }
         declared = List.copyOf(declared);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
+        endsLeftOpen = List.copyOf(endsLeftOpen);
         unansweredQuestions = List.copyOf(unansweredQuestions);
         // Kept in the order the readers found them, so that two runs over one model produce the
         // same value — the reason `MeasureClosure` keeps its gaps that way too.
@@ -66,16 +78,40 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition te
      */
     @Override
     public Admits admissionOf(TypeSymbol leaf) {
+        return admissionOf(distinction(
+                each -> each instanceof Case.SumCase sum && sum.leaf().equals(leaf)));
+    }
+
+    @Override
+    public Admits admissionOf(Refinement narrowing) {
+        return admissionOf(distinction(each -> narrowing.equals(Refinement.of(each))));
+    }
+
+    /**
+     * Which distinction of this position a key names, or null where it names none.
+     *
+     * <p>One lookup and two keys. A leaf and a narrowing pick out the same distinction where they
+     * pick out one at all, and worked out twice the two would answer differently on the day the
+     * distinctions changed — a caller asking by leaf being told a case stands while one asking by
+     * narrowing was told nothing was read about it.
+     */
+    private Case distinction(java.util.function.Predicate<Case> named) {
         for (Case each : declared) {
-            if (each instanceof Case.SumCase sum && sum.leaf().equals(leaf)) {
-                return admissionOf(each);
+            if (named.test(each)) {
+                return each;
             }
         }
-        return new Admits.Unsettled(new Unsettlement.NoSuchDistinction());
+        return null;
     }
 
     @Override
     public Admits admissionOf(Case one) {
+        if (one == null) {
+            // A key that names no distinction of this position. Said as the reading stating no such
+            // distinction, which is what it is: a fact about the two vocabularies not being about
+            // the same values, and not about how far the rules were read.
+            return new Admits.Unsettled(new Unsettlement.NoSuchDistinction());
+        }
         if (obligations instanceof ObligationDomain.Conservative) {
             return new Admits.Unsettled(new Unsettlement.RulesLeaveNothing());
         }

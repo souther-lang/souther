@@ -1,16 +1,19 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
+import souther.compiler.check.Comparison;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -66,32 +69,33 @@ public final class EnsuresThresholds {
      *                them and so have no axis to come off. Already obligations rather than
      *                thresholds: a line between two positions divides neither, so there is no class
      *                for a partition to be told about
-     * @param rulesWithoutALine  the positions a rule states something about that this drew no
-     *                line at. Carried rather than left out: a position a clause compares is not a
-     *                position the model draws no line through, and a reading that answered with its
-     *                lines alone would have that said of it — which is a sentence about the model,
-     *                and the model says otherwise in its own declaration
+     * @param noLine  the positions a rule states something about that this drew no line at, sorted
+     *                by how far the reading of each got. Carried rather than left out: a position a
+     *                clause compares is not a position the model draws no line through, and a
+     *                reading that answered with its lines alone would have that said of it — which
+     *                is a sentence about the model, and the model says otherwise in its own
+     *                declaration
      */
-    public record Clauses(List<LineEvidence> evidence,
-                          List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {
+    public record Clauses(List<RuleEvidence> evidence,
+                          List<LineDrawn> between, RulesWithNoLine noLine) {
 
-        public static final Clauses NONE = new Clauses(List.of(), List.of(), List.of());
+        public static final Clauses NONE =
+                new Clauses(List.of(), List.of(), RulesWithNoLine.NONE);
 
         public Clauses {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
-            rulesWithoutALine = List.copyOf(rulesWithoutALine);
         }
 
         /** The lines, read off what the walk said. Not a list of their own, for the reason
          *  {@link GuardThresholds.Guards#thresholds} is not one. */
         public List<Threshold> thresholds() {
-            return LineEvidence.linesIn(evidence);
+            return RuleEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return LineEvidence.pointsIn(evidence);
+            return RuleEvidence.pointsIn(evidence);
         }
     }
 
@@ -103,8 +107,8 @@ public final class EnsuresThresholds {
      * reads them once and hands the same one to everything that asks, since each of these reading
      * its own is every rule of every parameter read again to arrive at the same answers.
      */
-    public static Clauses of(StatedContract stated, InputDomain inputs, Symbols symbols) {
-        return of(stated, inputs, inputs.quantities(symbols), symbols);
+    public static Clauses of(StatedContract stated, InputDomain inputs, RuleReadingSource source) {
+        return of(stated, inputs.reading(source));
     }
 
     /**
@@ -119,98 +123,114 @@ public final class EnsuresThresholds {
      *               not be read. Both leave nothing to draw a line from, and which of them happened
      *               is said where the declaration is held to its rules
      */
-    public static Clauses of(StatedContract stated, InputDomain inputs,
-                             souther.compiler.inputs.Quantities quantities, Symbols symbols) {
+    public static Clauses of(StatedContract stated, InputReading read) {
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
-        InputReads reads = InputReads.ofWhatIsDeclared(inputs, rootsOf(stated.params()));
+        InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>());
+                new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
-            String clause = labelOf(rule);
-            // Which line of the clause each one is, counted over every comparison the clause states
-            // in the order they are written. A clause states as many lines as it has comparisons,
-            // and a row at one of them says nothing about the next.
-            int line = 0;
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
                 // concluded from it either way: it draws no line here, and that it drew none is not
-                // a statement that the model has none there. It is still counted, so that which
-                // line of the clause the next one is does not move with what this reading managed.
-                line = conjunct.stated().orNull() == null ? line + 1
-                        : stated(conjunct.stated().orNull(), rule, clause, line, reads, symbols,
-                                quantities, drawn);
+                // a statement that the model has none there. Which part of the clause the next one
+                // is does not turn on that, because a part is named by the split that made it and
+                // not by how far this reading got.
+                if (conjunct.stated().orNull() == null) {
+                    continue;
+                }
+                for (ClauseStatements.Stated said : ClauseStatements.of(
+                        conjunct.part(), conjunct.stated().orNull(), reads, read.symbols(),
+                        read.newtypes())) {
+                    switch (said.statement()) {
+                        case ClauseStatements.Statement.Compares it ->
+                                compared(it, rule, said.id(), read,
+                                        souther.compiler.coverage.Arrivals.inTheTree(
+                                                conjunct.stated().orNull()), drawn);
+                        // A form no reader of clauses reads. Which positions it is about is still
+                        // said, because a position left out of every answer is reported as one the
+                        // model draws no line through — and the model says otherwise in the rule
+                        // this stopped on. Answered here and not by whichever reader met it last:
+                        // the statement is nobody's, which is one fact about it and not one per
+                        // reader that turned it away.
+                        case ClauseStatements.Statement.NotRead it ->
+                                notRead(it, rule, read,
+                                        souther.compiler.coverage.Arrivals.inTheTree(
+                                                conjunct.stated().orNull()), drawn);
+                        // Read by the reader that publishes what a rule tells apart
+                        // ({@link BehaviorSetStatements}), and a finding here would be this reader
+                        // saying it could not read a rule that was read.
+                        case ClauseStatements.Statement.TellsStringsApart _ -> { }
+                        case ClauseStatements.Statement.StatesNeither _ -> { }
+                    }
+                }
             }
         }
-        return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
-    private record Drawn(String behavior, List<LineEvidence> evidence,
-                         List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {}
+    private record Drawn(String behavior, List<RuleEvidence> evidence,
+                         List<LineDrawn> between,
+                         RulesWithNoLine.Gathered noLine) {}
 
     /**
-     * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
-     * above them.
+     * A statement no reader of clauses reads, at every position it is about.
      *
-     * <p>Nothing below anything else. A disjunct holds where the other one does not, a call's
-     * argument is not what the call comes to, and neither states the comparison inside it — so a
-     * line drawn from one would be a line the model does not draw.
-     *
-     * @param line which line of the clause this one is
-     * @return which line of the clause the next one is. Every statement the walk reaches takes one,
-     *         whether or not a line came out of it, so that a reading which could make nothing of
-     *         one numbers the rest the same as a reading that could
+     * <p>The form it is written in is what stopped this — the one of the reasons that does not turn
+     * on what two sides name — and the positions the statement mentions are all there is to file it
+     * at. One answer at every one of them, and not a copy of a decision made elsewhere: nothing was
+     * read, so no place is one the rule is known to be about the values at, and the form is what
+     * each of them is left with.
      */
-    private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
-                              InputReads reads, Symbols symbols, souther.compiler.inputs.Quantities quantities, Drawn out) {
-        if (e instanceof Core.Binary both && both.op() == BinOp.AND) {
-            return stated(both.right(), rule, clause,
-                    stated(both.left(), rule, clause, line, reads, symbols, quantities, out),
-                    reads, symbols, quantities, out);
-        }
-        // Through what a `let` binds, which is not a choice: what the expression comes to is its
-        // body, so the body states whatever the rule states. This is the shape a helper called from
-        // a clause arrives in — the call is expanded and its argument bound to the helper's own
-        // parameter — and a walk that stopped here found the rule stating nothing while the model
-        // plainly says something about the position.
-        if (e instanceof Core.LetIn let) {
-            return stated(let.body(), rule, clause, line, reads.and(let.binder(), let.value()),
-                    symbols, quantities, out);
-        }
-        // A disjunction was read, and what it states is not what either side of it states. Said as
-        // nothing rather than as a rule this could not read: reporting it would send an author after
-        // a limit of this compiler that is not there.
-        if (e instanceof Core.Binary or && or.op() == BinOp.OR) {
-            return line + 1;
-        }
-        // Anything else is a form this walk does not read. Which positions it is about is still
-        // said, because a position left out of every answer is reported as one the model draws no
-        // line through — and the model says otherwise in the rule this stopped on.
-        if (!(e instanceof Core.Binary comparison) || !comparison.op().compares()) {
-            // A statement that is not a comparison was not assessed as one, so what stopped this
-            // is the form it is written in — the one of the reasons that does not turn on what two
-            // sides name — and the positions the walk met are all there is to file it at.
-            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
-                    new BlockReason.UnreadComparisonForm(),
-                    GuardThresholds.mentionedIn(e, reads, symbols).stream()
-                            .map(FilingCoordinate::at).toList(),
-                    out.rulesWithoutALine());
-            return line + 1;
-        }
+    private static void notRead(ClauseStatements.Statement.NotRead it,
+                                StatedContract.StatedRule rule,
+                                InputReading read,
+                                souther.compiler.coverage.Arrivals answering, Drawn out) {
+        reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(),
+                ComparisonAssessment.atEachOf(
+                        GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
+                                        read.newtypes(), answering).stream()
+                                .map(FilingCoordinate::at).toList(),
+                        new BlockReason.UnreadComparisonForm()),
+                out.noLine());
+    }
+
+    /**
+     * What one comparison a rule states comes to.
+     *
+     * <p>Which things a rule states, and which of them are comparisons, is
+     * {@link ClauseStatements}' answer and not this reader's. Asked here, the question every reader
+     * asks is "is this mine" and the only word it has for no is its own — which is how a rule read
+     * as a set of strings was also reported as a comparison this could not read.
+     *
+     * @param said which statement of which part of the clause this one is, as the reading of what
+     *             the part states issued it
+     */
+    private static void compared(ClauseStatements.Statement.Compares it,
+                                 StatedContract.StatedRule rule, ClauseStatementId said,
+                                 InputReading read,
+                                 souther.compiler.coverage.Arrivals answering, Drawn out) {
+        Core e = it.stated();
+        InputReads reads = it.reads();
+        Comparison comparison = it.comparison();
         // What the comparison comes to is read the same way wherever a comparison is written, which
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
         // draw one line and raise one question, and neither is worked out beside the other.
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison, reads,
-                symbols, quantities, rule.value(), false);
+        // No arrival either: a clause stands in no body, it is checked whenever the behavior
+        // answers, so there is nothing on the way to it and what arrives is the declarations'
+        // whole domain — which is what an arrival that restricts nothing reads as.
+        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison.stated(),
+                Citation.of(e.pos()), read,
+                reads, rule.value(),
+                answering, false);
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
-        assessed.whyTheLineReadingDrewNone().ifPresent(why ->
-                reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), comparison, rule.value(), why,
-                        assessed.filedAt(comparison, reads, symbols), out.rulesWithoutALine()));
+        reportRuleWithoutLine(rule.ref(), e, rule.value(),
+                assessed.whatEachPlaceIsLeftWith(), out.noLine());
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
         switch (assessed) {
@@ -218,18 +238,24 @@ public final class EnsuresThresholds {
             // reading of the comparison; taken off the level the rule was written with, a rule that
             // wrote a multiple of the position named a class at a number the position never holds.
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.EnsuresOrigin origin = originOf(rule, clause, line, at.cutting());
-                if (at.cutting().singles()) {
+                LineOrigin.EnsuresOrigin origin = originOf(said, at.cutting());
+                // From the one reading of what the rule placed, the way a body's rule is read:
+                // which kind of evidence this is and what it carries are one answer, and the side
+                // is a question only one of the two kinds has.
+                switch (at.cutting().claim()) {
                     // The value the rule names, for the reason a body's rule gets: where its line
                     // falls and not the value beside it.
-                    if (at.value() != null) {
-                        out.evidence().add(new LineEvidence.Singles(
-                                new GuardThresholds.Guards.Singled(
-                                        at.position(), at.value(), origin)));
+                    case ComparisonClaim.Singled _ -> {
+                        if (at.value() != null) {
+                            out.evidence().add(new RuleEvidence.Singles(
+                                    new GuardThresholds.Guards.Singled(
+                                            at.position(), at.value(), origin)));
+                        }
                     }
-                } else {
-                    out.evidence().add(new LineEvidence.Divides(new Threshold(at.position(),
-                            at.cutting().seam(), at.cutting().valueBelongsBelow(), origin)));
+                    case ComparisonClaim.Cut order ->
+                            out.evidence().add(new RuleEvidence.Divides(
+                                    new Threshold(at.position(), at.cutting().seam(),
+                                            order.valueBelongs(), origin)));
                 }
                 // And the line itself, where the position has no value beside it for a row to be
                 // owed at: the classes either side are what the model tells apart, and the border is
@@ -252,25 +278,24 @@ public final class EnsuresThresholds {
                 // border to owe a row away from.
                 if (over.drawsABorder()) {
                     out.between().add(new LineDrawn(over.cutting(),
-                            originOf(rule, clause, line, over.cutting())));
+                            originOf(said, over.cutting())));
                 }
             }
             // Nothing this reader draws at any of them. What each leaves the positions is said
             // above, in the one place that answers it for both readers of a comparison.
             case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
                  ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
-        return line + 1;
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other
      *  rule's. */
-    private static OriginRef.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
-                                                    int line, Cutting cutting) {
-        return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), line,
-                cutting.valueBelongsBelow(), cutting.holdsAtTheValue(), cutting.singles());
+    private static LineOrigin.EnsuresOrigin originOf(ClauseStatementId said, Cutting cutting) {
+        return new LineOrigin.EnsuresOrigin(new WhichLine.OfAComparisonOfAPart(said),
+                new LineFacts(cutting.claim()));
     }
 
     /**
@@ -293,37 +318,27 @@ public final class EnsuresThresholds {
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     BlockReason.RuleWithoutLineReason why,
-                                     List<FilingCoordinate> at,
-                                     List<RuleWithoutALine> withoutALine) {
+                                     java.util.SequencedMap<FilingCoordinate,
+                                             BlockReason.RuleWithoutLineReason> left,
+                                     RulesWithNoLine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
-                souther.compiler.check.RuleCitation.named(rule);
-        for (FilingCoordinate named : at) {
-            RuleWithoutALine here = new RuleWithoutALine(rule, cited, named, why);
-            if (withoutALine.stream().noneMatch(had -> had.sameAs(here))) {
-                withoutALine.add(here);
+                new souther.compiler.check.RuleCitation.Named(rule);
+        // And what each place is left with, which for a clause of an `ensures` turns on whether its
+        // reading finished. Nothing works out what such a clause raises about an input — what it
+        // states is a relation the behavior is held to — so where the reading stopped there is
+        // nothing that was determined.
+        left.forEach((named, why) -> {
+            if (why instanceof BlockReason.RuleReadingStopped stopped) {
+                withoutALine.unclassified(cited, named, stopped);
+            } else {
+                withoutALine.add(cited, named, why);
             }
-        }
+        });
     }
 
-
-    /**
-     * What a report calls one rule of a clause.
-     *
-     * <p>The author's name for the clause where they gave one, since that is what they will look
-     * for. Where they did not, the case the arm is about, which is the other thing written next to
-     * the rule. A clause over an answer with no cases has neither, and the behavior's own name is
-     * then the whole of what there is to say.
-     */
-    private static String labelOf(StatedContract.StatedRule rule) {
-        if (rule.clause().isPresent()) {
-            return rule.clause().get();
-        }
-        return rule.id().selector() == null ? "" : rule.id().selector().name();
-    }
 
     /**
      * Which binding names which parameter, in the tree a declaration's rules are written in.
@@ -333,7 +348,7 @@ public final class EnsuresThresholds {
      * so a clause of an injected behavior draws its lines like any other, and there is no body for
      * a reading to have taken them from.
      */
-    private static Map<BindingId, String> rootsOf(List<Contract.Param> params) {
+    static Map<BindingId, String> rootsOf(List<Contract.Param> params) {
         Map<BindingId, String> roots = new LinkedHashMap<>();
         for (Contract.Param param : params) {
             roots.putIfAbsent(param.binding(), param.name());

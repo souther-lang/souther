@@ -25,7 +25,7 @@ package souther.compiler.partition;
  *
  * <p><b>Not the level either.</b> Two rules can cut at one value on one carrier — a record stopping
  * a {@code Minute} at 1000 and another record stopping it at the same 1000 — and each is a rule the
- * author could change without touching the other. That is the accounting {@link OriginRef} keeps for
+ * author could change without touching the other. That is the accounting {@link LineOrigin} keeps for
  * cuts, and it is kept here for the same reason.
  *
  * <p><b>And not where it was read.</b> The quantity a line was met on — which position of which
@@ -41,8 +41,8 @@ package souther.compiler.partition;
  * lit is read where the reading is, before anything is folded.
  *
  * <p>Four identities and not one, the way {@link souther.compiler.coverage.CoverageSites.Obligation}
- * and {@link souther.compiler.coverage.ControlPointId} are on the arm side.
- * {@link OriginRef#rule()} answers which rule of the model this came from and is provenance; this
+ * and {@link souther.compiler.coverage.ControlPlace} are on the arm side.
+ * {@link LineOrigin#rule()} answers which rule of the model this came from and is provenance; this
  * answers which debt it is; {@link BoundaryLine} answers which readings are one line; {@link Border}
  * answers where one of them was read. A narrowing moves the debt without moving the rule:
  * {@code MinuteOfDay}'s maximum is the same rule whether or not {@code WorkInterval} moved where it
@@ -73,13 +73,13 @@ public record BorderObligationId(AuthoredLine line, Level at) {
      * line does not reach past this into the line and come back holding something that groups.
      */
     public souther.compiler.check.RuleRef provenance() {
-        return line.rule();
+        return line.which().rule();
     }
 
-    /** What a report calls this line, which is the rule's own name and never a place a body reached
-     *  it at. */
-    public String named() {
-        return line.named();
+    /** What a report calls this line — the author's word for the rule where they wrote one and what
+     *  the rule is where they did not, and never a place a body reached it at. */
+    public String saidWithoutAPlace() {
+        return line.saidWithoutAPlace();
     }
 
     /** The declaration this line is owed to, where a declaration's clause drew it. */

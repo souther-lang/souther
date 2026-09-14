@@ -1,5 +1,8 @@
 package souther.compiler.reading;
 
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -126,7 +129,7 @@ public final class CoverageRead {
      *                     have come from wherever that map put its keys
      */
     public record Read(List<Interaction> interactions,
-                       java.util.SequencedMap<Integer, PathAccess> arms) {
+                       java.util.SequencedMap<ArmProbe, PathAccess> arms) {
 
         public Read {
             interactions = List.copyOf(interactions);
@@ -135,7 +138,7 @@ public final class CoverageRead {
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */
-        public PathAccess armAt(int probe) {
+        public PathAccess armAt(ArmProbe probe) {
             PathAccess access = arms.get(probe);
             if (access == null) {
                 throw new IllegalArgumentException(
@@ -147,9 +150,20 @@ public final class CoverageRead {
 
     /** What the walk over {@code behavior}'s {@code body} reads. */
     public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
-                          Symbols symbols) {
-        CoverageNaming naming = new CoverageNaming(plan, symbols, InputReads.of(inputs));
-        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming);
+                          RuleReadingSource source) {
+        Symbols symbols = source.symbols();
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+                ElementBindings.NONE);
+        // One reading of this body's comparisons, handed to both readers of them. What a way is
+        // admitted by and what a decision is said of are two questions about one comparison, and
+        // each reading it for itself is how they came to be about different numbers.
+        souther.compiler.inputs.ComparedNumbers numbers =
+                souther.compiler.inputs.ComparedNumbers.of(inputs.reading(source));
+        CoverageNaming naming =
+                new CoverageNaming(plan, symbols, source.newtypes(), reads, numbers);
+        ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,
+                new NumberWays(numbers, numbers.reading().quantities(), reads, symbols,
+                        source.newtypes()));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)
@@ -230,7 +244,8 @@ public final class CoverageRead {
                             ? new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     arms.at(match, part, into);
-                    walk(match.cases().get(part).body(), naming, into, observed);
+                    Core.Case arm = match.cases().get(part);
+                    walk(arm.body(), naming.insideArm(match, arm), into, observed);
                 }
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
@@ -269,15 +284,15 @@ public final class CoverageRead {
                 walk(let.value(), naming, reach, observed);
                 walk(let.body(), naming.under(let.binder(), let.value()), reach, observed);
             }
-            case Core.Int ignored -> { }
-            case Core.Decimal ignored -> { }
-            case Core.Str ignored -> { }
-            case Core.Bool ignored -> { }
-            case Core.Temporal ignored -> { }
-            case Core.Read ignored -> { }
-            case Core.UnitValue ignored -> { }
-            case Core.OptionNone ignored -> { }
-            case Core.Unreachable ignored -> { }
+            case Core.Int _ -> { }
+            case Core.Decimal _ -> { }
+            case Core.Str _ -> { }
+            case Core.Bool _ -> { }
+            case Core.Temporal _ -> { }
+            case Core.Read _ -> { }
+            case Core.UnitValue _ -> { }
+            case Core.OptionNone _ -> { }
+            case Core.Unreachable _ -> { }
             // Everything the node is made of is evaluated, and under what the node itself was.
             case Core.Neg neg -> walkAll(some(neg.operand()), naming, reach, observed);
             case Core.FieldAccess access -> walkAll(some(access.target()), naming, reach, observed);
@@ -418,10 +433,10 @@ public final class CoverageRead {
         if (held.isEmpty()) {
             return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
         }
-        if (above instanceof Reach.Coarse(var ignored, var why)) {
+        if (above instanceof Reach.Coarse(var _, var why)) {
             return new Reach.Coarse(held, why);
         }
-        if (step instanceof Reach.Coarse(var ignored, var why)) {
+        if (step instanceof Reach.Coarse(var _, var why)) {
             return new Reach.Coarse(held, why);
         }
         return new Reach.Ways(held);

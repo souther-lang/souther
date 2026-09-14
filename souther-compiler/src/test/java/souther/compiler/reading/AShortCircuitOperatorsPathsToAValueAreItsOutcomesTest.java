@@ -2,16 +2,17 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -86,7 +87,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
 
     /** The same three comparisons bracketed the other way round. */
     private static final String BRACKETED_RIGHT = """
-            module example.bracketed
+            module example.chain
 
             behavior fee : (a: Int, b: Int, c: Int, d: Int) -> Int
 
@@ -120,7 +121,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
 
     /** The same chain, given a name before the fork that tests it. */
     private static final String NAMED_BEFORE_THE_FORK = """
-            module example.named
+            module example.chain
 
             behavior fee : (a: Int, b: Int, c: Int, d: Int) -> Int
 
@@ -139,11 +140,10 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return CoverageRead.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs, symbols).interactions();
+                checked.plan(), inputs, rules).interactions();
     }
 
     /** The sizes of each group's factors, which is the shape of the space a row is owed for. */
@@ -153,13 +153,50 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
                 .toList();
     }
 
-    /** What each factor of each group is settled by, as the conditions are written. */
+    /**
+     * What each factor of each group is settled by, for holding one model's reading against
+     * another's.
+     *
+     * <p>Said without the names the decisions carry. The three models here are one model written
+     * three ways, which is three sources — and what a decision names is the construct the source
+     * wrote, counted within the definition that wrote it. Two spellings write different numbers of
+     * constructs, so one comparison has a name in each and the two are not the same name; a
+     * comparison is told from every other of its own compilation and from nothing outside it.
+     *
+     * <p>So a decision is rendered as which of them it is here, by the order this walk first meets
+     * it. That keeps two decisions apart without claiming that a name from one spelling is a name
+     * from the other — which is the thing these tests would be asserting if they compared what the
+     * decisions are called, and is not what they are about. Which decisions there are and how they
+     * are settled is; a spelling that read one comparison twice, or read them in another order,
+     * still differs here.
+     */
     private static List<List<List<String>>> outcomes(List<Interaction> found) {
+        Map<Object, Integer> met = new LinkedHashMap<>();
         return found.stream()
                 .map(group -> group.factors().stream()
-                        .map(factor -> factor.outcomes().stream().map(Object::toString).toList())
+                        .map(factor -> factor.outcomes().stream()
+                                .map(outcome -> said(outcome, met)).toList())
                         .toList())
                 .toList();
+    }
+
+    /** One settling, with each decision said as which of them it is rather than as what it is
+     *  called. */
+    private static String said(Outcome outcome, Map<Object, Integer> met) {
+        StringBuilder out = new StringBuilder();
+        for (Decision each : outcome.holds()) {
+            if (!out.isEmpty()) {
+                out.append(" & ");
+            }
+            if (each.constrains() instanceof Condition.Side side) {
+                out.append(side.at()).append(side.held() ? " holds" : " fails")
+                        .append(" #").append(
+                                met.computeIfAbsent(side.comparison(), _ -> met.size()));
+            } else {
+                out.append(each.constrains());
+            }
+        }
+        return out.toString();
     }
 
     /** What each group's way in is made of, said by the kind of condition each decision is. */

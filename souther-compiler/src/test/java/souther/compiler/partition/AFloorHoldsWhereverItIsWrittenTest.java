@@ -2,10 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleKey;
+import souther.compiler.check.TypeView;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -27,17 +30,35 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class AFloorHoldsWhereverItIsWrittenTest {
 
-    private record Model(Symbols symbols, String module) {
+    private record Model(RuleReadingSource rules, String module) {
 
         FieldDomains domainsOf(String type) {
             TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+            Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
-            return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            return FieldDomains.of(named, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         }
 
         Type ref(String type) {
             return new Type.Ref(TypeSymbols.declared(new TypeKey(module, type)));
+        }
+
+        /** The world these readings are made in, with nothing to borrow from. */
+        RuleReadingContext reading() {
+            return RuleReadingContext.unshared(rules,
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        }
+
+        /** The floor of a position of {@code type}, read as this model's rules leave it. */
+        int floorOf(Type type) {
+            return Partitions.leastHeld(
+                    TypeView.asWritten(type, rules.symbols(), rules.published()), reading());
+        }
+
+        /** The same, where the record the position sits in has a rule about it too. */
+        int floorOf(Type type, FieldDomains.Held held) {
+            return Partitions.leastHeld(
+                    TypeView.asWritten(type, rules.symbols(), rules.published()), reading(), held);
         }
     }
 
@@ -48,12 +69,12 @@ class AFloorHoldsWhereverItIsWrittenTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        assertNotNull(symbols, "the model did not compile");
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        assertNotNull(rules, "the model did not compile");
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");
-        return new Model(symbols, module);
+        return new Model(rules, module);
     }
 
     /** The record's rule, at a field whose own type says nothing. */
@@ -68,8 +89,8 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastTwo = List.length(xs) >= 2
                 """);
 
-        assertEquals(2, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+        assertEquals(2, model.floorOf(new Type.ListOf(Type.INT),
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /** And the type's own rule where the record says nothing, which is the reading that already
@@ -85,8 +106,8 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 data Bag = { xs: NonEmpty }
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("NonEmpty"), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+        assertEquals(1, model.floorOf(model.ref("NonEmpty"),
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /**
@@ -110,8 +131,8 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastTwo = List.length(xs.value) >= 2
                 """);
 
-        assertEquals(3, Partitions.leastHeld(model.ref("AtLeastThree"), model.symbols(),
-                model.domainsOf("Bag").heldAt("xs")));
+        assertEquals(3, model.floorOf(model.ref("AtLeastThree"),
+                model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
     /**
@@ -134,10 +155,10 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
         FieldDomains domains = model.domainsOf("Possible");
 
-        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                domains.heldAt("accounts")), "an empty list of accounts stands beside a contact");
-        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
-                domains.heldAt("contacts")), "and the same the other way round");
+        assertEquals(0, model.floorOf(new Type.ListOf(Type.INT),
+                domains.heldAt(RuleKey.of("accounts"))), "an empty list of accounts stands beside a contact");
+        assertEquals(0, model.floorOf(new Type.ListOf(Type.INT),
+                domains.heldAt(RuleKey.of("contacts"))), "and the same the other way round");
     }
 
     /** A rule a layer down is the outer name's rule too: the reader reaches every name the value
@@ -153,7 +174,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastOne = List.length(value) >= 1
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
+        assertEquals(1, model.floorOf(model.ref("Kids")));
     }
 
     /**
@@ -173,6 +194,6 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant nonEmpty = String.length(value) >= 1
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("Name"), model.symbols()));
+        assertEquals(1, model.floorOf(model.ref("Name")));
     }
 }

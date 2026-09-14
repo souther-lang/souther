@@ -136,7 +136,9 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     private static List<String> account(Compilation compilation, String module) {
         return debtsOf(compilation, module).stream()
                 .map(each -> each.subject().named() + " owes " + each.debt().id() + " "
-                        + each.debt().role() + "=" + each.debt().item().isUnmetGap()
+                        + each.debt().role() + "="
+                        + (each.debt().item().disposition()
+                                instanceof ObligationDisposition.Unmet)
                         + "/" + each.debt().demand())
                 .toList();
     }
@@ -286,8 +288,8 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
                 "the line under test is a body's, so nothing owes it");
 
         assertThrows(IllegalArgumentException.class,
-                () -> new souther.compiler.partition.AuthoredLine(comparison.rule(),
-                        comparison.conjunct(), comparison.facts(),
+                () -> new souther.compiler.partition.AuthoredLine(comparison.which(),
+                        comparison.facts(),
                         List.of(souther.compiler.types.TypeSymbols.declared(
                                 new souther.compiler.types.TypeKey("example.guarded", "Ok")))),
                 "and no declaration can be said to have taken its end in");

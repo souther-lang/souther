@@ -1,9 +1,14 @@
 package souther.compiler;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -311,18 +316,22 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         souther.compiler.types.ValueName.Stdlib.Operation map =
                 souther.compiler.types.ValueName.Stdlib.operation("List", "map");
-        Hir.Apply named = new Hir.Apply("List.map",
-                new ReachName.OfLibrary(map), java.util.List.of(),
-                souther.compiler.types.ConstructionOrigin.own(), at, null);
-        Hir.Apply nameless = new Hir.Apply(new Hir.Block(java.util.List.of(),
-                new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), at, null), java.util.List.of(),
-                souther.compiler.types.ConstructionOrigin.own(), at, null);
+        Hir.Apply named = Hir.Apply.synthetic("List.map",
+                new ReachName.OfLibrary(map),
+                new souther.compiler.types.SourceReferenceOrigin(
+                        new souther.compiler.types.WrittenOwner.Body("m", "b"), 0),
+                new souther.compiler.types.ApplicationOrigin.ComposedFixture(),
+                java.util.List.of(), at, null);
+        Hir.Apply nameless = Hir.Apply.synthetic(new Hir.Block(java.util.List.of(),
+                new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), at, null),
+                java.util.List.of(),
+                new souther.compiler.types.ApplicationOrigin.ComposedFixture(), at, null);
 
-        assertTrue(named.appliesAName());
+        assertTrue(named.applied().isAName());
         assertEquals("List.map", named.written());
         assertEquals("List.map", named.answered().reaches());
 
-        assertFalse(nameless.appliesAName());
+        assertFalse(nameless.applied().isAName());
         assertEquals("", nameless.written(), "there is no spelling to quote");
         assertNull(nameless.answered(), "and no declaration to look up");
     }
@@ -332,18 +341,37 @@ class CompilePostfixApplicationTest {
      * application of something other than a name binds it first, so what this reaches is that
      * binding — and every table in the compiler is keyed by declarations, so a spelling reaching one
      * would be a miss that looked like a hit for whatever happened to be filed under it.
+     *
+     * <p>The rewrite is where the two part company, and it is the rewrite that keeps them together:
+     * what the author applied was settled when the application was read, and putting the binding in
+     * the callee position does not re-settle it.
      */
     @Test
     void whatAnApplicationReachesIsNeverTheSpellingAReportQuotes() {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         ValueName.Local fn0 = new ValueName.Local("$fn0", id);
-        Hir.Apply lowered = new Hir.Apply(
-                Hir.Var.denoting("$fn0", new ReachName.InScope(fn0), at),
-                java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
+        WrittenName applied = WrittenName.of("d", at)
+                .then(WrittenName.of("count", new SourcePos(1, 3)));
+        Hir.Apply lowered = readApplying(applied, at)
+                .replacedBy(Hir.Var.denoting("$fn0", new ReachName.InScope(fn0), at));
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
+        assertEquals(applied.region(), lowered.appliedAt(),
+                "and underlines the characters they wrote it over");
         assertEquals("$fn0", lowered.answered().reaches(),
                 "a table is looked up with the binding");
+    }
+
+    /** An application a source wrote, applying {@code applied} — as much of the reading as a
+     *  question about what a report quotes needs. */
+    private static Hir.Apply readApplying(WrittenName applied, SourcePos at) {
+        Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "f"), 0),
+                applied.region());
+        return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
+                        SourceConstructOrigin.written(new souther.compiler.types.WrittenOwner.Body("m", "f"),
+                                0, SourceConstruct.CALL), at, null),
+                new Hir.AppliedCallee(applied, callee.reportedAt()),
+                new Hir.Var.Unanswered(applied, null, applied.region()), java.util.List.of());
     }
 }

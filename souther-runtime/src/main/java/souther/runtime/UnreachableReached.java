@@ -23,6 +23,9 @@ public final class UnreachableReached extends RuntimeException {
      * expression like any other — the position it stands in has a value on the stack in every path
      * the verifier walks, and nothing follows it at run time.
      */
+    // Emitted code calls this, so it is not a method to keep callers away from: what it is for is
+    // being reached.
+    @SuppressWarnings("DoNotCallSuggester")
     public static Object reached(String message) {
         throw new UnreachableReached(message);
     }

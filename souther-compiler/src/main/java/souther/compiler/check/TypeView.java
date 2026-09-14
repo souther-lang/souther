@@ -30,16 +30,23 @@ import java.util.List;
  *       position back to an author.
  * </ul>
  *
- * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.declarations().declaration(ref.name())} again
+ * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.declaredNode(ref.name())} again
  * to find out whether a name is a newtype is the defect this exists to remove, not a shortcut around
  * it.
+ *
+ * <p><b>Names, and not the declarations they are written by.</b> What a value wears is which names
+ * it is written under; the bodies those names are declared with are what a reader of the rules
+ * asks for, and it asks the walk over the declarations
+ * ({@link TypeOps#newtypeChain}) rather than this. Handed a declaration here, a consumer holding an
+ * interpreted position could read structure back out of it and settle for itself what this had
+ * already decided — which is the reading this exists to be the only one of.
  *
  * @param declared the type the signature wrote
  * @param wrappers the newtype names worn over {@link #shape}, outermost first; empty for a type
  *                 written under no name of its own
  * @param shape    what the value is, with those names off
  */
-public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape) {
+public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
 
     public TypeView {
         wrappers = List.copyOf(wrappers);
@@ -52,9 +59,23 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      * ({@link TypeOps#newtypeSpine}), so this cannot disagree with the carrier or the range about
      * where a value's base is.
      */
-    public static TypeView of(Type type, Symbols symbols) {
-        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, symbols);
-        return new TypeView(type, spine.layers(), shapeOf(spine.terminal(), symbols));
+    public static TypeView of(Type type, NewtypeInners inners, Symbols symbols,
+                              PublishedDeclarations published) {
+        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
+        return new TypeView(type, spine.layers().stream().map(TypeOps.Layer::named).toList(),
+                shapeOf(spine.terminal(), symbols, published));
+    }
+
+    /**
+     * The same, for a reader that holds the declarations rather than the compilation's answer.
+     *
+     * <p>What a position is, is read off the declarations either way — the shape under the names
+     * comes from them. What differs is how far the names come off: asked of the compilation, that
+     * answer is kept when a declaration only moves, and read off the tree it is worked out again.
+     * Every caller of this is a reader that has not been handed the first, and a test counts them.
+     */
+    public static TypeView asWritten(Type type, Symbols symbols, PublishedDeclarations published) {
+        return of(type, NewtypeInners.asWritten(symbols), symbols, published);
     }
 
     /** Whether any name is worn over the shape — which is a fact about how the value is written,
@@ -73,7 +94,8 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      * newtype here is one whose {@code value} the walk could not reach, which is a name that
      * resolved to nothing usable rather than a shape.
      */
-    private static Shape shapeOf(Type terminal, Symbols symbols) {
+    private static Shape shapeOf(Type terminal, Symbols symbols,
+                                 PublishedDeclarations published) {
         return switch (terminal) {
             case Type.Prim prim -> new Shape.Scalar(prim);
             case Type.Never _ -> new Shape.Uninhabited();
@@ -87,7 +109,7 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
             case Type.OptionOf option -> new Shape.Optional(option.element());
             case Type.TupleOf tuple -> new Shape.Tuple(tuple.elements());
             case Type.FnOf fn -> new Shape.Function(fn.params(), fn.result());
-            case Type.Ref ref -> denoted(ref.name(), symbols);
+            case Type.Ref ref -> denoted(ref.name(), symbols, published);
         };
     }
 
@@ -98,9 +120,11 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      * <p>A newtype arriving here is one the spine stopped on — its {@code value} was not declared,
      * so there is no base to read a shape from.
      */
-    private static Shape denoted(TypeSymbol name, Symbols symbols) {
-        return switch (symbols.declarations().declaration(name)) {
-            case Hir.SumData sum -> new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols));
+    private static Shape denoted(TypeSymbol name, Symbols symbols,
+                                 PublishedDeclarations published) {
+        return switch (symbols.declaredNode(name)) {
+            case Hir.SumData sum ->
+                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, published));
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             case Hir.Data data -> new Shape.Product(name, TypeOps.fieldTypes(data, symbols));

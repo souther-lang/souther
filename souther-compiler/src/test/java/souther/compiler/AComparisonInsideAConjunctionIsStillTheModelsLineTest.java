@@ -1,9 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Measurement;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
@@ -59,7 +59,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
         StringBuilder block = new StringBuilder();
         boolean inside = false;
         for (String line : human.split("\n", -1)) {
@@ -91,7 +91,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     /** The edge a row can reach through the arm that proves the comparison ran is owed as ever. */
     @Test
     void theEdgeOnTheSideTheConjunctionAdmitsIsStillOwed() {
-        assertTrue(blockOf("inAConjunction").contains("no row is at the ON point inAConjunction/r.cost = 100000"),
+        assertTrue(blockOf("inAConjunction").contains("read as inAConjunction/r.cost: = 100000"),
                 blockOf("inAConjunction"));
     }
 

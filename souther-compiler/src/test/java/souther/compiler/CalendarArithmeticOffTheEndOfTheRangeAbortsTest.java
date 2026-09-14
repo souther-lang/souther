@@ -16,10 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A shift off the end of what a temporal can hold aborts, and says so in the language's own terms.
  *
- * <p>These called {@code java.time} directly, so `Date.addYears(999999999, d)` reached the boundary
- * as {@code java.time.DateTimeException: Invalid value for Year (valid values -999999999 -
- * 999999999)` and `addDays` with a large enough count as {@code java.lang.ArithmeticException: long
- * overflow}. Both name a class the language has no type for, at a program that never mentioned one.
+ * <p>These called {@code java.time} directly, so {@code Date.addYears(999999999, d)} reached the
+ * boundary as {@code java.time.DateTimeException: Invalid value for Year (valid values -999999999
+ * - 999999999)} and {@code addDays} with a large enough count as
+ * {@code java.lang.ArithmeticException: long overflow}. Both name a class the language has no type
+ * for, at a program that never mentioned one.
  *
  * <p>Running out of range is the same kind of thing as an {@code Int} overflow — not a business
  * result, and not the infrastructure being unavailable either (ADR-0029) — so it aborts, as an

@@ -130,8 +130,9 @@ class ADivideRoundedToAScaleIsReadTest {
      *
      * <p>Three questions and not one, and the third is not here. A scale outside the ones the run
      * time takes is a division that answers nothing at all, which is
-     * {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest#
-     * aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered} and reads as silence; these are
+     * {@code aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered} in
+     * {@link AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest} and reads as
+     * silence; these are
      * scales the run time does take, so what is left is what a reading can afford, and it reports.
      *
      * <p>What the run time divides at is settled by the backend; what a

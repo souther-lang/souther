@@ -7,9 +7,11 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
-import souther.compiler.values.AdmissibleValues;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.AsACompilationAllows;
+import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -49,7 +51,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void eachSubjectIsHeldByOneDomainAlone() {
         ConstraintState<FactSubject> state = spread();
         assertTrue(state.facts().entails(ONLY_IN_FACTS, true));
-        assertFalse(state.ordered().at(ONLY_IN_FACTS).holdsNothing());
+        assertFalse(state.confinement().holdingNothing().contains(ONLY_IN_FACTS));
         assertEquals(ValueSet.ANY, state.values().at(ONLY_IN_ORDERED));
     }
 
@@ -70,7 +72,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get));
 
         assertTrue(said.facts().entails("p.f", true));
-        assertTrue(said.ordered().at("p.o").holdsNothing());
+        assertTrue(said.confinement().holdingNothing().contains("p.o"));
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p.v"));
         assertEquals(Endpoint.inclusive(Count.of(3)),
                 said.numbers().boundsOf(LinearForm.<String>atom("p.n")).max());
@@ -115,9 +117,10 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void aSubjectHeldByTwoDomainsIsRenamedOnce() {
         ConstraintState<FactSubject> both = ConstraintState.<FactSubject>top()
                 .taking(ONLY_IN_FACTS, true)
-                .takingValuesRead(
-                        AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))),
-                        souther.compiler.values.Allowance.ofAdmittedValues());
+                .takingRead(new Confinement.Planned<>(says(ONLY_IN_FACTS, "A"),
+                                OrderedIntervals.top(), Map.<FactSubject, Carrier>of())
+                                .resolve(AsACompilationAllows.forAdmittedValues()),
+                        AsACompilationAllows.forAdmittedValues());
         java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
 
         ConstraintState<String> said = both.renamed(
@@ -127,16 +130,22 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p#0"));
     }
 
+    /** One rule about one position. */
+    private static PlannedValues<FactSubject> says(FactSubject atom, String text) {
+        return PlannedValues.at(atom, AdmittedPlan.of(ValueSet.just(Value.text(text))));
+    }
+
     /** One subject in each domain, and no subject in two of them. */
     private static ConstraintState<FactSubject> spread() {
         return ConstraintState.<FactSubject>top()
                 .taking(ONLY_IN_FACTS, true)
-                .taking(OrderedIntervals.at(ONLY_IN_ORDERED,
-                        new OrderedInterval(Endpoint.inclusive(Count.of(6)),
-                                Endpoint.inclusive(Count.of(2)))))
-                .takingValuesRead(
-                        AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))),
-                        souther.compiler.values.Allowance.ofAdmittedValues())
+                .takingRead(new Confinement.Planned<>(says(ONLY_IN_VALUES, "A"),
+                                OrderedIntervals.at(ONLY_IN_ORDERED, new OrderedInterval(
+                                        Endpoint.inclusive(Count.of(6)),
+                                        Endpoint.inclusive(Count.of(2)))),
+                                Map.<FactSubject, Carrier>of())
+                                .resolve(AsACompilationAllows.forAdmittedValues()),
+                        AsACompilationAllows.forAdmittedValues())
                 .taking(LinearForm.<FactSubject>atom(ONLY_IN_NUMBERS)
                                 .minus(LinearForm.<FactSubject>constant(BigDecimal.valueOf(3))),
                         Rel.LE, Map.of(ONLY_IN_NUMBERS, souther.compiler.numeric.Granularity.DISCRETE));

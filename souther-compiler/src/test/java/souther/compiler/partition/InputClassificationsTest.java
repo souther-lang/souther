@@ -2,11 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -17,7 +16,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
-import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
@@ -59,39 +57,41 @@ class InputClassificationsTest {
             }
             """;
 
-    private record Read(List<Axis> axes, BehaviorInputs inputs, List<RowOutcome> rows) {}
+    private record Read(MeasuredInput subject, List<RowOutcome> rows) {
+
+        MeasuredInput.MeasuredAxes axes() {
+            return subject.axes();
+        }
+    }
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("submit");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        InputDomain read = InputDomain.of(spec, sigs.get("submit"), symbols,
+        CoverageSites.Plan plan = checked.plan();
+        InputDomain read = InputDomain.of(sigs.get("submit"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                read.quantities(symbols),
-                GuardThresholds.of("submit", body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), symbols).thresholds(),
-                symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("submit", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                read.quantities(rules),
+                GuardThresholds.of("submit", checked.analysisBodies().get("submit"), body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(),
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
 
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(),
-                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(MeasuredInput.of("submit", read.reading(rules), partitioning),
                 observed.rows());
     }
 
@@ -111,7 +111,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/0 <= x <= 100"),
@@ -127,7 +127,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertEquals(Classification.in("Overseas"), at(classes, "request.kind"));
         assertEquals(Classification.in("request.cost/100 < x"),
@@ -144,7 +144,7 @@ class InputClassificationsTest {
                 """);
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(read.rows().get(0).inputs(), read.inputs(), read.axes());
+                InputClassifications.of(read.rows().get(0).inputs(), read.axes());
 
         assertTrue(classes.keySet().stream().noneMatch(a -> a.term().equals("request.memo")),
                 "a plain String is not divided, so there is no class to be in");
@@ -165,13 +165,21 @@ class InputClassificationsTest {
                 assertInstanceOf(ObservedValue.Constructed.class, row.inputs().get(0));
         Map<String, ObservedValue> broken = new java.util.LinkedHashMap<>(request.fields());
         broken.put("cost", new ObservedValue.Truncated());
-        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
+        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(),
+                row.expectation(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.run());
+                List.of(new ObservedValue.Constructed(request.type(), broken)),
+                // A row whose input the observation stopped in states no values, which is what the
+                // one place that decides answers for these. Kept as the row's own, the fixture
+                // would say two different things about what it handed over.
+                souther.compiler.observe.RowStatements.read(List.of(),
+                        List.of(new ObservedValue.Constructed(request.type(), broken)),
+                        ((souther.compiler.observe.RowStatement.Stated) row.statement()).expects()),
+                row.run());
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(damaged.inputs(), read.inputs(), read.axes());
+                InputClassifications.of(damaged.inputs(), read.axes());
 
         assertEquals(Classification.in("Domestic"), at(classes, "request.kind"),
                 "the readable field still answers");
@@ -191,7 +199,7 @@ class InputClassificationsTest {
         assertEquals(List.of(), row.inputs(), "the fixture never built");
 
         Map<AxisId, Classification> classes =
-                InputClassifications.of(row.inputs(), read.inputs(), read.axes());
+                InputClassifications.of(row.inputs(), read.axes());
 
         assertTrue(classes.values().stream().noneMatch(Classification::isClassified));
     }

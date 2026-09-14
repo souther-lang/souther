@@ -1,13 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.PlacementFiling;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionId;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -52,80 +57,109 @@ public final class LinesWhereTheyFall {
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
      */
-    public record Filed(List<LineEvidence> evidence, List<LineDrawn> between,
-                        List<RuleWithoutALine> notPlaced) {
+    public record Filed(List<RuleEvidence> evidence, List<ClassingBlocker> blocked,
+                        List<LineDrawn> between,
+                        RulesWithNoLine notPlaced) {
 
         public Filed {
             evidence = List.copyOf(evidence);
+            blocked = List.copyOf(blocked);
             between = List.copyOf(between);
-            notPlaced = List.copyOf(notPlaced);
         }
 
         /** The lines, for a reader that wants only those. Read off the one list and not kept
          *  beside it. */
         public List<Threshold> thresholds() {
-            return LineEvidence.linesIn(evidence);
+            return RuleEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return LineEvidence.pointsIn(evidence);
+            return RuleEvidence.pointsIn(evidence);
         }
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputDomain inputs, List<LineEvidence> evidence,
-                           List<LineDrawn> between,
-                           souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        List<LineEvidence> out = new ArrayList<>();
+    public static Filed of(InputReading read, List<RuleEvidence> evidence,
+                           List<ClassingBlocker> blocked, List<LineDrawn> between) {
+        InputDomain inputs = read.domain();
+        Symbols symbols = read.symbols();
+        List<RuleEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
-        List<RuleWithoutALine> notPlaced = new ArrayList<>();
+        RulesWithNoLine.Gathered notPlaced = new RulesWithNoLine.Gathered();
         // One pass in the order the rules were read, so what comes out is in that order too. A pass
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
-        for (LineEvidence each : evidence) {
+        for (RuleEvidence each : evidence) {
             // Every number the name stands at, filed together. Filing is one rule to as many
             // positions as its name reaches, so a piece put out one part at a time can leave the
             // others behind — and the account that runs after this begins with what comes out of
             // here, so it has nothing to say those others were ever expected. There is no partial
             // filing to write: what a name stands at is one list and this maps it.
             List<NumericTerm> destinations =
-                    standingOf(inputs, each.at(), symbols, each.by()).all();
+                    standingOf(inputs, each.at(), read.rules().inners(), symbols, each.by()).all();
             destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
-        for (LineDrawn each : between) {
-            place(inputs, each, quantities, symbols, outBetween, notPlaced);
+        // And the rules that would have divided a position and did not, through the same authority
+        // and in the same act. What a name reaches is one answer, and a blocker filed by anything
+        // else would be at the position the rule was written about while the evidence beside it had
+        // moved — so a position would be composed out of rules one of these was meant to stop.
+        List<ClassingBlocker> outBlocked = new ArrayList<>();
+        for (ClassingBlocker each : blocked) {
+            standingOf(inputs, each.at(), read.rules().inners(), symbols, each.by()).all()
+                    .forEach(at -> {
+                NumericTerm.FromOnePosition here = at.atOnePosition();
+                // Held to what the evidence beside it is held to. A destination no single position
+                // answers is this compiler contradicting the reading that produced the blocker, and
+                // dropped quietly it would take a position's denominator back to the rules that
+                // worked — which is the whole of what a blocker is for.
+                if (here == null) {
+                    throw new IllegalStateException(
+                            "`" + each.at() + "` is a distinction of a position and was filed at `"
+                                    + at + "`, which no single position answers");
+                }
+                outBlocked.add(each.measuredAt(here));
+            });
         }
-        return new Filed(out, outBetween, notPlaced);
+        for (LineDrawn each : between) {
+            place(read, each, outBetween, notPlaced);
+        }
+        return new Filed(out, outBlocked, outBetween, notPlaced.found());
     }
 
 
     /**
      * The same piece of evidence, measured at {@code at}.
      *
-     * <p>Evidence divides a position, so the number it moved to answers one. What a name is filed
-     * at is a field of a value and a term is taken at it the way it was taken where it was written,
-     * so a move that left the number answered by no single place would be this compiler
-     * contradicting the reading that produced the evidence.
+     * <p>What a rule states is about one position's values, so the number it moved to answers one.
+     * What a name is filed at is a field of a value and a term is taken at it the way it was taken
+     * where it was written, so a move that left the number answered by no single place would be
+     * this compiler contradicting the reading that produced the evidence.
      */
-    private static LineEvidence measuredAt(LineEvidence evidence, NumericTerm at) {
+    private static RuleEvidence measuredAt(RuleEvidence evidence, NumericTerm at) {
         NumericTerm.FromOnePosition here = at.atOnePosition();
         if (here == null) {
             throw new IllegalStateException(
-                    "`" + evidence.at() + "` divides a position and was filed at `" + at
-                            + "`, which no single position answers");
+                    "`" + evidence.at() + "` is what a rule states about one position and was filed"
+                            + " at `" + at + "`, which no single position answers");
         }
         return switch (evidence) {
-            case LineEvidence.Divides(Threshold line) ->
-                    new LineEvidence.Divides(thresholdAt(line, here));
-            case LineEvidence.Singles(GuardThresholds.Guards.Singled point) ->
-                    new LineEvidence.Singles(singledAt(point, here));
+            case RuleEvidence.Divides(Threshold line) ->
+                    new RuleEvidence.Divides(thresholdAt(line, here));
+            case RuleEvidence.Singles(GuardThresholds.Guards.Singled point) ->
+                    new RuleEvidence.Singles(singledAt(point, here));
+            // The values are the position's own, so moving the division moves where it is measured
+            // and nothing else. What each side holds was worked out where the rule was read, and a
+            // filing that worked them out again would be a second answer about one rule.
+            case RuleEvidence.BySet(SetStatement division) ->
+                    new RuleEvidence.BySet(new SetStatement(here, division.whenTrue(),
+                            division.whenFalse(), division.statement(), division.origin()));
         };
     }
 
     /** The same threshold, measured at {@code at}. */
     private static Threshold thresholdAt(Threshold each, NumericTerm.FromOnePosition at) {
-        return new Threshold(at, each.parts(), each.valueBelongsBelow(), each.origin());
+        return new Threshold(at, each.parts(), each.valueBelongs(), each.origin());
     }
 
     /** The same singled-out value, measured at {@code at}. */
@@ -146,12 +180,14 @@ public final class LinesWhereTheyFall {
      * second how many come out of it. Answered off one count, a name filed at one position and a
      * name left where it was written would be the same answer.
      */
-    private static void place(InputDomain inputs, LineDrawn line,
-                              souther.compiler.inputs.Quantities quantities, Symbols symbols,
-                              List<LineDrawn> out, List<RuleWithoutALine> notPlaced) {
+    private static void place(InputReading read, LineDrawn line,
+                              List<LineDrawn> out, RulesWithNoLine.Gathered notPlaced) {
+        InputDomain inputs = read.domain();
+        Quantities quantities = read.quantities();
+        Symbols symbols = read.symbols();
         List<FiledName> filed = new ArrayList<>();
         for (NumericTerm term : line.cuts().of().terms()) {
-            switch (standingOf(inputs, term, symbols, line.by())) {
+            switch (standingOf(inputs, term, read.rules().inners(), symbols, line.by())) {
                 // Where the model wrote it, so the line is already about the position it names.
                 case WhereTheNameStands.AsWritten _ -> { }
                 case WhereTheNameStands.FiledAt at -> filed.add(new FiledName(term, at));
@@ -161,9 +197,11 @@ public final class LinesWhereTheyFall {
             // Not passed on. A line at a name no row is written at reaches the generator, which
             // says it could not build a value there — a reason nobody established, about a place
             // nobody meant. What an author is owed is the pairing, and it is said here.
-            notPlaced.add(new RuleWithoutALine(line.by().rule(), line.by().cited(),
-                    new souther.compiler.inputs.FilingCoordinate.OfTerm(filed.getFirst().name()),
-                    new souther.compiler.inputs.BlockReason.CasePairingNotDetermined()));
+            // The line is what has nowhere to go: the rule was read, an end came out of it, and
+            // which of the positions it runs between is what nothing worked out.
+            notPlaced.boundaryUndetermined(line.by().cited(),
+                    new FilingCoordinate.OfTerm(filed.getFirst().name()),
+                    new BlockReason.CasePairingNotDetermined());
             return;
         }
         if (filed.isEmpty()) {
@@ -172,9 +210,9 @@ public final class LinesWhereTheyFall {
         }
         FiledName moves = filed.getFirst();
         List<LineDrawn> made = new ArrayList<>();
-        made.add(lineAt(line, moves.name(), moves.at().first(), inputs, quantities, symbols));
+        made.add(lineAt(line, moves.name(), moves.at().first(), quantities));
         for (NumericTerm to : moves.at().rest()) {
-            made.add(lineAt(line, moves.name(), to, inputs, quantities, symbols));
+            made.add(lineAt(line, moves.name(), to, quantities));
         }
         out.addAll(made);
     }
@@ -188,9 +226,8 @@ public final class LinesWhereTheyFall {
      * fewer places than the name was filed.
      */
     private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                    InputDomain inputs,
-                                    souther.compiler.inputs.Quantities quantities, Symbols symbols) {
-        Cutting cut = line.cuts().movedTo(moves, to, inputs.ordersOf(to, symbols), quantities);
+                                    Quantities quantities) {
+        Cutting cut = line.cuts().movedTo(moves, to, quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "
@@ -215,7 +252,8 @@ public final class LinesWhereTheyFall {
      * so a fourth outcome is a question asked of this method and not an answer it already gives.
      */
     private static WhereTheNameStands standingOf(InputDomain inputs, NumericTerm term,
-                                                 Symbols symbols, OriginRef origin) {
+                                                 NewtypeInners inners, Symbols symbols,
+                                                 RuleEvidenceOrigin origin) {
         TermPath path = term.subjectPath();
         if (inputs.at(path) != null) {
             return new WhereTheNameStands.AsWritten(term);
@@ -223,17 +261,17 @@ public final class LinesWhereTheyFall {
         // The value a rule naming this location is read of, which the reading answers. A location
         // already naming a case is under no name of that value's, and comes back with none rather
         // than with one this worked out for itself.
-        InputDomain.RuleRoot root = inputs.rootNaming(path);
-        if (root == null) {
+        souther.compiler.inputs.RuleAddress address = inputs.rootNaming(path);
+        if (address == null) {
             return new WhereTheNameStands.AsWritten(term);
         }
         PlacementFiling filing = inputs.file(
-                PlacementSeed.of(root.at(), term, origin.rule(), origin.cited()));
+                PlacementSeed.of(address, term, origin.cited()));
         List<NumericTerm> filed = new ArrayList<>();
         for (souther.compiler.inputs.PlacementOutcome outcome : filing.outcomes()) {
             switch (outcome) {
                 case souther.compiler.inputs.PlacementOutcome.Filed(PositionId at) ->
-                        filed.add(termAt(term, at, inputs, symbols));
+                        filed.add(termAt(term, at, inputs, inners, symbols));
                 // The reading held to what it already said about this case: no row is written under
                 // it, so there is no position there for a line to be about. Nothing is owed and
                 // nothing is left over.
@@ -259,10 +297,10 @@ public final class LinesWhereTheyFall {
      * compiler contradicting itself rather than a place to drop one.
      */
     private static NumericTerm termAt(NumericTerm term, PositionId at, InputDomain inputs,
-                                      Symbols symbols) {
+                                      NewtypeInners inners, Symbols symbols) {
         Position position = inputs.at(at.at());
         NumericTerm moved = position == null ? null
-                : term.movedTo(at.at(), position.type(), symbols);
+                : term.movedTo(at.at(), position.type(), inners, symbols);
         if (moved == null) {
             throw new IllegalStateException(
                     "`" + term + "` was filed at " + at + " and cannot be taken there, though a "

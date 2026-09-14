@@ -4,7 +4,7 @@ package souther.compiler.check;
  * One question a rule raises, and what it is about.
  *
  * <p><b>The question and its subject are one thing and not two beside each other.</b> The
- * obligations do not share a subject — what values may stand somewhere is about a position, where a
+ * obligations do not share a subject — what values may stand somewhere is about a name, where a
  * line falls is about a number of one — and a rule bounding a {@code String} on its length raises
  * both, the values being the string's and the line being on the length. Which subject an obligation
  * has does not vary, so it is the arm. Carried as an obligation beside a subject, the pair was a
@@ -24,38 +24,49 @@ package souther.compiler.check;
 public sealed interface Owed {
 
     /**
-     * Which values may stand at a position.
+     * Which values may stand at a name.
      *
-     * <p>The position and never a number of it. What a rule about the length of a string admits is
+     * <p>The name and never a number at it. What a rule about the length of a string admits is
      * a set of strings; the length is where its line falls, which is the question below.
      *
-     * @param path where in the value it sits, {@link FieldDomains#THE_VALUE} for the value itself
+     * @param path what the value's own rules call the place, {@link RuleKey#THE_VALUE} for the
+     *             value itself
      */
-    record AdmittedValues(String path) implements Owed {
+    record AdmittedValues(RuleKey path) implements Owed {
 
         public AdmittedValues {
             if (path == null) {
-                throw new IllegalArgumentException("a subject sits somewhere in the value");
+                throw new IllegalArgumentException("a subject is at a name of the value");
             }
         }
 
         @Override
         public String toString() {
-            // The value itself is at no path, which reads as nothing at all where it is printed.
-            return path.isEmpty() ? "the value" : path;
+            return spelled(path);
         }
     }
 
     /**
-     * Where a line falls on one number of one position.
+     * Where a line falls on one number at one name.
      *
-     * <p>The number itself, which is the position's own value or what an operation answers of it.
-     * Two operations over one path are two of these, and that is the whole reason the coordinate is
+     * <p>The number itself, which is the value at the name or what an operation answers of it.
+     * Two operations over one name are two of these, and that is the whole reason the claim is
      * carried rather than a flag saying that a number was taken: told apart by the flag, a rule
      * about one operation's number was filed at another's, and every reader that wanted the name
      * reached past the question to whatever stood beside it.
+     *
+     * <p><b>A subject and never a term.</b> What names the number is the place the rules call it
+     * and the operation as it resolved, both of which a rule that nothing read still has. A term
+     * is what a reading makes of one, so a question carrying a term could only be raised where the
+     * reading had already succeeded.
+     *
+     * <p><b>A name the rules of the value write, and never a place a row writes a value at.</b> The
+     * two part at a sum whose cases share a spread, and a question is on the side the rules are
+     * read from: what is at a name here is what a rule of this value could have said something
+     * about, which is why a position inside a sequence or under a case is not one of these rather
+     * than one nothing is written at.
      */
-    record Boundary(FieldDomains.Coordinate on) implements Owed {
+    record Boundary(NumberAt<RuleKey> on) implements Owed {
 
         public Boundary {
             if (on == null) {
@@ -65,8 +76,26 @@ public sealed interface Owed {
 
         @Override
         public String toString() {
-            return on.toString();
+            String where = spelled(on.position());
+            return switch (on.of()) {
+                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> where;
+                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
+                        taken.operation() + "(" + where + ")";
+            };
         }
+    }
+
+    /**
+     * How a question spells the place it is about.
+     *
+     * <p>Once for both questions, so that the two of them do not come to call one place two things.
+     * What a document writes is not this — a report's own words for a line are
+     * {@code check.DeclaredBorders.nameOf}'s, and it spells this one differently on purpose; what
+     * is here is what a reader of a question sees.
+     */
+    private static String spelled(RuleKey path) {
+        // The value itself is at no name, which reads as nothing at all where it is printed.
+        return path.isTheValueItself() ? "the value" : path.toString();
     }
 
     /**

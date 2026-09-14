@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -101,7 +101,7 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
     void aLineInsideWhatTheDeclarationAdmitsIsDrawn() {
         String report = report(INSIDE_THE_BOUND);
 
-        assertTrue(report.contains("no row is at the ON point f/c@Cons.tail@Cons.head = 150"),
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.head: = 150"),
                 report);
     }
 
@@ -213,6 +213,6 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

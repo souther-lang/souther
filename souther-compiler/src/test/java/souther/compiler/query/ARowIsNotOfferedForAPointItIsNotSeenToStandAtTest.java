@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
 
 import java.util.List;
@@ -76,12 +77,10 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         List<ItemAssessment> owed = pointsOfTheInnerLine();
         assertFalse(owed.isEmpty(), "the line behind the disjunction is owed rows");
         for (ItemAssessment item : owed) {
-            ItemAssessment.Attempt.Unresolved no = assertInstanceOf(
-                    ItemAssessment.Attempt.Unresolved.class,
-                    ((ItemAssessment.Owed) item).attempt(),
+            assertTrue(((ItemAssessment.Owed) item).searches().rowToOffer().isEmpty(),
                     "nothing composed a row that reaches this point, so none is offered");
             assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                    no.why().reason(),
+                    wordOf((ItemAssessment.Owed) item),
                     "and the reason is what the walk that reads a row said, not what the search"
                             + " managed to compose");
         }
@@ -91,15 +90,31 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
     @Test
     void theWayToItIsDeclinedRatherThanLeftOff() {
         for (ItemAssessment item : pointsOfTheInnerLine()) {
-            ItemAssessment.Attempt.Unresolved no = assertInstanceOf(
-                    ItemAssessment.Attempt.Unresolved.class,
-                    ((ItemAssessment.Owed) item).attempt());
+            ItemAssessment.Attempt.Searched no = assertInstanceOf(
+                    ItemAssessment.Attempt.Searched.class,
+                    ((ItemAssessment.Owed) item).searches().only());
             assertFalse(no.way().declined().isEmpty(),
                     "a disjunction states one of two things and this reading says so: "
                             + no.way().onTheWay());
             assertTrue(no.way().takenIn().isEmpty(),
                     "and it narrowed nothing: " + no.way().onTheWay());
         }
+    }
+
+    /**
+     * The word the one search of a point came back with.
+     *
+     * <p>Asked of the outcome rather than of which outcome it is. A point is put one value after
+     * another until the figure for how many ends the asking, so the word a search that reached no
+     * row came back with arrives wearing that figure as often as not — and it is the same word
+     * either way.
+     */
+    private static Generator.UnresolvedCombination.Reason wordOf(ItemAssessment.Owed owed) {
+        return switch (owed.searches().only()) {
+            case ItemAssessment.Attempt.Unresolved it -> it.why().reason();
+            case ItemAssessment.Attempt.Limited it -> it.why().reason();
+            default -> null;
+        };
     }
 
     /** And every row that is offered settles what it was composed for, which is what the first half
@@ -109,7 +124,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         Settlements table = settlements();
         assertFalse(table.composedFor().isEmpty(), "rows are composed for this model");
         table.composedFor().forEach((item, row) -> {
-            Map<OfferItem, Settlement> here = table.byRow().get(row);
+            Map<ObligationIdentity, Settlement> here = table.byRow().get(row);
             assertNotNull(here, "the row composed for " + item + " is one this offers: " + row);
             assertFalse(here.get(item) instanceof Settlement.DoesNotSettle,
                     "a row composed for " + item + " is not read as standing elsewhere: " + row);
@@ -139,7 +154,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
 
     /** Whether a line was drawn at {@code number} of whatever it is a line of. */
     private static boolean isAt(souther.compiler.partition.Level level, Count number) {
-        return level instanceof souther.compiler.partition.Level.OnACarrier(var ignored, var at)
+        return level instanceof souther.compiler.partition.Level.OnACarrier(_, var at)
                 && at instanceof Count count && count.compareTo(number) == 0;
     }
 
@@ -149,7 +164,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
                 Adequacy.generatedOf(compilation.db(), "example.unspoken");
         assertNotNull(generated, "the model under test compiles");
         return Settlements.of(compilation.db(), Composition.composed(
-                OfferingRequest.overTheModule("example.unspoken", true), generated,
+                OfferingRequest.overTheModule("example.unspoken"), generated,
                 Adequacy.accountFor(compilation.db(), "example.unspoken",
                         new GenerationScope.Module())));
     }

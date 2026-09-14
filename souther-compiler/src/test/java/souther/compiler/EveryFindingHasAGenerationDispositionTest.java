@@ -1,9 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
@@ -118,33 +122,6 @@ class EveryFindingHasAGenerationDispositionTest {
                 "one answer per finding, in the order the findings were established");
     }
 
-    /**
-     * And the same list whichever bar the run was held to.
-     *
-     * <p>The other half of the separation. The list above could be total over the findings and
-     * still be decided by the bar — a stricter one having more of them — and what says it is not is
-     * that two runs of one model under two bars answer for the same findings.
-     */
-    @Test
-    void whatIsAnsweredForDoesNotMoveWithTheBar() {
-        for (Adequacy.AdequacyBar bar : Adequacy.AdequacyBar.values()) {
-            Compilation compilation = Compilation.ofSource(POLICY, "Main");
-            compilation.measure(Adequacy.Asked.fullReport(bar));
-            compilation.answerEverything();
-
-            // Held within one compilation, because that is where the two lists are the same
-            // findings. Compared across two, a border's finding carries the region its row was
-            // composed over, which is one object per run and equal to nothing else — so the
-            // comparison would be about object identity rather than about what was answered for.
-            List<Adequacy.Finding> found = findings(compilation, "example.policy", "fee");
-            assertFalse(found.isEmpty(), "the model under test has findings to answer for");
-            assertEquals(found,
-                    filling(compilation, "example.policy", "fee").generation().stream()
-                            .map(Adequacy.GenerationDisposition::finding).toList(),
-                    bar::name);
-        }
-    }
-
     @Test
     void aBoundaryARowWasComposedForIsAnsweredWithThatRow() {
         Compilation compilation = compiled(GUARDED);
@@ -198,8 +175,8 @@ class EveryFindingHasAGenerationDispositionTest {
      * A generation narrowed to one behavior answers from what that behavior's search composed.
      *
      * <p>A line is owed once over every behavior carrying the type, and a row for it may be
-     * composable at one of them and not at another — {@code held} holds the field to a single
-     * value the line is not at, and {@code anywhere} does not. Answered from the module's readings, a
+     * composable at one of them and not at another — {@code held} holds the field to values the
+     * line itself is not at, and {@code anywhere} does not. Answered from the module's readings, a
      * request that searched only {@code held} would say a row is on offer because {@code anywhere}
      * had one, and print no row beside it (issue #1062).
      *
@@ -211,9 +188,9 @@ class EveryFindingHasAGenerationDispositionTest {
     void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
         Compilation compilation = compiled(NARROWED);
         List<PointResolution> atHeld = drawnBy(resolved(compilation, "example.narrowed",
-                new GenerationScope.Behavior("held")), "Code");
+                new GenerationScope.Behavior("held")), "Code", PointRole.ON);
         List<PointResolution> atAnywhere = drawnBy(resolved(compilation, "example.narrowed",
-                new GenerationScope.Behavior("anywhere")), "Code");
+                new GenerationScope.Behavior("anywhere")), "Code", PointRole.ON);
 
         assertFalse(atHeld.isEmpty(), "the line is owed at both, so both are asked about");
         assertFalse(atAnywhere.isEmpty(), "the line is owed at both, so both are asked about");
@@ -231,9 +208,23 @@ class EveryFindingHasAGenerationDispositionTest {
      * <p>Asked by the declaration the line is owed to, because a model has more than one: what
      * {@code Narrow} says about its own field is a line too, and a reading that can compose nothing
      * at {@code Code}'s line composes one at that.
+     *
      */
     private static List<PointResolution> drawnBy(BorderAccount rows, String declaredOn) {
+        return drawnBy(rows, declaredOn, null);
+    }
+
+    /**
+     * The same, at one of the line's points.
+     *
+     * <p>Because the points of a line are separate work. A position admitting nothing at the value
+     * a rule names admits plenty in the run beside it, so a caller whose subject is a point nobody
+     * can stand at has to say which point that is.
+     */
+    private static List<PointResolution> drawnBy(BorderAccount rows, String declaredOn,
+                                                 PointRole role) {
         return rows.resolved().entrySet().stream()
+                .filter(each -> role == null || each.getKey().role() == role)
                 .filter(each -> each.getKey().line().owedToTheDeclaration()
                         .map(on -> on.name().equals(declaredOn)).orElse(false))
                 .map(each -> each.getValue().resolution()).toList();
@@ -242,7 +233,7 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * A line the first reading composes nothing at is searched at the next.
      *
-     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to four
+     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to three
      * characters or more, so the reading of the line at {@code held} cannot stand a row at length 1
      * — and a line one reading composes nothing at is not a line nothing composes a row for
      * (issue #1076). Stopping at the first reading, the module's own declaration was reported as
@@ -251,7 +242,8 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void aLineTheFirstReadingComposesNothingAtIsSearchedAtTheNext() {
         List<PointResolution> atCode = drawnBy(
-                resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()), "Code");
+                resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()),
+                "Code", PointRole.ON);
 
         assertFalse(atCode.isEmpty(), "the model under test has a line owed at both");
         assertEquals(List.of("anywhere"), atCode.stream()
@@ -302,7 +294,7 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void aWalkThatCouldNotSeeEveryReadingDoesNotSettleTheLine() {
         List<SearchCoverage> narrowed = drawnBy(resolved(compiled(NARROWED), "example.narrowed",
-                new GenerationScope.Behavior("held")), "Code").stream()
+                new GenerationScope.Behavior("held")), "Code", PointRole.ON).stream()
                 .filter(each -> each instanceof PointResolution.Unresolved)
                 .map(each -> ((PointResolution.Unresolved) each).coverage()).toList();
 
@@ -500,8 +492,8 @@ class EveryFindingHasAGenerationDispositionTest {
     void whatOneReadingCameToIsSaidAsThatReadings() {
         Compilation compilation = compiled(NARROWED);
 
-        String block = GeneratedRows.of(compilation, "example.narrowed", "held", true,
-                SourceNameResolver.identity()).text();
+        String block = GeneratedRows.of(compilation, "example.narrowed", "held",
+                SourceRendering.namedByIdentity(compilation.texts())).text();
 
         assertTrue(block.contains("in `held`"),
                 "what the reading this asked about came to, named as its own: " + block);
@@ -790,7 +782,7 @@ class EveryFindingHasAGenerationDispositionTest {
         return filling(compilation, module, behavior).generation().stream()
                 .filter(each -> each.finding().about()
                         instanceof souther.compiler.query.About.ACaseNoRowAppliesItTo(
-                                var input, var case_)
+                                var input, var case_, var _)
                         && case_.name().equals(missing) && input.at() + 1 == at)
                 .map(Adequacy.GenerationDisposition::outcome)
                 .findFirst().orElseThrow(() -> new AssertionError("no gap for " + missing));
@@ -901,10 +893,13 @@ class EveryFindingHasAGenerationDispositionTest {
         // searched for, so there is no store to ask what their rows would settle.
         return GeneratedRows.of(souther.compiler.query.EveryRowOfIt.offered(
                         souther.compiler.query.Composition.composed(
-                        souther.compiler.query.OfferingRequest.overTheModule("example.kind", true),
+                        souther.compiler.query.OfferingRequest.overTheModule("example.kind"),
                         Map.of("pick", new Adequacy.Filling(stopped(why),
-                                atTheEdges(alsoAtTheEdges), List.of())), null)),
-                Map.of(), SourceNameResolver.identity()).text();
+                                atTheEdges(alsoAtTheEdges),
+                                Adequacy.Generated.RowsForRules.NOTHING,
+                                List.of())), null)),
+                Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE),
+                compiled(KIND).db()).text();
     }
 
     /** A run asked for nothing that came to a reason about itself, which is what a stopped
@@ -928,12 +923,13 @@ class EveryFindingHasAGenerationDispositionTest {
                         List.of(why));
     }
 
-    private static souther.compiler.partition.Generator.Subject nothingIsDivided() {
-        return new souther.compiler.partition.Generator.Subject("pick",
-                new souther.compiler.partition.BehaviorInputs(List.of(), List.of(),
-                        souther.compiler.check.Symbols.none(DefaultStdlib.get()),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                List.of(), souther.compiler.partition.HeldCounts.NONE);
+    private static souther.compiler.partition.MeasuredInput nothingIsDivided() {
+        RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
+                souther.compiler.check.Symbols.none(DefaultStdlib.get()));
+        return souther.compiler.partition.MeasuredInput.of("pick",
+                souther.compiler.inputs.InputDomain.of(List.of(), rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(rules),
+                souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 
     /**
@@ -977,8 +973,8 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(POLICY);
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.policy", true)),
-                Map.of(), SourceNameResolver.identity()).text();
+                                "example.policy")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
 
         assertTrue(block.contains("`then`"),
                 "the arm nothing offers a row for is named: " + block);

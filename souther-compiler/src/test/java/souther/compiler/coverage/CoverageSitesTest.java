@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -45,17 +46,31 @@ class CoverageSitesTest {
                         unreachable "a member over thirty is handled elsewhere"
             """;
 
-    private static Map<String, Core> bodiesOf(String source) {
+    /** The bodies a source compiles to, under the name the source declares them in. The name comes
+     *  with them: a body's own parameters belong to the behavior the module declares, so a plan
+     *  built under some other module's name is a plan of bodies whose names it cannot place. */
+    private record Checked(String module, Map<String, Core> bodies) {}
+
+    private static Checked bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
-                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+                .ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        return checked.behaviorBodies();
+        return new Checked(module, checked.behaviorBodies());
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        return planOf(bodiesOf(source));
+    }
+
+    private static CoverageSites.Plan planOf(Checked checked) {
+        return CoverageSites.of(
+                new ModuleBodies(checked.module(),
+                        new java.util.LinkedHashMap<>(checked.bodies())),
+                souther.compiler.coverage.DecisionSources.NONE,
+                souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
@@ -164,7 +179,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkNothingReachesIsPlannedWithNoArms() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.dead
 
                 data Yes
@@ -186,9 +201,9 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
+        Core.Match outer = (Core.Match) unwrap(checked.bodies().get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, CoverageSites.NO_SITE},
                 plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
@@ -298,7 +313,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmWithoutAProbeKeepsItsPlaceInTheArray() {
-        Map<String, Core> bodies = bodiesOf("""
+        Checked checked = bodiesOf("""
                 module example.order
 
                 data Yes
@@ -315,9 +330,9 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
+        Core.Match match = (Core.Match) unwrap(checked.bodies().get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
                 "the surviving arm is second, and it is the second entry that holds its probe");
     }
@@ -328,8 +343,18 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals("then", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexThen())));
-        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
+        assertEquals("then", labelAt(plan, guard.whereThen()));
+        assertEquals("else", labelAt(plan, guard.whereElse()));
+    }
+
+    /** What the arm {@code where} numbers is called, asked of the plan that numbered it. */
+    private static String labelAt(CoverageSites.Plan plan, java.util.Optional<ArmProbe> where) {
+        CoverageSites.ArmSite found = plan.sites().stream()
+                .filter(CoverageSites.ArmSite.class::isInstance)
+                .map(CoverageSites.ArmSite.class::cast)
+                .filter(site -> site.index().equals(where.orElseThrow()))
+                .findFirst().orElseThrow();
+        return souther.compiler.report.ArmVocabulary.label(found);
     }
 
     /** The comparison was evaluated to reach the arm that is left, so the line it draws is still one
@@ -341,8 +366,8 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals(CoverageSites.NO_SITE, guard.siteIndexThen());
-        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
+        assertTrue(guard.whereThen().isEmpty(), "the `then` arm answers nothing, so it has no place");
+        assertEquals("else", labelAt(plan, guard.whereElse()));
     }
 
     /**
@@ -382,18 +407,19 @@ class CoverageSitesTest {
 
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
-        Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        Checked checked = bodiesOf(MODEL);
+        CoverageSites.Plan plan = planOf(checked);
 
-        Core body = bodies.get("daysFor");
+        Core body = checked.bodies().get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
         assertEquals(2, arms.length);
-        assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
+        assertEquals("case UnderThirty", labelAt(plan, java.util.Optional.of(
+                plan.numbering().arm(arms[0]))));
 
-        Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
-                match.type(), match.pos(), java.util.List.of());
+        Core.Match copy = new Core.Match(match.scrutinee(), match.cases(),
+                Core.ForkPlace.asWritten(match.occurrence()), match.type(), match.pos());
         assertEquals(match, copy, "an equal node is easy to make");
         assertNull(plan.probesOf(copy),
                 "and it is not this one: a value-keyed plan would hand the emitter another arm's probe");
@@ -466,6 +492,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of(Map.of(), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE).hasNoProbes());
+        assertSame(true, planOf(new Checked("example.empty", Map.of())).hasNoProbes());
     }
 }

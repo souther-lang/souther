@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -69,7 +69,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
         assertTrue(report.contains("borders 1"), report);
-        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b"), report);
     }
 
     /**
@@ -83,9 +83,8 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void aRowIsAskedForAtThePointTheLineDraws() {
         String report = report(BELOW_WHERE_THE_READING_STOPS);
 
-        assertTrue(report.contains("no row is at the OFF point"
-                        + " f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b"),
-                report);
+        assertTrue(report.contains("no row is at the OFF point ("), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b"), report);
     }
 
     /** The same two fields, held one apart, which is a rule no operand of the comparison names. */
@@ -110,7 +109,8 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
 
         // The line is where `a` is one below `b`, so the point on it is the pair two apart: the
         // rule is written `<` and the last pair satisfying it is the one before they are one apart.
-        assertTrue(report.contains("f/c@Cons.tail@Cons.a = c@Cons.tail@Cons.b - 2"), report);
+        assertTrue(report.contains("read as f/c@Cons.tail@Cons.a: = c@Cons.tail@Cons.b - 2"),
+                report);
     }
 
     /** Two fields of what a list holds, compared inside a closure. The path reaches them through
@@ -166,14 +166,14 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return souther.compiler.report.GeneratedRows.of(compilation, "example.held", null, true,
-                SourceNameResolver.identity()).text();
+        return souther.compiler.report.GeneratedRows.of(compilation, "example.held", null,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

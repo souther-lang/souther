@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
@@ -13,11 +12,15 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.numeric.Rel;
+import souther.compiler.check.Comparison;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Ordering;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
+import souther.compiler.coverage.ComparisonEmissionSite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
@@ -28,6 +31,8 @@ import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
+import java.lang.constant.DynamicConstantDesc;
+import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -66,16 +71,8 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private ClassDesc matchCaseClass(TypeSymbol caseName) {
-        return ctx.matchCaseClass(caseName);
-    }
-
     private Map<String, Type> fieldTypes(Hir.Data data) {
         return ctx.fieldTypes(data);
-    }
-
-    private Type successType(Hir.RetType ret) {
-        return ctx.successType(ret);
     }
 
     private ClassDesc jvmType(Type type) {
@@ -228,7 +225,7 @@ final class BodyGen {
          * as the Core the checker made (issue #1080).
          */
         CheckContext context() {
-            return new CheckContext(symbols, data, reqSigs());
+            return new CheckContext(symbols, ctx.published, ctx.kinds, ctx.inners, data, reqSigs());
         }
 
         /**
@@ -239,7 +236,7 @@ final class BodyGen {
          */
         private void emitFieldRead(CodeBuilder code, TypeSymbol ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
-            if (symbols.declarations().declaration(ownerName) instanceof Hir.SumData) {
+            if (symbols.declaredNode(ownerName) instanceof Hir.SumData) {
                 // a field every case spreads is declared on the sum's sealed interface (issue #160)
                 code.invokeinterface(cd(ownerName), field, mtd);
             } else {
@@ -252,7 +249,7 @@ final class BodyGen {
          * non-newtype operand untouched. Used so comparison operators read the value a newtype wraps. */
         private Type unwrapNewtypeValue(Type t) {
             if (t instanceof Type.Ref ref
-                    && symbols.declarations().declaration(ref.name()) instanceof Hir.Data d && d.newtype()) {
+                    && symbols.declaredNode(ref.name()) instanceof Hir.Data d && d.newtype()) {
                 Type inner = fieldTypes(d).get("value");
                 if (inner != null) {
                     emitFieldRead(code, ref.name(), "value", inner);
@@ -271,7 +268,7 @@ final class BodyGen {
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
         private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
-                                           Type resultType, List<Core.Read> captures,
+                                           List<Core.Read> captures,
                                            List<ValueName.Behavior> injectedNames,
                                            Map<ValueName.Behavior, Type> reqSuccess,
                                            Map<ValueName.Behavior, List<Type>> reqParams) {
@@ -413,6 +410,7 @@ final class BodyGen {
                         store(code, slot, vt);
                         bind(li.binder(), slot, vt);
                     }
+                    emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
                 }
                 case Core.If iff -> {
@@ -445,7 +443,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -599,16 +597,25 @@ final class BodyGen {
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
-        private void comparisonProbe(Core.Binary comparison) {
+        private void comparisonProbe(Core.Binary bin) {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
             }
-            ctx.comparisonSiteOf(comparison).ifPresent(site -> {
-                ctx.emitted(site);
-                code.dup();
-                code.loadConstant(site);
-                code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
-            });
+            ctx.comparisonSiteOf(bin).ifPresent(this::comparisonProbeAt);
+        }
+
+        /**
+         * The call itself, written for the place a run through this comparison is recorded at.
+         *
+         * <p>The number is asked of the place twice for the one act: the emitter records that it
+         * wrote this number, and writes it into the instruction. What the instruction carries is a
+         * number and nothing else — a probed class has no numbering to ask what it addresses.
+         */
+        private void comparisonProbeAt(ComparisonEmissionSite site) {
+            ctx.emitted(site.raw());
+            code.dup();
+            code.loadConstant(site.raw());
+            code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
         }
 
         /**
@@ -631,13 +638,31 @@ final class BodyGen {
             code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
         }
 
-        /** Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}
-         * (spec §target-jdk). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack trace
-         * — an invariant abort above all — points back to the {@code .sou} line. Consecutive nodes on
-         * the same line (a subexpression tree, or a tail node re-lined by {@code genExpr}) collapse to
-         * one entry. */
+        /**
+         * Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}
+         * (spec §target-jdk). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack
+         * trace — an invariant abort above all — points back to the {@code .sou} line. Consecutive
+         * nodes on the same line (a subexpression tree, or a tail node re-lined by {@code genExpr})
+         * collapse to one entry.
+         *
+         * <p>A node written in another text writes nothing. The class carries one
+         * {@code SourceFile}, which is this module's, and a helper declared in another file of the
+         * same compile keeps the positions it was written at — so its line is a line of a file this
+         * class does not name, and the file it does name may be shorter than it. Leaving the entry
+         * out is what the table has for saying so: the pc then falls under the entry before it,
+         * which is a line of this class's own file because that is the only kind of line written
+         * here.
+         *
+         * <p>Which entry stands there is the {@code let} the copy is the body of. The bindings an
+         * expansion makes carry the call's own position, and between them and the copy the bound
+         * value is emitted — an argument written on its own line binds that line, and the copy binds
+         * nothing to move it back. So the call is bound again before the body, which is the same
+         * re-pin a construction does once its fields are on the stack. Binding it where the body
+         * binds a line of its own costs nothing: two lines at one offset are one entry, the last.
+         */
         private void emitLine(Core e) {
-            int line = e.pos() != null ? e.pos().line() : 0;
+            souther.compiler.diag.PhysicalPos sits = ctx.sits(e.pos());
+            int line = sits == null ? 0 : sits.line();
             if (line > 0 && line != lastEmittedLine) {
                 code.lineNumber(line);
                 lastEmittedLine = line;
@@ -648,7 +673,7 @@ final class BodyGen {
          * Emits a Core expression — the single expression emitter (ADR-0021); every node kind is
          * handled here. A {@code let} whose value is a runtime-selected function still asks the
          * type checker (which works on the AST) whether the value is such a function and for its
-         * parameter types, so those calls go through {@link Core#toAst()}: Core is untyped and type
+         * parameter types, so those calls go through the tree the checker reads: Core is untyped and type
          * inference lives in the checker, so the backend reuses it rather than re-deriving types.
          */
         Type genExpr(Core e) {
@@ -676,13 +701,15 @@ final class BodyGen {
                 // emits from keeps none, and one arriving means it was handed another tree.
                 case Core.PreservedCall p -> throw p.unexpectedIn("the emitter");
                 case Core.Int x -> code.loadConstant(x.value());
-                case Core.Decimal x -> {
-                    code.new_(CD_BigDecimal);
-                    code.dup();
-                    code.loadConstant(x.value().toString());
-                    code.invokespecial(CD_BigDecimal, "<init>",
-                            MethodTypeDesc.of(ConstantDescs.CD_void, CD_String));
-                }
+                // A literal is a constant of the class it is written in, and is loaded as one: a
+                // dynamic constant the JVM resolves once, by running the BigDecimal constructor
+                // on the spelling, and answers from the constant pool thereafter. Constructing it
+                // where it stands would parse the spelling on every evaluation, and a literal in
+                // the step of a fold is evaluated once per element.
+                case Core.Decimal x -> code.ldc(DynamicConstantDesc.ofNamed(
+                        ConstantDescs.BSM_INVOKE, "decimal", CD_BigDecimal,
+                        MethodHandleDesc.ofConstructor(CD_BigDecimal, CD_String),
+                        x.value().toString()));
                 case Core.Str x -> code.loadConstant(x.value());
                 case Core.Bool x -> {
                     if (x.value()) code.iconst_1(); else code.iconst_0();
@@ -757,12 +784,13 @@ final class BodyGen {
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> {
-                    binary(bin);
-                    comparisonProbe(bin);
+                    if (binary(bin) != null) {
+                        comparisonProbe(bin);
+                    }
                 }
                 case Core.Construct nd -> construct(nd);
                 case Core.Match m -> match(m, expected);
-                case Core.Call c -> call(c, expected);
+                case Core.Call c -> call(c);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
@@ -777,6 +805,7 @@ final class BodyGen {
                     int s = slot(vt);
                     store(code, s, vt);
                     bind(li.binder(), s, vt);
+                    emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
@@ -824,12 +853,17 @@ final class BodyGen {
          *
          * <p>No file name. This compiler is not given one — a generated class's {@code SourceFile}
          * is derived from its module name rather than threaded down from a path — and deriving one
-         * here would name a file that need not exist, and would name the reading module's when the
-         * {@code unreachable} came in with an inlined helper of another. A reader at run time has
-         * the frame's own file and line; a reader of E1911 has the row's place beside this one.
+         * here would name a file that need not exist. A reader at run time has the frame's own file
+         * and line; a reader of E1911 has the row's place beside this one.
+         *
+         * <p>Which is why an {@code unreachable} that came in with an inlined helper of another file
+         * says its reason and no numbers. A place with no file beside it is read against the frame's,
+         * and the frame's file is this class's — so a line of the helper's file put here would be
+         * read as a line of this one. The reason is what the model wrote and stands on its own.
          */
         private String abortMessage(Core.Unreachable u) {
-            return u.pos() == null ? u.reason() : u.reason() + " (" + u.pos() + ")";
+            souther.compiler.diag.PhysicalPos sits = ctx.sits(u.pos());
+            return sits == null ? u.reason() : u.reason() + " (" + sits + ")";
         }
 
         private void match(Core.Match m, Type expected) {
@@ -928,7 +962,7 @@ final class BodyGen {
                     unbox(code, bound, bslot);
                     bind(c.binder(), bslot, bound);
                 }
-                case Refinement.OptionAbsent ignored -> { }
+                case Refinement.OptionAbsent _ -> { }
             }
         }
 
@@ -942,10 +976,10 @@ final class BodyGen {
         }
 
         private void construct(Core.Construct nd) {
-            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName());
+            Hir.Data owner = (Hir.Data) symbols.declaredNode(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            TypeSymbol built = nd.typeName();
+            TypeSymbol.AtModule built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
             // that is not public, and the checked entry is the declared path either way.
             if (DataChecker.isInvariantBearing(built, symbols) || symbols.scope().isForeign(built)) {
@@ -1015,7 +1049,7 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.Construct nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
@@ -1207,7 +1241,7 @@ final class BodyGen {
         static final Set<Kernel> WRITTEN_OUT =
                 Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
 
-        private void call(Core.Call call, Type expected) {
+        private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
             // the operation. Matched against the rendered reach name instead, these arms would turn
             // on the alias the library publishes the operation under.
@@ -1675,8 +1709,18 @@ final class BodyGen {
             }
         }
 
-        private void binary(Core.Binary bin) {
-            switch (bin.op()) {
+        /**
+         * The operator, emitted; and the comparison it was, where it was one.
+         *
+         * <p>A switch expression, because an enum switch statement is not held to covering its
+         * type. What is wanted here is that an operator added to the language stops the compile
+         * until this has decided what to emit for it, and only an expression asks javac for that.
+         *
+         * <p>What comes back is what a probe records, so a caller has the recognition rather than
+         * the node and a lookup that answers for everything else.
+         */
+        private Comparison binary(Core.Binary bin) {
+            return switch (bin.op()) {
                 // Left to right, stopping as soon as the answer is settled. Not an optimisation:
                 // `/` aborts on a zero divisor and `Int` overflows, so a left operand is how the
                 // domain the right one is evaluated in gets narrowed, and `x /= 0 && 100 / x > 1`
@@ -1692,6 +1736,7 @@ final class BodyGen {
                     code.labelBinding(settled);
                     code.iconst_0();
                     code.labelBinding(end);
+                    yield null;
                 }
                 case OR -> {
                     genExpr(bin.left());
@@ -1703,6 +1748,7 @@ final class BodyGen {
                     code.labelBinding(settled);
                     code.iconst_1();
                     code.labelBinding(end);
+                    yield null;
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
@@ -1715,30 +1761,14 @@ final class BodyGen {
                 // BigDecimal here is what let a scale overflow leave a behavior as a
                 // java.lang.ArithmeticException (ADR-0112, issue #976). This said "Decimal does not
                 // overflow", which is not true of a sum, a difference or a product either.
-                case ADD, SUB, MUL, DIV -> {
-                    // The operands are numbers here: newtype arithmetic is a construction over the
-                    // values its operands wrap, and it was written as one where the tree was built
-                    // (spec §newtype-arithmetic), so nothing is opened or re-wrapped at the operator.
-                    Type t = genExpr(bin.left());
-                    genExpr(bin.right());
-                    if (t == Type.DECIMAL) {
-                        String m = switch (bin.op()) {
-                            case ADD -> "add";
-                            case SUB -> "subtract";
-                            case MUL -> "multiply";
-                            default  -> "divide";
-                        };
-                        code.invokestatic(CD_DecimalMath, m, MTD_bdArith);
-                    } else {
-                        String m = switch (bin.op()) {
-                            case ADD -> "addExact";
-                            case SUB -> "subtractExact";
-                            case MUL -> "multiplyExact";
-                            default  -> "divideExact";
-                        };
-                        code.invokestatic(CD_IntMath, m, MTD_intExact);
-                    }
-                }
+                //
+                // One arm each, and the runtime's method named in it. Read off the operator a
+                // second time inside a single arm, the last of the four is whatever is left over,
+                // and an arithmetic operator added to that arm takes the leftover's method.
+                case ADD -> { arithmetic(bin, "add", "addExact"); yield null; }
+                case SUB -> { arithmetic(bin, "subtract", "subtractExact"); yield null; }
+                case MUL -> { arithmetic(bin, "multiply", "multiplyExact"); yield null; }
+                case DIV -> { arithmetic(bin, "divide", "divideExact"); yield null; }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
@@ -1758,99 +1788,150 @@ final class BodyGen {
                         genExpr(bin.right());
                         code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
                     }
+                    yield null;
                 }
-                default -> {
-                    // A single-value newtype compares by its underlying value, so each operand is
-                    // opened to that value right after it is pushed (金額 <= 金額, 金額 <= 100 — the
-                    // checker allows only same newtype or a bare literal).
-                    //
-                    // An ordering is emitted from the order the operands open to and from nothing
-                    // else, and the switch below carries no `default`: reading the representation
-                    // instead is what let `StageN < StageN` fall past every ordering arm into the
-                    // equality test at the bottom, and an order added to {@link Ordering} would
-                    // fall the same way through an `instanceof` chain (issue #856). An equality is
-                    // the representation's own question and stays below.
-                    if (orderingOf(bin) instanceof Ordering how) {
-                        switch (how) {
-                            case Ordering.Longs _ -> {
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                comparisonMaterialize(bin.op(), true);
-                            }
-                            case Ordering.Natural _ -> {
-                                // These all carry as Comparable — String, BigDecimal, LocalDate,
-                                // LocalTime, LocalDateTime, Instant — so one compareTo reduces the
-                                // order to its sign against 0. BigDecimal.compareTo ignores scale,
-                                // which matches Decimal equality (spec §equality); the others order
-                                // lexicographically / in time.
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
-                                code.iconst_0();
-                                comparisonMaterialize(bin.op(), false);
-                            }
-                            case Ordering.Places places -> {
-                                // An enumeration compares by where its case stands in the
-                                // declaration, which the sum answers for both operands —
-                                // `stage < Won` pairs a sum with one of its cases, and
-                                // `x < StageN(Qualified)` two wrappers over one sum.
-                                unwrapNewtypeValue(genExpr(bin.left()));
-                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                                unwrapNewtypeValue(genExpr(bin.right()));
-                                code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                                comparisonMaterialize(bin.op(), false);
-                            }
-                            // `opened` answers for the value the operands are opened to, which is
-                            // never one a name is still worn over.
-                            case Ordering.Wrapped _ -> throw new IllegalStateException(
-                                    "an opened order is never a wrapped one: " + bin.left().type());
-                        }
-                        return;
-                    }
-                    Type lt = unwrapNewtypeValue(genExpr(bin.left()));
-                    unwrapNewtypeValue(genExpr(bin.right()));
-                    if (lt == Type.STRING) {
-                        code.invokevirtual(CD_String, "equals",
-                                MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
-                        if (bin.op() == BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
-                    if (isReference(lt)) {
-                        // What sameness is, is the runtime's to say: a data compares by its fields,
-                        // an amount ignores its scale, a collection asks that of what it holds
-                        // (spec §equality). A pair of Decimals takes the overload for them.
-                        emitValueEquals(code, lt == Type.DECIMAL);
-                        if (bin.op() == BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
-                    comparisonMaterialize(bin.op(), lt == Type.INT);
+                case EQ, NE, LT, LE, GT, GE -> {
+                    // The recognition is here whenever this arm is, because what an operator places
+                    // is a claim exactly where it compares — which is a law and not an agreement
+                    // between two lists ({@code WhatAnOperatorPlacesIsOneAnswerTest}). Asked for
+                    // rather than assumed all the same, so that a comparison this arm names and
+                    // that law stops holding for is said rather than emitted against.
+                    Comparison comparison =
+                            Comparison.of(bin).orElseThrow(() -> placedNothing(bin));
+                    emitComparison(comparison);
+                    yield comparison;
                 }
+            };
+        }
+
+        /** That an operator this arm names as one that compares placed nothing, which is the law
+         *  above having stopped holding for it. */
+        private static IllegalStateException placedNothing(Core.Binary bin) {
+            return new IllegalStateException(
+                    "an operator that compares placed nothing: " + bin.op());
+        }
+
+        /** What the operator computes of two numbers, through the runtime that owns the arithmetic
+         *  — {@code IntMath} and {@code DecimalMath} — rather than a host method. The operands are
+         *  numbers here: newtype arithmetic is a construction over the values its operands wrap,
+         *  and it was written as one where the tree was built (spec §newtype-arithmetic), so
+         *  nothing is opened or re-wrapped at the operator. */
+        private void arithmetic(Core.Binary bin, String onDecimal, String onInt) {
+            Type t = genExpr(bin.left());
+            genExpr(bin.right());
+            if (t == Type.DECIMAL) {
+                code.invokestatic(CD_DecimalMath, onDecimal, MTD_bdArith);
+            } else {
+                code.invokestatic(CD_IntMath, onInt, MTD_intExact);
             }
         }
 
-        /** How a {@code <}/{@code <=}/{@code >}/{@code >=} compares its operands, or null when this
-         * is not that comparison. Whether the two may be compared at all was settled by
-         * {@code BinaryElaborator} against the types as written; this reads what they open to. */
-        private Ordering orderingOf(Core.Binary bin) {
-            boolean ordering = switch (bin.op()) {
-                case LT, LE, GT, GE -> true;
-                default -> false;
-            };
-            if (!ordering) {
-                return null;
+        /**
+         * The comparison, emitted from what it placed.
+         *
+         * <p>An order and a value singled out are the two things a comparison places, and which of
+         * the two this is comes from the claim the recognition carries. Read off the operator here
+         * instead, the same six would be divided a second time and the two divisions would agree
+         * only for as long as somebody kept them so.
+         *
+         * <p>A single-value newtype compares by its underlying value, so each operand is opened to
+         * that value right after it is pushed (金額 &lt;= 金額, 金額 &lt;= 100 — the checker allows
+         * only same newtype or a bare literal).
+         */
+        private void emitComparison(Comparison comparison) {
+            switch (comparison.claim()) {
+                case ComparisonClaim.Cut cut -> ordered(comparison, cut);
+                case ComparisonClaim.Singled singled -> same(comparison, singled);
             }
-            Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), symbols);
+        }
+
+        /**
+         * An order, emitted from the order the operands open to and from nothing else.
+         *
+         * <p>The switch carries no {@code default}: reading the representation instead is what let
+         * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
+         * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
+         */
+        private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
+            // Whether the two may be compared at all was settled by BinaryElaborator against the
+            // types as written; this reads what they open to.
+            Ordering how = Ordering.ofComparison(
+                    comparison.left().type(), comparison.right().type(), ctx.inners, symbols,
+                    ctx.kinds,
+                    ctx.published);
             if (how == null) {
                 throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + bin.left().type() + " " + bin.op() + " " + bin.right().type());
+                        + comparison.left().type() + " " + cut.statedRelation() + " "
+                        + comparison.right().type());
             }
-            return how.opened();
+            switch (how.opened()) {
+                case Ordering.Longs _ -> {
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    comparisonMaterialize(cut.statedRelation(), true);
+                }
+                case Ordering.Natural _ -> {
+                    // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
+                    // LocalDateTime, Instant — so one compareTo reduces the order to its sign
+                    // against 0. BigDecimal.compareTo ignores scale, which matches Decimal equality
+                    // (spec §equality); the others order lexicographically / in time.
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    code.iconst_0();
+                    comparisonMaterialize(cut.statedRelation(), false);
+                }
+                case Ordering.Places places -> {
+                    // An enumeration compares by where its case stands in the declaration, which
+                    // the sum answers for both operands — `stage < Won` pairs a sum with one of its
+                    // cases, and `x < StageN(Qualified)` two wrappers over one sum.
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
+                    comparisonMaterialize(cut.statedRelation(), false);
+                }
+                // `opened` answers for the value the operands are opened to, which is never one a
+                // name is still worn over.
+                case Ordering.Wrapped _ -> throw new IllegalStateException(
+                        "an opened order is never a wrapped one: " + comparison.left().type());
+            }
+        }
+
+        /**
+         * A value singled out, tested for sameness.
+         *
+         * <p>{@link ComparisonClaim.Singled#holdsAtTheValue} says which of the two classes the
+         * comparison selects, so a comparison met where the value is not the one named is this test
+         * inverted.
+         */
+        private void same(Comparison comparison, ComparisonClaim.Singled singled) {
+            Type lt = unwrapNewtypeValue(genExpr(comparison.left()));
+            unwrapNewtypeValue(genExpr(comparison.right()));
+            if (lt == Type.STRING) {
+                code.invokevirtual(CD_String, "equals",
+                        MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+                selecting(singled);
+                return;
+            }
+            if (isReference(lt)) {
+                // What sameness is, is the runtime's to say: a data compares by its fields, an
+                // amount ignores its scale, a collection asks that of what it holds (spec
+                // §equality). A pair of Decimals takes the overload for them.
+                emitValueEquals(code, lt == Type.DECIMAL);
+                selecting(singled);
+                return;
+            }
+            comparisonMaterialize(singled.statedRelation(), lt == Type.INT);
+        }
+
+        /** Turns a test of sameness into the class the comparison selects: the one it is met at is
+         *  what was emitted, and the other is its denial. */
+        private void selecting(ComparisonClaim.Singled singled) {
+            if (!singled.holdsAtTheValue()) {
+                code.iconst_1();
+                code.ixor();
+            }
         }
 
         /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
@@ -1868,7 +1949,7 @@ final class BodyGen {
          * natural order", so an order added to {@link Ordering} has to say which of the two it is
          * instead of inheriting the answer that happens to be right for these three. */
         private TypeSymbol sumOrdering(Type t) {
-            Ordering how = Ordering.of(t, symbols);
+            Ordering how = Ordering.of(t, ctx.inners, symbols, ctx.kinds, ctx.published);
             if (how == null) {
                 return null;
             }
@@ -1883,12 +1964,24 @@ final class BodyGen {
             };
         }
 
-        private void comparisonMaterialize(BinOp op, boolean isLong) {
+        /**
+         * The relation the comparison states, brought to a boolean on the stack.
+         *
+         * <p>Taken as what the comparison states rather than as the operator it was written with:
+         * the claim is what a reader holds below a recognition, and reaching back for the operator
+         * to emit it would be the last step of an emission asking the question the recognition
+         * settled.
+         *
+         * <p>The {@code default} is here though the six arms are the whole of {@link Rel} today. An
+         * enum switch statement is not held to covering its type, so a relation added later would
+         * emit no branch at all and leave the stack to the {@code iconst_0} below.
+         */
+        private void comparisonMaterialize(Rel rel, boolean isLong) {
             Label t = code.newLabel();
             Label end = code.newLabel();
             if (isLong) {
                 code.lcmp();
-                switch (op) {
+                switch (rel) {
                     case LT -> code.iflt(t);
                     case LE -> code.ifle(t);
                     case GT -> code.ifgt(t);
@@ -1898,7 +1991,7 @@ final class BodyGen {
                     default -> throw new IllegalStateException();
                 }
             } else {
-                switch (op) {
+                switch (rel) {
                     case LT -> code.if_icmplt(t);
                     case LE -> code.if_icmple(t);
                     case GT -> code.if_icmpgt(t);
@@ -1945,9 +2038,14 @@ final class BodyGen {
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
                     code.ifeq(elseL);
+                    // A fork answering a function is a fork like any other: a row takes one of its
+                    // arms, and the arm it took is the plan's to be told about. What the arm answers
+                    // with is what differs here, and that is not something a count is about.
+                    probe(iff, 0);
                     emitFunctionValue(iff.then(), paramTypes);
                     code.goto_(end);
                     code.labelBinding(elseL);
+                    probe(iff, 1);
                     emitFunctionValue(iff.els(), paramTypes);
                     code.labelBinding(end);
                 }
@@ -1967,17 +2065,16 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes,
-                    ((Type.FnOf) block.type()).result(), freeVars(block));
+            emitLambda(block.params(), block.body(), paramTypes, freeVars(block));
         }
 
         private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
-                                Type resultType, Reaches free) {
+                                Reaches free) {
             List<Core.Read> captures = free.bindings();
             List<ValueName.Behavior> injectedNames = free.injected();
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
-            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes, resultType,
+            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes,
                     captures, injectedNames, reqSuccess, reqParams));
 
             // the same condition generateLambdaClass interned on — it must stay the same one

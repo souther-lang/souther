@@ -27,15 +27,23 @@ import java.util.Objects;
  * manifest is what a run needs — and one covering every linked module would be answering for
  * behaviors no answerer here is asked about.
  *
+ * <p>{@link #probes} is here for the same reason the two above are one value. The numbers a probed
+ * class writes are of the numbering it was emitted under, and a run handed one compile's classes
+ * beside another's numbering would be recorded in numbers that address other places — silently,
+ * because a number addresses something either way.
+ *
  * @param classes         binary name to class file, for this module and the ones its rows reach
  * @param implementations what the module being evaluated generated an implementation for
+ * @param probes          whether these classes record where a run goes, and in whose numbers
  */
 public record EvaluationArtifact(Map<String, ClassFileImage> classes,
-                                 GeneratedImplementations implementations) {
+                                 GeneratedImplementations implementations,
+                                 ProbeImage probes) {
 
     public EvaluationArtifact {
         Objects.requireNonNull(classes, "a run says what classes it loads");
         Objects.requireNonNull(implementations,
                 "a run says what the compile generated an implementation for");
+        Objects.requireNonNull(probes, "a run says whether its classes record where it goes");
     }
 }

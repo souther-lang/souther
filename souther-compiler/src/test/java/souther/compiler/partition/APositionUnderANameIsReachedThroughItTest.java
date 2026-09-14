@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.WhatTheRowsReached;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -110,17 +112,18 @@ class APositionUnderANameIsReachedThroughItTest {
     void aRowWrittenUnderTheNameIsReadBackThroughIt() {
         Compilation compilation = measured(FLAGS);
 
-        assertEquals(Set.of("true"), evidence(compilation, "wrapped").axes().get(0).rows().covered());
-        assertEquals(evidence(compilation, "bare").axes().get(0).rows().covered(),
-                evidence(compilation, "wrapped").axes().get(0).rows().covered(),
+        assertEquals(Set.of("true"),
+                WhatTheRowsReached.at(evidence(compilation, "wrapped").axes().get(0)).covered());
+        assertEquals(WhatTheRowsReached.at(evidence(compilation, "bare").axes().get(0)).covered(),
+                WhatTheRowsReached.at(evidence(compilation, "wrapped").axes().get(0)).covered(),
                 "a name is how a value is written, not what it is");
     }
 
     /** Write: what the row for the class nothing covers is, which is the value under the name. */
     @Test
     void aRowOfferedForThePositionIsWrittenUnderTheName() {
-        String rows = GeneratedRows.of(measured(FLAGS), "demo", "wrapped", true,
-                SourceNameResolver.identity()).text();
+        String rows = GeneratedRows.of(measured(FLAGS), "demo", "wrapped",
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
 
         assertTrue(rows.contains("(SlotN(Slot { flag = false }))"), rows);
     }
@@ -142,8 +145,8 @@ class APositionUnderANameIsReachedThroughItTest {
                 "the same record is bounded the same way under a name");
         assertTrue(lines(compilation, "wrapped").size() >= 4);
 
-        String rows = GeneratedRows.of(compilation, "demo", "wrapped", true,
-                SourceNameResolver.identity()).text();
+        String rows = GeneratedRows.of(compilation, "demo", "wrapped",
+                SourceRendering.namedByIdentity(compilation.texts())).text();
         assertTrue(rows.contains("(PairN(Pair { low = N(9), high = N(10) }))"), rows);
     }
 }

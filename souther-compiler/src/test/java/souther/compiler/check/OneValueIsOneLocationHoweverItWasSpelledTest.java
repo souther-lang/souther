@@ -1,9 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.DefaultStdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -50,9 +49,9 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         BindingId i = BINDERS.binder("i", POS).id();
         Location root = Location.of(i);
 
-        assertNotEquals(root, root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())));
-        assertNotEquals(root.then(Type.INT, "n", Symbols.none(DefaultStdlib.get())),
-                root.then(Type.INT, "m", Symbols.none(DefaultStdlib.get())));
+        assertNotEquals(root, root.then(Type.INT, "n", DeclarationNewtypes.NONE));
+        assertNotEquals(root.then(Type.INT, "n", DeclarationNewtypes.NONE),
+                root.then(Type.INT, "m", DeclarationNewtypes.NONE));
     }
 
     @Test
@@ -60,7 +59,7 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         assertNull(of(new Core.Int(1, Type.INT, POS)));
         assertNull(of(new Core.Binary(BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                CoverageOrigin.unwritten(), Type.INT, POS)));
+                ConstructOccurrence.unwritten(), Type.INT, POS)));
     }
 
     private static Core read(BindingId binding, String spelledAs) {
@@ -68,6 +67,6 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, Symbols.none(DefaultStdlib.get()), Location::of);
+        return Location.of(e, DeclarationNewtypes.NONE, Location::of);
     }
 }

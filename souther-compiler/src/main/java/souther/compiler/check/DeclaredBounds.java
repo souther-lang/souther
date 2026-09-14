@@ -1,15 +1,15 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What the rules written on a type leave a value of it between, and which of the names it wears
@@ -19,6 +19,11 @@ import java.util.List;
  * not the same reader: what a position is divided and bounded at, and what values can be produced to
  * stand for it. Each working it out for itself is how a reading of one invariant came to mean two
  * things.
+ *
+ * <p>And read off the one walk that goes inside a conjunct. What a declaration's rules leave is
+ * established where the statements are ({@link FieldDomains}); what is done here is narrowing that
+ * to one number of one position and dropping the lines. A reading of its own here would be a second
+ * account of what the rules say, free to answer about fewer of them than the author wrote.
  *
  * <p>A range, and only what a range can hold. What the rules leave out between their ends is not
  * here — a caller asking whether some particular value is admitted is asking the domain the rules
@@ -31,59 +36,70 @@ import java.util.List;
 public final class DeclaredBounds {
 
     /**
-     * One rule that put an end here, and which number of the declaration it was written about.
+     * One end of a range, and everything the readings established about what put it there.
      *
-     * <p>The pair and not the rule alone. One clause can bound two numbers of one declaration —
-     * {@code invariant both = String.length(name) >= 1 && String.length(code) >= 1} places two ends
-     * at one value — and they are two lines an author drew: a row whose {@code name} is one
-     * character says nothing about {@code code}. Held as the rule, the two came out as one thing to
-     * write a row for, which is the mistake issue #1062 is about with the halves the other way round.
-     *
-     * <p><b>The conjunct and not the number it was written about.</b> Which coordinate a clause
-     * bounded is read from whatever value the reading started at — {@code Day}'s own clause is about
-     * {@code value} read from {@code Day} and about {@code d} read from the {@code Span} holding it
-     * — so two readings of one line spell the coordinate two ways, and an identity built on it calls
-     * one authored line two. The conjunct is the clause's own text: it is the same number whichever
-     * value the reading started at, and it is what tells the ends of {@code value >= 0 && value <=
-     * 10} apart.
-     *
-     * <p>Counted over every conjunct and not over the ones a line came out of, so that a reading
-     * that could make nothing of one conjunct still numbers the next the same as a reading that
-     * could.
-     */
-    public record Drawn(RuleRef.Invariant rule, int conjunct) {
-
-        public Drawn {
-            if (rule == null) {
-                throw new IllegalArgumentException("a rule put an end here, and this is which");
-            }
-            if (conjunct < 0) {
-                throw new IllegalArgumentException(
-                        "a conjunct of a clause is counted from zero: " + conjunct);
-            }
-        }
-    }
-
-    /**
-     * One end of a range, and every rule that put it there.
-     *
-     * <p>Rules, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
-     * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
-     * one would drop an obligation rather than a line of text.
+     * <p>Evidence, plural. Two layers can state the same bound — a wrapper repeating what it wraps —
+     * and they are two rules a row could be owed to, which is the accounting a cut already keeps.
+     * Holding one would drop an obligation rather than a line of text.
      *
      * <p>The clauses and not the declarations they are written on. Held as declarations, two clauses
      * of one declaration at one value came out as one rule, and a report owed one line for a
      * boundary two rules had drawn ({@link Clause}).
      *
-     * <p>Each as the rule a report names it by. An end here is read by the measure that turns it
-     * into lines to write rows at, and that measure names the rule that drew it — handed the clause
-     * reference, it built the identity back for itself, which is a decision about what a rule is
-     * being taken by whoever happened to consume one.
+     * <p><b>What was established, and not the lines it comes to.</b> Which lines an end is owed to
+     * is a question about the end: a conjunct taken away moves an end that one of its own statements
+     * placed, and what that shows is the statement's line found a second way rather than a line
+     * beside it. Answered where each piece of evidence is made, that reading has only its own piece
+     * in hand and there is no answer to give — so it is answered here, where every piece about this
+     * end is ({@link #drawn}).
      */
-    public record End(Endpoint at, List<Drawn> from) {
+    public record End(Endpoint at, List<LineProvenance> found) {
 
         public Place value() {
             return at.at();
+        }
+
+        /**
+         * The lines this end is owed to, read off everything established about it.
+         *
+         * <p>A statement's line where a comparison placed the end, which is the one reading that
+         * establishes a statement placed anything. What the other reading takes away is a whole
+         * conjunct, so the line it establishes is the conjunct's however few of its statements are
+         * on this number.
+         *
+         * <p>And the conjunct's line only where none of the statements it is paired with is a line
+         * here already. Taking a conjunct away takes away every statement it made, so where one of
+         * them placed this end on its own the intervention was bound to move it — what the coarser
+         * reading established is the line that is already here, and nothing beside it. Read as a
+         * line of its own, {@code n >= 0 && n /= 100} written into one conjunct owes two rows at the
+         * bottom of its range, where the author drew one.
+         *
+         * <p>Not a rule about which reading wins. Where the ends are apart there is no such
+         * subsumption to make and both are lines: {@code n >= 0 && n /= 0} places one at nought and
+         * leaves the values starting at one, and the second is a line no statement of the conjunct
+         * drew.
+         */
+        public List<DeclaredLine> drawn() {
+            Set<InvariantStatementId> here = new LinkedHashSet<>();
+            for (LineProvenance each : found) {
+                InvariantStatementId placed = each.placedBy();
+                if (placed != null) {
+                    here.add(placed);
+                }
+            }
+            List<DeclaredLine> out = new ArrayList<>();
+            here.forEach(each -> out.add(new DeclaredLine.OfAStatement(each)));
+            for (LineProvenance each : found) {
+                if (each.placedBy() != null
+                        || each.statements().stream().anyMatch(here::contains)) {
+                    continue;
+                }
+                DeclaredLine conjunct = new DeclaredLine.OfAConjunct(each.statements());
+                if (!out.contains(conjunct)) {
+                    out.add(conjunct);
+                }
+            }
+            return List.copyOf(out);
         }
 
         /**
@@ -105,8 +121,8 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<Drawn> both = new ArrayList<>(had.from());
-            one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
+            List<LineProvenance> both = new ArrayList<>(had.found());
+            one.found().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
     }
@@ -124,6 +140,12 @@ public final class DeclaredBounds {
             return min == null && max == null;
         }
 
+        /** Where the value stops, with the lines left behind — for a caller asking how wide the
+         *  value is rather than what the model draws through it. */
+        public Range range() {
+            return new Range(min == null ? null : min.at(), max == null ? null : max.at(), carrier);
+        }
+
         /**
          * The end on one side, or null where nothing stops the values that way.
          *
@@ -138,67 +160,75 @@ public final class DeclaredBounds {
         }
     }
 
+    /**
+     * Where the rules a value wears stop it, with nothing about which of them said so.
+     *
+     * <p>Two numbers and no line. What a caller asking how wide a value is wants is where it stops;
+     * which rule stopped it there is a line of the model, and a line is owed a row. Held as ends
+     * with names on them, this reading's names met the reading of lines' names at the same value and
+     * the model owed two rows for one line.
+     *
+     * <p>Which is all this has to give. The ends come from the reading lines are read from
+     * ({@link FieldDomains#placed}), narrowed to one number of the position, and what a line is
+     * named by is left there — a caller wanting to know which rule stopped the values asks that
+     * reading rather than taking a name off a width.
+     */
+    public record Range(Endpoint min, Endpoint max, Carrier carrier) {}
+
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
-    public static Bounds of(Type type, Symbols symbols) {
-        return of(type, symbols, Carrier.ofValue(type, symbols), null);
+    public static Range of(TypeView view, RuleReadingContext reading) {
+        return of(view, reading,
+                Carrier.ofValue(view.declared(), reading.source().inners(),
+                        reading.source().symbols(),
+                        reading.source().kinds(), reading.source().published()), null);
     }
 
     /**
+     * What the rules a position wears leave {@code measure} of it between, or null where nothing
+     * here reads the position's values.
+     *
+     * <p><b>A projection of the reading that reaches the statements, and not a second reading of the
+     * clauses.</b> What the rules leave a number is read once, by the walk that goes inside each
+     * authored conjunct ({@link FieldDomains#placed}); this narrows that to one number of the
+     * position and drops the lines, which is what a width is. Read here instead as one comparison
+     * per conjunct, a rule stated through a helper, one written as the denial of its opposite and
+     * one reaching the count through a name it wraps each arrived as a shape that reading made
+     * nothing of — so a position was offered values its own rules refuse, and which of the two
+     * readings had seen the rule decided what the model admitted.
+     *
+     * <p>The outermost name and no walk of the rest. What a value wears is a chain of names and the
+     * rules of every one of them are the rules of the value, which is a fact the reading of a
+     * declaration already has: asked of the name a position is written under, it comes back with
+     * the ends every name below placed as well. A caller reading each name and intersecting would
+     * count the inner ones once per name above them.
+     *
+     * @param view    the position as it was read: the rules of every name it wears are the rules of
+     *                its value, and which names those are is that reading's answer rather than one
+     *                worked out again here
      * @param carrier what the clauses' values are read on, or null where nothing here reads them
      * @param measure the operation the number is taken by, or null where the number is the value
      *                itself
      */
-    public static Bounds of(Type type, Symbols symbols, Carrier carrier, ValueName measure) {
+    public static Range of(TypeView view, RuleReadingContext reading, Carrier carrier,
+                           ValueName measure) {
         if (carrier == null) {
             return null;
         }
-        End min = null;
-        End max = null;
-        // Every name the value wears, not the outermost one. A rule written on the type a newtype
-        // wraps bounds the value as much as one written on the newtype does, and the two intersect:
-        // `Inner: value >= 0` under `Outer: value <= 10` is a range of `[0, 10]`, and neither layer
-        // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
-        // and every layer that put an end where it is is kept, because each is a rule a row is owed.
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            // The clauses with the declaration each was written on, which is what names the line
-            // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
-            // spread it, and two clauses of one declaration were one rule.
-            // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
-            // says; the pattern is where the layer's name says so.
-            if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
-                continue;
-            }
-            for (TypeOps.Declared declared
-                    : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
-                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
-                // Which conjunct of the clause each end came out of, counted over all of them in
-                // the order the clause was written. The other reading of these clauses counts them
-                // the same way, which is what makes an end read here and an end read through the
-                // value this type sits in one line rather than two.
-                int conjunct = -1;
-                for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
-                    conjunct++;
-                    // An end and nothing else. A rule this reads no end from narrows nothing here,
-                    // and a rule stepping past the last value of the order states an end no value is
-                    // at — which is a declaration with no value, answered where counts are and not
-                    // by a bound written at a place nothing can be.
-                    if (!((measure == null ? InvariantBound.of(each, carrier)
-                            : InvariantBound.ofSize(each, measure))
-                            instanceof InvariantBound.Read.AnEnd placed)) {
-                        continue;
-                    }
-                    InvariantBound read = placed.bound();
-                    End end = new End(read.end(), List.of(new Drawn(rule, conjunct)));
-                    if (read.lower()) {
-                        min = End.tighter(min, end, false);
-                    } else {
-                        max = End.tighter(max, end, true);
-                    }
-                }
-            }
+        // Nothing wears a rule here, which is a position the rules leave everything rather than one
+        // nothing reads. Told apart from the null above, because a caller asking what is left of a
+        // number needs a number that is left of it.
+        Range everything = new Range(null, null, carrier);
+        if (view.wrappers().isEmpty()
+                || !(view.wrappers().getFirst() instanceof TypeSymbol.AtModule outermost)) {
+            return everything;
         }
-        return new Bounds(min, max, carrier);
+        NumberAt.OfWhatNumber kind = measure == null
+                ? new NumberAt.OfWhatNumber.OfItsOwnValue()
+                : new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(measure);
+        FieldDomains own = FieldDomains.of(outermost, reading);
+        Bounds bounds = placed(own.placedAt(RuleKey.THE_VALUE), kind, carrier);
+        return bounds == null ? everything : bounds.range();
     }
 
     /**
@@ -216,14 +246,14 @@ public final class DeclaredBounds {
      *             path is the caller's already, which is what {@code placed} is a list of
      */
     public static Bounds placed(List<FieldDomains.Placed> placed,
-                                FieldDomains.CoordinateKind kind, Carrier carrier) {
+                                NumberAt.OfWhatNumber kind, Carrier carrier) {
         End min = null;
         End max = null;
         for (FieldDomains.Placed each : placed) {
-            if (!each.at().kind().equals(kind)) {
+            if (!each.at().of().equals(kind)) {
                 continue;
             }
-            End end = new End(each.end(), List.of(new Drawn(each.from(), each.conjunct())));
+            End end = new End(each.end(), List.of(each.from()));
             if (each.lower()) {
                 min = End.tighter(min, end, false);
             } else {
@@ -265,17 +295,14 @@ public final class DeclaredBounds {
      * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
      * list's, and comes back a floor on characters; a caller reading every floor above zero as a
      * collection that cannot be empty would be answering a question this did not.
+     *
+     * <p>Of the position as it was read, like every other question about the rules on it. How many a
+     * value holds is what the rules of every name it wears say, so this needs the same reading
+     * {@link #of} does — and a caller that had already read the position and handed a type over here
+     * would have it read a second time, which is one more answer to which names it wears.
      */
-    public static int leastCountOf(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return 0;
-        }
-        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
-        if (sized == null || sized.min() == null) {
-            return 0;
-        }
-        return CountDomain.leastFrom(sized.min().at());
+    public static int leastCountOf(TypeView view, RuleReadingContext reading) {
+        return countsHeld(view, reading, null).least();
     }
 
     /**
@@ -290,27 +317,21 @@ public final class DeclaredBounds {
      * settled once. A second reading here could put a record's {@code > 3} at three while the type's
      * came to four, and the two would disagree about one rule written twice.
      */
-    public static int leastCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.max(leastCountOf(type, symbols),
-                held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
+    public static int leastCountOf(TypeView view, RuleReadingContext reading,
+                                   FieldDomains.Held held) {
+        return countsHeld(view, reading, held).least();
     }
 
     /**
-     * How many of whatever counts a value of {@code type} the rules on it allow it to hold, or every
+     * How many of whatever counts a value of the position the rules on it allow it to hold, or every
      * number where they cap it in no way.
      *
      * <p>The dual of {@link #leastCountOf} and asked for the same reason: a rule capping a value at
      * none is written on the type as readily as on the record holding one, and a reader finding only
      * the second offered a value at a position the first leaves no room for.
      */
-    public static int mostCountOf(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return Integer.MAX_VALUE;
-        }
-        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
-        return sized == null || sized.max() == null ? Integer.MAX_VALUE
-                : CountDomain.mostFrom(sized.max().at());
+    public static int mostCountOf(TypeView view, RuleReadingContext reading) {
+        return countsHeld(view, reading, null).most();
     }
 
     /**
@@ -319,9 +340,58 @@ public final class DeclaredBounds {
      * <p>The lower of the two, because both are rules the construction has to satisfy -- which is
      * {@link #leastCountOf}'s argument at the other end.
      */
-    public static int mostCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.min(mostCountOf(type, symbols),
-                held == null ? Integer.MAX_VALUE : CountDomain.mostFrom(held.bounds().max()));
+    public static int mostCountOf(TypeView view, RuleReadingContext reading,
+                                  FieldDomains.Held held) {
+        return countsHeld(view, reading, held).most();
+    }
+
+    /**
+     * How many a value of the position may hold, both ends of one reading of the rules.
+     *
+     * <p>Both together, because a caller choosing how many to build needs the pair and neither end
+     * alone is safe to stand in for it. A reader holding only the floor builds the fewest a rule
+     * allows and never asks whether that many can carry what it is for; one holding only the cap
+     * never asks whether the rules leave room to go higher. The two ends are one answer about one
+     * snapshot of the rules, and a caller taking them from two calls can be handed a floor above the
+     * cap and read it as a range.
+     *
+     * <p>Empty where the rules leave no count at all, which is a value nothing holds and not a range
+     * to walk. That is the model's answer, and a caller that walked an inverted range would step
+     * over it silently.
+     */
+    public static CountRange countsHeld(TypeView view, RuleReadingContext reading,
+                                        FieldDomains.Held held) {
+        ValueName.Stdlib counts =
+                NumericMeasures.takenOf(view.declared(), reading.source().inners());
+        Range sized = counts == null ? null : of(view, reading, Carrier.WHOLE, counts);
+        Endpoint least = sized == null ? null : sized.min();
+        Endpoint most = sized == null ? null : sized.max();
+        return new CountRange(
+                Math.max(CountDomain.leastFrom(least),
+                        held == null ? 0 : CountDomain.leastFrom(held.bounds().min())),
+                Math.min(CountDomain.mostFrom(most),
+                        held == null ? Integer.MAX_VALUE
+                                : CountDomain.mostFrom(held.bounds().max())));
+    }
+
+    /**
+     * How many a value may hold, from the fewest to the most.
+     *
+     * <p>Inclusive at both ends, and counted in values. {@code Integer.MAX_VALUE} at the top is the
+     * rules capping it in no way, which is not a number to build up to — how far a search goes there
+     * is the search's own budget and is nothing this says.
+     */
+    public record CountRange(int least, int most) {
+
+        /** Whether {@code many} is a count the rules allow. */
+        public boolean admits(int many) {
+            return many >= least && many <= most;
+        }
+
+        /** Whether the rules leave no count at all. */
+        public boolean empty() {
+            return least > most;
+        }
     }
 
     private DeclaredBounds() {}

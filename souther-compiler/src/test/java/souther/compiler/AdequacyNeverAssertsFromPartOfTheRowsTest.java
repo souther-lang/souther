@@ -1,15 +1,18 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Measurement;
 import souther.compiler.execute.jvm.JvmExampleDeadlines;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmObligation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.ArmVocabulary;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
@@ -216,21 +219,34 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
-            for (souther.compiler.query.OwedBoundaryPoint point : partition.owedPoints()) {
-                if (point.item().weakeningSource() instanceof Measurement.Complete<?>
-                        && !point.item().hasRowWitness()) {
-                    wrong.add("boundary " + point.axis() + " " + point.asked());
+            for (souther.compiler.query.BorderObligationPointAssessment point
+                    : compilation.db().ask(new Adequacy.BodyBorders(module)).value().get("take")
+                            .made().orElseGet(List::of)) {
+                if (point.item().coverage().settled() && !point.owed().hasRowWitness()) {
+                    wrong.add("boundary "
+                            + RuleHandleProse.said(
+                                    point.said(cited -> souther.compiler.query.Sites.placeOf(
+                                            compilation.db(), cited)),
+                                    new souther.compiler.diag.SourceRendering(
+                                            souther.compiler.source.SourceId::value,
+                                            compilation.texts()), null));
                 }
             }
             if (partition.pairs().counted() instanceof Measurement.Complete<?>
-                    && partition.pairs().counts().unknown() > 0) {
-                wrong.add("pairs: " + partition.pairs().counts().unknown() + " untried");
+                    && partition.pairs().unknown() > 0) {
+                wrong.add("pairs: " + partition.pairs().unknown() + " unknown");
             }
 
+            // Per arm, the way the boundary above is per point: an arm this account calls unmet is
+            // one it read every row against and found nothing going through, so the sentence is
+            // asserted there and nowhere else. Where a row of this behavior did not come back the
+            // arms it may have lit come back undecided instead, which asserts nothing.
             Adequacy.BranchEvidence branch = compilation.db()
                     .ask(new Adequacy.BranchCoverage(module)).value().get("take");
-            if (branch.measured() instanceof Measurement.Complete<?> && !branch.unreached().orElseThrow().isEmpty()) {
-                wrong.add("branch: " + branch.unreached().orElseThrow().size() + " unreached");
+            if (branch.measured().made().isPresent()) {
+                for (ArmObligation.Counted arm : branch.arms().unmet()) {
+                    wrong.add("branch: " + ArmVocabulary.label(arm.display()) + " unreached");
+                }
             }
 
             assertEquals(List.of(), wrong, module + " asserted a gap over rows it did not read");
@@ -265,8 +281,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             assertNotNull(generated);
 
             String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
-                            souther.compiler.query.OfferingRequest.overTheModule(module, true)),
-                    Map.of(), SourceNameResolver.identity()).text();
+                            souther.compiler.query.OfferingRequest.overTheModule(module)),
+                    Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -314,15 +330,16 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.of(compilation).status());
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
-        assertTrue(partition.owedPoints().stream()
-                        .anyMatch(p -> !p.item().hasRowWitness()),
+        assertTrue(compilation.db().ask(new Adequacy.BodyBorders(module)).value().get("take")
+                        .made().orElseGet(List::of).stream()
+                        .anyMatch(p -> !p.owed().hasRowWitness()),
                 "a boundary nothing is at");
-        assertTrue(partition.pairs().counts().unknown() > 0, "a combination nothing reaches");
+        assertTrue(partition.pairs().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
-                .get("take").unreached().orElseThrow().isEmpty(), "an arm nothing goes through");
+                .get("take").arms().unmet().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
-                        souther.compiler.query.OfferingRequest.overTheModule(module, true)),
-                Map.of(), SourceNameResolver.identity()).text().isEmpty(),
+                        souther.compiler.query.OfferingRequest.overTheModule(module)),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text().isEmpty(),
                 "and rows offered for them");
     }
 }

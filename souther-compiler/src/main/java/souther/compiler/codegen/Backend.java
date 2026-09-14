@@ -2,8 +2,12 @@ package souther.compiler.codegen;
 
 import souther.compiler.query.Bodies;
 
+import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.Boundary;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -20,12 +24,15 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelSignatures;
+import souther.compiler.diag.SourceLayouts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -65,7 +72,7 @@ public final class Backend {
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names by
      * the code still living here. */
     private final String pkg;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
 
     private final CodecGen codec;
     private final ValueClassGen value;
@@ -140,7 +147,9 @@ public final class Backend {
      * what a value of each declared data is made of and what must hold of one, which is what a
      * construction is refused by and is the checker's answer rather than this emitter's
      * (issue #1080). */
-    public static Emissions generate(Hir.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
+                                               PublishedDeclarations published,
+                                               DeclarationKinds kinds,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
@@ -150,13 +159,16 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               ExpandedClauseLookup dischargeInvariants,
+                                               InvariantStatements invariantStatements,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                               Map<String, Type> standingCalls) {
-        return generate(module, symbols, kernels, typePackage, sigs, importedSigs, importedInjected,
-                calleeSigs, requirements, checked, compositions, dischargeInvariants, shapes, checks,
-                standingCalls, Instrumentation.NONE);
+                                               Map<String, Type> standingCalls,
+                                               SourceLayouts layouts) {
+        return generate(module, symbols, published, kinds, kernels, typePackage, sigs, importedSigs,
+                importedInjected,
+                calleeSigs, requirements, checked, compositions, dischargeInvariants,
+                invariantStatements, shapes, checks, standingCalls, layouts, Instrumentation.NONE);
     }
 
     /**
@@ -167,12 +179,14 @@ public final class Backend {
      * that ask for them are an evaluation and a measurement. Anything that ships goes through the
      * signature above and gets bytecode with no reference to either in it at all.
      *
-     * <p>An {@code instrumentation} carrying a coverage plan must have been made from the bodies in
-     * {@code checked} — the same instances, not equal ones. The emitter looks each node up by identity
-     * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
-     * the arm that ran as one nothing reaches.
+     * <p>Where {@code instrumentation} asks for coverage, the arms numbered are the arms of
+     * {@code checked}, and the plan that numbers them is made here from those bodies. The emitter
+     * looks each node up by identity, so a plan of any other bodies addresses none of the nodes
+     * being walked — which is why there is nowhere for a caller to supply one.
      */
-    public static Emissions generate(Hir.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
+                                               PublishedDeclarations published,
+                                               DeclarationKinds kinds,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
@@ -182,15 +196,19 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               ExpandedClauseLookup dischargeInvariants,
+                                               InvariantStatements invariantStatements,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
+                                               SourceLayouts layouts,
                                                Instrumentation instrumentation) {
         try {
-            return generating(module, symbols, kernels, typePackage, sigs, importedSigs,
+            return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
+                    importedSigs,
                     importedInjected, calleeSigs, requirements, checked, compositions,
-                    dischargeInvariants, shapes, checks, standingCalls, instrumentation);
+                    dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
+                    layouts, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -199,7 +217,9 @@ public final class Backend {
         }
     }
 
-    private static Emissions generating(Hir.Module module, Symbols symbols,
+    private static Emissions generating(Hir.Module module, DerivedSymbols symbols,
+                                        PublishedDeclarations published,
+                                        DeclarationKinds kinds,
                                         KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
@@ -209,10 +229,12 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
-                                                  Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  ExpandedClauseLookup dischargeInvariants,
+                                                  InvariantStatements invariantStatements,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
+                                                  SourceLayouts layouts,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -240,12 +262,27 @@ public final class Backend {
                 recHelpers.put(fn.name(), fn);
             }
         }
-        CodegenContext ctx = new CodegenContext(module.name(), symbols, kernels, caseToSums, typePackage,
-                module.exposing().isEmpty(), exposed, standingCalls);
+        CodegenContext ctx = new CodegenContext(module.name(), symbols, published, kinds,
+                souther.compiler.check.NewtypeInners.asWritten(symbols), kernels,
+                caseToSums, typePackage,
+                module.exposing().isEmpty(), exposed, standingCalls, layouts,
+                module.pos().quotedFrom());
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setInvariantStatements(invariantStatements);
         ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);
-        ctx.setCoveragePlan(instrumentation.coverage());
+        // The one place a coverage plan is made, and it is made from the bodies about to be emitted.
+        // Every number the emitter writes into the bytecode and every number a report reads back
+        // comes from this call, so there is no second numbering for either of them to disagree with.
+        CoverageSites.Plan coverage = instrumentation.measuresCoverage()
+                ? checked.plan() : CoverageSites.Plan.NONE;
+        // Said off what was asked for and not off what the plan came to hold. A module whose bodies
+        // have no arm to number is a module a run leaves an empty account of, which is not the same
+        // as one a run leaves no account of at all.
+        ProbeImage probes = instrumentation.measuresCoverage()
+                ? new ProbeImage.Instrumented(coverage.identity())
+                : new ProbeImage.Uninstrumented();
+        ctx.setCoveragePlan(coverage);
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
@@ -301,7 +338,7 @@ public final class Backend {
             }
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
-        Emissions out = new Emissions(module.name());
+        Emissions out = new Emissions(module.name(), probes);
         behaviorResults.forEach((union, alternatives) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
@@ -355,7 +392,7 @@ public final class Backend {
                 List<TypeSymbol> unitCases = new ArrayList<>();
                 for (Hir.TypeTerm term : spec.ret().cases()) {
                     if (term instanceof Hir.TypeRef t && t.denotes() instanceof Type.Ref r
-                            && b.symbols.declarations().declaration(r.name()) instanceof Hir.UnitData) {
+                            && b.symbols.declaredNode(r.name()) instanceof Hir.UnitData) {
                         unitCases.add(r.name());
                     }
                 }
@@ -365,7 +402,7 @@ public final class Backend {
                     for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.declarations().declaration(names(tn)) instanceof Hir.Data
+                        if (b.symbols.declaredNode(names(tn)) instanceof Hir.Data
                                 && seenConstruct.add(names(tn))) {
                             dataConstructs.add(names(tn));
                         }
@@ -438,6 +475,12 @@ public final class Backend {
             behaviorDeps.put(new ValueName.Behavior(module.name(), e.getKey()),
                     Requirements.names(e.getValue()));
         }
+        // Which definition implements each behavior, and which of that definition's parameters are
+        // the declared inputs, asked once for the module rather than worked out here: the snapshot's
+        // assembler reads its binders from the same answer, so which local an input arrives in
+        // cannot be one thing there and another here.
+        Map<String, SpecImplementation.Implemented> implementations =
+                SpecImplementation.implementationsOf(module);
         for (Hir.BehaviorDef bd : module.behaviors()) {
             emitting(bd.written(), () -> {
                 // The class a declared relation is checked by, emitted by the module that declares
@@ -453,15 +496,21 @@ public final class Backend {
                 }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
-                        // Which definition implements it, and which of that definition's parameters
-                        // are the declared inputs, is asked rather than worked out here: the
-                        // snapshot's assembler reads its binders from the same answer, so which
-                        // local an input arrives in cannot be one thing there and another here.
                         // Bodies arrive with their helper calls already inlined (the Lower stage,
                         // ADR-0021), and are emitted as-is.
                         SpecImplementation.Implemented implemented =
-                                SpecImplementation.implementedBy(module, spec);
+                                implementations.get(spec.name());
                         if (implemented != null) {
+                            // What this emitter takes, said here rather than by the reading that
+                            // divided the parameters: an editor reads a definition whose parameters
+                            // do not line up and answers what it can about it, and this may not run
+                            // on one at all. The division is the same either way; what differs is
+                            // who may act on it.
+                            if (!implemented.hasCompleteShape()) {
+                                throw new IllegalStateException("`" + module.name() + "."
+                                        + spec.name() + "` is emitted from an implementation whose"
+                                        + " parameters the declaration does not account for");
+                            }
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
                             // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
                             out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
@@ -808,7 +857,7 @@ public final class Backend {
     private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct);
+        Hir.Data data = (Hir.Data) symbols.declaredNode(construct);
         ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
@@ -1068,7 +1117,7 @@ public final class Backend {
             // encoder and the bridge cases, so none of them is in a position to work the form or a
             // tag out again.
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()),
-                    Boundary.of(sig.outputType(), symbols));
+                    Boundary.of(sig.outputType(), ctx.kinds, ctx.published));
         }
         return results;
     }
@@ -1290,8 +1339,8 @@ public final class Backend {
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            if (where instanceof EnsuresEnforcement.AtTheCallee(Contract contract)) {
-                emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
+            if (where instanceof EnsuresEnforcement.AtTheCallee(Contract _)) {
+                emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
@@ -1299,13 +1348,15 @@ public final class Backend {
                 gen.armsAreCounted();
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(requiredNames, requiredSuccess, requiredParam, injected);
-                for (int i = 0; i < n; i++) {
-                    // the definition's input names the binding; its type comes from the behavior
-                    Type pt = successType(spec.params().get(i).type());
-                    code.aload(i + 1);
+                for (SpecImplementation.ParameterBinding.AnInput input
+                        : implemented.declaredInputs()) {
+                    // the definition's input names the binding; its type comes from the behavior,
+                    // paired with it where the parameters were divided rather than here
+                    Type pt = successType(input.declared().type());
+                    code.aload(input.at() + 1);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
-                    Hir.Binder binder = implemented.inputs().get(i).binder();
+                    Hir.Binder binder = input.written().binder();
                     gen.bind(binder.binding(), binder.name(), slot, pt);
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
@@ -1346,7 +1397,7 @@ public final class Backend {
      * this wrapper stands between a behavior and its own recursion.
      */
     private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
-                                   Contract contract, MethodTypeDesc mtdApply, int n) {
+                                   MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
         List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));
@@ -1515,7 +1566,7 @@ public final class Backend {
                             code.goto_(end);
                             code.labelBinding(doApply);
                         }
-                        case Composition.Routing.Always ignored -> { }
+                        case Composition.Routing.Always _ -> { }
                     }
                     applyStage(code, cdP, stage.behavior(), requiredNames, reqStages, behaviorDeps,
                             stage.answers(), arity + 1);

@@ -6,6 +6,8 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ResolvedCase;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -17,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -45,8 +46,11 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     private static final TypeSymbol.AtModule FOUND = TypeSymbols.declared(new TypeKey("demo", "Found"));
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
-    private final PathEngine engine =
-            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    private final PathEngine engine = new PathEngine(
+            RuleReadingContext.unshared(
+                    RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+            Terms.Of.THE_DISCHARGE_TREE);
 
     @Test
     void aNameGivenTextIsThatText() {
@@ -90,7 +94,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(
+                        ResolvedCase.of(CaseSelector.direct(FOUND), List.of(FOUND))), x),
                 written, Known.top(), Denotations.none()).at();
 
         assertSame(written, engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));
@@ -101,11 +106,12 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     void anArmOpeningAnAnswerOpensNoText() {
         Core answer = new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                Type.ref(FOUND), POS);
+                ConstructOccurrence.unwritten(), Type.ref(FOUND), POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(
+                        ResolvedCase.of(CaseSelector.direct(FOUND), List.of(FOUND))), x),
                 answer, Known.top(), Denotations.none()).at();
 
         assertNull(engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));

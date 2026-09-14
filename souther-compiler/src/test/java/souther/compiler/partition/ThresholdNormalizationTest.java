@@ -2,21 +2,19 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -41,32 +39,33 @@ class ThresholdNormalizationTest {
      *  asking a different question from the one the compiler asks. */
     private record Read(Partitions.Partitioning partitioning,
                         souther.compiler.inputs.Quantities reading, List<Threshold> thresholds,
-                        Symbols symbols) {}
+                        RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), symbols);
+        CoverageSites.Plan plan = checked.plan();
+        GuardThresholds.Guards guards = GuardThresholds.of(behavior,
+                checked.analysisBodies().get(behavior), body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), rules);
         List<Threshold> thresholds = guards.thresholds();
-        InputDomain domain = InputDomain.of(spec, sigs.get(behavior), symbols,
+        InputDomain domain = InputDomain.of(sigs.get(behavior), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
-        Partitions.Partitioning base = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Read(Partitions.withThresholds(base, reading, thresholds, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), reading, thresholds, symbols);
+        souther.compiler.inputs.Quantities reading = domain.quantities(rules);
+        Partitions.Partitioning base = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return new Read(Partitions.withThresholds(base, reading, thresholds,
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)), reading, thresholds, rules);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -105,7 +104,7 @@ class ThresholdNormalizationTest {
         Threshold threshold = read.thresholds().get(0);
         assertEquals("request.cost", threshold.path().toString());
         assertEquals(Count.of(new BigDecimal(100000)), threshold.value());
-        assertTrue(threshold.valueBelongsBelow(), "`<= c` puts c on the low side");
+        assertEquals(Towards.BELOW, threshold.valueBelongs(), "`<= c` puts c on the low side");
 
         Axis cost = axis(read.partitioning(), "request.cost");
         assertEquals(List.of("0 <= x <= 100000", "100000 < x"), labels(cost));
@@ -217,8 +216,8 @@ class ThresholdNormalizationTest {
         Threshold bare = read.thresholds().get(0);
         Threshold beside = compound.thresholds().get(0);
         assertEquals(
-                List.of(bare.term(), bare.parts(), bare.valueBelongsBelow()),
-                List.of(beside.term(), beside.parts(), beside.valueBelongsBelow()),
+                List.of(bare.term(), bare.parts(), bare.valueBelongs()),
+                List.of(beside.term(), beside.parts(), beside.valueBelongs()),
                 "and the line is the same one either way: " + compound.thresholds());
     }
 
@@ -229,7 +228,7 @@ class ThresholdNormalizationTest {
 
         NumericDomain.Bounds within = read.reading().runsBetween(cost.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
-        List<String> described = pointsAgainstTheLines(cost, read.symbols(), within);
+        List<String> described = pointsAgainstTheLines(cost, read.reading(), within);
 
         assertTrue(described.contains("ON 100000"), described.toString());
         assertTrue(described.contains("OFF 100001"), described.toString());
@@ -274,7 +273,7 @@ class ThresholdNormalizationTest {
         assertEquals(List.of("Prospecting", "Qualified", "Won"), labels(stage),
                 "the cut is the coarser partition, so the classes stay the cases");
 
-        List<String> described = pointsAgainstTheLines(stage, read.symbols(),
+        List<String> described = pointsAgainstTheLines(stage, read.reading(),
                 read.reading().runsBetween(stage.term()));
         assertEquals(List.of("ON Prospecting", "OFF Qualified"), described);
     }
@@ -306,15 +305,16 @@ class ThresholdNormalizationTest {
 
         NumericDomain.Bounds within = read.reading().runsBetween(amount.term());
         assertNotNull(within, "the invariant's domain is what this asks the obligations about");
-        List<String> described = pointsAgainstTheLines(amount, read.symbols(), within);
+        List<String> described = pointsAgainstTheLines(amount, read.reading(), within);
         assertTrue(described.contains("OFF 3000"), described.toString());
         assertTrue(described.contains("ON 2999"), described.toString());
     }
 
     /** The points against each of {@code axis}'s borders, as {@code role value}. */
-    private static List<String> pointsAgainstTheLines(Axis axis, Symbols symbols,
+    private static List<String> pointsAgainstTheLines(Axis axis,
+                                                      souther.compiler.inputs.Quantities reading,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, symbols, within, new LinesRead()).stream()
+        return Partitions.bordersOf(axis, reading, within, new LinesRead()).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
@@ -343,16 +343,16 @@ class ThresholdNormalizationTest {
 
         Axis level = axis(read.partitioning(), "level");
         Cut at20 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(20).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(20L))).findFirst()
                 .orElseThrow();
         Cut at10 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(10L))).findFirst()
                 .orElseThrow();
 
         assertEquals(1, at10.origins().size(), "the declaration's own end");
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.InvariantOrigin));
         assertEquals(1, at20.origins().size(), "and the body's, which divides what it leaves");
-        assertTrue(at20.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
+        assertTrue(at20.origins().stream().anyMatch(o -> o instanceof LineOrigin.ComparisonOrigin));
     }
 
     /**
@@ -387,14 +387,14 @@ class ThresholdNormalizationTest {
 
         Axis level = axis(read.partitioning(), "level");
         Cut at10 = level.cuts().stream()
-                .filter(c -> new ObservedValue.Integer(10).equals(c.value())).findFirst()
+                .filter(c -> c.at().sameAs(Count.of(10L))).findFirst()
                 .orElseThrow();
 
         assertEquals(2, at10.origins().size(),
                 () -> "the declaration's end and the comparison, both at ten: " + at10.origins());
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin),
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.InvariantOrigin),
                 () -> "the clause's own end: " + at10.origins());
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin),
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.ComparisonOrigin),
                 () -> "and the comparison, which no value satisfies and which divides them all the"
                         + " same: " + at10.origins());
     }

@@ -6,8 +6,10 @@ import souther.compiler.types.BindingId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -73,18 +75,52 @@ public final class ValueArrivals<P> {
     private final Set<Core> walked =
             java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
-    private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics) {
+    /** Whether a call kept standing is a defect here or an operation the model names. */
+    private final WhereTheOperationsAre operations;
+
+    private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics,
+                          WhereTheOperationsAre operations) {
         this.naming = naming;
         this.semantics = semantics;
+        this.operations = operations;
     }
 
-    /** The reading of {@code body}, with every occurrence in it settled under what binds it. */
+    /** The reading of {@code body} against what the body's own text says of its comparisons. */
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming) {
-        ValueArrivals<AnonymousPath> semantics =
-                naming == Anonymous.NAMING ? null : ofBody(body, Anonymous.NAMING);
-        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics);
+        return ofBody(body, naming, ComparisonWays.OF_THE_TREE);
+    }
+
+    /** The same, of a tree the language's own operations stand in. */
+    public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(Core body, Naming<P> naming) {
+        return ofBody(body, naming, ComparisonWays.OF_THE_TREE,
+                WhereTheOperationsAre.STAND_IN_IT);
+    }
+
+    /**
+     * The reading of {@code body}, with every occurrence in it settled under what binds it.
+     *
+     * <p>Both halves against the one {@code ways}. What the body does is the half computed with no
+     * naming, so a reading whose halves were asked different things about a comparison would answer
+     * one thing about what the body does and another about which ways it has.
+     */
+    public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways) {
+        return ofBody(body, naming, ways, WhereTheOperationsAre.ARE_EXPANDED_IN_IT);
+    }
+
+    /**
+     * The same, of a tree that says whether the language's own operations stand in it.
+     *
+     * <p>Both halves against the one answer, for the reason both are against one {@code ways}: a
+     * reading whose halves read a kept call differently would answer one thing about what the body
+     * does and another about which ways it has.
+     */
+    public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
+                                              WhereTheOperationsAre operations) {
+        ValueArrivals<AnonymousPath> semantics = naming == Anonymous.NAMING
+                ? null : ofBody(body, Anonymous.NAMING, ways, operations);
+        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics, operations);
         if (body != null) {
-            reading.fill(body, naming, Map.of());
+            reading.fill(body, naming, ways, Map.of());
         }
         return reading;
     }
@@ -171,40 +207,46 @@ public final class ValueArrivals<P> {
      * caller may ask about a node in it — so it is settled too, under its own parameters, and the
      * answer for the block itself stays what it is.
      */
-    private void fill(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private void fill(Core e, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
         if (e == null || !walked.add(e)) {
             return;
         }
-        settle(e, naming, bound);
+        settle(e, naming, comparisons, bound);
         switch (e) {
             case Core.LetIn let -> {
-                fill(let.value(), naming, bound);
+                fill(let.value(), naming, comparisons, bound);
                 fill(let.body(), naming.under(let.binder(), let.value()),
-                        with(bound, let.binder(), settle(let.value(), naming, bound), let.value()));
+                        comparisons.under(let.binder(), let.value()),
+                        with(bound, let.binder(),
+                                settle(let.value(), naming, comparisons, bound), let.value()));
             }
             case Core.Block block -> {
                 Map<BindingId, Bound<P>> inner = bound;
                 for (Core.Binder param : block.params()) {
                     inner = with(inner, param, oneWay(), null);
                 }
-                fill(block.body(), naming, inner);
+                fill(block.body(), naming, comparisons, inner);
             }
             case Core.Match match -> {
-                fill(match.scrutinee(), naming, bound);
+                fill(match.scrutinee(), naming, comparisons, bound);
                 for (Core.Case arm : match.cases()) {
-                    fill(arm.body(), naming, with(bound, arm.binder(), oneWay(), null));
+                    fill(arm.body(), naming.insideArm(match, arm),
+                            comparisons.insideArm(match, arm),
+                            with(bound, arm.binder(), oneWay(), null));
                 }
             }
             case Core.IfConstructed constructed -> {
-                fill(constructed.construct(), naming, bound);
-                fill(constructed.then(), naming, with(bound, constructed.binder(), oneWay(), null));
-                constructed.els().forEach(arm -> fill(arm.body(), naming, bound));
+                fill(constructed.construct(), naming, comparisons, bound);
+                fill(constructed.then(), naming, comparisons,
+                        with(bound, constructed.binder(), oneWay(), null));
+                constructed.els().forEach(arm -> fill(arm.body(), naming, comparisons, bound));
             }
             // Everything else through the enumeration the language keeps for itself. A list written
             // out here would be a copy of that one, agreeing with it until one of them changed — and
             // the two slots it had already stopped agreeing about are exactly the ones nothing here
             // could have noticed: a name a call applies, and the construction an attempt is of.
-            default -> Core.forEachChild(e, child -> fill(child, naming, bound));
+            default -> Core.forEachChild(e, child -> fill(child, naming, comparisons, bound));
         }
     }
 
@@ -236,7 +278,8 @@ public final class ValueArrivals<P> {
 
     // ---------------------------------------------------------------- reading
 
-    private Paths<P> settle(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private Paths<P> settle(Core e, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
         if (e == null) {
             // A body the checker refused a clause of arrives with a hole where the clause was.
             // Nothing is evaluated there and nothing arrives.
@@ -246,7 +289,7 @@ public final class ValueArrivals<P> {
         if (already != null) {
             return already;
         }
-        Paths<P> answer = normalised(e, reading(e, naming, bound));
+        Paths<P> answer = normalised(e, reading(e, naming, comparisons, bound));
         settled.put(e, answer);
         return answer;
     }
@@ -268,7 +311,8 @@ public final class ValueArrivals<P> {
                 ? new Paths.Beyond<>() : answer;
     }
 
-    private Paths<P> reading(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private Paths<P> reading(Core e, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
         return switch (e) {
             case Core.Unreachable ignored -> new Paths.Held<>(List.of());
             case Core.Bool literal -> one(Truth.of(literal.value()), whole(naming.nowhere()));
@@ -279,19 +323,29 @@ public final class ValueArrivals<P> {
             case Core.Block ignored -> oneWay();
             // The value is evaluated before the body it binds is.
             case Core.LetIn let -> {
-                Paths<P> value = settle(let.value(), naming, bound);
+                Paths<P> value = settle(let.value(), naming, comparisons, bound);
                 yield arrivesAt(let.value())
                         ? settle(let.body(), naming.under(let.binder(), let.value()),
+                                comparisons.under(let.binder(), let.value()),
                                 with(bound, let.binder(), value, let.value()))
                         : new Paths.Held<>(List.of());
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
-                    through(binary, naming, bound);
-            case Core.If iff -> fork(iff, naming, bound);
-            case Core.Match match -> arms(match, naming, bound);
-            case Core.IfConstructed constructed -> attempted(constructed, naming, bound);
-            case Core.PreservedCall preserved -> throw preserved.unexpectedIn("value-flow analysis");
-            default -> built(e, naming, bound);
+                    through(binary, naming, comparisons, bound);
+            case Core.If iff -> fork(iff, naming, comparisons, bound);
+            case Core.Match match -> arms(match, naming, comparisons, bound);
+            case Core.IfConstructed constructed -> attempted(constructed, naming, comparisons, bound);
+            // A call kept standing where the operations are expanded is one this compiler failed to
+            // expand, and is refused. Where they stand, it is the model naming an operation: its
+            // arguments are evaluated and what it answers is a value with no truth this reading
+            // says, which is what a value made of several already comes to.
+            case Core.PreservedCall preserved -> {
+                if (operations == WhereTheOperationsAre.ARE_EXPANDED_IN_IT) {
+                    throw preserved.unexpectedIn("value-flow analysis");
+                }
+                yield built(e, naming, comparisons, bound);
+            }
+            default -> built(e, naming, comparisons, bound);
         };
     }
 
@@ -303,10 +357,11 @@ public final class ValueArrivals<P> {
      * arrives at no value leaves the whole arriving at none, which is what makes this the reading of
      * everything strict as well.
      */
-    private Paths<P> built(Core e, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private Paths<P> built(Core e, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
         Paths<P> out = oneWay();
         for (Core part : partsOf(e)) {
-            Paths<P> each = settle(part, naming, bound);
+            Paths<P> each = settle(part, naming, comparisons, bound);
             if (!arrivesAt(part)) {
                 return new Paths.Held<>(List.of());
             }
@@ -316,7 +371,7 @@ public final class ValueArrivals<P> {
             }
         }
         if (out.orNone().size() == 1) {
-            Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming,
+            Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
                     read -> {
                         Bound<P> named = bound.get(read.binding());
                         return named == null ? null : named.settledBy();
@@ -340,9 +395,10 @@ public final class ValueArrivals<P> {
      * added to the reading and nothing is taken out of it.
      */
     private Paths<P> comparedOut(Core value, Arrival<P> under, Naming<P> naming,
+                                 ComparisonWays comparisons,
                                  java.util.function.Function<Core.Read, Core> settledBy) {
-        boolean holds = Witnessed.comesOut(value, true, settledBy);
-        boolean fails = Witnessed.comesOut(value, false, settledBy);
+        boolean holds = comparisons.comesOut(value, true, settledBy);
+        boolean fails = comparisons.comesOut(value, false, settledBy);
         if (!holds && !fails) {
             return null;
         }
@@ -384,11 +440,11 @@ public final class ValueArrivals<P> {
      * this reading can point at otherwise: where the right arrives at no value, claiming this way
      * arrives would be reading "I cannot say which" as "it comes out the way that stops here".
      */
-    private Paths<P> through(Core.Binary binary, Naming<P> naming,
+    private Paths<P> through(Core.Binary binary, Naming<P> naming, ComparisonWays comparisons,
                              Map<BindingId, Bound<P>> bound) {
         Truth goesOn = Truth.of(binary.op().rightRunsWhenLeftIs());
-        Paths<P> left = settle(binary.left(), naming, bound);
-        Paths<P> right = settle(binary.right(), naming, bound);
+        Paths<P> left = settle(binary.left(), naming, comparisons, bound);
+        Paths<P> right = settle(binary.right(), naming, comparisons, bound);
         if (left instanceof Paths.Beyond) {
             return left;
         }
@@ -414,12 +470,13 @@ public final class ValueArrivals<P> {
         return out.paths();
     }
 
-    private Paths<P> fork(Core.If iff, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
+    private Paths<P> fork(Core.If iff, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
         // Numbered where they are written and not where they survive: the arm a fork answers on is
         // its place among the arms, and one that answers nothing is skipped rather than closing the
         // gap and letting the next arm be called the first.
         Core[] arms = {iff.then(), iff.els()};
-        settle(iff.cond(), naming, bound);
+        settle(iff.cond(), naming, comparisons, bound);
         Comes cond = comesAt(iff.cond());
         Gathered out = new Gathered();
         for (int part = 0; part < arms.length; part++) {
@@ -427,7 +484,7 @@ public final class ValueArrivals<P> {
             if (!cond.mayCome(want)) {
                 continue;
             }
-            Paths<P> body = settle(arms[part], naming, bound);
+            Paths<P> body = settle(arms[part], naming, comparisons, bound);
             if (!arrivesAt(arms[part])) {
                 continue;
             }
@@ -466,8 +523,9 @@ public final class ValueArrivals<P> {
                 ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
     }
 
-    private Paths<P> arms(Core.Match match, Naming<P> naming, Map<BindingId, Bound<P>> bound) {
-        settle(match.scrutinee(), naming, bound);
+    private Paths<P> arms(Core.Match match, Naming<P> naming, ComparisonWays comparisons,
+                            Map<BindingId, Bound<P>> bound) {
+        settle(match.scrutinee(), naming, comparisons, bound);
         if (!arrivesAt(match.scrutinee())) {
             return new Paths.Held<>(List.of());
         }
@@ -475,7 +533,9 @@ public final class ValueArrivals<P> {
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
             Paths<P> body =
-                    settle(arm.body(), naming, with(bound, arm.binder(), oneWay(), null));
+                    settle(arm.body(), naming.insideArm(match, arm),
+                            comparisons.insideArm(match, arm),
+                            with(bound, arm.binder(), oneWay(), null));
             if (!arrivesAt(arm.body())) {
                 continue;
             }
@@ -494,9 +554,9 @@ public final class ValueArrivals<P> {
     }
 
     private Paths<P> attempted(Core.IfConstructed constructed, Naming<P> naming,
-                               Map<BindingId, Bound<P>> bound) {
+                               ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
         for (Core.FieldValue given : constructed.construct().values()) {
-            settle(given.value(), naming, bound);
+            settle(given.value(), naming, comparisons, bound);
             if (!arrivesAt(given.value())) {
                 return new Paths.Held<>(List.of());
             }
@@ -508,7 +568,7 @@ public final class ValueArrivals<P> {
         for (int part = 0; part < arms.size(); part++) {
             Map<BindingId, Bound<P>> inner =
                     part == 0 ? with(bound, constructed.binder(), oneWay(), null) : bound;
-            Paths<P> body = settle(arms.get(part), naming, inner);
+            Paths<P> body = settle(arms.get(part), naming, comparisons, inner);
             if (!arrivesAt(arms.get(part))) {
                 continue;
             }
@@ -541,7 +601,16 @@ public final class ValueArrivals<P> {
      */
     private final class Gathered {
 
-        private final List<Arrival<P>> ways = new ArrayList<>();
+        /**
+         * The ways, once each, in the order they arrived.
+         *
+         * <p>A set and not a list asked whether it holds one. What is kept is the same — an
+         * insertion-ordered set is the order the walk met them — and what goes is a search over
+         * everything gathered so far for every candidate: a naming whose equality is worked out
+         * from what the way consulted pays that search once per pair, and the cost of gathering
+         * one body's ways grew with their square.
+         */
+        private final SequencedSet<Arrival<P>> ways = new LinkedHashSet<>();
         private boolean beyond;
 
         boolean isBeyond() {
@@ -562,7 +631,7 @@ public final class ValueArrivals<P> {
                 ways.clear();
                 return;
             }
-            ways.add(way);
+            ways.addLast(way);
         }
 
         /** Each arrival held to what already holds along the way to it. */
@@ -580,7 +649,7 @@ public final class ValueArrivals<P> {
         }
 
         Paths<P> paths() {
-            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(ways);
+            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(List.copyOf(ways));
         }
     }
 

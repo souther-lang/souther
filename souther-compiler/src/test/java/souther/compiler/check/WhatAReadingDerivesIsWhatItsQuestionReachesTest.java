@@ -25,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>So a reading derives what its own question can reach: the atoms its clauses are decided by, and
  * the atoms the domain it was built from says anything about. The second half is not an optimisation
- * to be tidied away — {@link AProductIsBoundedByWhatThePathBoundsItsFactorsToTest#
- * aClauseReachesAProductThroughAGuardThatEquatesTheTwo} is a clause that names no product and
- * reaches one through a guard that related the two.
+ * to be tidied away — {@code aClauseReachesAProductThroughAGuardThatEquatesTheTwo} in
+ * {@link AProductIsBoundedByWhatThePathBoundsItsFactorsToTest} is a clause that names no product
+ * and reaches one through a guard that related the two.
  */
 class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
 

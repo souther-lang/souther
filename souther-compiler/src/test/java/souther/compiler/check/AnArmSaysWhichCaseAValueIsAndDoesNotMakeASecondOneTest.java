@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -8,7 +9,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -54,8 +57,11 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     private static final TypeSymbol AN_INT = TypeSymbol.primitive("Int");
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
-    private final PathEngine engine =
-            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    private final PathEngine engine = new PathEngine(
+            RuleReadingContext.unshared(
+                    RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+            Terms.Of.THE_DISCHARGE_TREE);
 
     @Test
     void anArmOverOneCaseIsAboutTheValueItOpened() {
@@ -63,7 +69,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
         FactSubject opened = in.at().subject(x.binding());
@@ -79,7 +85,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(
-                        List.of(CaseSelector.direct(FOUND), CaseSelector.direct(MISSING)),
+                        List.of(aLeaf(FOUND), aLeaf(MISSING)),
                         Type.ref(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
@@ -96,10 +102,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), first),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), first),
                 answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), second),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), second),
                 answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
@@ -113,7 +119,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), x),
                 answer, Known.top(), Denotations.none());
 
         FactSubject optional = engine.terms().subjectOf(answer, Denotations.none());
@@ -132,10 +138,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), first),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), first),
                 answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), second),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), second),
                 answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
@@ -150,7 +156,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), x),
                 written, Known.top(), Denotations.none());
 
         assertEquals(engine.terms().subjectOf(three, Denotations.none()),
@@ -165,7 +171,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
         assertEquals(answer, in.at().valueOf(x.binding()),
@@ -185,15 +191,18 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core answer = numericAnswer();
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
         Core.Binder y = CoreBinders.of(binders.binder("y", POS));
-        PathEngine reading = new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(),
-                Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        PathEngine reading = new PathEngine(
+                RuleReadingContext.unshared(
+                        RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE);
 
         Denotations outer = reading.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(
-                        List.of(CaseSelector.direct(AN_INT), CaseSelector.direct(MISSING)),
+                        List.of(aLeaf(AN_INT), aLeaf(MISSING)),
                         answer.type()), x),
                 answer, Known.top(), Denotations.none()).at();
-        Core.Case inner = arm(new Core.ResolvedPattern.Single(CaseSelector.direct(AN_INT)), y);
+        Core.Case inner = arm(new Core.ResolvedPattern.Single(aLeaf(AN_INT)), y);
         PathEngine.Entered in = reading.enteringArm(inner,
                 new Core.Read("x", x.binding(), answer.type(), POS), Known.top(), outer);
 
@@ -202,20 +211,23 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 "the rule the behavior stated about its Int case was taken in here");
     }
 
-    /** {@code ensures | Int v -> v > 0}, as the analysis holds it. */
-    private static StatedContract statesThatTheIntIsPositive() {
+    /** {@code ensures | Int v -> v > 0}, as a caller of the behavior has it — read from the
+     *  declaration's own holding of it, which is what answers one anywhere else. */
+    private static AssumedContract statesThatTheIntIsPositive() {
         BindingId value = new Hir.Binders(new BindingOwner.OfValue("demo", "findIt"))
                 .binder("v", POS).binding();
         Core states = new Core.Binary(BinOp.GT,
                 new Core.Read("v", value, Type.INT, POS), new Core.Int(0, Type.INT, POS),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, POS);
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
+        RuleRef.Ensures ref = new RuleRef.Ensures(new RuleId(FIND, 0, 0, AN_INT), AN_INT.name());
         return new StatedContract(FIND, List.of(), Type.INT,
-                List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
+                List.of(new StatedContract.StatedRule(
                         new Guard.Case(CaseSpace.resolve(CaseSelector.direct(AN_INT),
-                                Symbols.none(DefaultStdlib.get()))), value,
+                                PublishedDeclarations.NONE)), value,
                         Optional.empty(),
-                        List.of(new StatedContract.Conjunct(POS,
-                                new souther.compiler.check.TypedClause.Typed(states))))));
+                        List.of(new StatedContract.Conjunct(new PartId<>(ref, 0), POS,
+                                new souther.compiler.check.TypedClause.Typed(states))))))
+                .assumptions();
     }
 
     private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
@@ -226,20 +238,21 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                Type.ref(FOUND), POS);
+                ConstructOccurrence.unwritten(), Type.ref(FOUND), POS);
     }
 
     /** The same call, answering an optional — what an arm naming a present carrier is written over. */
     private static Core optionalAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                Type.option(Type.INT), POS);
+                ConstructOccurrence.unwritten(), Type.option(Type.INT), POS);
     }
 
     /** A call answering {@code Int | Missing}, which an arm may name either case of. */
     private static Core numericAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
+                ConstructOccurrence.unwritten(),
                 Type.union(new java.util.LinkedHashSet<>(List.of(AN_INT, MISSING))), POS);
     }
 
@@ -272,14 +285,16 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void aRuleHoldsOfAnArmWhoseValuesAreAllOnesItIsAbout() {
         Symbols symbols = symbolsOf(NESTED);
-        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        PathEngine reading = new PathEngine(
+                RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Terms.Of.THE_DISCHARGE_TREE);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
         Guard aboutOnceKind = new Guard.Case(
-                CaseSpace.resolve(CaseSelector.direct(once), symbols));
+                CaseSpace.resolve(CaseSelector.direct(once), ScopedDeclarations.of(symbols)));
         Guard aboutStation = new Guard.Case(
-                CaseSpace.resolve(CaseSelector.direct(station), symbols));
+                CaseSpace.resolve(CaseSelector.direct(station), ScopedDeclarations.of(symbols)));
 
         assertTrue(reading.impliedBy(aboutOnceKind, single(station)),
                 "a station is one of the values the rule about OnceKind is stated of");
@@ -291,29 +306,46 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void anArmNamingSeveralTakesARuleThatIsAboutAllOfThem() {
         Symbols symbols = symbolsOf(NESTED);
-        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        PathEngine reading = new PathEngine(
+                RuleReadingContext.unshared(RuleReadings.ofNoClauseFiled(symbols),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Terms.Of.THE_DISCHARGE_TREE);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
         TypeSymbol hospital = named(symbols, "Hospital");
         Type visitKind = Type.ref(named(symbols, "VisitKind"));
+        // Resolved the way the checker resolves an arm, so what the alternatives cover is this
+        // compile's answer rather than one written here.
         Core.ResolvedPattern both = new Core.ResolvedPattern.AnyOf(
-                List.of(CaseSelector.direct(station), CaseSelector.direct(hospital)), visitKind);
+                List.of(CaseSpace.resolve(CaseSelector.direct(station), ScopedDeclarations.of(symbols)),
+                        CaseSpace.resolve(CaseSelector.direct(hospital), ScopedDeclarations.of(symbols))), visitKind);
 
         assertTrue(reading.impliedBy(
-                        new Guard.Case(CaseSpace.resolve(CaseSelector.direct(once), symbols)), both),
+                        new Guard.Case(CaseSpace.resolve(CaseSelector.direct(once),
+                                ScopedDeclarations.of(symbols))), both),
                 "both alternatives are values the rule about OnceKind is stated of");
         assertFalse(reading.impliedBy(
-                        new Guard.Case(CaseSpace.resolve(CaseSelector.direct(station), symbols)), both),
+                        new Guard.Case(CaseSpace.resolve(CaseSelector.direct(station), ScopedDeclarations.of(symbols))), both),
                 "one of the alternatives is a value the rule says nothing of");
     }
 
     private static Core.ResolvedPattern single(TypeSymbol name) {
-        return new Core.ResolvedPattern.Single(CaseSelector.direct(name));
+        return new Core.ResolvedPattern.Single(aLeaf(name));
+    }
+
+    /** A leaf as this compile would resolve it: a case that covers itself. */
+    private static ResolvedCase aLeaf(TypeSymbol leaf) {
+        return ResolvedCase.of(CaseSelector.direct(leaf), List.of(leaf));
+    }
+
+    /** One of an optional's carriers, which covers itself and no leaf of anything. */
+    private static ResolvedCase aCarrier(CaseSelector carrier, TypeSymbol covers) {
+        return ResolvedCase.of(carrier, List.of(covers));
     }
 
     private static TypeSymbol named(Symbols symbols, String type) {
-        for (Hir.Def d : symbols.declarations().declaredIn("demo").values()) {
+        for (String declared : symbols.declaredNamesIn("demo")) {
+            Hir.Def d = symbols.declaredNode(new TypeKey("demo", declared));
             if (d.name().equals(type)) {
                 return d.declares();
             }

@@ -5,6 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
@@ -141,10 +145,13 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     /** One clause of one declaration, which is only an identity here. */
     private static AuthoredLine aLine() {
         return new AuthoredLine(
-                new RuleRef.Invariant(new Clause.Ref(
-                        new Clause.Id(TypeSymbols.declared(new TypeKey("example.probe", "Amount")),
-                                0),
-                        Optional.of(new ClauseName("floor")))),
-                0, new LineFacts(false, true, false), List.of());
+                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(
+                                        TypeSymbols.declared(
+                                                new TypeKey("example.probe", "Amount")), 0),
+                                Optional.of(new ClauseName("floor")))), 0),
+                        0))),
+                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), List.of());
     }
 }

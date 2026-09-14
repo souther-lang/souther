@@ -8,11 +8,15 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,15 +39,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CallElaboratorNoCalleeTest {
 
+    /** The applications are a body's: this test stands where an author's call stands. */
+    private static final ApplicationOrigin WROTE = new ApplicationOrigin.Written(
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0, SourceConstruct.CALL));
+
     private static final SourcePos AT = new SourcePos(7, 3);
 
     private static RuntimeException answerFor(ValueName denotes) {
         // As this module reaches it, whichever kind of name it is — which is what the arm of the
         // reference then says, and what this is about is the ones that reach no callee.
+        // Over a scope with no module in it: which arm answers is what the name denotes, and the
+        // one case that reads a declaration is a newtype applied to a count other than one, which
+        // is not what any of these is.
         return CallElaborator.noCallee(
-                new Hir.Apply("f", ReachName.of(denotes, "f", "m"),
-                        List.of(new Hir.IntLit(1, AT, null)),
-                        ConstructionOrigin.own(), AT, null));
+                Hir.Apply.synthetic("f", ReachName.of(denotes, "f", "m"),
+                        new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                        List.of(new Hir.IntLit(1, AT, null)), AT, null),
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */
@@ -64,7 +76,7 @@ class CallElaboratorNoCalleeTest {
     @Test
     void aTypeIsToldItConstructs() {
         RuntimeException e = answerFor(
-                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen")), null));
+                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen"))));
         CompileException c = assertInstanceOf(CompileException.class, e);
         assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, c.diagnostic().said());
         assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));
@@ -109,7 +121,7 @@ class CallElaboratorNoCalleeTest {
                 ValueName.Stdlib.operation("List", "map"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());
-            assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());
+            assertTrue(e.getMessage().contains(String.valueOf(AT)), () -> "says where: " + e.getMessage());
         }
     }
 
@@ -124,10 +136,11 @@ class CallElaboratorNoCalleeTest {
     @Test
     void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {
         Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), souther.compiler.types.RuleOrigin.unwritten(), AT, null);
-        RuntimeException e = CallElaborator.noCallee(new Hir.Apply(block,
-                List.of(new Hir.IntLit(1, AT, null)), ConstructionOrigin.own(), AT, null));
+        RuntimeException e = CallElaborator.noCallee(Hir.Apply.synthetic(block,
+                List.of(new Hir.IntLit(1, AT, null)), WROTE, AT, null),
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
 
         assertInstanceOf(IllegalStateException.class, e);
-        assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());
+        assertTrue(e.getMessage().contains(String.valueOf(AT)), () -> "says where: " + e.getMessage());
     }
 }

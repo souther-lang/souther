@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 
@@ -69,38 +70,51 @@ public record InputDemand(List<TermPath> paths) {
      * that change what a name means: a binding, and an arm that says which case the value it matched
      * turned out to be. Everything else is walked with the environment it stands in.
      *
-     * <p>Taken as {@link InputPaths} and not as the reader that implements it, so that the reading
-     * of the input is not reachable from here at all. It is the thing being built.
+     * <p>The reading of the input is not reachable from here, and is not reachable from what walks
+     * a body at all: {@link InputReads} knows what a name stands for and nothing about the model.
+     * Which is what lets this run — the reading is built over what this names, so whatever finds
+     * the names runs before there is one to consult.
      */
-    public static InputDemand of(Core body, InputPaths names, Symbols symbols) {
+    public static InputDemand of(Core body, InputReads names, Symbols symbols,
+                                 DeclarationNewtypes newtypes) {
         if (body == null) {
             return NONE;
         }
         Set<TermPath> found = new LinkedHashSet<>();
-        walk(body, names, symbols, found);
+        walk(body, names, symbols, newtypes, found);
         return new InputDemand(List.copyOf(found));
     }
 
-    private static void walk(Core e, InputPaths names, Symbols symbols, Set<TermPath> found) {
-        TermPath at = names.pathOf(e, symbols);
-        if (at != null) {
-            found.add(at);
+    private static void walk(Core e, InputReads names, Symbols symbols,
+                             DeclarationNewtypes newtypes, Set<TermPath> found) {
+        // What is demanded are the positions named, so an expression that stands nowhere demands
+        // none: what the model puts at no position, nothing asks for.
+        switch (names.pathOf(e, newtypes)) {
+            case PathResolution.At(var at) -> found.add(at);
+            case PathResolution.NotAPosition _ -> { }
+            // A name that may stand at a place stands there on some run, so each of them is asked
+            // for. Which of them this read is of is what could not be worked out, and taking one of
+            // them for the answer would leave the others unasked wherever the model reads nothing
+            // else of them.
+            case PathResolution.MayStandAt(var among) -> found.addAll(among);
         }
         switch (e) {
             // The body of a `let` is where the name stands for what was bound to it.
             case Core.LetIn let -> {
-                walk(let.value(), names, symbols, found);
-                walk(let.body(), names.and(let.binder(), let.value()), symbols, found);
+                walk(let.value(), names, symbols, newtypes, found);
+                walk(let.body(), names.and(let.binder(), let.value()), symbols, newtypes, found);
             }
             // And each arm under what the arm says the value it matched turned out to be, which is
             // the one step of a path no expression writes down.
             case Core.Match match -> {
-                walk(match.scrutinee(), names, symbols, found);
+                walk(match.scrutinee(), names, symbols, newtypes, found);
                 for (Core.Case arm : match.cases()) {
-                    walk(arm.body(), names.insideArm(match, arm, symbols), symbols, found);
+                    walk(arm.body(), names.insideArm(match, arm, symbols, newtypes), symbols,
+                            newtypes, found);
                 }
             }
-            default -> Core.forEachChild(e, child -> walk(child, names, symbols, found));
+            default ->
+                    Core.forEachChild(e, child -> walk(child, names, symbols, newtypes, found));
         }
     }
 

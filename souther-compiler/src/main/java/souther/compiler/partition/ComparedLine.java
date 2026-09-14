@@ -1,12 +1,13 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.BinOp;
-import souther.compiler.check.Carrier;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.Symbols;
-import souther.compiler.core.Core;
+import souther.compiler.inputs.ComparedNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
@@ -22,62 +23,55 @@ import souther.compiler.numeric.Place;
  * conditions of a body, the other the rules of a declaration — and the two have nothing to say to
  * each other about where to look.
  *
- * @param valueBelongsBelow whether {@code value} itself is on the low side. {@code x <= c} puts it
- *                          there; {@code x < c} puts it on the high side. Getting this wrong moves
- *                          the boundary by one and asks for a row that proves nothing
- * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
- *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
- *                          about the class the value is in and disagree here
- * @param singles           whether the comparison singles the value out rather than ordering the
- *                          values either side of it. An equality says nothing about ranges: what it
- *                          distinguishes is the value from every other value
+ * @param value  where the line falls on the order the number is counted on, which is not the order
+ *               the position is written on wherever the number is taken of what stands there: a
+ *               line at thirty minutes past the hour is at thirty, and what the position holds is a
+ *               time
+ * @param orders both of those, so that a reader writing a row knows what to write there and a
+ *               reader placing a line knows what it is placed against
+ *
+ * @param claim  what the comparison placed on the values, carried as the classification the rule
+ *               already has. An order says which side of the line the value it wrote belongs to and
+ *               whether it holds there; a rule that names a value says the second and has no side
+ *               to say — so opened into a boolean apiece, the second has to answer the first's
+ *               question and what it answers is invented
  */
 record ComparedLine(NumericTerm.FromOnePosition term, Place value,
-                    souther.compiler.inputs.TermOrders orders,
-                    boolean valueBelongsBelow, boolean holdsAtTheValue, boolean singles) {
+                    TermOrders orders, ComparisonClaim claim) {
+
+    ComparedLine {
+        // A line is drawn on a position's own number, which is the narrower kind of term, and the
+        // orders say which number they are of. Two spellings of one thing, so the second is refused
+        // here rather than read further along as a line on one number at the order of another.
+        orders.areOf(term);
+    }
 
     /**
      * What {@code comparison} draws, or null where it draws nothing.
      *
-     * <p>The position-bearing side is read first and the comparison is turned round where it is on
-     * the right: {@code 100000 >= cost} says what {@code cost <= 100000} says. The carrier is the
-     * position's own ({@link souther.compiler.inputs.InputDomain#carrierOf}), and the literal on the
-     * other side is read on it — a size call is an {@code Int} there, and a position holding dates
-     * is a day count.
+     * <p>Read once, by the reading every reader of a comparison shares
+     * ({@link ComparedNumber}): which number is compared, which side of it
+     * the comparison keeps, and where the other side falls on that number's order. What is left
+     * here is turning that into a line.
      *
-     * <p>The position's order and not the operand's type, which is a distinction that costs nothing
-     * here and everything next door. An operand that names a position is written as that position,
-     * so the two agreed wherever this reading reached an answer at all; the reading beside this one
-     * compares what an operation answered, and there the operands are whole numbers while the
-     * positions hold dates (#1018). One question with one place to ask it is what keeps that from
-     * depending on which reading a rule happens to fall into.
+     * <p><b>The number's order and not the position's.</b> A count of a string's characters is
+     * placed against whole numbers while what stands at the position is a string, and a rule on a
+     * position holding dates is placed against a day count. The two are one order only where the
+     * number is what the position holds — and a reading that took the position's order for both
+     * wrote a minute of a time as a time.
+     *
+     * <p>Nothing here is a number against a value its order writes where that reading comes to
+     * nothing, and there is nothing else for a spelling to try: which quantity a rule cuts is the
+     * arithmetic's answer, and this reading is reached only where the arithmetic had none.
      */
-    static ComparedLine asWritten(Core.Binary comparison, InputReads reads, Symbols symbols) {
-        BinOp op = comparison.op();
-        GuardThresholds.Named named = GuardThresholds.namedBy(comparison.left(), reads, symbols);
-        Place value = named == null ? null : named.order().literalOf(comparison.right(), symbols);
-        if (named == null || value == null) {
-            named = GuardThresholds.namedBy(comparison.right(), reads, symbols);
-            value = named == null ? null : named.order().literalOf(comparison.left(), symbols);
-            op = mirrored(op);
-        }
-        NumericTerm.FromOnePosition term = named == null ? null : named.term().atOnePosition();
-        souther.compiler.inputs.TermOrders orders = named == null ? null : named.orders();
-        if (term == null || value == null) {
-            // Nothing here is a position against a value this carrier writes, and there is nothing
-            // else for a spelling to try: which quantity a rule cuts is the arithmetic's answer,
-            // and this reading is reached only where the arithmetic had none.
-            return null;
-        }
-        return switch (ComparisonClaim.of(op)) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
-                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
-            // A value singled out has no low side of its own — the values either side of it are one
-            // class — so the side is written down as one answer and read by nobody.
-            case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
-            case ComparisonClaim.Nothing _ -> null;
-        };
+    static ComparedLine asWritten(StatedComparison comparison,
+                                  InputReading read, InputReads reads) {
+        // What the rule placed comes from the comparison and is carried as what it placed, so
+        // nothing on the way here has a side to fill in for a rule that has none — and nothing on
+        // the way here reads the operator, which the comparison has already been read for.
+        ComparedNumber.DrawnLine drawn = ComparedNumber.lineOf(comparison, read, reads);
+        return drawn == null ? null
+                : new ComparedLine(drawn.term(), drawn.at(), drawn.orders(), drawn.claim());
     }
 
     /**
@@ -88,8 +82,8 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
      * nine is not one of them, and reading it as a line on {@code a} would put a row at four and a
      * half. That is a quantity of its own ({@link BorderQuantity.OverAForm}) and is read elsewhere.
      */
-    static ComparedLine fromTheForm(AffineReading read, InputReads reads,
-                                    Symbols symbols) {
+    static ComparedLine fromTheForm(AffineReading read,
+                                    Quantities quantities) {
         if (read == null) {
             return null;
         }
@@ -101,29 +95,13 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         // The position's own order, not the order of whichever operand it was written beside. The
         // reading two methods up asks the same question of the same place, and `10 >= a + 1` names
         // the position on the right.
-        souther.compiler.inputs.TermOrders orders =
-                term == null ? null : reads.read().ordersOf(term, symbols);
+        TermOrders orders =
+                term == null ? null : quantities.ordersOf(term);
         if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;
         }
-        Carrier carrier = orders.answered();
         Place value = Count.of(read.cut());
-        return switch (read.claim()) {
-            case ComparisonClaim.Cut cut -> new ComparedLine(term, value, orders,
-                    cut.valueBelongsBelow(), cut.holdsAtTheValue(), false);
-            case ComparisonClaim.Singled singled ->
-                    new ComparedLine(term, value, orders, true, singled.holdsAtTheValue(), true);
-            case ComparisonClaim.Nothing _ -> null;
-        };
+        return new ComparedLine(term, value, orders, read.claim());
     }
 
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
 }

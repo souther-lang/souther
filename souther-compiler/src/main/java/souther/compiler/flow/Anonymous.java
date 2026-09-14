@@ -35,6 +35,11 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
+    public Naming<AnonymousPath> insideArm(Core.Match match, Core.Case arm) {
+        return this;
+    }
+
+    @Override
     public AnonymousPath side(Core value, boolean held) {
         return AnonymousPath.INSTANCE;
     }

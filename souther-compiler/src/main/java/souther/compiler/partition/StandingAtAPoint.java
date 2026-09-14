@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 
@@ -8,7 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 
 /**
  * Whether a tuple of values stands at one point of a border.
@@ -35,21 +36,82 @@ public final class StandingAtAPoint {
      * read leaves the point undecided; a tuple that stands at the level and has no account of its
      * run is one nothing can say reached the comparison, which is not the same as one that ran and
      * did not reach it. Which of them a caller may treat as a miss is the caller's to say.
+     *
+     * <p><b>And the two that found the values are a case of their own.</b> A caller that wants to
+     * know whether the values were seen where the line is asks {@link AtPoint}, and one that wants
+     * to know whether anything watched the run tells its two arms apart — so which readers those
+     * two answers are alike to is settled here, once, rather than by each of them writing the pair
+     * into an arm of its own switch. A caller free to write its own pair is free to write any pair,
+     * and the pair that costs something is a walk that could not look put beside a walk that looked
+     * and found nothing.
      */
-    public enum Met { YES, NO, NOT_WATCHED, UNREADABLE }
+    public sealed interface Met {
+
+        /** The values stand where the line is. */
+        sealed interface AtPoint extends Met {}
+
+        /** And something watched the run reach the comparison, where reaching it was asked. */
+        record Reached() implements AtPoint {}
+
+        /** And nothing watched it get there, which this found out rather than concluded. */
+        record NotWatched() implements AtPoint {}
+
+        /** The values were read, and they are not where the line is. */
+        record NotAtPoint() implements Met {}
+
+        /**
+         * There was nothing at the point to compare, and this is what stopped there being one.
+         *
+         * <p>Carries every reason rather than the fact of there being some, and never one of them
+         * over another. A reader handed the case alone can say only that something went unread —
+         * which is {@code Observed} from {@code TruncatedByLimit} from {@code Absent} being lost one
+         * layer before anybody needs it; handed the strongest, it is lost wherever a point met both.
+         */
+        record CouldNotTell(Set<ReadingGap> why) implements Met {
+
+            public CouldNotTell {
+                if (why == null || why.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a point nothing could be told about says what stopped the telling");
+                }
+                // In the order they were met, for the reason a report keeps any order.
+                why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            }
+        }
+
+        Met REACHED = new Reached();
+
+        Met NOT_WATCHED = new NotWatched();
+
+        Met NOT_AT_POINT = new NotAtPoint();
+    }
 
     /**
      * The first of {@code rows} that stands there, or why none was found.
      *
-     * @param site which comparison a row has to have got an answer out of, for a rule that meeting
-     *             takes more than standing at the level. Empty where standing there is the whole
-     *             of it
+     * <p>Takes the line as one measurement's reading of it, so that the walk a row's values are
+     * found by is the one the line was measured against. Handed the quantity beside a walk, a
+     * caller could put a line drawn at one reading to the rows of a behavior read at another —
+     * which two behaviors taking a parameter spelled the same way is all it takes.
+     *
+     * @param watched every place a run through the comparison a row has to have got an answer out
+     *             of is recorded, for a rule that meeting takes more than standing at the level.
+     *             Empty where standing there is the whole of it. The places a run is written down
+     *             and not which comparison it is, because what this asks them of is a run's own
+     *             record.
+     *             <p>Several where one rule is written into the tree that runs more than once, and
+     *             a run that got an answer out of any of them got one out of the rule: they are
+     *             one comparison the author wrote, and which of its copies ran is the operation's
+     *             business rather than the model's
      */
-    public static Met met(BorderQuantity quantity, BehaviorInputs where, List<ObservedInputs> rows,
-                          Criterion criterion, Optional<ComparisonOccurrence> site) {
-        boolean unreadable = false;
+    public static Met met(MeasuredInput.BorderReading line,
+                          List<ObservedInputs> observed, Criterion criterion,
+                          List<ComparisonEmissionSite> watched) {
+        BorderQuantity quantity = line.quantity();
+        BehaviorInputs where = line.subject().inputs();
+        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
-        for (ObservedInputs row : rows) {
+        for (ObservedInputs one : observed) {
             // A row has more than one value at a position inside a sequence, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
             // every point on such a line came back undecided — a measurement that could not look,
@@ -57,31 +119,30 @@ public final class StandingAtAPoint {
             // The first reading both answers the point and says which steps the line's positions
             // take; the rest are tried under each choice those steps allow.
             Map<TermPath, Integer> held = new LinkedHashMap<>();
-            OneReadingOfARow first = new OneReadingOfARow(where, row, Map.of(), held);
+            OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             boolean stands = false;
-            boolean stopped = false;
-            for (OneReadingOfARow reading : readings(where, row, quantity, criterion, first, held)) {
+            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            for (OneReadingOfARow reading : readings(where, one, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
-                    // A reading that could not look, unless what it could not find was an element
-                    // the row wrote none of — that is a row that was read and does not stand, and
-                    // said of the reading it happened in rather than of the row, since another
-                    // reading of the same row may reach the point.
-                    case UNREADABLE -> stopped = stopped || !reading.wroteNothing();
-                    case NO -> { }
-                    case YES -> stands = true;
+                    // A reading that could not look. What the row wrote nothing at is not among
+                    // these: the quantity answers for the row there, since it is the quantity that
+                    // knows whether a position it wrote nothing at leaves it a value.
+                    case BorderQuantity.Stands.CouldNotTell it -> stopped.addAll(it.why());
+                    case BorderQuantity.Stands.No _ -> { }
+                    case BorderQuantity.Stands.Yes _ -> stands = true;
                 }
                 if (stands) {
                     break;
                 }
             }
             if (stands) {
-                if (site.isEmpty()) {
-                    return Met.YES;   // writing the value is the whole of what there is to reach
+                if (watched.isEmpty()) {
+                    return Met.REACHED;   // writing the value is the whole of what there is to reach
                 }
-                switch (row.watched()) {
+                switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (site.stream().allMatch(account::reached)) {
-                            return Met.YES;
+                        if (gotAnAnswerOutOfTheRule(watched, account)) {
+                            return Met.REACHED;
                         }
                     }
                     // It stands where the line is and nothing watched it get there. Said rather
@@ -90,12 +151,15 @@ public final class StandingAtAPoint {
                     case Generator.Watched.NoAccount _ -> unwatched = true;
                 }
             }
-            unreadable = unreadable || stopped;
+            unreadable.addAll(stopped);
         }
-        if (unreadable) {
-            return Met.UNREADABLE;
+        // Every reason any row met, the way one reading collects every reason its terms met. A
+        // point tried against several rows is one this could not tell about for whatever stopped
+        // any of them, and taking the strongest would say which row this walk began with.
+        if (!unreadable.isEmpty()) {
+            return new Met.CouldNotTell(unreadable);
         }
-        return unwatched ? Met.NOT_WATCHED : Met.NO;
+        return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }
 
     /**
@@ -116,47 +180,53 @@ public final class StandingAtAPoint {
     private static final class OneReadingOfARow implements BorderQuantity.Observation {
 
         private final BehaviorInputs where;
-        private final ObservedInputs row;
+        private final ObservedInputs observedInputs;
         /** The element chosen at each step, for this reading. */
         private final Map<TermPath, Integer> chosen;
         /** How many elements each step was found to have, over every reading so far. */
         private final Map<TermPath, Integer> held;
-        private boolean wroteNothing;
 
-        OneReadingOfARow(BehaviorInputs where, ObservedInputs row,
+        OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
                          Map<TermPath, Integer> chosen,
                          Map<TermPath, Integer> held) {
             this.where = where;
-            this.row = row;
+            this.observedInputs = observedInputs;
             this.chosen = chosen;
             this.held = held;
         }
 
         @Override
-        public ObservedValue at(TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(row.inputs(), path);
-            if (values == null) {
-                return null;   // the walk and the type disagree, which is the quantity's to report
-            }
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            // Over the arms, so that a walk coming to answer a third way is one this has to be
+            // taught about rather than one quietly read as a walk that could not be made.
+            return switch (where.occurrencesAt(observedInputs.inputs(), path)) {
+                // The walk and the type disagree, which is the quantity's to report.
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
+                        WalkResult.reached(standingAmong(values));
+            };
+        }
+
+        /** Which of the row's answers this reading gets at a position the walk arrived at. */
+        private ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
             if (values.isEmpty()) {
-                // The row wrote no element here, so nothing of it stands anywhere on this line.
-                // That is a row that was read and does not reach the point, and reporting it as a
-                // value nothing could read leaves the point undecided over a row that plainly
-                // settles it.
-                wroteNothing = true;
-                return null;
+                // The row wrote no element here, which is a row that was read. What that leaves a
+                // quantity is the quantity's to say, and it says it where it knows what the
+                // position is worth to the number it is reading.
+                return ObservationAtPoint.WROTE_NOTHING;
             }
             for (BehaviorInputs.Occurrence each : values) {
                 each.at().forEach((step, ordinal) -> held.merge(step, ordinal + 1, Math::max));
             }
             for (BehaviorInputs.Occurrence each : values) {
                 if (agrees(each)) {
-                    return each.value();
+                    return new ObservationAtPoint.Value(each.value());
                 }
             }
             // No value here under this reading. Not a stop: the reading names an element this
             // position does not have, and another reading is where its values are.
-            return null;
+            return ObservationAtPoint.ANOTHER_READING;
         }
 
         /**
@@ -171,10 +241,10 @@ public final class StandingAtAPoint {
          * written nothing here: it wrote a container, and what it holds is none.
          */
         @Override
-        public List<ObservedValue> everyValueAt(TermPath path) {
-            // Null where the walk and the type disagree, which is the quantity's to report, as it
-            // is for the one value a place holds.
-            return where.valuesAt(row.inputs(), path);
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            // The walk's own answer handed on, which is the quantity's to report where it could not
+            // be taken, as it is for the one value a place holds.
+            return where.valuesAt(observedInputs.inputs(), path);
         }
 
         /** Whether {@code each} was reached through the elements this reading chose. */
@@ -187,11 +257,6 @@ public final class StandingAtAPoint {
             }
             return true;
         }
-
-        /** Whether the row wrote nothing at some position this line is over. */
-        boolean wroteNothing() {
-            return wroteNothing;
-        }
     }
 
     /**
@@ -201,14 +266,14 @@ public final class StandingAtAPoint {
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
      */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs row,
+    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs observed,
                                                    BorderQuantity quantity, Criterion criterion,
                                                    OneReadingOfARow first,
                                                    Map<TermPath, Integer> held) {
         quantity.standsAt(criterion, first);
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(held)) {
-            out.add(new OneReadingOfARow(where, row, choice, held));
+            out.add(new OneReadingOfARow(where, observed, choice, held));
         }
         return out;
     }
@@ -241,4 +306,21 @@ public final class StandingAtAPoint {
     private static final int MOST_READINGS = 256;
 
     private StandingAtAPoint() {}
+
+    /**
+     * Whether a run got an answer out of the rule, given every place the rule is watched at.
+     *
+     * <p><b>Any of them, because they are one rule.</b> A library operation may evaluate a closure
+     * it was handed more than once — {@code List.distinctBy} asks its key twice — so a comparison
+     * the author wrote once is written into the tree that runs more than once and each copy is
+     * watched. Which of them ran is the operation's business; what the model states is the one rule,
+     * and a run that got an answer out of any copy got one out of it.
+     *
+     * <p>Asked for all of them, a row would owe a run through every copy an operation happens to
+     * make — a debt against how the library is written rather than against anything the model says.
+     */
+    static boolean gotAnAnswerOutOfTheRule(List<ComparisonEmissionSite> watched,
+                                           AlignedObservation account) {
+        return watched.stream().anyMatch(account::reached);
+    }
 }

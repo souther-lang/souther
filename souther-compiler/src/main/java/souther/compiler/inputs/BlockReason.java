@@ -1,6 +1,11 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.CoverageObligation;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.regex.Meter;
+import souther.compiler.regex.PatternRead;
+
+import java.util.Comparator;
+import souther.compiler.values.UnreadReason;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -41,7 +46,22 @@ public sealed interface BlockReason {
      * used to be a comment saying which reasons a caller must not be handed is now the parameter
      * type.
      */
-    sealed interface ReadingStopReason extends BlockReason {}
+    sealed interface ReadingStopReason extends BlockReason {
+
+        /**
+         * Whether a run of this compiler that allows more could get past this.
+         *
+         * <p>Asked of a stop and of nothing else. These are exactly the reasons a measurement can
+         * be left open by, and the ones that are not among them were read from end to end — they
+         * leave no measure short of anything and so have nothing here to be asked about. A reason
+         * answering for a measure it does not weaken is an answer a report could reach for.
+         *
+         * <p>The question is the allowances and never the person: did a figure this compiler
+         * compared something against stop it. What an author or an operator may go on to do is what
+         * the reasons themselves say, one word at a time.
+         */
+        RunSensitivity runSensitivity();
+    }
 
     /**
      * A reading that ran to the end of the rules and could not work out what they leave.
@@ -57,7 +77,18 @@ public sealed interface BlockReason {
      * remember which arms are the exception, and the day one forgot it would name a rule that
      * nothing was wrong with.
      */
-    sealed interface AnswerRealizationStopped extends ReadingStopReason {}
+    sealed interface AnswerRealizationStopped extends QuestionStandingReason {
+
+        /** All three are an allowance a reading was granted running out, which is a figure a run
+         *  may allow more of. */
+        @Override
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _,
+                     BehaviorDistinctionsTooCostly _ -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
 
     /**
      * A rule of the model that is no line at a position it is about, however that came about.
@@ -75,36 +106,51 @@ public sealed interface BlockReason {
      * observable predicate — this rule has no line here — and that is what the name says.
      */
     sealed interface RuleWithoutLineReason extends BlockReason {
-
-        /**
-         * Whether {@code measure} is thereby short of something.
-         *
-         * <p>Which of the two halves the reason is in answers most of it. A reading that stopped
-         * leaves what the rule states unknown, and what it would have divided or bounded is exactly
-         * the part that was not read; a rule read to the end that divided no position states what
-         * it states, and nothing is missing. So the second half answers alike and the first is asked
-         * per reason.
-         */
-        boolean leavesShort(CoverageObligation.Measure measure);
     }
 
     /**
-     * A shortfall about a rule of the model, whatever became of the reading of it.
+     * A rule with no line here where this compiler is what fell short, whether or not the shortfall
+     * is about the rule.
+     *
+     * <p>The half of {@link RuleWithoutLineReason} that is a stop, beside {@link
+     * ReadToEndWithoutLine}, which is the half that is not. What a caller asks this for is whether
+     * anything is outstanding at the place a finding sits — a rule read to the end says the model
+     * states something, and one of these says nobody knows yet.
+     *
+     * <p>Wider than {@link RuleReadingStopped} by exactly what does not name a rule. A rule whose
+     * own reading stopped is answerable as that rule; a rule whose position could not hand its sets
+     * on is not, and both leave the same thing outstanding here. Held as the narrower type, a
+     * shortfall no rule is answerable for could only be carried by pretending one is.
+     */
+    sealed interface StoppedWithoutALine extends RuleWithoutLineReason, ReadingStopReason {
+    }
+
+    /**
+     * A shortfall that leaves a question a rule raised standing.
      *
      * <p>The third capability, and it cuts across the other two the way they cut across each other.
-     * A rule a reading held and gave up on is one of these and is also a stop and also a rule with
-     * no line; a rule no reading claimed is one of these and is neither of those — nothing stopped,
-     * because nothing started, and no reader is answerable for a line it never drew.
+     * A rule a reading gave up on is one of these and is also a rule with no line; an answer the
+     * rules come to that was not built is one of these and is neither of those — it names no rule,
+     * and no reading drew a line it could be the absence of.
      *
-     * <p>What a caller typed here is promised is that there is a rule to name. That is what the
-     * question a rule raises needs and all it needs: {@link souther.compiler.inputs.StandingQuestion}
-     * carries the rule already, and what it is short of is about that rule rather than about the
-     * place it stands at. Typed by {@link RuleReadingStopped} instead, a question no reading claimed
-     * had to be answered with some reading's account of stopping — and every reader downstream that
-     * takes a stop, a line that came to nothing, or a position's verdict would take that answer as
-     * well.
+     * <p><b>Two ways for one question to stand, and both may hold of it at once.</b> The rule the
+     * question is of may be one a reading gave up on, and the answer its position finally admits
+     * may be one nothing built. The two are recorded in different places — the first under the
+     * rule, the second at the position, because no rule is answerable for it — and a rule with a
+     * conjunct nothing reads beside a choice whose meet ran past the allowance stands on both. A
+     * caller handed one of them where two hold is told to rewrite a form, and the position stays as
+     * wide as it was for a reason nothing said.
+     *
+     * <p>What is promised here is that a reading fell short, and not that there is a rule to name.
+     * {@link souther.compiler.inputs.StandingQuestion} carries the rule it is of already: which
+     * rule raised the question and what stopped the answer are two facts, and a type that made the
+     * second promise the first is what sent an answer-level limit out as a rule nobody interpreted.
+     *
+     * <p>Not every stop. A position whose rules were never reached raises no question at all, so
+     * {@link AboutThePosition} is the half of {@link ReadingStopReason} that is not this.
      */
-    sealed interface AboutARule extends BlockReason {}
+    sealed interface QuestionStandingReason extends ReadingStopReason {
+    }
 
     /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
@@ -118,51 +164,130 @@ public sealed interface BlockReason {
      *
      * <p>Which is why a reading's own answer for having stopped may only be one of these. What such
      * a rule would have raised is exactly the part that was not read, so an obligation cannot be
-     * built from it; that the model is thereby short of something is what {@link #leavesShort} says
-     * instead.
+     * built from it — and a rule filed under one of these travels as
+     * {@link StandingQuestion.Unclassified}, which says which question nothing worked out and names
+     * no subject for it.
      *
      * <p><b>The one reason in all three capabilities.</b> A rule this got partway through is a rule
-     * with no line here, it is this compiler having fallen short, and it is about a rule — so it is
-     * the only member of {@link ReadingStopReason} that names a rule, and the only member of
-     * {@link RuleWithoutLineReason} a caller asking about a stop may be handed.
+     * with no line here, it is this compiler having fallen short, and it leaves the question that
+     * rule raised standing — so it is the only member of {@link RuleWithoutLineReason} a caller
+     * asking about a stop may be handed, and the only member of {@link QuestionStandingReason}
+     * that names a rule.
      */
-    sealed interface RuleReadingStopped extends RuleWithoutLineReason, ReadingStopReason,
-            AboutARule {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason {
 
         /**
-         * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
-         * answered with a set of them: a set is open at the measure end, so a third measure would
-         * be one every reason had silently answered "not short of" — which is the shape this whole
-         * arrangement is against, a new measure inheriting what two others happened to share. This
-         * way a reason added fails the inner switch and a measure added fails the outer, and
-         * whichever axis grows has to be answered for.
+         * These in a steady order, which is one two of them are equal in only where they are equal.
+         *
+         * <p>Beside the members and not inside whoever sorts them. A sealed type is a set and not a
+         * sequence — {@code getPermittedSubclasses} says so itself, answering in no order it
+         * specifies — so a walk reading its array as a sequence takes an order from something that
+         * has none. Written here, whoever adds a member places it; written where a carrier sorts,
+         * the next carrier to need an order writes a second one.
+         *
+         * <p><b>The whole of what one is, and not which kind it is.</b> A member that carries
+         * something is two facts where what it carries differs, so an order over the kinds alone
+         * leaves those wherever the walk put them — which is what the order is here to stop. So the
+         * kind is compared, and then whatever the kind holds.
+         *
+         * <p><b>Steady and nothing else.</b> What the result means is nothing beyond which comes
+         * first, and it says nothing about what an author wrote: that is a fact about where the
+         * rules stand and is asked where the places are ({@code AdequacyReport}). This is what
+         * keeps one compiler over one source publishing one document where nobody wrote an order.
+         *
+         * <p>A switch and no {@code default}, so a reason added to the vocabulary is placed by
+         * whoever adds it rather than arriving wherever the runtime happened to put it.
+         */
+        Comparator<RuleReadingStopped> IN_A_STEADY_ORDER =
+                Comparator.<RuleReadingStopped>comparingInt(RuleReadingStopped::rank)
+                        .thenComparing(RuleReadingStopped::carrying,
+                                Comparator.nullsFirst(Comparator.naturalOrder()));
+
+        /** What a member carries, where it carries anything a second of its kind can differ in. */
+        private static Meter.Stopped carrying(RuleReadingStopped reason) {
+            return reason instanceof OrderedExtentTooCostly it ? it.stopped() : null;
+        }
+
+        private static int rank(RuleReadingStopped reason) {
+            return switch (reason) {
+                case UnreadComparisonForm _ -> 0;
+                case UnreadComparisonDomain _ -> 1;
+                case ValueRuleRelatingTwoPositions _ -> 2;
+                case CasePairingNotDetermined _ -> 3;
+                case RuleAboutADerivedValue _ -> 4;
+                case UnreadValueRule _ -> 5;
+                case PatternTooDeeplyNested _ -> 6;
+                case PatternTooCostly _ -> 7;
+                case OrderedExtentTooCostly _ -> 8;
+                case RuleAboutAnElementOfSeveralSequences _ -> 9;
+                case EndLeftOpenByAChoice _ -> 10;
+                case ValueRuleLeftOpenByAChoice _ -> 11;
+            };
+        }
+
+        /**
+         * Whether a position holding this rule has values nothing can claim are what the rules
+         * leave.
+         *
+         * <p>What a caller means by "a reading stopped here" and what this type is
+         * ({@link RulesWithNoLine#aReadingThatStopped}). They were one question while every rule
+         * this compiler got partway through was one the reading of values got partway through: a
+         * rule that reaches a position and is not taken in leaves the values there an upper bound,
+         * and a reader deciding whether the position was answered exactly asked which type the
+         * reason had.
+         *
+         * <p>They are not one question. A rule can be read to the end by the reading that says
+         * which values may stand at a position and be one the reading that says where they stop
+         * could not follow — and then the values are exactly what the rules leave, and only the
+         * line is missing. Answered off the type, such a position comes back as one whose cases
+         * are all unsettled because a rule went unread, on the strength of a border.
+         *
+         * <p>One switch, as {@link #runSensitivity} is one, and for the same reason: the answers
+         * are only reviewable together. Every arm that was here before this question was asked
+         * answers as it did — each of them is a stop of the reading that turns clauses into sets of
+         * values — so nothing about what a position admits moves by this being asked.
+         */
+        default boolean widensWhatThePositionAdmits() {
+            return switch (this) {
+                // The reading of ends could not follow an alternative, and every alternative's
+                // values were read. What the position admits is what the rules leave; the line
+                // through them is what nobody worked out.
+                case EndLeftOpenByAChoice _ -> false;
+                // And the same operator read the other way does widen it, which is the whole
+                // difference between the two: what the alternatives admit was not read here, so
+                // the position holds whatever a value taking the unread branch may hold.
+                case PatternTooCostly _, PatternTooDeeplyNested _, OrderedExtentTooCostly _,
+                     UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     ValueRuleLeftOpenByAChoice _,
+                     ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
+            };
+        }
+
+        /**
+         * One switch over the twelve, and the reason for it being one: a division of these into two
+         * is only reviewable where all twelve answers are visible together.
          */
         @Override
-        default boolean leavesShort(CoverageObligation.Measure measure) {
-            return switch (measure) {
-                // A comparison in a form no reader takes apart may have divided the position or
-                // bounded it, and nothing knows which — so both.
-                // And a pattern whose machine was not made is a rule that leaves no line, which is
-                // what every other reason here is. What the position holds is wider than the rule
-                // says, so a division the rule implies is not made and an end it states is not
-                // found — short of both, and short of them because of this rule.
-                //
-                // What is not here is the answer nobody could work out. That leaves the position
-                // short of the same two things and is not a rule without a line, because it is not
-                // about a rule at all — a caller asking which of an author's rules has no line
-                // would be handed one that is not the matter.
-                case PARTITION -> switch (this) {
-                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
-                         PatternTooDeeplyNested _,
-                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
-                };
-                case BOUNDARY -> switch (this) {
-                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
-                         PatternTooDeeplyNested _,
-                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
-                };
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                // Three figures this compiler compared a rule against: the states a pattern is
+                // built into, how deeply one may be bracketed, and the machines that say where the
+                // strings it admits stop. A run allowed more of any of them need not stop at the
+                // same rule.
+                case PatternTooCostly _, PatternTooDeeplyNested _,
+                     OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                // And eight where nothing was compared against anything. A form nothing takes
+                // apart, values no line can be drawn on, a rule about a value made from this one, a
+                // rule about an element of one of several sequences, a relation between two
+                // positions and a pairing nothing worked out are all met again by a run allowed
+                // more of everything. So is an end a choice left open: what the reading of ends
+                // stops on is a form it does not enter, and there is no figure it stopped at.
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _,
+                     CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
             };
         }
     }
@@ -170,11 +295,20 @@ public sealed interface BlockReason {
     /**
      * A rule read to the end that left no position divided, which is the other half.
      *
-     * <p>Three ways for that to happen and they are three: the quantity the rule cuts is empty, the
-     * quantity is a form over several positions and divides none of them on its own, and the line
-     * falls where the quantity never runs. Each is a fact about the rule rather than about this
-     * compiler — the reading finished — and each is still worth saying, because a position nothing
-     * is said about comes back as one the model states nothing about, and the model states this.
+     * <p><b>The reading of the rule succeeded.</b> That is the line between this and
+     * {@link ReadingStopReason} and it is a line about the reading, not about how sure anybody is:
+     * a rule reaches here having been taken in through this position, and what is absent is an
+     * ordered line coming out of what it says. A reader that cannot tell which half it is in is
+     * holding a rule it did not finish, and that is the other half — there is no arm here for
+     * "read far enough to guess", and one added would be this compiler's uncertainty filed as a
+     * fact about the model.
+     *
+     * <p>Ways for that to happen, and they are their own: the quantity the rule cuts is empty, the
+     * quantity is a form over several positions and divides none of them on its own, the line falls
+     * where the quantity never runs, and the rule divides the position by something that is not an
+     * order at all. Each is a fact about the rule rather than about this compiler — the reading
+     * finished — and each is still worth saying, because a position nothing is said about comes
+     * back as one the model states nothing about, and the model states this.
      *
      * <p>No measure is short of anything here, and that is what makes them one half rather than
      * three reasons that happen to agree. A rule that was read has had whatever it places placed by
@@ -187,11 +321,6 @@ public sealed interface BlockReason {
      * type stood for both halves.
      */
     sealed interface ReadToEndWithoutLine extends RuleWithoutLineReason {
-
-        @Override
-        default boolean leavesShort(CoverageObligation.Measure measure) {
-            return false;
-        }
     }
 
 
@@ -208,7 +337,23 @@ public sealed interface BlockReason {
      * rules and reports one of these, so this whole half sits inside {@link ReadingStopReason} and
      * the two questions meet only at {@link RuleReadingStopped}.
      */
-    sealed interface AboutThePosition extends ReadingStopReason {}
+    sealed interface AboutThePosition extends ReadingStopReason {
+
+        /** The same switch over the five ways a reading never got to a position's rules. */
+        @Override
+        default RunSensitivity runSensitivity() {
+            return switch (this) {
+                // A type nothing could interpret, a path returning to a declaration it has been
+                // through, and a place this does not reach into. None of them is a figure anything
+                // was compared against.
+                case TypeUnresolved _, RecursiveExpansion _, UnsupportedTraversal _,
+                     ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
+                // And the one figure among them: a reading that stopped at the depth it could
+                // afford, which a run allowed to read further need not stop at.
+                case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
 
     /**
      * What a value reading's account of a rule it could not use comes to here.
@@ -243,13 +388,17 @@ public sealed interface BlockReason {
         }
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
-            case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
+            case FORM_NOT_READ -> new UnreadValueRule();
+            // Its own, and not the one above. Both leave what may stand at the position open and
+            // an author does different work about them: one is a clause to rewrite and one is a
+            // branch beside a clause that reads.
+            case ALTERNATIVE_NOT_READ -> new ValueRuleLeftOpenByAChoice();
             case PATTERN_TOO_COSTLY -> new PatternTooCostly();
             case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
-            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED -> throw new IllegalStateException(
-                    "refused above: " + why);
+            case EXACT_VALUES_TOO_COSTLY, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
+                    throw new IllegalStateException("refused above: " + why);
         };
     }
 
@@ -268,19 +417,68 @@ public sealed interface BlockReason {
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
-            // The one a reading can be short of that is about no rule at all, and the reason this
-            // answers a wider type than the one below. A caller here is asking what stopped the
-            // reading of a position, which this is; asking which rule it was is the other question
-            // and has no answer.
+            case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
+            // And every other way this reading is short by the one below, since all of them leave a
+            // question of a rule standing. Written out rather than defaulted to: a reason added to
+            // the vocabulary is a decision about which of the two halves it is, and a default takes
+            // that decision by arriving at whichever arm was written last.
+            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY, PATTERN_TOO_DEEPLY_NESTED ->
+                    ofAQuestionStandingOn(why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding a question a rule raised that nothing answered.
+     *
+     * <p>Two kinds of reason reach a standing question and one does not. A rule this reading gave
+     * up on and an answer it could not build both leave the question where they found it; a reading
+     * that never arrived at the position raises no question for anything to stand on, so one of
+     * those here is a caller answering a question out of a place it never looked.
+     *
+     * <p>Refused by naming the two rather than by asking what came back from the one above. Which
+     * capability a reason arrives in is what this decides, so reading it off a reason this made is
+     * deciding it twice — and a reason added to the vocabulary would be classified by whichever arm
+     * it happened to land in instead of stopping the compile here.
+     */
+    static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
+        return switch (why) {
             case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            default -> ofARuleTheValueReadingLeft(why);
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+                 PATTERN_TOO_DEEPLY_NESTED -> ofARuleTheValueReadingLeft(why);
+            case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " leaves no question of a rule standing: "
+                            + why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding what the answer at a position was short of.
+     *
+     * <p>The other half of the pair above, and refused the same way: a reason about a rule is filed
+     * under that rule and does not come this way, and a reason about neither is a reading that never
+     * arrived. What is left is a fact about what the rules of a position come to between them, which
+     * names no rule and sends a reader to no clause.
+     */
+    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(UnreadReason why) {
+        if (why.about() != UnreadReason.About.THE_ANSWER) {
+            throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " is not one the answer was short of: " + why);
+        }
+        return switch (why) {
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            // Refused above, each of them, and named here so that a reason added to the vocabulary
+            // stops this rather than arriving as whichever arm is nearest.
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+                 PATTERN_TOO_DEEPLY_NESTED, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
+                    throw new IllegalStateException("refused above: " + why);
         };
     }
 
     /**
      * The type at the position could not be interpreted: a name denoting no declaration, or a
-     * newtype whose {@code value} the walk over the names could not reach. Such a model compiles, so
-     * this is a position a report is asked about and cannot be answered for.
+     * newtype whose {@code value} the walk over the names could not reach. A report is written
+     * about such a model, so this is a position a report is asked about and cannot be answered for.
      */
     record TypeUnresolved() implements AboutThePosition {}
 
@@ -350,6 +548,26 @@ public sealed interface BlockReason {
     record RuleAboutADerivedValue() implements RuleReadingStopped {}
 
     /**
+     * A rule is written about an element of a sequence, in a block handed to more than one walk.
+     *
+     * <p>One block written once and given to two operations: the name it reads the element under
+     * holds an element of a different sequence on each run, so a rule inside it is about one of
+     * them and nothing here says which. It is filed at every one of them, because that is what is
+     * known — the rule is about one of these places and each is a place a reader can be sent to.
+     *
+     * <p>And filed at each of the ones there are where a run through the block stands at no
+     * position of the input at all — a block handed to a walk over a list written in the body as
+     * well as over a parameter. What that run says about the input is nothing, and what the others
+     * say is still owed where they say it.
+     *
+     * <p>Its own case and not {@link RuleAboutADerivedValue}. Nothing was made out of the element
+     * and there is no operation to invert; an author told that one would go looking for a
+     * computation that is not there. What lifts this is telling the two walks apart, and what an
+     * author can do about it today is write the block twice.
+     */
+    record RuleAboutAnElementOfSeveralSequences() implements RuleReadingStopped {}
+
+    /**
      * A rule naming which values the position may hold is written in a form no reader here takes
      * apart as a set of them: a call, a pattern, a comparison against something other than a value
      * written out.
@@ -360,6 +578,56 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * A choice in the rule offers an alternative this compiler does not read, and where the values
+     * stop here is what the two alternatives leave together.
+     *
+     * <p>The rule was read. What stopped is the reading of one branch of it, and a value satisfying
+     * that branch owes the branch beside it nothing — so the end at this position is as far out as
+     * whatever the unread alternative allows, which is not known.
+     *
+     * <p>Its own case beside {@link UnreadComparisonForm}, and the difference is what an author can
+     * do about it. That one says the comparison at this position is written in a shape no reader
+     * here takes apart, and an author sent after it would rewrite a bound that reads perfectly
+     * well. What they can act on is the branch written beside it.
+     *
+     * <p><b>Which choice it was is not here, and a document does not say it yet.</b> A rule may
+     * hold two of them that each leave one end open, and they are two things an author has to do —
+     * so this is one sentence about two, exactly as the same shape is on the reading of values,
+     * whose two shortfalls at one position come to one line as well. What would tell them apart is
+     * the operator each was written at, and a rule an author named is found by that name
+     * ({@link souther.compiler.check.RuleCitation}): there is nowhere in what a document says about
+     * such a rule to put a second place. Split without one, the two are the same sentence twice.
+     *
+     * <p>So the choices are kept where they are told apart — the construct each was written as,
+     * and the copy of it ({@code ChoiceToLift}) — and what reaches a position says how many
+     * ({@link EndLeftOpen}). What is missing is a way for a document to name a place inside a named
+     * rule, and it is the same thing missing wherever the two readings' accounts of one choice are
+     * to be put together.
+     */
+    record EndLeftOpenByAChoice() implements RuleReadingStopped {}
+
+    /**
+     * A choice offering an alternative nothing read, leaving what may stand at a position open.
+     *
+     * <p>The other reading's half of {@link EndLeftOpenByAChoice}, and its own case for the reason
+     * that one is: {@link UnreadValueRule} promises the rule at this position is written in a form
+     * nothing here takes apart, and an author acting on it rewrites a clause that was read from end
+     * to end. What went unread is the branch beside it.
+     *
+     * <p>Which is what the value reading has recorded all along ({@code UnreadReason
+     * .ALTERNATIVE_NOT_READ}) and lost here, arriving at a document as the form nobody could read.
+     * The distinction was worth making inside the reading and was worth nothing to the reader it
+     * was made for.
+     *
+     * <p>What a document writes for this and for the one above is one word. They are two readings
+     * of one operator saying two things about it — what may stand at the position, and where those
+     * values stop — and which of them a reader is being told is what the section they are in says.
+     * Two words would put that in the vocabulary as well, and a reader joining the pair would have
+     * to know they meant the same thing.
+     */
+    record ValueRuleLeftOpenByAChoice() implements RuleReadingStopped {}
 
     /**
      * A rule naming a set of strings whose machine is more than this compiler will make.
@@ -387,6 +655,51 @@ public sealed interface BlockReason {
     record PatternTooDeeplyNested() implements RuleReadingStopped {}
 
     /**
+     * What a pattern nothing read is, in the words a rule left unread is said in.
+     *
+     * <p>Here because two readings ask it. A declaration's clauses and a behavior's body both write
+     * rules whose text is a pattern, and both are stopped by the same things — so what an author is
+     * told is a fact about the pattern and about this compiler's reader, and not about which of the
+     * two tree walks met it. Written once per reader, the day one of them learned that a construct
+     * is the reading's own limit rather than one it has no word for, an author would be sent to the
+     * brackets by one reading and to a construct that was never the trouble by the other.
+     *
+     * <p>Two answers and not one per code. A pattern written more deeply than this reads is the
+     * reading's own limit and is said as itself; every other construct is one the subset does not
+     * hold, which is a rule this could not read like any other.
+     */
+    static RuleReadingStopped forAPatternNotRead(PatternRead.Unsupported why) {
+        return why == PatternRead.Unsupported.NESTED_TOO_DEEPLY
+                ? new PatternTooDeeplyNested() : new UnreadValueRule();
+    }
+
+    /**
+     * A rule whose strings this read, and whose place on the order they are measured on would take
+     * more machines than this compiler will make.
+     *
+     * <p>Its own case beside {@link PatternTooCostly}, and the difference is what was too large. That
+     * one is the pattern an author wrote turned into the strings it accepts, which is a machine as
+     * big as the pattern is written and is something they can write differently. This is the further
+     * work of asking where those strings begin and end — the strings above the first of them, the
+     * ones the rule leaves out, and the two put together — and none of those is a machine anybody
+     * wrote. Told the other, an author would go looking at a pattern that was read perfectly.
+     *
+     * <p>Which limit refused it is kept. A machine larger than one machine may be is a shape
+     * somebody wrote and could write smaller; an answer that had already spent what it was allowed
+     * is not, and the same rule asked first would have been read.
+     */
+    record OrderedExtentTooCostly(souther.compiler.regex.Meter.Stopped stopped)
+            implements RuleReadingStopped {
+
+        public OrderedExtentTooCostly {
+            if (stopped == null) {
+                throw new IllegalArgumentException(
+                        "a construction that stopped was stopped by a limit");
+            }
+        }
+    }
+
+    /**
      * The rules about this position were followed, every one of them became the set it names, and
      * what those sets come to between them is more than this compiler will build.
      *
@@ -403,31 +716,52 @@ public sealed interface BlockReason {
     record ExactValuesTooCostly() implements AnswerRealizationStopped {}
 
     /**
-     * Every reading was asked about the rule at this position and none of them took it in, and none
-     * of them wrote down why.
+     * A behavior's rules about the strings at this position were read, and building what they tell
+     * apart is more than this compiler will do.
      *
-     * <p>Its own case because it names no reading. The others are one reading's account of where it
-     * gave up, and a question left standing by nobody has no such account to give — answered with
-     * one of them, an author is told which reader fell short of their clause, and the named reader
-     * may be one that has no word for such a rule at all and never claimed it.
+     * <p><b>About the position's distinctions and about none of the rules.</b> The rules of one
+     * position are built as one group, because what a reader is told about the position must not
+     * turn on which of them the building reached first — so what ran out is the allowance for the
+     * group, and naming one rule would say that rule is why when any of the others being cheaper
+     * would have left it affordable.
      *
-     * <p>What produces it is the accounting, from the two answers coming apart: a rule no reading
-     * adopted, at a position no reading recorded a reason for. A helper that reads a field of a
-     * value the readings do not know the positions of is one — the clause is about that field, and
-     * every reader here passed over it.
+     * <p>Its own case beside {@link ExactValuesTooCostly}, which is what a declaration's answer ran
+     * out on. That one bounds what may stand at a position and this one bounds what a behavior
+     * tells apart there, and they are separate on purpose: a run allowed more of one must not
+     * change the other's answer. Said as that one, a position whose declaration was answered
+     * exactly would be reported as one whose values could not be worked out.
      *
-     * <p>Nothing is claimed about which capability would lift it, which is what makes it different
-     * from every case above. What a document writes for it is the same word it writes for a rule
-     * written in a form nothing here reads, because that is the whole of what is known: no reading
-     * of this compiler has a word for the rule.
-     *
-     * <p><b>Not a {@link ReadingStopReason} and not a {@link RuleWithoutLineReason}.</b> Nothing
-     * stopped here, because nothing started; and no reading drew a line this could be the absence
-     * of. So it reaches neither the readers that ask what stopped a derivation nor the account of
-     * the rules a position was left with, and a {@link RuleWithoutALine} cannot be built carrying
-     * it. What is true of it is that there is a rule to name, which is {@link AboutARule}.
+     * <p><b>And a rule with no line at the position all the same</b> ({@link StoppedWithoutALine},
+     * as {@link RulesNotHandedOnAsSets} is). What ran out is the group, and the rules of the group
+     * are written at the position — so a reader of the position is owed the sentence about each of
+     * them, and what it says is that the position's distinctions were not built rather than that
+     * this one rule was the expensive one.
      */
-    record NoReadingTookItIn() implements AboutARule {}
+    record BehaviorDistinctionsTooCostly()
+            implements AnswerRealizationStopped, StoppedWithoutALine {}
+
+    /**
+     * The rules about the strings at this position were read, what the position admits was worked
+     * out, and what each of those rules leaves on its own was more than this compiler would build.
+     *
+     * <p>Two questions and this is the second. What a position admits is every rule of it met
+     * together; what a reader drawing lines needs is what each of them leaves on its own, and a
+     * rule met with its neighbours can be settled without ever making its machine — a pattern
+     * beside a value the rules write out is a question about that value. So the sets handed on are
+     * not the sets the answer needed, and where they cannot be made the answer stands exactly while
+     * nothing says where the strings of one rule stop.
+     *
+     * <p><b>About the position and about none of its rules.</b> They are made as a group out of one
+     * allowance, so a rule cheap enough on its own goes unmade beside one that was not — and which
+     * of them was which may not be told, because it would send an author to rewrite whichever rule
+     * the building reached last. Which is why this carries no rule and is not among the reasons
+     * that do ({@link RuleReadingStopped}).
+     *
+     * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
+     * position's own answer coming out wider than the rules leave it, and here that answer is what
+     * the rules leave and a reader is short of something else.
+     */
+    record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
 
     /**
      * A rule about the position says how it stands against another position, and what is held here
@@ -451,28 +785,31 @@ public sealed interface BlockReason {
      * The reading of what the position may hold never reached the rules about it.
      *
      * <p>Not a rule it read and could not use. The walk that gathers a value's clauses stopped
-     * somewhere — at a depth, at a type it had already been through, at one with no declaration to
-     * read — or a clause could not be typed and so arrived nowhere. None of those is a fact about
-     * the rule, and all of them leave the same hole: what is written about this position is not
-     * known to have been read.
+     * somewhere — at a type it had already been through, at one with no declaration to read — or a
+     * clause could not be typed and so arrived nowhere. None of those is a fact about the rule, and
+     * all of them leave the same hole: what is written about this position is not known to have
+     * been read.
+     *
+     * <p>And none of them is a figure this compiler stopped at, which is what
+     * {@link ValueRulesNotReachedPastDepthLimit} is beside this for.
      */
     record ValueRulesNotReached() implements AboutThePosition {}
 
     /**
-     * Each of two rules is read, and they are about different coordinates of one position, so
-     * neither can be the one it is measured at.
+     * The same, where what stopped the reading was how far down it could afford to read.
      *
-     * <p>Nothing is wrong with either rule. A {@code String} is the one thing that can be measured
-     * two ways — its own order, and the length of it — and which of them a position is measured at
-     * is settled by whichever the model wrote about. Where the position's own type chose neither
-     * and the value it sits in states an end on each, choosing either would put a line the author
-     * can read beside one they cannot see, so both go unread and each says so.
+     * <p>Its own reason and the same hole. A depth this compiler could not afford is a figure it
+     * compared something against, so a run allowed to read further need not stop at this position;
+     * every other way of never reaching one is met again whatever a run allows. Held as one reason,
+     * nothing could say which of the two a reader was looking at.
      *
-     * <p>Its own case and not {@link UnreadComparisonForm}. The forms were read: what is missing is
-     * not a reader for an expression but a rule for which coordinate wins, and an author told the
-     * first would go looking for a syntax this compiler handles perfectly well.
+     * <p><b>And the same published word.</b> Which figure stopped a walk is this compiler's
+     * business — a document promises a reader the hole and not the route to it — so
+     * {@link ReportedReason} takes both to {@code RULES_NOT_READ_AT_ALL}. That is what this
+     * vocabulary being apart from the published one is for: the precision is recorded without a
+     * reader being promised it.
      */
-    record CompetingCoordinates() implements RuleReadingStopped {}
+    record ValueRulesNotReachedPastDepthLimit() implements AboutThePosition {}
 
     /**
      * The rule was read, it draws a line, and where each of the names it is between stands is known
@@ -517,6 +854,22 @@ public sealed interface BlockReason {
     record ComparisonCuttingOutsideDomain() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison was read to the end, the quantity runs as far as the line it draws — and no
+     * row that arrives at the comparison holds a value at the line.
+     *
+     * <p>{@code guard value >= 10} above {@code guard value >= 5} leaves the second guard's line
+     * with nothing against it: every row that gets there is already past it. The line is inside
+     * what the declarations leave, so this is not {@link ComparisonCuttingOutsideDomain} — an
+     * author reading that one would look at the rule for a line their declarations refuse, and
+     * what refuses it is the conditions on the way to the comparison.
+     *
+     * <p>Said only on a proof. The values that arrive were read off the paths, and either nothing
+     * arrives at all or what arrives stops short of the line; a comparison whose arrival nothing
+     * could read keeps its line and its rows.
+     */
+    record ComparisonNothingArrivesAtItsLine() implements ReadToEndWithoutLine {}
+
+    /**
      * The comparison relates two positions rather than dividing one.
      *
      * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either
@@ -540,6 +893,69 @@ public sealed interface BlockReason {
      * what is absent is a partition, because the model divides no position by it.
      */
     record ComparisonOverARun() implements ReadToEndWithoutLine {}
+
+    /**
+     * The rule holds this position to the values it admits, and places no end on them.
+     *
+     * <p>What a reader is owed, and it is a fact they act on: the value written here has to be one
+     * of the ones the rule admits, because everything outside them is refused at construction
+     * (E1903). A bounded newtype gets the same restraint said as an edge; this is the same fact
+     * about a rule whose admitted values are not a run of the order, and it is why there is no
+     * class away from them to cover (ADR-0090).
+     *
+     * <p><b>Not a division.</b> That a rule tells the values it admits from the rest is a fact
+     * about those values, and whether the position is divided is a different question, answered by
+     * what the rule is written in. Under an invariant the other side is no class of the position, so
+     * a reader told the model divides the position here is told the opposite of what the declaration
+     * says.
+     *
+     * <p><b>And it says nothing either way about whether the position is divided.</b> A rule may
+     * restrict and divide at once — {@code invariant value == "A" || value == "B"} admits two values
+     * and every other string is no class of the position — so the classes are read where they are
+     * read ({@link Distinctions#ofValues}) and this stays a statement about what may stand here.
+     *
+     * <p>Nor a limit of the reading. What a rule leaves a position is worked out by the reading
+     * that turns clauses into sets, and one it could not work out is not one of these: a set left
+     * wide because something went unread is this compiler falling short, and said from here it
+     * would go out as a fact about the model.
+     */
+    record RuleRestrictingToAdmittedValues() implements ReadToEndWithoutLine {}
+
+    /**
+     * A rule of a behavior about the strings at a position, read to the end, with nothing on one of
+     * its sides.
+     *
+     * <p>A predicate divides a position by putting the values that satisfy it on one side and the
+     * rest on the other, and that is two classes only where both sides hold a value. A pattern no
+     * string satisfies leaves the first empty and one every string satisfies leaves the second, and
+     * either way a run of the model is on the same side however it is written.
+     *
+     * <p>Nothing here fell short: the predicate was read, the text was worked out and both sides
+     * were built. What came of it is that the model draws no distinction, which is a fact about the
+     * rule and something an author can see in it.
+     */
+    record PredicateTellingNothingApart() implements ReadToEndWithoutLine {}
+
+    /**
+     * Every rule about this position was read, and what they say cannot all be said as one list of
+     * classes.
+     *
+     * <p>A rule can put a line on the order the position's values are counted on, or tell a set of
+     * them from the rest, and the two are not one vocabulary: a run of values has a least and a
+     * next, and a set has neither, so a class written in one of them cannot be written in the
+     * other. A position both kinds reach is one this compiler has no single denominator for.
+     *
+     * <p><b>Nothing here fell short of a rule.</b> Every one of them was read and each says what it
+     * says — which is what keeps this apart from {@link RulesNotHandedOnAsSets} and from
+     * {@link BehaviorDistinctionsTooCostly}. Those are a set the rules leave that was not worked
+     * out; here every set was worked out and the classes are what they will not compose into. A run
+     * allowed more of everything meets this again.
+     *
+     * <p>And it is the classes and not the position. What the lines cut and where the rules part it
+     * are still what they were, because those are separate observations rather than a projection of
+     * the classes.
+     */
+    record ClassesNotComposed() implements ReadToEndWithoutLine {}
 
     /**
      * What a derivation would have to be able to reach into.

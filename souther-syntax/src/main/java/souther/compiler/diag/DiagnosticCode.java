@@ -20,7 +20,7 @@ import java.util.Set;
  *   <li>{@link #titleKey()} is the category a reader sees in the header — {@code BOUNDARY TYPE},
  *       {@code TYPE MISMATCH}. It is shared, and says nothing about identity;</li>
  *   <li>this code is the identity a reader looks up and a tool keys on;</li>
- *   <li>the message key a site passes to {@link Diagnostic#of} is the wording for one way the rule
+ *   <li>the message key a site passes to {@link Diagnostic#say} is the wording for one way the rule
  *       was broken, and several of them belong to one code.</li>
  * </ul>
  *
@@ -168,8 +168,8 @@ public enum DiagnosticCode {
     E1911("example-does-not-reach-unreachable", "check.example.title"),
     E1913("every-output-case-is-expected-by-a-row", "check.example.title"),
     E1915("every-input-case-is-used-by-a-row", "check.example.title"),
-    E1916("every-border-has-a-row-against-its-line", "check.example.title"),
-    E1917("every-border-has-a-row-away-from-its-line", "check.example.title"),
+    E1916("every-obligation-against-its-line-has-a-row", "check.example.title"),
+    E1917("every-obligation-away-from-its-line-has-a-row", "check.example.title"),
     E1918("every-arm-has-a-row", "check.example.title"),
     E1919("stand-in-and-recorded-row-agree", "check.example.title"),
     E1920("stand-in-comparison-completes", "check.example.title"),
@@ -185,6 +185,9 @@ public enum DiagnosticCode {
     E1930("an-implementation-keeps-what-the-behavior-states", "check.example.title"),
     E1931("every-axis-class-has-a-row", "check.example.title"),
     E1932("a-stand-in-names-a-behavior", "check.example.title"),
+    E1933("a-behavior-has-at-most-one-stand-in-table", "check.example.title"),
+    E1934("every-row-has-its-answer-written", "check.example.title"),
+    E1935("every-decision-rule-has-a-row", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
@@ -211,7 +214,6 @@ public enum DiagnosticCode {
 
     // --- the external representation ---
     E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),
-    E2202("a-codec-reached-for-exists", "check.codec.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),
@@ -266,7 +268,7 @@ public enum DiagnosticCode {
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
             java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
-                    E1922, E1931, E2011);
+                    E1922, E1931, E1934, E1935, E2011);
 
     /** The catalog key of the header category this code is shown under. Shared across codes. */
     public String titleKey() {

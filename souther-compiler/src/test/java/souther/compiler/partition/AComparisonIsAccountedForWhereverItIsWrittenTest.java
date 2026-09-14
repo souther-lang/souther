@@ -2,13 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 
@@ -40,15 +40,14 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + body);
         Core core = checked.behaviorBodies().get("pick");
         assertNotNull(core);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
-        return GuardThresholds.of("pick", core, plan,
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get("pick"), symbols);
+        CoverageSites.Plan plan = checked.plan();
+        return GuardThresholds.of("pick", checked.analysisBodies().get("pick"), core, plan,
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get("pick"), rules);
     }
 
     /**
@@ -59,12 +58,19 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
      * on, so this is the answer that separates "the model draws a line here this could not read"
      * from "the model draws none". Written under a fork, the reading already gave it; written as the
      * answer, it gave nothing.
+     *
+     * <p>Said as a question and not as a finding about the model, which is what the reading of it
+     * came to: nothing worked out what such a rule states here, so what it raises is unknown rather
+     * than nothing.
      */
     @Test
     void aComparisonAnsweredWithIsNoticedEvenWhereNoLineCameOfIt() {
         GuardThresholds.Guards guards = read("Int.multiply(p.x, p.x) < 10");
 
         assertEquals(List.of(), guards.thresholds());
-        assertEquals(1, guards.rulesWithoutALine().size(), guards.rulesWithoutALine().toString());
+        assertEquals(List.of(), guards.noLine().reported(),
+                "the reading of it did not finish, so nothing is said about what the model states");
+        assertEquals(1, guards.noLine().unclassified().size(),
+                guards.noLine().unclassified().toString());
     }
 }

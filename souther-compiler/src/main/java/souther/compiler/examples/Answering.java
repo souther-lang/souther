@@ -73,9 +73,14 @@ public interface Answering {
      * read as. It is the run's answer and not the instance's: what a row states is of the module the
      * rows are written for, and holding that module's declarations against the instance's is
      * {@code DeclarationAgreement}'s, done before any row is handed over.
+     *
+     * <p>{@code applied} is where the instance is applied. It is handed over rather than decided
+     * here because an implementation supplied from outside answers in the world the caller called
+     * from, and which world that is belongs to whoever arranged the run.
      */
-    static Answering bound(Object implementation, Set<String> answersFor, Map<String, Sig> sigs) {
+    static Answering bound(Object implementation, Set<String> answersFor, Map<String, Sig> sigs,
+                           CallerApplication applied) {
         return (generated, compiled) -> new BoundImplementation(implementation, answersFor, sigs,
-                new GeneratedImplementation(generated, compiled), generated.module());
+                new GeneratedImplementation(generated, compiled), generated.module(), applied);
     }
 }

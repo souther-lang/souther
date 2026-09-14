@@ -1,6 +1,8 @@
 package souther.compiler.diag;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.doc.SpecDocument;
 import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
@@ -300,8 +302,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * construction, before any argument is substituted, and a message with a stray brace and no
      * placeholder names none.
      *
-     * <p>What the message says survives that: a literal brace is written {@code '{'} and a literal
-     * apostrophe {@code ''}, and the check below renders each pattern to see what comes out.
+     * <p>What the message says survives that: a literal brace is written <code>'{'</code> and a
+     * literal apostrophe <code>''</code>, and the check below renders each pattern to see what
+     * comes out.
      */
     @Test
     void everyMessageIsAPatternTheFormatterAccepts() throws IOException {
@@ -427,7 +430,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     void everyCatalogListsTheOrderedPrimitivesAndOnlyThose() throws IOException {
         Set<String> ordered = new TreeSet<>();
         for (Type.Prim prim : Type.Prim.values()) {
-            if (Ordering.of(prim, null) != null) {
+            if (Ordering.of(prim, souther.compiler.check.NewtypeInners.NONE, null, DeclarationKinds.NONE,
+                    PublishedDeclarations.NONE)
+                    != null) {
                 ordered.add(prim.shown());
             }
         }

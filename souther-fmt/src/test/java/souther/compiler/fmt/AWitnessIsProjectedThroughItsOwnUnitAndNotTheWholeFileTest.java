@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * almost nothing to disagree about; a source written down the page where the canonical form writes
  * it flat, or indented two columns where it writes four, is the case the gathering was made for.
  */
+@Tag("population")
 class AWitnessIsProjectedThroughItsOwnUnitAndNotTheWholeFileTest {
 
     /**

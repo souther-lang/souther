@@ -1,11 +1,12 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
+import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
@@ -49,13 +50,11 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class ValueClassGen {
 
     private final CodegenContext ctx;
-    private final String pkg;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {
         this.ctx = ctx;
-        this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = codec;
     }
@@ -131,27 +130,24 @@ final class ValueClassGen {
             }
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
-            data.decoder().ifPresent(d -> {
-                boolean mapInput = codec.isMapInput(data);
-                codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
-                codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
-                if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
-            });
-            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data))));
+            boolean mapInput = codec.isMapInput(data);
+            codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
+            codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
+            if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
+            codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data)));
         }));
 
-        data.decoder().ifPresent(dec -> {
-            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
-                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
-                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-            if (codec.recordCompatible(data)) {
-                out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
-                        codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
-            }
-        });
-        data.encoder().ifPresent(enc ->
-                out.put(new GeneratedClass.Encoder(valueOf(data)), codec.generateEncoderClass(cdName, data, enc)));
+        Hir.DecoderDef dec = symbols.derived(data).decoder();
+        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
+                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
+        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
+                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
+        if (codec.recordCompatible(data)) {
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
+                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
+        }
+        out.put(new GeneratedClass.Encoder(valueOf(data)),
+                codec.generateEncoderClass(cdName, data, symbols.derived(data).encoder()));
 
         // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
         // same invariant bytecode as __construct — the checker's, which both read. Two callers: a constant construction
@@ -223,7 +219,8 @@ final class ValueClassGen {
         // How this sum's alternatives are written is settled once, here, and handed to everything
         // that generates from it. Each of them holding the type and the symbols instead would be
         // each of them able to work the form and the tag out again, which is what five of them did.
-        Boundary.Alternatives alternatives = Boundary.of(Type.ref(sum.declares()), symbols);
+        Boundary.Alternatives alternatives =
+                Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.published);
         boolean enumeration = alternatives.representation() instanceof Boundary.Representation.Enumeration;
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
@@ -238,9 +235,9 @@ final class ValueClassGen {
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
             // A field every case spreads is readable on the sum (issue #160): declared here, and
             // implemented by each case record's accessor of the same name and descriptor.
-            if (TypeView.of(Type.ref(sum.declares()), symbols).shape() instanceof Shape.Sum shape
-                    && shape.common() instanceof Shape.CommonProduct.Shared shared) {
-                for (Map.Entry<String, Type> e : shared.fields().entrySet()) {
+            if (TypeView.asWritten(Type.ref(sum.declares()), symbols, ctx.published).shape()
+                    instanceof Shape.Sum shape) {
+                for (Map.Entry<String, Type> e : ReadableFields.of(shape).declaredFields().entrySet()) {
                     cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
                             ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
                 }
@@ -256,7 +253,9 @@ final class ValueClassGen {
             // two gates hold of the same sums today. Written as one, a wire form that stopped being
             // a bare tag would take the ordering methods with it and leave a comparison calling a
             // method nothing emitted.
-            if (Ordering.of(Type.ref(sum.declares()), symbols) instanceof Ordering.Places places
+            if (Ordering.of(Type.ref(sum.declares()), ctx.inners, symbols, ctx.kinds,
+                    ctx.published)
+                    instanceof Ordering.Places places
                     && places.enumeration().equals(sum.declares())) {
                 emitOrderMethods(cb, cdX, alternatives.atoms());
             }
@@ -504,7 +503,7 @@ final class ValueClassGen {
 
     /** How the value a newtype wraps compares, as the newtype's own field holds it. */
     private Ordering orderOfWrapped(Type value) {
-        Ordering how = Ordering.of(value, symbols);
+        Ordering how = Ordering.of(value, ctx.inners, symbols, ctx.kinds, ctx.published);
         return how == null ? null : how.asHeld();
     }
 

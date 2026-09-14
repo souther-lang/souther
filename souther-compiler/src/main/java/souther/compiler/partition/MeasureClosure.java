@@ -2,11 +2,15 @@ package souther.compiler.partition;
 
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.inputs.BlockedDescent;
+import souther.compiler.inputs.EndLeftOpen;
 import souther.compiler.inputs.RulesLeftUnread;
+import souther.compiler.inputs.StandingQuestion;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,9 +29,11 @@ import java.util.Set;
  * proof that the reading ran out — the arrangement {@link UndividedPosition.Why.Absent} is under, at
  * the measure rather than at a position.
  *
- * <p><b>The questions first.</b> What a measure is mostly short of is a question the model raised
+ * <p><b>The questions, and nothing but the questions and where the walk did not go.</b> What a
+ * measure is short of is a rule of the model that left something open: a question about a subject
  * that nothing answered, filed under the measure that answers it
- * ({@link CoverageObligation#answeredBy}). Counted as "every reader ran to the end" instead, a
+ * ({@link CoverageObligation#answeredBy}), or a rule this compiler did not read far enough to say
+ * what it raises, which leaves both open. Counted as "every reader ran to the end" instead, a
  * completeness says the model was read in full for exactly as long as nobody adds a reader.
  *
  * <p><b>And two facts no question carries.</b> A position whose rules were never enumerated
@@ -38,11 +44,9 @@ import java.util.Set;
  * both dropped, and the accounting is right to say they were read. What an accounting cannot say
  * is that the measure was then left with nothing, and that is what this reads the refusals for.
  *
- * <p>Which measures each of the two costs is each one's own answer, and they do not agree. A
- * position whose rules were never enumerated and one the walk could not reach into leave both short,
- * because what is not known about them is not known for either. And a rule set aside answers
- * through its own reason ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort}),
- * which for a comparison relating two positions is neither measure.
+ * <p>Which measures each of these costs is each one's own answer, and they do not agree. A position
+ * whose rules were never enumerated and one the walk could not reach into leave both short, because
+ * what is not known about them is not known for either.
  *
  * <p><b>One stop, one gap, and the fold is on where the gap came from.</b> Two of the things a
  * reading can be short of are one stop said from two ends: the walk could not go into a position,
@@ -57,11 +61,11 @@ import java.util.Set;
  * rule about a {@code Map}'s size that nothing answered, dropped because the map's contents are out
  * of reach, which is a fact about other rules entirely.
  *
- * <p><b>A clause's question may stand and a comparison's may not.</b> A comparison raises a question
- * exactly where the reading of it reached a line, and that line answers it — both come off the one
- * reading, so a comparison either yields the question and its answer together or yields neither and
- * records what stopped it. So the way a comparison leaves a measure short is as a rule this reading
- * set aside, and never as a question nothing answered.
+ * <p><b>A comparison leaves what any other rule leaves.</b> Where the reading of one reached a line,
+ * that line is the answer and the comparison leaves nothing; where it did not, what the comparison
+ * raises is the part that was not read, and it stands here as that. Which is the same sentence a
+ * clause of a declaration gets: what holds a measure open is a question about a rule, and never a
+ * word about the model that something read a flag off.
  */
 public final class MeasureClosure {
 
@@ -164,26 +168,16 @@ public final class MeasureClosure {
      *                both of the producers there are. Here so that a conclusion about the reading is
      *                drawn from what it produced beside what it found, and not from the gaps alone
      *                — see {@link LinesRead#everyLineFoundWasDrawn}
-     * @param refused the rules of the model this reading set aside, each from the reader that did.
-     *                Asked which measures it leaves short rather than counted: a comparison relating
-     *                two positions is set aside by what it says and not by anything missing here,
-     *                and it is the rule's own reason that answers
-     *                ({@link souther.compiler.inputs.BlockReason.RuleWithoutLineReason#leavesShort})
+     * @param asked   everything the rules of the model left open, whether or not anything worked
+     *                out what each of them raises. A rule this reading set aside is here or is
+     *                nowhere: a rule read from end to end that draws no line leaves nothing open,
+     *                and one whose reading stopped is a question about a rule that says as much
      */
     static Both of(List<PositionAccount> positions,
-                   List<souther.compiler.inputs.StandingQuestion> asked,
-                   List<souther.compiler.inputs.RuleWithoutALine> refused, LinesRead lines) {
+                   List<StandingQuestion> asked, LinesRead lines) {
         lines.everyLineFoundWasDrawn();
-        Set<ClosureGap> partition = new LinkedHashSet<>();
-        Set<ClosureGap> border = new LinkedHashSet<>();
-        for (souther.compiler.inputs.RuleWithoutALine rule : refused) {
-            if (rule.why().leavesShort(CoverageObligation.Measure.PARTITION)) {
-                partition.add(new ClosureGap.RuleUnread(rule));
-            }
-            if (rule.why().leavesShort(CoverageObligation.Measure.BOUNDARY)) {
-                border.add(new ClosureGap.RuleUnread(rule));
-            }
-        }
+        Gathering partition = new Gathering();
+        Gathering border = new Gathering();
         // Over the positions and not over the measures made of them. What a reading of a position
         // came to is the position's, and a location is measured at as many numbers as the rules
         // name of it: read off the measures, one stop at one location is one entry per number, which
@@ -200,6 +194,15 @@ public final class MeasureClosure {
                 partition.add(gap);
                 border.add(gap);
             }
+            // And the ends this reading did not work out, which are the border's alone: what the
+            // alternatives admit was read, and where they stop was not.
+            //
+            // The rule and the position, so two choices leaving one line open are one thing the
+            // measure is short of. Which of them an author is sent to is the findings' answer and
+            // is two; a measure counting those would be short twice of one line.
+            for (EndLeftOpen open : at.endsLeftOpen()) {
+                border.add(new ClosureGap.LineNotDerived(at.behavior(), at.id(), open.rule()));
+            }
             for (RulesLeftUnread unread : at.residue().rulesLeftUnread()) {
                 if (derived(unread)) {
                     continue;
@@ -215,16 +218,48 @@ public final class MeasureClosure {
         // real ones. Written as "there is already a finding at this path", a rule about a `Map`'s
         // size that nothing answered went unsaid because the walk could not read what the map holds,
         // which are two facts about two different rules (issue #1084).
-        for (souther.compiler.inputs.StandingQuestion each : asked) {
-            ClosureGap gap = new ClosureGap.QuestionUnanswered(each);
-            switch (each.obligation().answeredBy()) {
-                case PARTITION -> partition.add(gap);
-                case BOUNDARY -> border.add(gap);
+        for (StandingQuestion each : asked) {
+            ClosureGap gap = ClosureGap.QuestionUnanswered.of(each);
+            if (each.holdsOpen(CoverageObligation.Measure.PARTITION)) {
+                partition.add(gap);
+            }
+            if (each.holdsOpen(CoverageObligation.Measure.BOUNDARY)) {
+                border.add(gap);
             }
         }
         return new Both(
-                partition.isEmpty() ? new OfThePartition.Closed() : new OfThePartition.Open(partition),
-                border.isEmpty() ? new OfTheBorder.Closed() : new OfTheBorder.Open(border));
+                partition.isEmpty()
+                        ? new OfThePartition.Closed() : new OfThePartition.Open(partition.gaps()),
+                border.isEmpty()
+                        ? new OfTheBorder.Closed() : new OfTheBorder.Open(border.gaps()));
+    }
+
+    /**
+     * What one measure's reading was left open by, each fact once.
+     *
+     * <p>One stop met twice is one stop. Which handle a reader is sent to and what each reading of
+     * a question was short of are accumulated rather than kept apart, so that a gap found from two
+     * readers is one gap carrying both — and what makes two of these one is
+     * {@link ClosureGap#fact()}, asked of the gap rather than decided here.
+     *
+     * <p>Keyed and not ordered. Nothing here says which gap comes before which, and a reader that
+     * puts them in a sequence says which order it means.
+     */
+    private static final class Gathering {
+
+        private final Map<Object, ClosureGap> byFact = new HashMap<>();
+
+        void add(ClosureGap gap) {
+            byFact.merge(gap.fact(), gap, ClosureGap::merged);
+        }
+
+        boolean isEmpty() {
+            return byFact.isEmpty();
+        }
+
+        Set<ClosureGap> gaps() {
+            return Set.copyOf(byFact.values());
+        }
     }
 
     /**

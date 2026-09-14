@@ -363,8 +363,8 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
         above.add(0);
         int most = 0;
         while (!nodes.isEmpty()) {
-            Hir.Expr node = nodes.remove(nodes.size() - 1);
-            int here = above.remove(above.size() - 1) + 1;
+            Hir.Expr node = nodes.removeLast();
+            int here = above.removeLast() + 1;
             most = Math.max(most, here);
             Hir.forEachChild(node, child -> {
                 if (child != null) {

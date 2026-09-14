@@ -1,7 +1,8 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 
 import java.util.Map;
 import java.util.Optional;
@@ -19,20 +20,34 @@ import java.util.Optional;
 record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
-    public SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form,
-                                 NumericDomain.Rel rel) {
+    public SearchRegion assuming(LinearForm<NumericTerm> form,
+                                 Rel rel) {
         ReadQuantities taken = within.assuming(form, rel);
         return taken == within ? this : new ReadRegion(taken);
     }
 
     @Override
-    public SearchRegion given(Map<NumericTerm, Count> fixed) {
+    public SearchRegion assuming(NumericTerm.FromOnePosition term,
+                                 souther.compiler.numeric.Place at, Rel rel) {
+        ReadQuantities taken = within.assuming(term, at, rel);
+        return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
+    public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
+                                  souther.compiler.numeric.Place at) {
+        ReadQuantities taken = within.apartFrom(term, at);
+        return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
+    public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
         ReadQuantities taken = within.fixing(fixed);
         return taken == within ? this : new ReadRegion(taken);
     }
 
     @Override
-    public NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form) {
+    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         return within.runsBetween(form);
     }
 

@@ -166,10 +166,15 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
      * thing in: a caller hands over the one it is looking at. This holds the other half — that the
      * canonical constructor, which a public record cannot hide, is not how anybody makes one.
      *
-     * <p>The two take a {@link souther.compiler.query.FindingSubject} and not a behavior's name.
-     * Still two: what a finding is about became a value rather than a word, because not every
-     * finding is about a behavior (issue #1062). The overloads that take a name hand one over and
-     * make nothing, which is why they are not here.
+     * <p>The three take a {@link souther.compiler.query.FindingSubject} and not a behavior's name.
+     * What a finding is about is a value rather than a word, because not every finding is about a
+     * behavior. The overloads that take a name hand one over and make nothing, which is why they are
+     * not here.
+     *
+     * <p>Two of them and not one, because what finds a finding is not always a measure. A point of
+     * an authored line is answered by {@link souther.compiler.query.ObligationCoverage}, which folds
+     * the readings and has no status of its own, and it is taken whole for the reason a measure is:
+     * there is no argument here to pass a set worked out somewhere else.
      */
     @Test
     void aFindingIsMadeFromTheMeasurementThatFoundIt() throws IOException {
@@ -184,14 +189,30 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
                                 + "Lsouther/compiler/query/Measure;"
-                                + "Lsouther/compiler/diag/Citation;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/ObligationCoverage;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // A third thing that finds one: the reading of a body's decision. What it
+                        // went without is neither a measure's status nor a fold of the readings of
+                        // a line — a run it could not place among the rules and a row nothing
+                        // watched each leave a rule nothing was seen taking as one a row may
+                        // already take — and it is taken whole for the reason the two above are.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/DecisionEvidence;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         "souther.compiler.query.Adequacy$Finding#noticed("
                                 + "Lsouther/compiler/query/FindingSubject;"
-                                + "Lsouther/compiler/diag/Citation;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;"),
+                // None of them takes a place. What a finding says is what a reading came to, and
+                // where a report about it is shown is asked of the module that wrote the code —
+                // so there is no argument here to hand one over.
                 makers,
                 "what makes a finding rather than asking the measurement that found it");
     }
@@ -224,13 +245,4 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
         return n;
     }
 
-    /** Every main source of every module, as one string. Read rather than parsed: what these rules
-     *  are about is whether somebody wrote a thing down. */
-    private static String allMainSources() throws IOException {
-        StringBuilder out = new StringBuilder();
-        for (Path each : Reactor.mainJavaSources()) {
-            out.append(Files.readString(each, StandardCharsets.UTF_8));
-        }
-        return out.toString();
-    }
 }

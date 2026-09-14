@@ -7,8 +7,10 @@ import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
@@ -16,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * A value written the way a row writes it — {@code Amount(0)}, {@code None}, {@code Overseas} — held
@@ -76,6 +79,18 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * the line the row is on as well.
      */
     public static FixtureTemplate string(String value) {
+        return new FixtureTemplate(quoted(value), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
+    }
+
+    /**
+     * {@code value} as the language writes a string literal, quotes and escapes and all.
+     *
+     * <p>Here and not at each place that writes one. Every writer of a literal wants the same
+     * escapes for the same reason — what it writes is pasted back and read as the value it was made
+     * from — and a second spelling of the rule is a place where a value with a quote in it comes
+     * out as source that says something else, or does not parse at all.
+     */
+    public static String quoted(String value) {
         StringBuilder written = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
@@ -88,7 +103,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                 default -> written.append(c);
             }
         }
-        return new FixtureTemplate(written.append('"').toString(), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
+        return written.append('"').toString();
     }
 
     public static FixtureTemplate bool(boolean value) {
@@ -126,9 +141,9 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         // the reference says namespace, and no reader that emits calls can be handed it.
         ValueName.Stdlib.Namespace namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
-                new Hir.Apply(type, new ReachName.TheNamespace(namespace),
-                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                Hir.Apply.synthetic(type, new ReachName.TheNamespace(namespace), null,
+                        new ApplicationOrigin.ComposedFixture(),
+                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)), NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
@@ -142,8 +157,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     /** A case that carries nothing: naming it is constructing it. */
     public static FixtureTemplate unitCase(TypeReachName.Written type) {
         String written = type.rendered();
-        ValueName.OfType named =
-                new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own());
+        ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written,
                 Hir.Var.denoting(WrittenName.synthetic(written, NOWHERE),
                         new ReachName.InScope(named)));
@@ -168,10 +182,10 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * order stops is a second thing to keep true. What such a point leaves is a point nothing
      * composes a value at, which is what the callers already read a null as.
      *
-     * <p>Bare. How many names the value wears at the position it is going to is a different question
-     * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
-     * well, it was answered one layer deep, and a value of a newtype over a newtype came back
-     * missing the name in the middle.
+     * <p>Bare. Which names the value wears at the position it is going to is a different question
+     * with its own answer ({@link WornNames#under}), taken from the reading of that position;
+     * answered here as well, it was answered one layer deep, and a value of a newtype over a newtype
+     * came back missing the name in the middle.
      */
     public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
         if (!carrier.extent().admits(at)) {
@@ -200,16 +214,17 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     /**
      * A newtype around one value, written in the call form a row writes it in (ADR-0032).
      *
-     * <p>The construction says where it came from and the name says what it is, which is how the
-     * same call reads when a source wrote it: applying a type is the newtype taking what it wraps,
-     * so the origin is the application's and the name carries none of its own.
+     * <p>The application says where the construction came from and the name says what is applied,
+     * which is how the same call reads when a source wrote it: applying a type is the newtype taking
+     * what it wraps.
      */
     public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
         String written = type.rendered();
-        ValueName.OfType named = new ValueName.OfType(written, type.denotes(), null);
+        ValueName.OfType named = new ValueName.OfType(written, type.denotes());
         return new FixtureTemplate(written + "(" + inner.text() + ")",
-                new Hir.Apply(written, new ReachName.InScope(named), List.of(inner.value()),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                Hir.Apply.synthetic(written, new ReachName.InScope(named), null,
+                        new ApplicationOrigin.ComposedFixture(), List.of(inner.value()), NOWHERE,
+                        NO_SOURCE));
     }
 
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
@@ -233,7 +248,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             written.add(each.text());
         }
         return new FixtureTemplate("[" + String.join(", ", written) + "]",
-                new Hir.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
+                new Hir.ListLit(List.copyOf(values), SourceConstructOrigin.unwritten(), NOWHERE,
+                        NO_SOURCE));
     }
 
     /** One entry of a map: the pair a fixture writes a key and its value as. */
@@ -249,14 +265,22 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * module-level {@code let} is a row an author writes today — the value is expanded where the
      * row is read — and this is that same row, composed.
      *
-     * @param module what the name belongs to, which is what a reader of the name resolves it through
-     * @param name   the name as this module writes it
+     * <p>{@code occurrence} is which reference of the helper this is, and the run that composed it
+     * says so. The name reaches a declaration, so it is some reference of one; no source wrote it
+     * and no construct a source wrote is behind it, so nothing here could work one out — which is
+     * why it is taken and not minted. What the name reaches is {@code module} and {@code name}'s to
+     * answer, and the occurrence does not repeat it.
+     *
+     * @param module     what the name belongs to, which is what a reader of the name resolves it
+     *                   through
+     * @param name       the name as this module writes it
+     * @param occurrence which reference this run composed, from {@link FixtureReferences}
      */
-    public static FixtureTemplate named(String module, String name) {
+    public static FixtureTemplate named(String module, String name,
+                                        FixtureReferenceOrigin occurrence) {
         ValueName.Helper helper = new ValueName.Helper(module, name);
         return new FixtureTemplate(name,
-                Hir.Var.denoting(WrittenName.synthetic(name, NOWHERE),
-                        new ReachName.Own(helper)));
+                Hir.Var.respelled(name, new ReachName.Own(helper), occurrence, NOWHERE, NO_SOURCE));
     }
 
     /**
@@ -284,7 +308,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * @param moved the fields this writes over what the base holds, in the order they are written
      */
     public static FixtureTemplate spreading(TypeReachName.Written type, FixtureTemplate base,
-                                            Map<String, FixtureTemplate> moved) {
+                                            SequencedMap<String, FixtureTemplate> moved) {
         if (!(base.value() instanceof Hir.Var spread)) {
             throw new IllegalArgumentException("a spread names a value: " + base.text());
         }
@@ -299,12 +323,14 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         }
         return new FixtureTemplate(
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(spread),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(spread), NOWHERE, NO_SOURCE));
     }
 
-    /** A record, field by field, in the order the fields were declared. */
-    public static FixtureTemplate record(TypeReachName.Written type, Map<String, FixtureTemplate> fields) {
+    /** A record, field by field, in the order the fields were declared — which the fields are handed
+     *  over in, and which is why they are handed over as something that has one. */
+    public static FixtureTemplate record(TypeReachName.Written type,
+                                         SequencedMap<String, FixtureTemplate> fields) {
         List<String> written = new ArrayList<>();
         List<Hir.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, FixtureTemplate> field : fields.entrySet()) {
@@ -312,7 +338,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
-                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(),
-                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
+                Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
+                        List.of(), NOWHERE, NO_SOURCE));
     }
 }

@@ -101,10 +101,6 @@ final class TotalityChecker {
         if (group.size() == 1) {
             String name = group.iterator().next();
             Hir.FnDef h = own.get(name);
-            String message = "recursive helper `let " + name + "` is not structurally recursive: `" + name
-                    + "(...)` passes no argument that is a strictly smaller part of a parameter."
-                    + " Recurse on a part obtained by `match` (a field or a case), count with"
-                    + " `fold`, or mark the helper `partial`";
             Hir.Apply at = firstCall.get(name);
             return at == null
                     ? error(h, new BehaviorMessage.NotStructurallyRecursive(name))
@@ -324,8 +320,12 @@ final class TotalityChecker {
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Hir.Apply call -> {
+                // Named by what it reaches, which is what the group holds and what the definitions
+                // are keyed by. The spelling is what a report quotes: a helper of another module is
+                // written qualified where a reader reaches it and bare where its author wrote it,
+                // and the same call answers both.
                 if (call.answered() != null && group.contains(call.answered().reaches())) {
-                    calls.add(new RecCall(call.written(), call, lt, eq));
+                    calls.add(new RecCall(call.answered().reaches(), call, lt, eq));
                 }
                 Combinators.Written handed = Combinators.handedTo(call);
                 for (Hir.Expr arg : call.args()) {

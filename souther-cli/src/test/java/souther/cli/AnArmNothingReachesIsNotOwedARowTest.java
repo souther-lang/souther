@@ -4,20 +4,23 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
-import souther.compiler.types.CoverageOrigin;
-
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Weakening;
+import souther.compiler.reach.Reachability;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -117,8 +120,38 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "the `Off` arm is one no value reaches:\n" + report);
         assertTrue(report.contains("no row goes through `case Pending`"),
                 () -> "and the arm that is owed a row is still named:\n" + report);
-        assertFalse(report.contains("case Off"),
+        // Asked of what the lines say and not of whether the arm is spelled anywhere. The account
+        // names it where it says no row is owed through it, which is the opposite of asking for
+        // one; held as the arm going unmentioned, this would refuse the report for explaining
+        // itself.
+        assertEquals(List.of(), asksForARowAt(report, "case Off"),
                 () -> "nothing asks for a row through the arm nothing reaches:\n" + report);
+    }
+
+    /**
+     * The lines saying a row is missing somewhere that names {@code arm}.
+     *
+     * <p>The line and whatever it stands over. A block's entry says what is missing and the lines
+     * under it say which construct, so a check reading either alone answers about half of what the
+     * page says — an entry asking for a row at a rule names the rule under itself.
+     */
+    private static List<String> asksForARowAt(String report, String arm) {
+        List<String> asking = new ArrayList<>();
+        String entry = "";
+        for (String line : report.split("\n")) {
+            if (!line.startsWith("          ")) {
+                entry = line;
+            }
+            if (!line.contains(arm) && !entry.contains(arm)) {
+                continue;
+            }
+            if (entry.contains("no row goes through") || entry.contains("no row takes")
+                    || entry.contains("undecided whether a row")
+                    || entry.contains("nothing could show a row")) {
+                asking.add(entry);
+            }
+        }
+        return asking.stream().distinct().toList();
     }
 
     /** The control: the same arms with nothing refusing the case. Without this the assertion above
@@ -307,39 +340,32 @@ class AnArmNothingReachesIsNotOwedARowTest {
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     /**
-     * The probe numbers of the fork's two arms, read off the plan.
+     * The fork's two arms, read off the plan.
      *
-     * <p>Written down rather than read, these were the first two numbers the walk handed out —
-     * which they were only while nothing else in the body was numbered before them. A probe number
-     * is what the emitter and a measurement agree on and it moves whenever the numbering does, so a
-     * test that names one is naming the walk's order and not the arm.
+     * <p>The plan's own sites and not sites built here to stand for them. A site says where a run
+     * through the arm is recorded and which place that is, and the two are one answer the numbering
+     * gave; assembled in a test, the pair would be whatever this test put together and the measures
+     * below would agree with it by construction.
      */
-    private static List<Integer> armProbes() {
+    private static List<CoverageSites.ArmSite> armSites() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
-        return CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()).arms("classify").stream()
-                .map(CoverageSites.Site::index).toList();
+        return checked.plan().arms("classify");
     }
+
+    private static final List<CoverageSites.ArmSite> ARMS = armSites();
 
     /** The arm nothing reaches — the {@code then} of a guard at 50 no pair can be above. */
-    private static final int UNREACHED = armProbes().get(0);
+    private static final CoverageSites.ArmSite UNREACHED_ARM = ARMS.get(0);
 
     /** The arm every run takes. */
-    private static final int TAKEN = armProbes().get(1);
+    private static final CoverageSites.ArmSite TAKEN_ARM = ARMS.get(1);
 
-    private static CoverageSites.Site arm(int index) {
-        return new CoverageSites.Site("classify",
-                new souther.compiler.coverage.SourceOutcome.Held(
-                        new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
-                null, index, index,
-                new CoverageSites.Obligation("classify",
-                        CoverageOrigin.written("t", index,
-                                souther.compiler.types.CoverageConstruct.IF), 0,
-                        souther.compiler.coverage.DecidedBy.THE_DECLARATION));
-    }
+    private static final ArmProbe UNREACHED = UNREACHED_ARM.index();
+
+    private static final ArmProbe TAKEN = TAKEN_ARM.index();
 
     /**
      * The model's own reachability, which proves arm 0 unreachable: nothing at or above 50 is a
@@ -360,14 +386,21 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(TAKEN),
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(TAKEN), Set.of(),
                 proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
 
-        assertEquals(List.of(TAKEN),
-                measured.arms().all().stream().map(CoverageSites.Site::index).toList());
-        assertEquals(Set.of(TAKEN), measured.arms().covered());
-        assertTrue(measured.contradicted().isEmpty());
-        assertTrue(measured.unreached().orElseThrow().isEmpty());
+        assertEquals(List.of(TAKEN), probesOf(measured));
+        assertEquals(1, measured.arms().covered());
+        assertTrue(measured.arms().census().settled(),
+                "nothing has shown the arms it is counted out of to be short of one");
+        assertEquals(List.of(), measured.arms().unmet());
+    }
+
+    /** The probes of the arms this account holds, in the order the body holds them. */
+    private static List<ArmProbe> probesOf(Adequacy.BranchEvidence measured) {
+        return measured.arms().all().stream()
+                .flatMap(arm -> arm.occurrences().stream())
+                .map(CoverageSites.ArmSite::index).toList();
     }
 
     /**
@@ -383,22 +416,49 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // fold the measures read, so what a run does to a proof is decided in one place.
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED, TAKEN), asRun,
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED, TAKEN), Set.of(), asRun,
                 WeakeningSet.none());
 
-        assertEquals(Set.of(UNREACHED), measured.contradicted(),
+        // What a disproved proof bears on is the set of arms and not any one of them. Which arms
+        // there are is what the proofs decided, so a proof shown wrong leaves that set in doubt;
+        // where each arm stands is what the rows said, and a row through an arm went through it
+        // however wrong a proof about the arm beside it turned out to be.
+        assertEquals(new ArmCensus.Undecided(
+                        WeakeningSet.of(new Weakening.ProofContradicted(UNREACHED_ARM.obligation()))),
+                measured.arms().census(),
                 "the arm nothing reaches was proven unreachable and a row went through it");
-        assertEquals(List.of(UNREACHED, TAKEN),
-                measured.arms().all().stream().map(CoverageSites.Site::index).toList(),
+        assertEquals(List.of(UNREACHED, TAKEN), probesOf(measured),
                 "so it is still an arm this behavior has");
-        assertEquals(Set.of(UNREACHED, TAKEN), measured.arms().covered());
+        assertEquals(2, measured.arms().covered());
         assertEquals(MeasurementStatus.PARTIAL,
                 AdequacyReport.statusOf(measured.measured()),
                 "and no number here is given as though nothing had happened");
-        assertEquals(WeakeningSet.of(new souther.compiler.query.Weakening.ProofContradicted(
-                        "b", UNREACHED)),
+        assertEquals(WeakeningSet.of(new Weakening.ProofContradicted(UNREACHED_ARM.obligation())),
                 measured.measured().weakening(),
                 "and the measurement says which proof a row went against");
+    }
+
+    /**
+     * And the arms themselves are answered for as usual.
+     *
+     * <p>What the third of these says is the point. The rows here all ran, so an arm nothing lit is
+     * an arm nothing reaches — and while the claim over the arms was the measurement's to make, this
+     * one was withheld: the measurement was weakened by the contradicted proof, and the arms went
+     * unnamed under a line that said a row had not been read. No row had gone unread.
+     */
+    @Test
+    void andAnArmIsStillAnsweredForBesideADisprovedProof() {
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED), Set.of(), asRun,
+                WeakeningSet.none());
+
+        assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");
+        assertEquals(List.of(TAKEN), measured.arms().unmet().stream()
+                        .map(arm -> arm.display().index()).toList(),
+                "and nothing goes through the other, which every row was read against");
+        assertEquals(List.of(), measured.arms().undecided(),
+                "a proof shown wrong is not a row nobody read");
     }
 
     /** The same fact both measures read. Taking the arm back for one of them and not the other is how
@@ -409,14 +469,15 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
         assertEquals(Set.of(UNREACHED), asRun.provedWrong(),
                 "a row went through an arm this reading had proven nothing reaches");
-        assertFalse(asRun.answers().nothingArrivesAt(UNREACHED),
+        assertFalse(asRun.answers().at(UNREACHED_ARM.place())
+                        instanceof Reachability.Unreachable,
                 "so nothing about it is proven any more");
         // Both measures read this one object, so what is back for one is back for the other. Said
         // of the arms: what a comparison's outcome was proven to be is not something a row through
         // an arm settles — a lit comparison says it ran, not which way it came out.
         assertTrue(asRun.answers().found().entrySet().stream()
                         .filter(each -> each.getKey()
-                                instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence)
+                                instanceof souther.compiler.coverage.ControlPlace.Arm)
                         .noneMatch(each -> each.getValue()
                                 instanceof souther.compiler.reach.Reachability.Unreachable),
                 "and what the signature reads is the same answer the arms are counted by");

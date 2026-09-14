@@ -29,16 +29,16 @@ import java.util.List;
 public final class BoundExamples {
 
     private final String module;
-    private final Prepared.Examples rows;
+    private final Prepared.ForExamples forExamples;
     private final ExampleVerifier verifier;
 
     /** The behaviors the bound instance implements, worked out once from the instance. */
     private final List<String> bound;
 
-    BoundExamples(String module, Prepared.Examples rows, ExampleVerifier verifier,
+    BoundExamples(String module, Prepared.ForExamples forExamples, ExampleVerifier verifier,
                   List<String> bound) {
         this.module = module;
-        this.rows = rows;
+        this.forExamples = forExamples;
         this.verifier = verifier;
         this.bound = List.copyOf(bound);
     }
@@ -52,7 +52,7 @@ public final class BoundExamples {
      */
     public List<RecordedRow> rows() {
         List<RecordedRow> found = new ArrayList<>();
-        for (Prepared.Rows block : rows.rows()) {
+        for (Prepared.Example block : forExamples.examples()) {
             Hir.Example written = block.read();
             if (!bound.contains(written.target())) {
                 continue;
@@ -92,7 +92,7 @@ public final class BoundExamples {
      * silently never runs. What is resolved against is the rows as written, which the compiler holds
      * to carrying one name each within a behavior — so this finds one row or none, never two.
      */
-    public RowKey row(String behavior, String name) {
+    public RowKey rowKey(String behavior, String name) {
         for (RecordedRow candidate : rows()) {
             if (candidate.behavior().equals(behavior)
                     && candidate.identity() instanceof RowIdentity.Named named

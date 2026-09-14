@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
@@ -42,9 +43,10 @@ public final class Lower {
      * <p>Settling comes before the expansion because inlining is what carries a parameter's type onto
      * the binding a call becomes (issue #178): a type settled afterwards would never reach it.
      */
-    public static Hir.Module settle(Prepared prepared, Symbols symbols,
+    public static Hir.Module settle(CheckSurface surface, Symbols symbols,
+                                    PublishedDeclarations published, DeclarationKinds kinds,
                                     Map<ValueName.Behavior, ReqSig> reqSigs) {
-        return HelperParams.settle(prepared.module(), symbols, reqSigs);
+        return HelperParams.settle(surface.module(), symbols, published, kinds, reqSigs);
     }
 
     /**
@@ -127,13 +129,16 @@ public final class Lower {
     private static Hir.Expr listCompToIf(Hir.ListComp comp) {
         // The `if` stands where the comprehension was written; the two lists are this lowering's
         // own — no run of characters in the file spells either of them.
-        Hir.Expr result = new Hir.ListLit(List.of(comp.element()), comp.pos(), null);
+        Hir.Expr result = new Hir.ListLit(List.of(comp.element()),
+                SourceConstructOrigin.unwritten(), comp.pos(), null);
         List<Hir.Expr> guards = comp.guards();
         for (int i = guards.size() - 1; i >= 0; i--) {
-            // The fork is derived from the comprehension rather than minted here, so a
-            // comprehension a helper holds answers the same in every body that expanded it.
-            result = new Hir.If(guards.get(i), result, new Hir.ListLit(List.of(), comp.pos(), null),
-                    comp.origin().lowered(i), comp.pos(), comp.region());
+            // The fork is the comprehension's answer rather than one minted here, so a
+            // comprehension a helper holds answers the same in every body that expanded it, and the
+            // reading that runs before this lowering names the fork this builds.
+            result = new Hir.If(guards.get(i), result,
+                    new Hir.ListLit(List.of(), SourceConstructOrigin.unwritten(), comp.pos(), null),
+                    comp.forkOfGuard(i), comp.pos(), comp.region());
         }
         return result;
     }

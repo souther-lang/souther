@@ -3,10 +3,12 @@ package souther.compiler.observe;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.Citation;
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.SourcePos;
 
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One reason a measure could not read everything it needed, as data rather than as a sentence.
@@ -54,9 +56,26 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         VALUE_UNREADABLE(false),
         /** A value was larger than the limits allow, so only its shape was kept. */
         VALUE_TRUNCATED(false),
-        /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
-         * what it would have covered is unknown. */
+        /** A row could not be decided: the evaluation did not answer, so what the row would have
+         * covered is unknown. */
         ROW_UNDECIDED(false),
+        /**
+         * A row was stopped by a limit this compiler evaluates rows under, so what it would have
+         * covered is unknown.
+         *
+         * <p>Its own word beside {@link #ROW_UNDECIDED}, which is the same loss from the other
+         * cause. Both leave the measure without what the row would have decided, and a person
+         * holding them does different work: the values here are ones a run under a wider
+         * {@link souther.compiler.execute.EvaluationPolicy} keeps, and a row the evaluation had no
+         * answer for is not.
+         *
+         * <p>One word for the three limits there are — the counted steps, the recursion depth and
+         * the clock — because what a measure lost is the same for all of them and the row's own
+         * diagnostic already says which. A limit the host imposed rather than this compiler is not
+         * one of them: the stack running out is not a figure anything here compared against, and a
+         * run under a wider policy on the same host meets it again.
+         */
+        ROW_EVALUATION_LIMIT_REACHED(false),
         /**
          * A row was not handed to what was to apply it: nothing could establish that the answer's
          * declarations are the ones the row is written for.
@@ -121,6 +140,36 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         public boolean leftNoRowRead() {
             return leftNoRowRead;
         }
+
+        /**
+         * Whether a run that allows more could come to a different answer about this.
+         *
+         * <p>Answered here because every producer of a code agrees about it, which is what lets the
+         * code answer at all. Where they did not, the code was split: a row a figure stopped and a
+         * row the evaluation had no answer for were one word, and no answer to this could have been
+         * right at both.
+         *
+         * <p>One switch and no {@code default}, rather than a flag beside {@link #leftNoRowRead}.
+         * The two questions are asked the same way for different reasons: that one is a fact about
+         * one code and reads as one, and this one is a division of all eight into two, which is
+         * only reviewable where every answer is visible at once.
+         */
+        public RunSensitivity runSensitivity() {
+            return switch (this) {
+                // The observation walked as far as its nodes, its depth and its text allowed, and
+                // an observation allowed more keeps what it stopped at.
+                case VALUE_TRUNCATED -> RunSensitivity.MAY_CHANGE;
+                // And the row was stopped by the steps, the depth or the clock it is evaluated
+                // under, each of which a run may allow more of.
+                case ROW_EVALUATION_LIMIT_REACHED -> RunSensitivity.MAY_CHANGE;
+                // Nothing here compared anything against a figure. A value nothing could read back,
+                // a row the evaluation had no answer for, a row nothing could establish an answerer
+                // for, classes that would not link or were never made, and a source nothing was
+                // observed from are all met again by a run that allows more.
+                case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
+                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT -> RunSensitivity.UNAFFECTED;
+            };
+        }
     }
 
     public Incompleteness {
@@ -137,9 +186,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return target.subject();
     }
 
-    /** The same, as a person is shown it — a source under the name {@code names} gives it. */
-    public String shown(SourceNameResolver names) {
-        return target.shown(names);
+    /** The same, as a person is shown it — a source under the name {@code rendering} gives it. */
+    public String shown(SourceRendering rendering) {
+        return target.shown(rendering);
     }
 
     /** The source this is about, where what it names is one. Empty otherwise. */
@@ -153,7 +202,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
     }
 
-    /** @throws IllegalArgumentException for a scope whose subject is not a name — a source is
+    /** What {@code code} says, about the thing {@code subject} names in {@code scope}.
+     *
+     *  @throws IllegalArgumentException for a scope whose subject is not a name — a source is
      *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
@@ -194,22 +245,10 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return target.onlyBehavior();
     }
 
-    /**
-     * Whether this counts against {@code behavior}, and so whether its measures stop being answers.
-     *
-     * <p>A reason that names one behavior answers for itself. The rest are answered here and not by
-     * the target, because what a target names and what holds a behavior are two things: a module
-     * holds every behavior in it by what a module is, and whether a source holds one is a fact
-     * about the compilation that a source id does not carry.
-     *
-     * <p>A source answers yes, and that is a reading of the two places that write one. Both are a
-     * source that was not evaluated at all, where which behaviors it wrote rows for is exactly what
-     * could not be read — so every one of them is missing rows it may have held. A {@code SOURCE}
-     * whose contents were known would need the compilation to answer and would not belong here.
-     * Nothing writes one, and this is the claim to re-read if something does.
-     */
+    /** Whether this counts against {@code behavior}, which is the fact's answer and not this
+     *  occurrence's ({@link Fact#countsAgainst}). */
     public boolean countsAgainst(String behavior) {
-        return behavior().map(behavior::equals).orElse(true);
+        return identity().countsAgainst(behavior);
     }
 
     /**
@@ -222,7 +261,109 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Fact(code, target);
     }
 
-    /** A reason with the place it was said left out, which is the whole of what makes two of them
-     *  one. */
-    public record Fact(Code code, Target target) {}
+    /**
+     * A reason with the place it was said left out, which is the whole of what makes two of them
+     * one.
+     *
+     * <p>Everything a reader is told about the reason other than where it was met is here, because
+     * all of it follows from what happened and what it happened to. Where it was met is
+     * accumulated beside this rather than held in it, so that one fact cited at three places stays
+     * one fact.
+     */
+    public record Fact(Code code, Target target) {
+
+        public Fact {
+            if (code == null || target == null) {
+                throw new IllegalArgumentException("a reason is something that happened to"
+                        + " something");
+            }
+        }
+
+        /** Which kind of thing {@link #subject} identifies. */
+        public Scope scope() {
+            return target.scope();
+        }
+
+        /** What it happened to, as an identity. */
+        public String subject() {
+            return target.subject();
+        }
+
+        /** The same, as a person is shown it. */
+        public String shown(SourceRendering rendering) {
+            return target.shown(rendering);
+        }
+
+        /** The source this is about, where what it names is one. */
+        public Optional<SourceId> sourceIdentity() {
+            return target.sourceIdentity();
+        }
+
+        /** The behavior this is about, where it is about exactly one. */
+        public Optional<String> behavior() {
+            return target.onlyBehavior();
+        }
+
+        /**
+         * Whether this counts against {@code behavior}, and so whether its measures stop being
+         * answers.
+         *
+         * <p>Here and not beside the occurrence, because whose measures a reason costs follows
+         * from what it is about and never from where it was met. A reason that names one behavior
+         * answers for itself; the rest are answered here, because what a target names and what
+         * holds a behavior are two things — a module holds every behavior in it by what a module
+         * is, and whether a source holds one is a fact about the compilation that a source id does
+         * not carry.
+         *
+         * <p>A source answers yes, and that is a reading of the two places that write one. Both are
+         * a source that was not evaluated at all, where which behaviors it wrote rows for is
+         * exactly what could not be read — so every one of them is missing rows it may have held.
+         * A {@code SOURCE} whose contents were known would need the compilation to answer and would
+         * not belong here. Nothing writes one, and this is the claim to re-read if something does.
+         */
+        public boolean countsAgainst(String behavior) {
+            return behavior().map(behavior::equals).orElse(true);
+        }
+    }
+
+    /**
+     * One incompleteness fact, together with every usable citation at which it was met.
+     *
+     * <p>Empty citations is a fact met where there was nothing to send a reader to, and not a fact
+     * nobody met.
+     */
+    public record Met(Fact fact, Set<Citation> citations) {
+
+        public Met {
+            if (fact == null) {
+                throw new IllegalArgumentException("something was met, and this is what");
+            }
+            citations = citations == null ? Set.of() : Set.copyOf(citations);
+        }
+
+        /** One occurrence of it, as the reader that met it produced one. */
+        public static Met of(Incompleteness occurrence) {
+            return new Met(occurrence.identity(),
+                    occurrence.at().map(Set::of).orElseGet(Set::of));
+        }
+
+        /**
+         * Both occurrences of one fact, as one: the fact, cited everywhere either was met.
+         *
+         * <p>Of one fact, and it says so rather than taking the caller's word. What comes out
+         * carries this one's fact, so two that are not one fact would come out as this one met
+         * somewhere it was not — a reader sent to a place that is about something else. That the
+         * caller only ever asks under one key is true of the callers there are and is not what
+         * makes the answer right.
+         */
+        public Met mergedWith(Met other) {
+            if (!fact.equals(other.fact)) {
+                throw new IllegalArgumentException("two occurrences of one fact are of one fact: "
+                        + fact + " and " + other.fact);
+            }
+            Set<Citation> both = new HashSet<>(citations);
+            both.addAll(other.citations);
+            return new Met(fact, both);
+        }
+    }
 }

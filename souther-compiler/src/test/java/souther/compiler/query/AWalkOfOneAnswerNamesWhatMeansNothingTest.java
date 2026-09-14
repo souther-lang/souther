@@ -101,6 +101,9 @@ class AWalkOfOneAnswerNamesWhatMeansNothingTest {
     /** A key whose equality is over part of itself, so it carries more than it compares. */
     private static final class Named {
         private final String name;
+        /** Read by the walk and by nothing here: carrying more than it compares is the whole of
+         *  what this stands for. */
+        @SuppressWarnings("UnusedVariable")
         private final Address held;
 
         private Named(String name, Address held) {

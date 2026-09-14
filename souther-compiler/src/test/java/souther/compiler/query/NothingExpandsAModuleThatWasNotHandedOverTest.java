@@ -61,7 +61,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
     /** Each question that expands a body of a module, by the answer it is asked for. */
     private static final Map<String, Function<String, Key<?>>> EXPANDING = Map.of(
             "the derived module", Shapes.Derived::new,
-            "the invariants the discharge analysis reads", Shapes.InvariantsForDischarge::new,
+            "the clauses of each declaration, expanded", Shapes.ExpandedDeclarationClauses::new,
             "what each clause of an invariant can be discharged by", Shapes.InvariantCapabilities::new,
             "the module a body is prepared from", Shapes.Prepared::new,
             "one body as the backend emits it",

@@ -2,15 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -93,15 +93,17 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, () -> "the model under test writes " + behavior);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        InputReads reads = InputReads.of(
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        souther.compiler.inputs.InputDomain inputs =
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
                 checked.elementBindings().get(behavior));
-        return ReachingCuts.stating(Condition.of(body, reads), holding, symbols);
+        return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
+                new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */
-    private static boolean holdsAt(ReachingCuts.Cut cut, int x, int y) {
+    private static boolean holdsAt(TakenConstraint.Affine cut, int x, int y) {
         LinearForm<NumericTerm> form = cut.form();
         BigDecimal value = form.constant();
         for (Map.Entry<NumericTerm, BigDecimal> each : form.coefs().entrySet()) {
@@ -132,16 +134,20 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
     void whatWasTakenInHoldsWhereverTheConditionComesOutThatWay() {
         for (String behavior : MEANS.keySet()) {
             for (boolean holding : List.of(true, false)) {
-                List<ReachingCuts.Cut> cuts = stating(behavior, holding).stream()
+                // The arithmetic's, which is the vocabulary this model's conditions land in: every
+                // position of it counts to a number. What a bound on an order that counts nothing
+                // holds of is asked where such a model is written.
+                List<TakenConstraint.Affine> cuts = stating(behavior, holding).stream()
                         .filter(each -> each instanceof OnTheWay.TakenIn)
-                        .map(each -> ((OnTheWay.TakenIn) each).cut())
+                        .map(each -> ((OnTheWay.TakenIn) each).taken())
+                        .map(TakenConstraint.Affine.class::cast)
                         .toList();
                 for (int x = -4; x <= 13; x++) {
                     for (int y = -4; y <= 13; y++) {
                         if (MEANS.get(behavior).test(x, y) != holding) {
                             continue;   // this row does not come here, so nothing is claimed of it
                         }
-                        for (ReachingCuts.Cut cut : cuts) {
+                        for (TakenConstraint.Affine cut : cuts) {
                             int atX = x;
                             int atY = y;
                             assertTrue(holdsAt(cut, x, y),

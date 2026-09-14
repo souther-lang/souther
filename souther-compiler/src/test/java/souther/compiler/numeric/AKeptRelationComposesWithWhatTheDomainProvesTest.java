@@ -1,7 +1,5 @@
 package souther.compiler.numeric;
 
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import org.junit.jupiter.api.Test;
 

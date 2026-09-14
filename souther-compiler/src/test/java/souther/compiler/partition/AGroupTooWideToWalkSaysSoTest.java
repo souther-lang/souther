@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -13,7 +15,6 @@ import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashSet;
@@ -134,7 +135,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
         Model model = Model.of(THIRTEEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -149,7 +150,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void andUnderTheLimitTheGroupIsOffered() {
         Model model = Model.of(TWELVE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
 
         assertEquals(List.of(), offered.notOffered(),
                 "nothing is held back");
@@ -175,21 +176,21 @@ class AGroupTooWideToWalkSaysSoTest {
     @Test
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
-        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
+        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes().axes(),
                         atMost(4)).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
-        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
+        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes().axes(),
                         atMost(4)).notOffered(),
                 "a group of exactly the budget is offered");
-        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
+        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes().axes(),
                         atMost(3)).notOffered().size(),
                 "and one choice past it is not");
     }
 
 
     private static AdequacyPolicy.OfTheGeneration atMost(int cells) {
-        return new AdequacyPolicy.OfTheGeneration(Budgets.generation().rows(), cells);
+        return new AdequacyPolicy.OfTheGeneration(Budgets.generation().rowLimit(), cells);
     }
 
     /**
@@ -204,9 +205,9 @@ class AGroupTooWideToWalkSaysSoTest {
         Model wide = Model.of(THIRTEEN);
         Model narrow = Model.of(TWELVE);
 
-        Set<Integer> fromWide =
+        Set<ArmProbe> fromWide =
                 Generator.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
-        Set<Integer> fromNarrow =
+        Set<ArmProbe> fromNarrow =
                 Generator.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
@@ -380,7 +381,7 @@ class AGroupTooWideToWalkSaysSoTest {
         AdequacyPolicy.OfTheGeneration budget = atMost(8);
 
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes(), budget);
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), budget);
         assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 
@@ -389,9 +390,9 @@ class AGroupTooWideToWalkSaysSoTest {
 
         // The held group is one arms were owed behind: without this, the answer below would hold of
         // a group that claimed nothing and would say nothing about when a group is named.
-        Set<Integer> owed = Generator.everyArmACombinationMayTake(
+        Set<ArmProbe> owed = Generator.everyArmACombinationMayTake(
                 model.subject(), model.groups(), budget);
-        Set<Integer> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
+        Set<ArmProbe> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
         behindTheHeldGroup.retainAll(owed);
         assertFalse(behindTheHeldGroup.isEmpty(),
                 "arms were owed behind the group that was held back");
@@ -404,19 +405,19 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /** Which arms a group the limit held back could have been searched at. */
-    private static List<Integer> armsIn(InteractionCells.NotOffered held) {
-        List<Integer> out = new java.util.ArrayList<>();
+    private static List<ArmProbe> armsIn(InteractionCells.NotOffered held) {
+        List<ArmProbe> out = new java.util.ArrayList<>();
         for (souther.compiler.coverage.ControlClaim claim : held.claims()) {
-            if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
+            if (claim.at() instanceof souther.compiler.coverage.ControlPlace.Arm arm
                     && arm.probe().isPresent()) {
-                out.add(arm.probe().getAsInt());
+                out.add(arm.probe().get());
             }
         }
         return out;
     }
 
     /** The behavior's inputs, its axes and the groups its body meets at, off one compile. */
-    private record Model(Generator.Subject subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -429,7 +430,7 @@ class AGroupTooWideToWalkSaysSoTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(prepared, "the model compiles");
             assertNotNull(sigs);
@@ -439,18 +440,14 @@ class AGroupTooWideToWalkSaysSoTest {
             InputDomain inputs = compilation.db()
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("total");
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, symbols,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get("total");
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                    checked.supplied());
-            return new Model(new Generator.Subject(spec.name(),
-                    new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                            sigs.get("total").inputTypes(), symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                    partitioning.axes(), HeldCounts.of(inputs, symbols)),
-                    CoverageRead.of("total", body, plan, inputs, symbols));
+            CoverageSites.Plan plan = checked.plan();
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
+                    partitioning),
+                    CoverageRead.of("total", body, plan, inputs, rules));
         }
     }
 }

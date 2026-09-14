@@ -1,11 +1,13 @@
 package souther.compiler.core;
 
 import souther.compiler.check.CoreBinders;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -36,7 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EverySlotIsAChildTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0, souther.compiler.types.CoverageConstruct.IF);
+    private static final SourceConstructOrigin ORIGIN = SourceConstructOrigin.written(
+            new WrittenOwner.Body("t", "b"), 0,
+            souther.compiler.types.SourceConstruct.IF);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
 
     private static final Hir.Binders BINDERS = new Hir.Binders(OWNER);
@@ -107,7 +111,7 @@ class EverySlotIsAChildTest {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
                 binder("p"), new Core.Int(0, Type.INT, POS),
                 List.of(new Core.ElseArm(Optional.empty(), new Core.Int(1, Type.INT, POS))),
-                ORIGIN, Type.INT, POS, java.util.List.of());
+                Core.ForkPlace.asWritten(ConstructOccurrence.asWritten(ORIGIN)), Type.INT, POS);
 
         assertTrue(childrenOf(attempt).stream().anyMatch(c -> c instanceof Core.Construct),
                 "the construction itself, rather than the field values inside it");
@@ -118,7 +122,8 @@ class EverySlotIsAChildTest {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
                 binder("p"),
                 new Core.Apply(read("f", 1), List.of(), Type.INT, POS),
-                List.of(), ORIGIN, Type.INT, POS, java.util.List.of());
+                List.of(), Core.ForkPlace.asWritten(ConstructOccurrence.asWritten(ORIGIN)),
+                Type.INT, POS);
 
         List<String> asExpressions = new ArrayList<>();
         List<String> asNames = new ArrayList<>();

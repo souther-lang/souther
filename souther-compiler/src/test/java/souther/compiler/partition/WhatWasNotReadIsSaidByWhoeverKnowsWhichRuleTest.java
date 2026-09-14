@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -72,8 +73,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void aRuleThisReadAndCouldNotUseNamesIt() {
         PartitionEvidence.NotRead said = notRead(A_RULE).getFirst();
 
-        PartitionEvidence.NotRead.ARule rule =
-                assertInstanceOf(PartitionEvidence.NotRead.ARule.class, said);
+        PartitionEvidence.NotRead.AnUnclassifiedRule rule =
+                assertInstanceOf(PartitionEvidence.NotRead.AnUnclassifiedRule.class, said);
         assertInstanceOf(souther.compiler.check.RuleRef.Comparison.class, rule.rule());
         assertEquals(List.of(Adequacy.Kind.PARTITION_NOT_READ), kinds(A_RULE));
     }
@@ -93,7 +94,9 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
                         each instanceof PartitionEvidence.NotRead.APosition
                                 && each.reason() == UndividedPosition.Reason.RULES_NOT_READ_AT_ALL),
                 said::toString);
-        assertFalse(said.stream().anyMatch(each -> each instanceof PartitionEvidence.NotRead.ARule),
+        assertFalse(said.stream().anyMatch(each ->
+                        each instanceof PartitionEvidence.NotRead.ARule
+                                || each instanceof PartitionEvidence.NotRead.AnUnclassifiedRule),
                 said::toString);
     }
 
@@ -128,7 +131,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     }
 
     private static String human(String model) {
-        return report(model).human(SourceNameResolver.identity());
+        return report(model).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport report(String model) {

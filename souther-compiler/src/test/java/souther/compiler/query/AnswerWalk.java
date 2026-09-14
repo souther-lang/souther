@@ -82,7 +82,6 @@ final class AnswerWalk {
                             Set<String> classes) {
         OfOneStore facts = new OfOneStore(question, classes);
         Traversal<Object, Locus> walk = new Traversal<>(facts);
-        facts.walk = walk;
         walk.at(root, Locus.ROOT);
         switch (walk.covered()) {
             case Covered.Whole<Traversal.Stopped<Locus>>(List<Traversal.Stopped<Locus>> all) ->
@@ -109,7 +108,6 @@ final class AnswerWalk {
 
         private final String question;
         private final Set<String> classes;
-        private Traversal<Object, Locus> walk;
 
         OfOneStore(String question, Set<String> classes) {
             this.question = question;

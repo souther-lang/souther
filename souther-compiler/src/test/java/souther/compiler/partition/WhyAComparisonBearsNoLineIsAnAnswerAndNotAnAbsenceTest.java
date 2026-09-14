@@ -1,9 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -13,15 +16,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * A comparison that bears no line says which of the reasons it is.
  *
- * <p>They are not one answer. A truth nothing reads is one the behavior draws no boundary on at all,
- * and a report that stayed silent about it is right. A comparison no run through can be recorded is
- * one the behavior may well draw a boundary on and this cannot show a row to have met. Folded into
- * one {@code false}, the second becomes silence that reads like the first.
+ * <p>They are not one answer. A truth nothing reads is one the behavior draws no boundary on at all;
+ * a comparison no run answers through is one whose outcome is about no row, arrived at from where
+ * it stands rather than from what reads it. Neither is reported, and which of the two refused a
+ * comparison is a fact the policy has when it refuses — folded into one {@code false}, whoever
+ * needs it next works it out again.
  *
  * <p>What a comparison is written inside is no part of this. A step a combinator applies once per
  * element is passed as many times as there are elements, and the two written here stand together to
@@ -63,20 +68,20 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("read");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
         souther.compiler.inputs.InputDomain inputs = compilation.db()
                 .ask(new Adequacy.Inputs(module)).value().get("read");
 
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of(body, plan,
-                        InputReads.of(inputs, checked.elementBindings().get("read")),
-                        symbols).all()) {
-            byLine.put(each.comparison().pos().line(), each.standing());
+                : ComparisonReadings.of("read", body, inputs.reading(rules),
+                        InputReads.ofParameters(inputs.parameterReads(),
+                                checked.elementBindings().get("read"))).comparisons()) {
+            Citation.Written at = assertInstanceOf(
+                    Citation.Written.class, each.at(),
+                    "the model under test is written in this compile's own source");
+            byLine.put(WhereItSits.in(MODEL, at.at()).line(), each.standing());
         }
         return byLine;
     }
@@ -84,7 +89,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     /** A truth a fork below reads is a line. */
     @Test
     void aTruthSomethingReadsBearsALine() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
+        assertEquals(BoundaryPolicy.Standing.Admitted.class,
                 standingAt(8).getClass());
     }
 
@@ -97,7 +102,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
     /** A truth one run reaches once per element of an input bears a line at that element. */
     @Test
     void aTruthReachedOncePerElementOfAnInputBearsALine() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class,
+        assertEquals(BoundaryPolicy.Standing.Admitted.class,
                 standingAt(10).getClass(),
                 "each pass is one occurrence of a position, so a row can be read at it");
     }
@@ -115,10 +120,10 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
      */
     @Test
     void aTruthOneRunReachesMoreThanOnceIsStillOneThisPolicyAdmits() {
-        assertEquals(BoundaryPolicy.Standing.DrawsALine.class, standingAt(11).getClass());
+        assertEquals(BoundaryPolicy.Standing.Admitted.class, standingAt(11).getClass());
     }
 
     private static NotABoundary whyOf(BoundaryPolicy.Standing standing) {
-        return standing instanceof BoundaryPolicy.Standing.DrawsNone none ? none.why() : null;
+        return standing instanceof BoundaryPolicy.Standing.Refused none ? none.why() : null;
     }
 }

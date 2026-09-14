@@ -75,18 +75,20 @@ public sealed interface Proof
     /** What this proof comes to, in {@code words}. */
     <T> T said(Words<T> words);
 
-    /** @see Words#conditionsThatCannotAllHold */
+    /** The conditions on the way here cannot all hold; see
+     *  {@link Words#conditionsThatCannotAllHold}. */
     static Proof conditionsThatCannotAllHold(List<PathDecision> decisions) {
         return new ConditionsThatCannotAllHold(decisions);
     }
 
-    /** @see Words#outsideInputDomain */
+    /** The position would have to hold a value its input domain does not admit; see
+     *  {@link Words#outsideInputDomain}. */
     static Proof outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
                                     PathDecision departure) {
         return new OutsideInputDomain(position, admits, departure);
     }
 
-    /** @see Words#everyCaseRefused */
+    /** Every case the position could hold was refused; see {@link Words#everyCaseRefused}. */
     static Proof everyCaseRefused(String position, List<TypeSymbol> cases) {
         return new EveryCaseRefused(position, cases);
     }

@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -56,13 +57,13 @@ class ARowIsEvaluatedOncePerCompileTest {
      *  is asked for the wait this compilation was given, the way the build asks for it. */
     private static JvmExampleDeadlines recording(List<Deadline.Work> into) {
         JvmExampleDeadlines build = JvmDeadlines.onWorkers();
-        return outerTimeout -> {
-            Deadline inner = build.forThisCompile(outerTimeout);
+        return compilerTimeout -> {
+            Deadline inner = build.forThisCompile(compilerTimeout);
             return new Deadline() {
 
                 @Override
-                public long budgetMs() {
-                    return inner.budgetMs();
+                public Duration timeout() {
+                    return inner.timeout();
                 }
 
                 @Override
@@ -77,7 +78,7 @@ class ARowIsEvaluatedOncePerCompileTest {
     }
 
     private static long rowsRunIn(Adequacy.Asked measure) {
-        return workOf(measure).stream().filter(w -> w instanceof Deadline.Work.Row).count();
+        return workOf(measure).stream().filter(w -> w instanceof Deadline.Work.WholeRow).count();
     }
 
     /** Two rows, two evaluations — not four. */
@@ -107,7 +108,7 @@ class ARowIsEvaluatedOncePerCompileTest {
 
         Adequacy.Of measured = compilation.adequacy("example.once");
 
-        assertEquals(List.of(), measured.branches().get("take").unreached().orElseThrow(),
+        assertEquals(List.of(), measured.branches().get("take").arms().unmet(),
                 "both arms of `take` were taken, and both were recorded");
     }
 }

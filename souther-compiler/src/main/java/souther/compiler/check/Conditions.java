@@ -1,18 +1,22 @@
 package souther.compiler.check;
 
-import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
+import souther.compiler.types.ApplicationDerivationCause;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ReferenceDerivationCause;
+import souther.compiler.types.ReferenceOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -65,8 +69,8 @@ final class Conditions {
      * no arm ruled out.
      *
      * <p><b>What the values a condition names guarantee is not here either, and the walk has it.</b>
-     * {@link Predicates#assumeCond} takes {@link Predicates#sizeFacts} and
-     * {@link Predicates#resultFacts} into what is known before it reads the condition at all: a size
+     * {@link Predicates} takes what a size and what an operation's result are guaranteed to be into
+     * what is known before it reads the condition at all: a size
      * is at or above nought whether the condition holds or not, so those are guarantees about values
      * and not statements the condition makes. An arm read here is read without them, so
      * {@code List.size(xs)} under {@code not List.isEmpty(xs)} comes to "not nought" here where the
@@ -136,36 +140,107 @@ final class Conditions {
      */
     static void stating(Terms terms, Core rawCond, Denotations at, boolean positive,
                         List<NumericConstraint> out) {
-        Core cond = asSizeComparison(rawCond);
-        Core ordered = asOrderComparison(terms, cond, at);
-        if (ordered != cond) {
-            stating(terms, ordered, at, positive, out);
-        }
-        Core under = negated(cond);
-        if (under != null) {
-            stating(terms, under, at, !positive, out);
-            return;
-        }
-        if (cond instanceof Core.Binary b
-                && (b.op() == BinOp.AND && positive || b.op() == BinOp.OR && !positive)) {
-            stating(terms, b.left(), at, positive, out);
-            stating(terms, b.right(), at, positive, out);
-            return;
-        }
-        if (cond instanceof Core.Binary b) {
-            Rel rel = relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm<FactSubject> left = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<FactSubject> right = eff == null ? null : terms.affineOf(b.right(), at);
-            if (left != null && right != null) {
-                out.add(new NumericConstraint(left.minus(right), eff));
+        out.addAll(new Stating(terms).read(rawCond, positive, at, terms::inside));
+    }
+
+    /**
+     * What a condition states, read over the shape it was written in.
+     *
+     * <p>Over the shape and not over the tree, so that what a connective composes is recognised in
+     * one place ({@link ClauseExpr}) and this reading agrees with every other by having been given
+     * the answer. And a binding is crossed on the way in, so a rule stated through a helper states
+     * what the same rule written out states — read as a shape with no word for it, such a rule
+     * stated nothing at all.
+     */
+    private record Stating(Terms terms)
+            implements ClauseReading<List<NumericConstraint>, Denotations> {
+
+        /**
+         * Every reading of one part, because each of them holds of the values: an arm read without
+         * one of them is an arm bounded by less than what choosing it settles.
+         *
+         * <p>Read through the same normalisation a guard is, which is where it belongs: an
+         * emptiness check is the comparison it means, and what that comparison composes is nothing,
+         * so nothing above this had a shape to recognise differently for it.
+         */
+        @Override
+        public List<NumericConstraint> whole(ClauseExpr.Part part, Denotations at) {
+            boolean positive = part.positive();
+            List<NumericConstraint> out = new ArrayList<>();
+            for (StatedComparison stated
+                    : comparisonsStatedBy(terms, asSizeComparison(part.of()), at)
+                            .inReadingOrder()) {
+                LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
+                LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
+                if (left != null && right != null) {
+                    out.add(new NumericConstraint(left.minus(right),
+                            stated.relationUnder(positive)));
+                }
             }
+            return out;
+        }
+
+        /**
+         * A conjunction states both of what it composes, and a choice states neither.
+         *
+         * <p>One of a choice's parts holds and this cannot say which, so what is left of it is that
+         * the author named the two — which is nothing this reading has a constraint for. Descending
+         * would state each part of a choice as though the values had to satisfy it.
+         */
+        @Override
+        public Descent<List<NumericConstraint>> at(ClauseExpr.Joined join) {
+            return switch (join.how()) {
+                case BOTH -> new Descent.Into<>(Stating::and);
+                case EITHER -> new Descent.Whole<>();
+            };
+        }
+
+        private static List<NumericConstraint> and(List<NumericConstraint> one,
+                                                   List<NumericConstraint> other) {
+            List<NumericConstraint> both = new ArrayList<>(one);
+            both.addAll(other);
+            return both;
         }
     }
 
     /**
-     * A comparison of what an operation answering an order answered, as the comparison of the two
-     * values it orders — or {@code e} unchanged.
+     * The comparisons {@code cond} states, in their reading order.
+     *
+     * <p>The one entry point a reader of a flat condition takes. A condition that is not a
+     * comparison states none, and a comparison states itself and, where it compares what an
+     * operation answering an order answered, the comparison of the two values that order is of
+     * ({@link #orderStatedBy}). Composition repeats while it says something, so a comparison of a
+     * sign of a sign comes to the values underneath it; the deepest reading is first and the
+     * comparison as written is last. It stops on its own: each composition takes the arguments of a
+     * call one of the sides was, so the sides get smaller every time round.
+     *
+     * <p>Handed over as statements and not as expressions. What a reading arrived at is a claim and
+     * two sides ({@link StatedComparison}), which is what every reader below does something with —
+     * written back into the tree as an operator, it would be a comparison the source never wrote
+     * that each of them had to recognise again before it could read what this already knew.
+     */
+    static ComparisonReadings comparisonsStatedBy(Terms terms, Core cond, Denotations at) {
+        if (!(cond instanceof Core.Binary b)) {
+            return ComparisonReadings.none();
+        }
+        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        if (placed == null) {
+            return ComparisonReadings.none();
+        }
+        List<StatedComparison> readings = new ArrayList<>();
+        readings.add(new StatedComparison(placed, b.left(), b.right()));
+        for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
+                composed != null;
+                composed = orderStatedBy(terms, readings.getLast(), at)) {
+            readings.add(composed);
+        }
+        Collections.reverse(readings);
+        return new ComparisonReadings(readings);
+    }
+
+    /**
+     * The comparison of the two values an order is of, where {@code stated} compares what an
+     * operation answering that order answered — or null where it states nothing about them.
      *
      * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so a
      * condition that settles which side of nought the answer falls on is a condition about the two
@@ -191,30 +266,29 @@ final class Conditions {
      * leave the clause unreadable — a construction dropped from the check where it had been reported.
      * Reading a predicate never takes a reading away.
      */
-    static Core asOrderComparison(Terms terms, Core e, Denotations at) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
-            return e;
-        }
-        boolean callFirst = b.left() instanceof Core.PreservedCall;
-        Core side = callFirst ? b.left() : b.right();
-        Core against = callFirst ? b.right() : b.left();
+    private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
+                                                  Denotations at) {
+        boolean callFirst = stated.left() instanceof Core.PreservedCall;
+        Core side = callFirst ? stated.left() : stated.right();
+        Core against = callFirst ? stated.right() : stated.left();
         if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
-            return e;
+            return null;
         }
-        PositiveOrder positive =
+        BoundOperationFact.StatesTheOrderOfItsArguments positive =
                 DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null
                 || terms.bodyKey(call.args().get(1), at) == null) {
-            return e;
+            return null;
         }
         // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
         // however the two were written round.
-        Rel written = relOf(callFirst ? b.op() : mirrored(b.op()));
+        Rel written = (callFirst ? stated.claim() : stated.claim().turned()).statedRelation();
         Rel stands = standsToNought(terms, call, written, against, at);
-        return stands == null ? e
-                : comparison(opOf(stands), CallArguments.of(positive.greater(), call),
-                        CallArguments.of(positive.lesser(), call), b);
+        return stands == null ? null
+                : new StatedComparison(ComparisonClaim.stating(stands),
+                        CallArguments.of(positive.greater(), call),
+                        CallArguments.of(positive.lesser(), call));
     }
 
     /**
@@ -250,7 +324,8 @@ final class Conditions {
                 java.util.Map.of(sign, terms.granularityOf(call.type()));
         LinearForm<Object> answered = LinearForm.atom(sign);
         NumericDomain<Object> known = NumericDomain.<Object>top()
-                .assuming(sign, ResultRange.of(call.operation(), ConstantArguments.NONE), spacing)
+                .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
+                        .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
                 .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
         if (known.isBottom()) {
             return null;
@@ -265,108 +340,101 @@ final class Conditions {
         return null;
     }
 
-    /** The operator a relation is written as, which is {@link #relOf} the other way round. */
-    private static BinOp opOf(Rel rel) {
-        return switch (rel) {
-            case GE -> BinOp.GE;
-            case GT -> BinOp.GT;
-            case LE -> BinOp.LE;
-            case LT -> BinOp.LT;
-            case EQ -> BinOp.EQ;
-            case NE -> BinOp.NE;
-        };
-    }
-
-    /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
-     * other way round. */
-    static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case GT -> BinOp.LT;
-            case LE -> BinOp.GE;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
-
-    /** An emptiness check as the comparison it means, or {@code e} unchanged. */
+    /**
+     * An emptiness check as the comparison it means, or {@code e} unchanged.
+     *
+     * <p>The arguments move across as they stand. Nothing is checked of them here: what the call
+     * takes is what its declaration takes, and that the size takes the same is what the two
+     * declarations were held to each other for ({@link DischargeRules#sizeMeantBy}). A reader that
+     * counted them would be asking a third time.
+     */
     static Core asSizeComparison(Core e) {
-        if (e instanceof Core.PreservedCall call && call.args().size() == 1
-                && DischargeRules.sizeMeantBy(call.operation()) != null) {
-            Core size = new Core.PreservedCall(DischargeRules.sizeMeantBy(call.operation()),
-                    call.args(), Type.INT, call.pos());
+        if (e instanceof Core.PreservedCall call
+                && DischargeRules.sizeMeantBy(call.operation())
+                        instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
+            // No source wrote this call. It is the size the written one means, composed so that the
+            // rule can be read as the comparison it states — and giving it the written call's own
+            // identity would put two applications under one. So it is a name and an application of
+            // this pass's, each derived from the one the comparison it is read off reached.
+            ApplicationOrigin application = ApplicationOrigin.composedOutOf(call.application(), 0,
+                    ApplicationDerivationCause.SizeMeaningOfApplication::new);
+            Core size = new Core.PreservedCall(means.size(), call.args(),
+                    new Core.KeptCallPlace(
+                            ReferenceOrigin.composedOutOf(call.reference(), 0,
+                                    ReferenceDerivationCause.SizeMeaningOfReference::new),
+                            application, call.place().lineage()),
+                    Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
-                    CoverageOrigin.unwritten(), Type.BOOL, call.pos());
+                    ConstructOccurrence.unwritten(), Type.BOOL, call.pos());
         }
         return e;
     }
 
-    record Polar(Core expr, boolean positive) {}
+    record Polar(Core expr, boolean positive) {
+
+        /** A condition that states no comparison, which is stated as itself. There is nothing to
+         *  bring to a canonical form: what a guard settles such a condition by is the condition, and
+         *  the six ways of writing one thing that {@link #polar} exists for are ways of writing a
+         *  comparison. */
+        static Polar itself(Core e, boolean positive) {
+            return new Polar(e, positive);
+        }
+    }
 
     /**
-     * {@code e}, asserted with polarity {@code positive}, as the comparison of {@code ==} or {@code <}
-     * that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
+     * {@code stated}, asserted with polarity {@code positive}, as the comparison of {@code ==} or
+     * {@code <} that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
      * {@code a < b} denied, and {@code a > b} is {@code b < a}. A fact is settled by key equality, so
      * without this the six ways to compare two terms are six facts, and a guard written one way would
      * leave a clause written the other unsettled.
      */
-    static Polar polar(Core e, boolean positive) {
-        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
-            return new Polar(e, positive);
+    static Polar polar(StatedComparison stated, boolean positive) {
+        Polar written =
+                stated.claim().canonical(stated.left(), stated.right()).expressedAs(AS_POLAR);
+        return positive ? written : AS_POLAR.denied(written);
+    }
+
+    /** One of them, because it holds nothing: what a canonical comparison is written as is the same
+     *  answer wherever it is asked. */
+    private static final AsPolar AS_POLAR = new AsPolar();
+
+    /**
+     * A canonical comparison, written as a node with what is asserted of it held beside it.
+     *
+     * <p>The node is this reader's own spelling and stands nowhere. What a comparison is filed under
+     * is what it places and the terms of its two sides ({@link Terms}), so where it came from, what
+     * it answers and where it stands decide nothing here — which is why they are written inert
+     * rather than taken from a comparison the source wrote. A statement is a claim and two sides,
+     * and there is no occurrence in it to inherit.
+     */
+    private record AsPolar() implements CanonicalComparison.Expression<Core, Polar> {
+
+        @Override
+        public Polar theSameValue(Core left, Core right) {
+            return new Polar(canonical(BinOp.EQ, left, right), true);
         }
-        return switch (b.op()) {
-            case NE -> new Polar(comparison(BinOp.EQ, b.left(), b.right(), b), !positive);
-            case GE -> new Polar(comparison(BinOp.LT, b.left(), b.right(), b), !positive);
-            case GT -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), positive);
-            case LE -> new Polar(comparison(BinOp.LT, b.right(), b.left(), b), !positive);
-            default -> new Polar(e, positive);
-        };
-    }
 
-    static Core.Binary comparison(BinOp op, Core left, Core right, Core.Binary of) {
-        return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
-    }
-
-    /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
-     * ordinary helper: the analysis representation keeps it as a call, and a clause read off an
-     * imported declaration is the body it expands to — {@code if b then false else true} over a
-     * binding holding the argument. Both are read. */
-    static Core negated(Core e) {
-        if (e instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
-                && call.args().size() == 1) {
-            return call.args().get(0);
+        @Override
+        public Polar below(Core left, Core right) {
+            return new Polar(canonical(BinOp.LT, left, right), true);
         }
-        if (e instanceof Core.LetIn li) {
-            Core inner = negated(li.body());
-            return inner instanceof Core.Read r && r.binding().equals(li.binder().binding())
-                    ? li.value() : null;
+
+        /** Written over nothing the source holds. The three the node needs besides its operator
+         *  and sides decide nothing any reader of this asks, so they are filled with what says so:
+         *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
+         *  position taken from a side because the constructor takes one. */
+        private static Core.Binary canonical(BinOp op, Core left, Core right) {
+            return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
+                    left.pos());
         }
-        return e instanceof Core.If iff
-                && iff.then() instanceof Core.Bool t && !t.value()
-                && iff.els() instanceof Core.Bool f && f.value()
-                ? iff.cond() : null;
+
+        /** Carried beside the node, which is what a polarity is for: a denial written as a node
+         *  would be a second shape for the readings below to take apart before they could read the
+         *  comparison under it. */
+        @Override
+        public Polar denied(Polar statement) {
+            return new Polar(statement.expr(), !statement.positive());
+        }
     }
 
-    static Rel relOf(BinOp op) {
-        return switch (op) {
-            case GE -> Rel.GE;
-            case GT -> Rel.GT;
-            case LE -> Rel.LE;
-            case LT -> Rel.LT;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-            default -> null;
-        };
-    }
-
-    static Rel negateRel(Rel rel) {
-        return switch (rel) {
-            case GE -> Rel.LT;
-            case GT -> Rel.LE;
-            case LE -> Rel.GT;
-            case LT -> Rel.GE;
-            case EQ -> Rel.NE;
-            case NE -> Rel.EQ;
-        };
-    }
 }

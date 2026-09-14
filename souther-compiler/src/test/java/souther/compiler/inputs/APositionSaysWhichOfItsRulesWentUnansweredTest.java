@@ -2,21 +2,20 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleRef;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,14 +63,11 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        assertNotNull(prepared);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
                 .filter(p -> p.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }
@@ -94,24 +90,41 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
     }
 
     /**
-     * A clause nothing took in leaves its question standing, and the question names the clause.
+     * A clause nothing took in leaves its questions standing, and each names the clause.
      *
      * <p>Which is what the report never had. An author was told that a rule about the position went
      * unread, with nothing saying which rule — two lines above a boundary drawn from one of the
      * rules the sentence was about.
+     *
+     * <p>Two of them, because the clause is read to two different depths. {@code value * value >= 4}
+     * restricts which values may stand at the position whatever anything folds, so that question is
+     * raised and nothing answered it; whether it also places an end there is what folding the
+     * product would decide, and nothing did.
      */
     @Test
     void aClauseNothingTookInIsNamed() {
         List<StandingQuestion> open = positionOf(ONE_RULE_UNANSWERED).unansweredQuestions();
 
-        assertEquals(1, open.size(), () -> "one clause, one question: " + open);
-        assertEquals("invariant Length (even)", open.get(0).rule().named(),
+        assertEquals(List.of("invariant Length (even)", "invariant Length (even)"),
+                open.stream().map(each -> ((RuleRef.Named) each.rule()).citedName()).toList(),
                 "the clause the author wrote, as a report names it — and not the position it "
                         + "is about");
-        assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).obligation());
-        assertTrue(open.get(0).asks() instanceof InputQuestion.AboutAPosition at
+        StandingQuestion.Exact asked = open.stream()
+                .filter(StandingQuestion.Exact.class::isInstance)
+                .map(StandingQuestion.Exact.class::cast).findFirst().orElseThrow(
+                        () -> new AssertionError("which values may stand there is raised: " + open));
+        assertEquals(CoverageObligation.ADMITTED_VALUES, asked.obligation());
+        assertTrue(asked.asks() instanceof InputQuestion.AboutAPosition at
                         && at.path().equals(TermPath.of("length")),
                 () -> "about the position the newtype stands at, which is what the value its"
-                        + " clauses are written on is called out here: " + open.get(0).asks());
+                        + " clauses are written on is called out here: " + asked.asks());
+        StandingQuestion.BoundaryUndetermined undecided = open.stream()
+                .filter(StandingQuestion.BoundaryUndetermined.class::isInstance)
+                .map(StandingQuestion.BoundaryUndetermined.class::cast).findFirst().orElseThrow(
+                        () -> new AssertionError("and whether it bounds is not: " + open));
+        assertEquals(TermPath.of("length"), undecided.at().path(),
+                "the question nothing worked out is filed where the reading stopped");
+        assertFalse(undecided.holdsOpen(CoverageObligation.Measure.PARTITION),
+                "and it is about the end alone, so the classes rest on nothing here");
     }
 }

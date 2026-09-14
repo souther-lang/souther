@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * from the canonical form in a way that is not the choice the rule as a whole made: it broke down
  * the page as it should have, and one of the places it settles was run together.
  */
+@Tag("population")
 class EveryDeviationStatesADifferenceTest {
 
     /**

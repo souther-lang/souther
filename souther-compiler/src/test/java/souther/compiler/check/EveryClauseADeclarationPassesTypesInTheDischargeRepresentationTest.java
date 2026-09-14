@@ -12,7 +12,6 @@ import souther.compiler.types.TypeSymbol;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -107,22 +106,23 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
 
             String module = compilation.modules().get(0);
             Symbols symbols = Scopes.derived(compilation.db(), module).value();
-            Map<TypeSymbol, List<Hir.InvariantClause>> declared =
-                    compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
+            ExpandedClauseLookup declared = RuleReadings.declaredBy(compilation.db(), module);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             assertNotNull(symbols);
             assertNotNull(declared);
             assertNotNull(prepared);
 
-            Clauses clauses = new Clauses(symbols, declared);
+            Clauses clauses = new Clauses(new RuleReadingSource(symbols, declared,
+                    PublishedDeclarations.NONE, ScopedDeclarations.kindsOf(symbols),
+                    DeclarationNewtypes.asWritten(symbols), ClauseLocations.NONE));
             int read = 0;
-            for (Hir.Def def : prepared.defs().stream().map(Derived.Def::read).toList()) {
+            for (Hir.Def def : prepared.defs().stream().map(each -> each.declaration().node()).toList()) {
                 if (!(def instanceof Hir.Data data)) {
                     continue;
                 }
                 TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, data.name()));
-                for (Hir.InvariantClause clause : clauses.of(named, data)) {
-                    assertNotNull(clauses.typed(clause.expr(), named, data),
+                for (TypeOps.Declared each : clauses.declaredHere(named)) {
+                    assertNotNull(clauses.typed(each.asExpanded(), named),
                             "`" + data.name() + "` declares a clause this check could not type:\n"
                                     + source);
                     read++;

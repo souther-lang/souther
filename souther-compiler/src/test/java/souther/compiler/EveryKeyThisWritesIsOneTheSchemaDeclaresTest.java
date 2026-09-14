@@ -1,20 +1,18 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,7 +90,7 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        return JSON.readTree(AdequacyReport.of(compilation).json(SourceNameResolver.identity()));
+        return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** The object at a `$defs` name, following the one `$ref` that stands in the way. */
@@ -116,13 +114,6 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
         assertTrue(items.has("additionalProperties")
                         && !items.get("additionalProperties").asBoolean(),
                 "the object is closed, which is what makes an undeclared key a refusal");
-        return out;
-    }
-
-    /** Which objects of this document are checked, and where the schema declares each. */
-    private static List<String[]> checked() {
-        List<String[]> out = new ArrayList<>();
-        out.add(new String[] {"findings", "findings"});
         return out;
     }
 
@@ -159,5 +150,40 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
                 .get("properties").get("unanswered").get("items")));
 
         assertEquals(Set.of(), undeclared, "and none of a question's either");
+    }
+
+    /**
+     * And the same of a rule this could not turn into a line, where the entry names a place inside
+     * the rule.
+     *
+     * <p>Its own model, because the key is written for one reason only. A clause the reading of
+     * ends gave up on writes an entry with no place in it, and a check reading whatever the models
+     * above happened to produce would be green over an array that never carried the key — which is
+     * how the field could be added, shipped, and refused by the schema beside it.
+     */
+    @Test
+    void everyKeyOfARuleWithNoLineIsDeclaredOnOne() throws Exception {
+        JsonNode unread = document("""
+                module m
+
+                data Yes
+                data N = { n: Int }
+                    invariant r = n >= 2 || Int.abs(n) >= 5
+
+                behavior f : (v: N) -> Yes
+                    constructs Yes
+                let f (v) = Yes
+                """).get("modules").get(0).get("behaviors").get(0)
+                .get("partition").get("notRead");
+        assertNotNull(unread, "the model leaves a rule this could not turn into a line");
+        Set<String> written = keysWritten(unread);
+        assertTrue(written.contains("sentTo"),
+                () -> "the choice is what an author is sent to: " + unread);
+
+        Set<String> undeclared = new LinkedHashSet<>(written);
+        undeclared.removeAll(keysDeclared(defined(schema(), "partition")
+                .get("properties").get("notRead").get("items")));
+
+        assertEquals(Set.of(), undeclared, "and none of one of these either");
     }
 }

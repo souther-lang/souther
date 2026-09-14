@@ -1,26 +1,42 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Towards;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A clause of a type does not part the values of the position it is about.
@@ -43,10 +59,93 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     private static final Carrier WHOLE = new Carrier.Whole();
 
+    /**
+     * A clause naming a value of what two positions stand apart keeps neither end of that number.
+     *
+     * <p>What an end is, is where a run of the values stops, and a rule that names a value leaves
+     * the run under it and the run over it — so there is no end it placed and nothing to read one
+     * off. Compiled all the same, and measured: the model states a relation and the report says so.
+     */
+    @Test
+    void aClauseNamingAValueOfTwoPositionsKeepsNeitherEnd() {
+        String block = souther.compiler.report.AdequacyReport.of(compiled("""
+                module example.same
+
+                data R = { lo: Int, hi: Int }
+                    invariant level = lo == hi
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior take : (r: R) -> Answer
+                let take (r) = if r.lo > 0 then Yes else No
+
+                example take
+                    | "one" : (R { lo = 1, hi = 1 }) -> Yes
+                """)).human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+
+        org.junit.jupiter.api.Assertions.assertTrue(block.contains("example.same"), block);
+    }
+
+    /**
+     * A clause of a declaration that names one of the value's own numbers draws no line.
+     *
+     * <p>Which is what says where the words for a role with no point can be reached from. A role
+     * goes unplayed only where the rule that drew the line names a value, and a declaration's lines
+     * are ends: a clause naming one leaves a range of one, and the ends of that range are what a
+     * row is owed at. So the sentence belongs under a behavior, where a body's comparison and an
+     * {@code ensures} are, and a report that carried it under the declarations would carry a
+     * sentence no model can reach.
+     *
+     * <p>Asked of the lines rather than reasoned about, because which surface a sentence belongs to
+     * turns on it. Which is why this asks what the roles come to and not whether a line was drawn:
+     * a clause naming a value does leave the values stopping somewhere, and a row is owed there.
+     */
+    @Test
+    void aClauseNamingOneOfItsOwnValuesDrawsNoLineWithARoleUnplayed() {
+        List<String> drawn = new java.util.ArrayList<>();
+        souther.compiler.query.Compilation compilation = compiled("""
+                module example.only
+
+                data A = Int
+                    invariant only = value == 5
+
+                data H = { a: A }
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior take : (h: H) -> Answer
+                let take (h) = if h.a.value > 0 then Yes else No
+
+                example take
+                    | "one" : (H { a = A(5) }) -> Yes
+                """);
+        souther.compiler.query.Adequacy.boundariesOf(compilation.db(), "example.only").values()
+                .forEach(each -> each.forEach(at -> at.border().inEachRole()
+                        .forEach((role, played) -> {
+                            if (!(played instanceof RoleAnswer.Played)) {
+                                drawn.add(at.label() + " " + role + " " + played);
+                            }
+                        })));
+        assertEquals(List.of(), drawn,
+                "the ends of the range a clause naming a value leaves are ends like any other, and"
+                        + " no role of a line drawn from one goes unplayed");
+    }
+
+    private static souther.compiler.query.Compilation compiled(String model) {
+        souther.compiler.query.Compilation compilation =
+                souther.compiler.query.Compilation.ofSource(model, "Main");
+        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
     /** A bound is where what it leaves stops, and stops nothing else. */
     @Test
     void aBoundPartsNothing() {
-        assertNull(Border.partedBy(aLineAt(100), aBound()),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100), aBound()),
                 "nothing is outside a bound, so there is no run on the far side to be beside");
     }
 
@@ -54,8 +153,8 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
-        assertNull(Border.partedBy(aLineAt(100),
-                        OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
+        assertEquals(List.of(), Border.partedBy(aLineAt(100),
+                        LineOrigin.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }
 
@@ -84,28 +183,37 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     private static BoundaryTarget aLineAt(int value) {
         AxisId axis = new AxisId("weigh", "w.a");
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new NumericTerm.ValueOf(TermPath.of(axis.term())),
-                        TermOrders.itself(WHOLE)),
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                        TermOrdersFixtures.itself(term, WHOLE)),
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }
 
-    private static OriginRef.InvariantOrigin aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
-                new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
-                Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
+    private static LineOrigin.InvariantOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(
+                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                        new PartId<>(new RuleRef.Invariant(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.weigh", "Amount")), 0),
+                                Optional.of(new ClauseName("cap")))), 0),
+                        0)),
+                EndSide.LOWER, true);
     }
 
-    private static OriginRef aComparison() {
-        return new OriginRef.ComparisonOrigin(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
-                        souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence(0),
-                        new souther.compiler.check.RuleCitation.WrittenAt(
-                                souther.compiler.diag.Citation.of(
-                                        new souther.compiler.diag.SourcePos(3, 5)))),
-                true, true);
+    /** The place this fixture's comparison is at. One of them, so that two readings built here
+     *  address one place. */
+    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+
+    private static LineOrigin aComparison() {
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.weigh", "weigh"), 2, 0, SourceConstruct.BINARY);
+        return new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("weigh", wrote),
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(WHERE)),
+                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

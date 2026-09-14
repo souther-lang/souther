@@ -63,7 +63,7 @@ public final class ClassFileImage {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof ClassFileImage that && contents.equals(that.contents);
+                || (other instanceof ClassFileImage that && contents.equals(that.contents));
     }
 
     @Override

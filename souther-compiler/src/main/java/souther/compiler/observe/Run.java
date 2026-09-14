@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.coverage.RunRecord;
+
 import java.util.Objects;
 
 /**
@@ -31,6 +33,6 @@ public record Run(Applied applied, Counting counting) {
     /** A row that applied nothing and was read to have spent nothing. */
     public static Run nothing() {
         return new Run(new Applied.Nothing(),
-                new Counting.Read(0L, souther.compiler.coverage.Observation.NONE));
+                new Counting.Read(0L, new RunRecord.NoAccount()));
     }
 }

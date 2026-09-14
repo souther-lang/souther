@@ -1,6 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.diag.Placement;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
@@ -9,12 +11,34 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.NotMeasuredReason;
+import souther.compiler.query.ArmDisposition;
+import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.UnaskedReasons;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.partition.ReadingGap;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.Clause;
+import souther.compiler.check.RuleRef;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.RuleOrigin;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.ValueName;
+
+import java.util.Optional;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -23,8 +47,11 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -150,6 +177,125 @@ class EverySchemaWordIsAccountedForTest {
         return out;
     }
 
+    /**
+     * The word each thing that may write a block is published as.
+     *
+     * <p>The set is the owners themselves, so one added to the language leaves this without a word
+     * for it and fails here. What is written down is the spelling, which a document carries and a
+     * Java name is not.
+     */
+    private static Set<String> ownerWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("Declaration", "declaration");
+        spelling.put("Stated", "stated");
+        spelling.put("Body", "body");
+        spelling.put("Examples", "example_rows");
+        spelling.put("Fake", "stand_in");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> owner : armsOf(souther.compiler.types.WrittenOwner.class)) {
+            String word = spelling.get(owner.getSimpleName());
+            assertNotNull(word, owner.getSimpleName() + " may write a block and this document has"
+                    + " no word for it");
+            words.add(word);
+        }
+        return words;
+    }
+
+    /**
+     * The words a rule's identity gives one of its conditions, one per shape of the reading.
+     *
+     * <p>Spelled here and held against the arms, the way the owners above are: which words a
+     * consumer joining on a rule must handle is a decision about the contract, and a shape renamed
+     * inside the compiler is not one. What this keeps out is a shape added to the reading and
+     * written into the document under no word at all.
+     */
+    private static Set<String> conditionWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("AComparison", "comparison");
+        // The same word as the one above, because a consumer acts on the kind and both of these
+        // are one: a comparison of the body, held or denied. Which vocabulary its values were
+        // compared in is inside the identity, which is a key to join on and not a grammar anybody
+        // reads — given a word of its own, every consumer written before it would skip the rules
+        // that carry it while reporting that it had read them all.
+        spelling.put("AnOrderedComparison", "comparison");
+        spelling.put("ATruth", "truth");
+        spelling.put("ACase", "case");
+        spelling.put("AConditionNotRead", "not_read");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> shape
+                : armsOf(souther.compiler.partition.DecisionCondition.class)) {
+            String word = spelling.get(shape.getSimpleName());
+            assertNotNull(word, shape.getSimpleName() + " may be a column of a rule and this"
+                    + " document has no word for it");
+            words.add(word);
+        }
+        return words;
+    }
+
+    /**
+     * What a document may say a search settled about a rule of a decision.
+     *
+     * <p>Held against the three answers and not against their leaves. Which of them a rule got is
+     * what a consumer acts on — owed a row, owed none, or nothing settled — and how many ways this
+     * compiler has of looking without finding is its own business, said in the sentence a page
+     * writes rather than in a word a document carries.
+     */
+    private static Set<String> requirementWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("Excluded", "excluded");
+        spelling.put("Required", "required");
+        spelling.put("Unsettled", "unsettled");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> answer : souther.compiler.query.RuleRequirement.class
+                .getPermittedSubclasses()) {
+            String word = spelling.get(answer.getSimpleName());
+            assertNotNull(word, answer.getSimpleName() + " is something a search settles about a"
+                    + " rule and this document has no word for it");
+            words.add(word);
+        }
+        return words;
+    }
+
+    /** The words for the kinds of finding a build is told about, which is the ones with a code. */
+    private static Set<String> kindsWithACode() {
+        Set<String> words = new LinkedHashSet<>();
+        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
+            if (kind.code().isPresent()) {
+                words.add(kind.name().toLowerCase(Locale.ROOT));
+            }
+        }
+        return words;
+    }
+
+    /**
+     * What a document may say about how the requirement of one rule came to its answer.
+     *
+     * <p>The answers a search has, spelled here and held against the arms so that one added has to
+     * be given a word. What the composing fell short on is not among them: that is the other axis
+     * and has a field of its own, whose words are an enum's.
+     */
+    private static Set<String> requirementBecauseWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
+        spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
+        spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
+        spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");
+        spelling.put("NothingWatchedTheRow", "nothing_watched_the_row");
+        spelling.put("NothingWasComposedToTry", "nothing_was_composed_to_try");
+        // A rule owed a row, whose answer is the row that was seen standing in and is not a reason.
+        spelling.put("Required", null);
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> answer : armsOf(souther.compiler.query.RuleRequirement.class)) {
+            assertTrue(spelling.containsKey(answer.getSimpleName()),
+                    answer.getSimpleName() + " is something a search settles about a rule and this"
+                            + " document has no word for it");
+            if (spelling.get(answer.getSimpleName()) != null) {
+                words.add(spelling.get(answer.getSimpleName()));
+            }
+        }
+        return words;
+    }
+
     /** The names a branch measure can give an arm, spelled by the writer's own encoder. */
     private static Set<String> armWords() {
         return Arrays.stream(souther.compiler.coverage.OutcomeName.values())
@@ -158,12 +304,27 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The constructs an arm can be an outcome of. Fewer than the kinds an origin carries: a binary
-     *  expression is inside a fork rather than being one, and nothing wrote the last. */
+    /**
+     * The constructs an arm can be an outcome of.
+     *
+     * <p>Fewer than the kinds an origin carries, and the difference is the point: what a source
+     * wrote is a wider vocabulary than what this report has a word for. A binary expression is
+     * inside a fork rather than being one, an application is not a fork at all — a rule read off
+     * one divides a position into classes and has no arm to be an outcome of — a collection is a
+     * value and forks nothing, and nothing wrote the last. Each of those has an origin all the
+     * same, because an origin says which construct of a source it is and not what a report calls
+     * it.
+     *
+     * <p>Written out rather than read off {@code OutcomeName.of}. That mapping is what decides which
+     * pairs exist, and a population taken from it would move whenever it did — which is the one
+     * thing this is here to notice.
+     */
     private static Set<String> constructWords() {
-        return Arrays.stream(souther.compiler.types.CoverageConstruct.values())
-                .filter(c -> c != souther.compiler.types.CoverageConstruct.BINARY
-                        && c != souther.compiler.types.CoverageConstruct.NOT_WRITTEN)
+        return Arrays.stream(SourceConstruct.values())
+                .filter(c -> c != SourceConstruct.BINARY
+                        && c != SourceConstruct.CALL
+                        && c != SourceConstruct.COLLECTION_LITERAL
+                        && c != SourceConstruct.NOT_WRITTEN)
                 .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -176,7 +337,7 @@ class EverySchemaWordIsAccountedForTest {
      * agreeing with the copy after the writer had stopped saying it.
      */
     private static Set<String> writtenAtWords() {
-        SourcePos here = new SourcePos(1, 1, new SourceId("s"));
+        SourcePos here = Placement.aFileOfThisCompile(new SourceId("s")).at(1, 1);
         return java.util.stream.Stream
                 .of(here, here.standingInFor(new souther.compiler.diag.DeclaringCode(
                         new SourceProvenance.TheStandardLibrary("List.filter"))))
@@ -198,6 +359,31 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // What one thing keeping that verdict open says about a wider run. Its own enum and its
+            // own field: the words are the compiler's, and which of them a fact answers is decided
+            // where the fact is made rather than read back off the kind beside it here — one kind
+            // covers facts that answer differently.
+            new Vocabulary("keptOpenBy[].runSensitivity", List.of("$defs", "runSensitivity"),
+                    RunSensitivity.class),
+            // What kind of thing is keeping the verdict open. Two vocabularies and not one: an
+            // opening that is a measure going without something writes that weakening's own word,
+            // and everything else writes one of its own. Registered against both, so a word added
+            // to either side alone fails here — which is what `keptOpenBy` had instead of, while
+            // the writer spelled its words as literals and nothing could be pointed at them.
+            new Vocabulary("keptOpenBy[].kind",
+                    List.of("$defs", "adequacyOpening", "properties", "kind"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Incompleteness.Code.class,
+                    souther.compiler.publish.WeakeningWord.class,
+                    souther.compiler.publish.AdequacyOpeningWord.class),
+            // And what a measure nobody made was waiting for, which the document writes from its
+            // own vocabulary rather than from the reasons that produce it. Held against that
+            // vocabulary, because that is what is written: read off the reasons instead, a word
+            // renamed here would leave the schema and the document disagreeing with every check
+            // green. That the vocabulary covers every reason a verdict can rest on is
+            // `everyReasonAMeasureNobodyMadeCanGiveHasAWord`'s.
+            new Vocabulary("keptOpenBy[].reason", List.of("$defs", "notMeasuredReason"),
+                    souther.compiler.publish.NotMeasuredWord.class),
             // `status` is the one enumerated field written through a projection rather than off an
             // enum's own names. The compiler tells a measure with nothing to be about from one nobody
             // made; a document says `unavailable` for both and leaves which to the `reason` beside it.
@@ -208,9 +394,84 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             Vocabulary.of("branch.reason", List.of("$defs", "branch", "properties", "reason"),
                     Adequacy.BranchEvidence.class),
+            // Why nobody read which rules of a body's decision the rows took. Its own field beside
+            // the branch's, because the two measures fall short of different things: an arm is one
+            // branch of the body and a rule is one way through it, and a reading that placed no run
+            // has said nothing about the rules while the arms may be counted in full.
+            Vocabulary.of("decision.coverage.reason",
+                    List.of("$defs", "decision", "properties", "coverage", "properties", "reason"),
+                    souther.compiler.query.DecisionEvidence.class),
+            // Whether a row is owed at one rule at all, which is a different question from whether
+            // one took it. Spelled here and held against the answers a search may come to, so an
+            // answer added to that vocabulary is one somebody gives a word rather than one a
+            // document goes quiet about.
+            new Vocabulary("decision.obligations[].requirement",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "requirement"),
+                    requirementWords()),
+            // And which answer it was. Its own field beside that one because the two are different
+            // questions: whether a row is owed is what a bar and a count act on, and what the
+            // search came to is what a page groups the rules it is not asking for by.
+            new Vocabulary("decision.obligations[].because",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "because"),
+                    requirementBecauseWords()),
+            // And what the composing fell short on, which is the other axis. Held against the
+            // vocabulary every search of this compiler answers in, so a reason added there is
+            // carried without anybody editing the schema by hand.
+            new Vocabulary("decision.obligations[].synthesisShortfall",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfall"),
+                    souther.compiler.partition.Generator.UnresolvedCombination.Reason.class),
+            // What the shortfall is attributed to, which is the axis the word above is not. Held
+            // against the document's own vocabulary rather than against the shapes this compiler
+            // records: what a consumer keys on is where an author goes about it, and how those are
+            // arranged here is nothing a consumer was promised.
+            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].attribution",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfallCauses", "items",
+                            "properties", "attribution"),
+                    souther.compiler.partition.ReportedShortfall.Attribution.class),
+            // And which limit refused it, where one did. Apart from the reasons a reading stops,
+            // which the entry beside this writes in the vocabulary `notRead` already has.
+            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].limit",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfallCauses", "items",
+                            "properties", "limit"),
+                    souther.compiler.partition.ReportedShortfall.Limit.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
+            // The kinds a build is told about, which is the condition saying where a `code` is
+            // written. Read off the kinds rather than kept here: which of them carries a code is
+            // the kind's own answer, and a list of those written by hand is a condition that goes
+            // on promising a code for a kind that stopped having one.
+            new Vocabulary("findings[].code, in the condition that says where it is written",
+                    List.of("$defs", "findings", "items", "allOf", "0", "if", "properties", "kind"),
+                    List.of(), kindsWithACode(), Set.of()),
+            // What wrote a block a caller handed in. The set comes from the owners a source can
+            // write, so a sixth of them has to teach this its word before the schema will pass;
+            // only the spelling is written down here, the report's own switch being exhaustive over
+            // the same sealed type.
+            // One shape and one place, since a fork's subject names what wrote it too.
+            new Vocabulary("writtenBy.kind",
+                    List.of("$defs", "writtenBy", "properties", "kind"),
+                    List.of(souther.compiler.types.WrittenOwner.class), ownerWords(), Set.of()),
+            // Which of the measurements a behavior has one of, where a subject names one. Which
+            // kind of place a subject is, is not a field of this shape: a subject is written as the
+            // union it is, so each kind is the constant one branch turns on, and the words are held
+            // against the branches where the union is.
+            new Vocabulary("keptOpenBy[].about.measure",
+                    List.of("$defs", "subject", "oneOf", "13", "properties", "measure"),
+                    souther.compiler.publish.MeasureWord.class),
+            // Which distinction one column of a rule's identity is. Projected off the shapes of
+            // the reading rather than listed, so a shape added to what a body can decide by has to
+            // teach this document its word before the schema will pass.
+            new Vocabulary("findings[].obligationId.conditions[].kind",
+                    List.of("$defs", "ruleObligationId", "properties", "conditions", "items",
+                            "properties", "kind"),
+                    List.of(souther.compiler.partition.DecisionCondition.class),
+                    conditionWords(), Set.of()),
             new Vocabulary("findings[].disposition",
                     List.of("$defs", "findings", "items", "properties", "disposition"),
                     Adequacy.Finding.Disposition.class),
@@ -218,17 +479,32 @@ class EverySchemaWordIsAccountedForTest {
             // is a site and not a fork a row is in or out of, so it never reaches this field —
             // projected off the same predicate the measure uses rather than listed here, so that an
             // arm kind added later still has to teach the schema its word.
-            new Vocabulary("branch.unreached[].kind",
-                    List.of("$defs", "branch", "properties", "unreached", "items", "properties",
+            new Vocabulary("branch.obligations[].kind",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "kind"),
                     List.of(souther.compiler.coverage.OutcomeName.class), armWords(), Set.of()),
             // The other half of what an arm is. Held apart from the outcome because they vary on
             // their own: an `else` is written under an `if` and under a `guard`, and a construct
             // added to the language does not add an outcome.
-            new Vocabulary("branch.unreached[].construct",
-                    List.of("$defs", "branch", "properties", "unreached", "items", "properties",
+            new Vocabulary("branch.obligations[].construct",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "construct"),
-                    List.of(souther.compiler.types.CoverageConstruct.class), constructWords(), Set.of()),
+                    List.of(SourceConstruct.class), constructWords(), Set.of()),
+            // Where the arm account puts an arm, and why it leaves one out. Spelled by the writer
+            // for the reason the obligations' are: which states a consumer must handle is a
+            // decision about the contract, and a state renamed inside the compiler is not.
+            new Vocabulary("branch.obligations[].disposition",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
+                            "disposition"),
+                    List.of(ArmDisposition.class), armDispositionWords(), Set.of()),
+            new Vocabulary("branch.obligations[].notCountedBecause",
+                    List.of("$defs", "branch", "properties", "obligations", "items", "properties",
+                            "notCountedBecause"),
+                    List.of(ArmExclusion.class), armExclusionWords(), Set.of()),
+            // What settles which rule a fork decides by, which is part of what one arm is.
+            new Vocabulary("armObligationId.decidedBy",
+                    List.of("$defs", "armObligationId", "properties", "decidedBy"),
+                    List.of(DecidedBy.class), decidedByWords(), Set.of()),
             // What a rule of the model raises. Only the questions this compiler issues today: a
             // word arrives here in the same change that starts raising it, so the enum and the
             // schema move together or the compile stops.
@@ -237,9 +513,12 @@ class EverySchemaWordIsAccountedForTest {
             // partition's own geometry and never a question standing against an answer, so the
             // compiler stopped raising them. Retired rather than gone: reports of this version were
             // written carrying them.
+            // Not an enum's own names any more: a question that asks something says what its
+            // obligation is called, and one nothing classified says that instead. So the words are
+            // asked of the writer, arm by arm, rather than copied from either type.
             new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
-                    Set.of("singleton", "partition"),
-                    souther.compiler.check.CoverageObligation.class),
+                    List.of(souther.compiler.inputs.StandingQuestion.class),
+                    questionWords(), Set.of("singleton", "partition")),
             // `no_axis_derived` is what `the_reading_did_not_run_out` was called while it also
             // stood for a reading that ran out and found nothing to divide. Retired rather than
             // gone: reports of this version were written carrying it.
@@ -328,7 +607,7 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
-                    souther.compiler.report.WeakeningWord.class),
+                    souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
@@ -351,7 +630,180 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "items", "items", "properties", "writableBecause", "items"),
                     List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
+                    Set.of()),
+            // The account beside the geometry: one entry per point a behavior is owed, with every
+            // reading of it. The same words as a border's items, since an obligation's measurement
+            // is folded from its readings' and each reading's is one of those items.
+            new Vocabulary("obligations[].point",
+                    List.of("$defs", "obligations", "items", "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("obligations[].reason",
+                    List.of("$defs", "obligations", "items", "properties", "reason"),
+                    Set.of("no_arm_witnesses_it"),
+                    ItemAssessment.Coverage.NotAsked.class,
+                    ItemAssessment.Coverage.CouldNotAsk.class),
+            new Vocabulary("obligations[].writableBecause",
+                    List.of("$defs", "obligations", "items", "properties",
+                            "writableBecause", "items"),
+                    List.of(ItemAssessment.WritabilityEvidence.Ground.class), groundWords(),
+                    Set.of()),
+            // How an account treats the obligation, beside the evidence that is why. Spelled by the
+            // writer for the reason the grounds are: which dispositions a consumer must handle is a
+            // decision about the contract, and a state renamed inside the compiler is not.
+            new Vocabulary("obligations[].disposition",
+                    List.of("$defs", "obligations", "items", "properties", "disposition"),
+                    List.of(ObligationDisposition.class), dispositionWords(), Set.of()),
+            new Vocabulary("obligations[].undecidedAbout",
+                    List.of("$defs", "obligations", "items", "properties",
+                            "undecidedAbout", "items"),
+                    List.of(ObligationDisposition.Uncertainty.class), undecidedWords(), Set.of()),
+            new Vocabulary("obligations[].readings[].reason",
+                    List.of("$defs", "obligations", "items",
+                            "properties", "readings", "items", "properties", "reason"),
+                    Set.of("no_arm_witnesses_it"),
+                    ItemAssessment.Coverage.NotAsked.class,
+                    ItemAssessment.Coverage.CouldNotAsk.class),
+            // What tells one thing a row is owed for from another. Which of the four points it is
+            // comes off the role, as everywhere else; the rest are constants, the way the grounds
+            // above are — what a consumer must handle is a decision about the contract, and what
+            // this compiler calls the arms of a sum to itself is not.
+            new Vocabulary("location.kind",
+                    List.of("$defs", "location", "properties", "kind"),
+                    List.of(souther.compiler.partition.DomainPoint.class),
+                    Set.of("at_the_line", "beside_the_line", "in_the_region"), Set.of()),
+            new Vocabulary("location.side",
+                    List.of("$defs", "location", "properties", "side"),
+                    souther.compiler.numeric.Towards.class),
+            new Vocabulary("obligationId.stops.kind",
+                    List.of("$defs", "obligationId", "properties", "stops", "properties", "kind"),
+                    List.of(souther.compiler.partition.FarEnd.class),
+                    Set.of("at_a_line", "at_the_domain", "at_the_order_end"), Set.of()),
+            new Vocabulary("obligationId.stops.towards",
+                    List.of("$defs", "obligationId", "properties", "stops", "properties",
+                            "towards"),
+                    souther.compiler.numeric.Towards.class),
+            new Vocabulary("level.kind", List.of("$defs", "level", "properties", "kind"),
+                    List.of(souther.compiler.partition.Level.class),
+                    Set.of("on_a_carrier", "a_count"), Set.of()),
+            new Vocabulary("typeId.kind", List.of("$defs", "typeId", "properties", "kind"),
+                    List.of(souther.compiler.types.TypeSymbol.class),
+                    Set.of("declared", "primitive", "language_case"), Set.of()),
+            new Vocabulary("carrier.kind", List.of("$defs", "carrier", "properties", "kind"),
+                    List.of(souther.compiler.check.Carrier.class),
+                    Set.of("whole", "dense", "days", "seconds", "seconds_of_day", "nanos", "text",
+                            "ordinal"),
                     Set.of()));
+
+    /**
+     * One disposition of each kind there is, which is what the words are asked of.
+     *
+     * <p>A value apiece rather than a list of words, so that the words come off the writer. Which
+     * kinds there are is checked against the type below: a disposition added and not sampled here
+     * would leave the schema promising the words of the ones before it, and the compiler could write
+     * a document the shipped schema refuses.
+     */
+    private static List<ObligationDisposition> dispositions() {
+        return List.of(
+                new ObligationDisposition.Met(),
+                new ObligationDisposition.Unmet(),
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                                UnaskedReasons.of(
+                                        ItemAssessment.Coverage.NotAsked.NO_ROWS)))),
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
+                                WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
+                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())));
+    }
+
+    /** Every kind of disposition is sampled above, so the words below are all the words there are. */
+    @Test
+    void everyDispositionHasASample() {
+        Set<Class<?>> kinds = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            kinds.add(each.getClass());
+        }
+        assertEquals(leavesOf(ObligationDisposition.class), kinds,
+                "a disposition the writer can write is one this asks for a word");
+    }
+
+    /** The kinds a sealed hierarchy bottoms out in, which are the values that can be written. */
+    private static Set<Class<?>> leavesOf(Class<?> sealedType) {
+        Set<Class<?>> out = new LinkedHashSet<>();
+        Class<?>[] permitted = sealedType.getPermittedSubclasses();
+        if (permitted == null) {
+            out.add(sealedType);
+            return out;
+        }
+        for (Class<?> each : permitted) {
+            out.addAll(leavesOf(each));
+        }
+        return out;
+    }
+
+    /** The dispositions a document may name, spelled by the one writer of the field. */
+    private static Set<String> dispositionWords() {
+        return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Where the arm account puts an arm, spelled by the one writer of the field. */
+    private static Set<String> armDispositionWords() {
+        return Arrays.stream(ArmDisposition.values())
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * The reasons the arm account leaves an arm out, likewise spelled by the writer.
+     *
+     * <p>Built from a value of each rather than from a list of names: what a fork carries is not
+     * part of the word, and an exclusion added to the sum arrives here as a case the writer has no
+     * word for rather than as a word this test forgot.
+     */
+    private static Set<String> armExclusionWords() {
+        SourceConstructOrigin fork = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 0, SourceConstruct.IF);
+        return java.util.stream.Stream
+                .<ArmExclusion>of(new ArmExclusion.OccurrencesNotToldApart(fork))
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** What settles which rule a fork decides by, spelled by the writer for the same reason. */
+    private static Set<String> decidedByWords() {
+        return java.util.stream.Stream.of(DecidedBy.THE_DECLARATION,
+                        new DecidedBy.BySupplied(List.of(new SuppliedRules.RuleIdentity.Written(
+                                RuleOrigin.written(new WrittenOwner.Body("m", "b"), 0)))),
+                        DecidedBy.NOT_SAID)
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * The questions an obligation may be undecided about, likewise spelled by the writer.
+     *
+     * <p>Read off the answers sampled above rather than off the order they are said in. The word a
+     * document carries is the question's and not what left it open, so any member of a family
+     * spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds the writer
+     * to — and a sample missing a question is what {@code everyDispositionHasASample} is about.
+     */
+    private static Set<String> undecidedWords() {
+        Set<String> out = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open) {
+                open.because().written().forEach(question -> out.add(AdequacyReport.wire(question)));
+            }
+        }
+        return out;
+    }
 
     /** The grounds a document may name, spelled by the one writer of the field. */
     private static Set<String> groundWords() {
@@ -396,8 +848,8 @@ class EverySchemaWordIsAccountedForTest {
     void theWordsAGuardKeysOnAreTheStatusesOfAMeasurementWithAValue() {
         souther.compiler.query.WeakeningSet by = souther.compiler.query.WeakeningSet.of(
                 new souther.compiler.query.Weakening.ArmsUnsettled(
-                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
-                                souther.compiler.types.CoverageConstruct.IF)));
+                        new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
+                                SourceConstruct.IF)));
         Set<String> withAValue = new LinkedHashSet<>();
         for (souther.compiler.query.Measure<String> each : List.<
                 souther.compiler.query.Measure<String>>of(
@@ -505,7 +957,8 @@ class EverySchemaWordIsAccountedForTest {
      *
      * <p>Both arms of {@code Owed} say `position` — a position of an input, or a number of one — and
      * they are still asked of the writer rather than assumed, so an arm added and not given a word
-     * stops the compile.
+     * stops the compile. A question nothing classified says `filedAt` instead, which is a place and
+     * not a subject.
      *
      * <p>`comparison` is beside them and is retired. It was to have been the place a comparison of
      * two moving things draws; nothing ever raised such a question, because a comparison this
@@ -518,16 +971,75 @@ class EverySchemaWordIsAccountedForTest {
         // stand at a position and where a line on a number of it falls are both about the position,
         // and a document says so once.
         Set<String> written = new LinkedHashSet<>();
-        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
-                .AboutAPosition(souther.compiler.inputs.TermPath.of("x"))));
-        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
-                .AboutANumber(new souther.compiler.inputs.NumericTerm.ValueOf(
-                        souther.compiler.inputs.TermPath.of("x")))));
+        written.add(AdequacyReport.subjectWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x")))));
+        written.add(AdequacyReport.subjectWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutANumber(souther.compiler.check.NumberAt.valueOf(
+                        souther.compiler.inputs.TermPath.of("x"))))));
+        written.add(AdequacyReport.subjectWord(unclassified()));
         written.add("comparison");
 
         assertEquals(written,
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
                         "items", "properties", "subject", "properties", "kind")));
+    }
+
+    /** What a document calls each thing a rule can leave open, asked of the writer of the word. */
+    private static Set<String> questionWords() {
+        Set<String> out = new LinkedHashSet<>();
+        out.add(AdequacyReport.questionWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x")))));
+        out.add(AdequacyReport.questionWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutANumber(souther.compiler.check.NumberAt.valueOf(
+                        souther.compiler.inputs.TermPath.of("x"))))));
+        out.add(AdequacyReport.questionWord(boundaryUndetermined()));
+        out.add(AdequacyReport.questionWord(unclassified()));
+        return out;
+    }
+
+    /** A rule read far enough to say it restricts the values, and no further. */
+    private static souther.compiler.inputs.StandingQuestion boundaryUndetermined() {
+        return souther.compiler.inputs.StandingQuestion.BoundaryUndetermined.of(
+                new souther.compiler.check.RuleCitation.Written(
+                        new RuleRef.Comparison("f",
+                                new SourceConstructOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        SourceConstruct.IF)),
+                        new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
+                souther.compiler.inputs.FilingCoordinate.at(
+                        souther.compiler.inputs.TermPath.of("x")),
+                new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
+    }
+
+    /** A rule this compiler did not read far enough to classify. */
+    private static souther.compiler.inputs.StandingQuestion unclassified() {
+        return souther.compiler.inputs.StandingQuestion.NothingClassifiesIt.of(
+                new souther.compiler.check.RuleCitation.Written(
+                        new RuleRef.Comparison("f",
+                                new SourceConstructOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        SourceConstruct.IF)),
+                        new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
+                souther.compiler.inputs.FilingCoordinate.at(
+                        souther.compiler.inputs.TermPath.of("x")),
+                new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
+    }
+
+    /** A question that asks {@code about}, made the one way there is to make one. */
+    private static souther.compiler.inputs.StandingQuestion asking(
+            souther.compiler.inputs.InputQuestion about) {
+        return souther.compiler.inputs.StandingQuestion.Exact.of(
+                new souther.compiler.check.RuleCitation.Written(
+                        new RuleRef.Comparison("f",
+                                new SourceConstructOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        SourceConstruct.IF)),
+                        new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
+                about,
+                new souther.compiler.inputs.WhatAQuestionStandsOn(
+                        souther.compiler.inputs.RuleReasons.one(
+                                new souther.compiler.inputs.BlockReason.UnreadComparisonForm()),
+                        Optional.empty()));
     }
 
     /**
@@ -539,22 +1051,54 @@ class EverySchemaWordIsAccountedForTest {
      */
     @Test
     void theFourthFieldWithNoEnumBehindItIsWrittenFromWhichKindOfRuleItIs() {
+        assertEquals(
+                oneRuleOfEachKind().stream().map(AdequacyReport::schemaRuleKind)
+                        .collect(java.util.stream.Collectors.toSet()),
+                allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
+    }
+
+    /**
+     * One rule of every kind the seal has, held to being that.
+     *
+     * <p>The words above are read off these, so a kind missing here is a word the schema is never
+     * asked about — and the schema is not asked about it either, which is two lists agreeing by
+     * both being short. Held to the seal, a kind of rule added to the model is one this stops at
+     * until somebody says which word a document writes for it.
+     */
+    private static List<RuleRef> oneRuleOfEachKind() {
         souther.compiler.types.TypeSymbol.AtModule on =
                 souther.compiler.types.TypeSymbols.declared(
-                new souther.compiler.types.TypeKey("m", "L"));
-        assertEquals(Set.of(
-                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Invariant(
-                                new souther.compiler.check.Clause.Ref(
-                                        new souther.compiler.check.Clause.Id(on, 0),
-                                        java.util.Optional.empty()))),
-                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Ensures(
-                                new souther.compiler.check.BehaviorContract.RuleId(
-                                        new souther.compiler.types.ValueName.Behavior("m", "f"),
-                                        0, 0, on), "Found")),
-                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
-                                new souther.compiler.types.CoverageOrigin("m", 0, 0,
-                                        souther.compiler.types.CoverageConstruct.IF)))),
-                allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
+                        new TypeKey("m", "L"));
+        WrittenOwner.Body body = new WrittenOwner.Body("m", "b");
+        List<RuleRef> out = List.of(
+                new RuleRef.Invariant(
+                        new Clause.Ref(
+                                new Clause.Id(on, 0),
+                                Optional.empty())),
+                new RuleRef.Ensures(
+                        new BehaviorContract.RuleId(
+                                new ValueName.Behavior("m", "f"),
+                                0, 0, on), "Found"),
+                new RuleRef.Comparison("f",
+                        new SourceConstructOrigin(body, 0, 0,
+                                SourceConstruct.BINARY)),
+                // A rule a body writes as one of the language's own operations over the values at a
+                // position, which tells a set of them from the rest and draws no line. Its own word
+                // beside a comparison because what a reader does about them differs.
+                new RuleRef.Predicate("f",
+                        new SourceConstructOrigin(body, 1, 0,
+                                SourceConstruct.CALL)),
+                // And a fork whose condition states none of those, which is the model dividing on
+                // something this compiler did not read.
+                new RuleRef.Fork("f",
+                        new SourceConstructOrigin(body, 2, 0,
+                                SourceConstruct.IF)));
+
+        assertEquals(leavesOf(RuleRef.class),
+                out.stream().map(each -> (Class<?>) each.getClass())
+                        .collect(java.util.stream.Collectors.toSet()),
+                "one rule of each kind the seal has, and no other");
+        return out;
     }
 
     /**
@@ -572,7 +1116,8 @@ class EverySchemaWordIsAccountedForTest {
      * reason a document says nothing about — a thing somebody decided rather than a thing nobody
      * noticed.
      */
-    private static final Set<Class<?>> SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT = Set.of(
+    private static Set<Class<?>> saidToAReaderAndNotToADocument() {
+        return Set.of(
             // A reading of the rows, which the human report writes as `rows not read` and the
             // document does not carry as a measure at all.
             Adequacy.RowReading.NotAsked.class,
@@ -582,6 +1127,59 @@ class EverySchemaWordIsAccountedForTest {
             // of them a reason: `behavior_boundary_not_derived` is a `weakening` word, and is held
             // as one above.
             souther.compiler.query.BoundaryForMeasurement.NotDerived.class);
+    }
+
+    /**
+     * Every reason a measure the verdict rests on can give for never having been made.
+     *
+     * <p>The seal, less the ones no {@code reason} field carries. Computed rather than listed for
+     * the reason every population here is: a list would be a second copy of the membership, and the
+     * next arm added would be missing from it.
+     *
+     * <p>The subtraction is not a convenience. A reading of the rows nobody asked for is a measure
+     * this build was never going to make, and a verdict is not held open by one — so it is left out
+     * of what the verdict rests on before {@code keptOpenBy} ever sees it, and a schema promising
+     * its word would promise one nothing writes.
+     */
+    private static Class<?>[] everyReasonAMeasureNobodyMadeCanGive() {
+        List<Class<?>> out = new ArrayList<>();
+        for (Class<?> arm : armsOf(NotMeasuredReason.class)) {
+            if (!saidToAReaderAndNotToADocument().contains(arm)) {
+                out.add(arm);
+            }
+        }
+        return out.toArray(new Class<?>[0]);
+    }
+
+    /**
+     * And every one of those reasons has a word in the vocabulary the document writes.
+     *
+     * <p>The other half of holding {@code keptOpenBy[].reason} against that vocabulary. The schema
+     * and the vocabulary agreeing says the words are the same words; this says the vocabulary
+     * covers every reason a verdict can rest on, so that neither check is passed by a reason
+     * nothing has a word for.
+     *
+     * <p>Asked of the reason and not of the arm, because two constants of one arm can be two words
+     * — a measure nobody asked for and one there were no rows for come out of one enum.
+     */
+    @Test
+    void everyReasonAMeasureNobodyMadeCanGiveHasAWord() {
+        List<String> without = new ArrayList<>();
+        for (Class<?> arm : everyReasonAMeasureNobodyMadeCanGive()) {
+            for (Object constant : arm.getEnumConstants()) {
+                try {
+                    souther.compiler.publish.NotMeasuredWord.of((NotMeasuredReason) constant);
+                } catch (RuntimeException refused) {
+                    without.add(arm.getSimpleName() + "." + constant + ": "
+                            + refused.getMessage());
+                }
+            }
+        }
+
+        assertEquals(List.of(), without,
+                "a reason a verdict can rest on that the document has no word for, so a report"
+                        + " that met it would have nothing to write");
+    }
 
     /**
      * And every reason a measure can give is either registered with some field or named as one no
@@ -624,7 +1222,7 @@ class EverySchemaWordIsAccountedForTest {
             for (Class<?> arm : armsOf(family)) {
                 leaves.add(arm);
                 if (!registered.contains(arm)
-                        && !SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT.contains(arm)) {
+                        && !saidToAReaderAndNotToADocument().contains(arm)) {
                     unaccounted.add(arm.getSimpleName());
                 }
             }
@@ -637,7 +1235,7 @@ class EverySchemaWordIsAccountedForTest {
         // And the exceptions are still exceptions. One that got a field, or one whose type went
         // away, leaves a reason exempted from the check above for a fact that stopped being true —
         // which is the same silence one more turn along.
-        for (Class<?> said : SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT) {
+        for (Class<?> said : saidToAReaderAndNotToADocument()) {
             assertTrue(leaves.contains(said),
                     said.getSimpleName() + " is no longer a reason any measure gives");
             assertTrue(!registered.contains(said),
@@ -679,11 +1277,17 @@ class EverySchemaWordIsAccountedForTest {
         // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
         // reach the surface, and a list of words here would say the same thing without saying why.
         held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/answerRealizationStoppedReason");
         held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
         held.add("/$defs/ruleId/properties/kind");
+        // What wrote the application a predicate is. Its words are the owners such a rule may be
+        // written by, which is decided where one is made rather than by an enum — so they are held
+        // against what the constructor admits, in
+        // `EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWord`.
+        held.add("/$defs/ruleId/properties/writtenIn");
         // The two guards, held by the test above rather than against a vocabulary. They say which
         // keys an object has where its measure produced a value, so what has to be true of them is
         // that they name the states that did — not that a reader knows the words.
@@ -753,7 +1357,7 @@ class EverySchemaWordIsAccountedForTest {
         compilation.answerEverything();
 
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(souther.compiler.diag.SourceNameResolver.identity()));
+                .json(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())));
         Set<String> allowed =
                 allowedAt(schema(), List.of("$defs", "incompleteness", "properties", "code"));
 
@@ -766,8 +1370,12 @@ class EverySchemaWordIsAccountedForTest {
         // The word itself, and not merely a word the schema happens to allow. This is here to keep
         // one reproduction alive: a fixture that stopped producing an undecided row and produced
         // some other legitimate gap instead would go on passing while covering nothing.
-        assertEquals(List.of("row_undecided"), written,
-                "the row did not come back, and this is what the report says about it");
+        //
+        // The row here is stopped by the clock it is evaluated under, which is one of the three
+        // figures this compiler compares a row against, so the word is that one and not the word
+        // for a row the evaluation had no answer for.
+        assertEquals(List.of("row_evaluation_limit_reached"), written,
+                "the row ran past its deadline, and this is what the report says about it");
         assertTrue(allowed.containsAll(written),
                 "the schema allows " + allowed + " and the report writes " + written);
     }
@@ -843,7 +1451,10 @@ class EverySchemaWordIsAccountedForTest {
     private static JsonNode nodeAt(JsonNode schema, List<String> at) {
         JsonNode node = schema;
         for (String key : at) {
-            node = node.get(key);
+            // A step into a branch of a union is a number, and a union is where a shape that
+            // discriminates writes its arms — so a field of one is reached the way the shape is
+            // written rather than only where a shape is an object all the way down.
+            node = node.isArray() ? node.get(Integer.parseInt(key)) : node.get(key);
             assertNotNull(node, "the schema has no " + String.join("/", at));
         }
         return node;

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
@@ -84,9 +85,10 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
                 AdequacyReport.of(measured()).modules().get(0).behaviors().get(0);
 
         assertInstanceOf(Measurement.Partial.class, behavior.reading().measured(),
-                "the row was read and did not come back");
-        assertEquals(List.of(Incompleteness.Code.ROW_UNDECIDED),
-                behavior.reading().gaps().stream().map(Incompleteness::code).toList());
+                "the row was read and ran past the deadline it was evaluated under");
+        assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
+                behavior.reading().gaps().stream()
+                        .map(gap -> gap.fact().code()).toList());
         assertFalse(behavior.weakenedBy().isEmpty(),
                 () -> "so the behavior went without something: " + behavior.weakenedBy());
     }
@@ -98,23 +100,23 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         AdequacyReport.ModuleReport module = report.modules().get(0);
 
         assertEquals(MeasurementStatus.PARTIAL, module.status(),
-                () -> "a row of this module did not come back: " + module.incompleteness());
+                () -> "a row of this module did not come back: " + module.incompleteness().written());
         assertEquals(MeasurementStatus.PARTIAL, report.status());
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 "which the verdict already said, from a list the status could not see");
-        assertEquals(List.of(Incompleteness.Code.ROW_UNDECIDED),
-                module.incompleteness().stream().map(Incompleteness::code).toList());
+        assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
+                module.incompleteness().written().stream().map(gap -> gap.fact().code()).toList());
     }
 
     /** And the document a build reads says it too. */
     @Test
     void theDocumentSaysBoth() {
         JsonNode root = JSON.readTree(AdequacyReport.of(measured())
-                .json(souther.compiler.diag.SourceNameResolver.identity()));
+                .json(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         JsonNode module = root.get("modules").get(0);
 
         assertEquals("partial", module.get("status").asString());
-        assertEquals(List.of("row_undecided"),
+        assertEquals(List.of("row_evaluation_limit_reached"),
                 module.get("weakening").valueStream().map(JsonNode::asString).toList());
         assertEquals("row", module.get("incompleteness").get(0).get("scope").asString(),
                 "and says which row, since a behavior may have more than one");

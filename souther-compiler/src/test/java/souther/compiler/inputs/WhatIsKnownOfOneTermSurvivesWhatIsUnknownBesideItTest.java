@@ -2,22 +2,21 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.NumberAt;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * What is known of one term is not given up for what is unknown beside it.
  *
  * <p>Three things say where a term's values run, and they are not one thing. What the declarations
- * relate it to is one; what its own position was read to hold is another; what the term guarantees
+ * relate it to is one; where the values it is answered from leave it is another; what the term guarantees
  * of itself is a third, and a value a caller has fixed it at is a fourth. Asked as one question of
  * the reading that relates positions, the other three are answered only where that reading happens
  * to have a name for the coordinate — and where it does not, an answer that was in hand is dropped.
@@ -84,8 +83,9 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Read read = read(TEXT);
         Position c = read.inputs().at(TermPath.of("p").then("c"));
 
-        assertEquals(c.numericDomain(),
-                read.quantities().runsBetween(c.term()),
+        NumericTerm.FromOnePosition values = new NumericTerm.ValueOf(c.path());
+        assertEquals(c.boundsFor(values).admissible(),
+                read.quantities().runsBetween(values),
                 "the position's own answer and the quantity's are about the same values");
     }
 
@@ -103,13 +103,13 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     void aFormKeepsWhatIsKnownOfTheTermsBesideAnUnknownOne() {
         Read read = read(UNCOUNTED);
         NumericTerm size = size(read, "xs");
-        NumericTerm n = read.inputs().at(TermPath.of("p").then("n")).term();
+        NumericTerm n = new NumericTerm.ValueOf(TermPath.of("p").then("n"));
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(n, BigDecimal.ONE);
         coefs.put(size, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -154,16 +154,16 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         souther.compiler.types.Type there =
                 read.inputs().at(TermPath.of("p").then("ys")).type();
         NumericTerm buried = NumericTerm.TakenOf.of(
-                souther.compiler.check.NumericMeasures.takenOf(there, read.symbols()),
-                deep, there, read.symbols());
+                souther.compiler.check.NumericMeasures.takenOf(there, read.rules().inners()),
+                deep, there, read.rules().inners(), read.rules().symbols());
         assertNotNull(buried, "the term is one the operation may be taken of");
-        NumericTerm n = read.inputs().at(TermPath.of("p").then("n")).term();
+        NumericTerm n = new NumericTerm.ValueOf(TermPath.of("p").then("n"));
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(n, BigDecimal.ONE);
         coefs.put(buried, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -197,17 +197,18 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
      */
     @Test
     void twoOperationsTakenOfOneLocationAreTwoCoordinates() {
-        String path = "p.xs";
-        FieldDomains.Coordinate byLength = FieldDomains.Coordinate.takenBy(path,
+        souther.compiler.check.RuleKey path =
+                new souther.compiler.check.RuleKey(List.of("p", "xs"));
+        NumberAt<souther.compiler.check.RuleKey> byLength = NumberAt.takenOf(path,
                 souther.compiler.types.ValueName.Stdlib.operation("List", "length"));
-        FieldDomains.Coordinate bySize = FieldDomains.Coordinate.takenBy(path,
+        NumberAt<souther.compiler.check.RuleKey> bySize = NumberAt.takenOf(path,
                 souther.compiler.types.ValueName.Stdlib.operation("Set", "size"));
 
         assertNotEquals(byLength, bySize,
-                "one path, two operations, two numbers — and the coordinate says which");
-        assertNotEquals(byLength, FieldDomains.Coordinate.value(path),
+                "one path, two operations, two numbers — and the claim says which");
+        assertNotEquals(byLength, NumberAt.valueOf(path),
                 "and neither of them is the value the position holds");
-        assertEquals(byLength, FieldDomains.Coordinate.takenBy(path,
+        assertEquals(byLength, NumberAt.takenOf(path,
                         souther.compiler.types.ValueName.Stdlib.operation("List", "length")),
                 "while two namings of one number are one coordinate");
     }
@@ -225,7 +226,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         NumericTerm one = size(read, "xs");
 
         NumericDomain.Bounds twice = read.quantities().runsBetween(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                new LinearForm<>(BigDecimal.ZERO,
                         Map.of(one, BigDecimal.valueOf(2))));
 
         assertEquals(Endpoint.inclusive(count(10)), twice.max(),
@@ -272,15 +273,15 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     void aRuleRelatingTwoTermsSurvivesAThirdThatCannotBeNamed() {
         Read read = read(RELATED_BESIDE_AN_UNCOUNTED);
         NumericTerm size = size(read, "xs");
-        NumericTerm x = read.inputs().at(TermPath.of("p").then("x")).term();
-        NumericTerm y = read.inputs().at(TermPath.of("p").then("y")).term();
+        NumericTerm x = new NumericTerm.ValueOf(TermPath.of("p").then("x"));
+        NumericTerm y = new NumericTerm.ValueOf(TermPath.of("p").then("y"));
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(size, BigDecimal.ONE);
         coefs.put(x, BigDecimal.ONE);
         coefs.put(y, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(5)), runs.min(),
                 "the two the record relates come to five, and nothing is negative beside them");
@@ -322,7 +323,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         coefs.put(size(read, "c"), BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(1)), runs.min(),
                 "two of them come to one, and the third is never negative");
@@ -334,8 +335,8 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         TermPath at = TermPath.of("p").then(field);
         souther.compiler.types.Type type = read.inputs().at(at).type();
         NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
-                souther.compiler.check.NumericMeasures.takenOf(type, read.symbols()),
-                at, type, read.symbols());
+                souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
+                at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
         return made;
     }
@@ -349,9 +350,9 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 Endpoint.inclusive(count(most)));
     }
 
-    private record Read(InputDomain inputs, Symbols symbols) {
+    private record Read(InputDomain inputs, RuleReadingSource rules) {
         Quantities quantities() {
-            return inputs.quantities(symbols);
+            return inputs.quantities(rules);
         }
     }
 
@@ -359,12 +360,10 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new Read(InputDomain.of(spec, sigs.get("take"), symbols,
-                ReadAs.THE_COMPILATION_DOES), symbols);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(InputDomain.of(sigs.get("take"), rules,
+                ReadAs.THE_COMPILATION_DOES), rules);
     }
 }

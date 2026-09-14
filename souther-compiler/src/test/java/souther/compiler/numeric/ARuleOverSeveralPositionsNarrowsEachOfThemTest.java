@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.AffineConstraint.Read;
 import souther.compiler.numeric.AffineReduction.Reduction;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -404,7 +403,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             if (coefs.isEmpty()) {
                 continue;
             }
-            long constant = dice.nextInt(21) - 10;
+            long constant = dice.nextInt(21) - 10L;
             out.add(new Written(coefs, num(constant), someRelation(dice)));
         }
         return out;

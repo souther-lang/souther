@@ -35,11 +35,4 @@ public sealed interface CodecMessage extends Message {
     @Code(DiagnosticCode.E2201)
     record TheDecoderBuildsAnotherType(String data, String builds) implements CodecMessage, Reported {}
 
-    /** `T.decoder` is written for a type that has none. */
-    @Code(DiagnosticCode.E2202)
-    record HasNoDecoder(String data) implements CodecMessage, Reported {}
-
-    /** `T.encode` is written for a type that has none. */
-    @Code(DiagnosticCode.E2202)
-    record HasNoEncoder(String data) implements CodecMessage, Reported {}
 }

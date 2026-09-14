@@ -1,10 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -64,12 +64,13 @@ class CompileExampleGenerateTest {
      * <p>What is offered and not what was composed: a row another offered row answers is not one of
      * these, and a test that rendered the composition would be reading rows nobody is given.
      */
-    private static String blockOf(String source, String module, boolean boundaries) {
+    private static String blockOf(String source, String module) {
         Compilation compilation = compiledOf(source);
         souther.compiler.query.Offering offering = Adequacy.offeredFor(compilation.db(),
-                OfferingRequest.overTheModule(module, boundaries));
+                OfferingRequest.overTheModule(module));
         assertNotNull(offering, "the model under test compiles");
-        return GeneratedRows.of(offering, Map.of(), SourceNameResolver.identity()).text();
+        return GeneratedRows.of(offering, Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
     }
 
     private static Map<String, Adequacy.Filling> generated(String source) {
@@ -333,8 +334,8 @@ class CompileExampleGenerateTest {
      *
      * <p>The row is text somebody pastes, so what it says has to read back as what it was made from.
      * Written as itself, a tab is invisible in the row and a newline ends it — the rest of the row
-     * lands on a line that is not commented out, and what was pasted is not what was offered. So this
-     * asks the compiler rather than the text: the block goes back in, and the rows have to hold.
+     * lands on a line of its own, and what was pasted is not what was offered. So this asks the
+     * compiler rather than the text: the block goes back in, and the rows have to hold.
      */
     @Test
     void aValueWithACharacterALiteralEscapesSurvivesBeingPasted() {
@@ -364,11 +365,8 @@ class CompileExampleGenerateTest {
                 inputs(generated(tabbed).get("take").composed()),
                 "the tab is written the way a literal spells one");
 
-        String block = blockOf(tabbed, "example.tabbed", false);
-        String pasted = tabbed + block.lines()
-                .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
-                .map(line -> line.substring("// ".length()).replace("<?>", "Ok { n = 0 }"))
-                .reduce("", (all, line) -> all + line + "\n");
+        String pasted = tabbed + sourceOf(blockOf(tabbed, "example.tabbed"))
+                .replace("<?>", "Ok { n = 0 }");
 
         Compilation compilation = Compilation.ofSource(pasted, "Main");
         compilation.answerEverything();
@@ -593,10 +591,12 @@ class CompileExampleGenerateTest {
      * the ones not reached were not refused — nothing was written and nothing built — and calling them
      * refused tells an author their model rules out a combination it does not.
      *
-     * <p>What refuses every value here is a pattern the record states about one field, which nothing
-     * derives a value from: the field's own type says its values are x's, and the record wants y's.
-     * A rule counting the field would not do — a floor is read now, and the value built for it is
-     * one this model would accept.
+     * <p>What refuses every value here is a rule this compiler cannot take apart, which nothing
+     * derives a value from. Strings clearing both rules of a field exist — a run of y's of even
+     * length is one — so what stops a row is the search rather than the model. A second format
+     * would not do: the formats a reading can take in are met with each other, and a value clearing
+     * all of them is proposed. Nor would a rule counting the field — a floor is read too, and the
+     * value built for it is one this model would accept.
      */
     @Test
     void whatTheSearchDidNotReachIsNotReportedAsRefused() {
@@ -606,7 +606,7 @@ class CompileExampleGenerateTest {
             declarations.append("""
                     data V%1$s = String
                         invariant String.matches("[a-z]+", value)
-                        invariant String.matches("x+", value)
+                        invariant String.matches("(y+)\\\\1", value)
 
                     """.formatted(Character.toUpperCase(c)));
             fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
@@ -619,7 +619,7 @@ class CompileExampleGenerateTest {
                 data Flag = Yes | No
 
                 data Req = { %sflag: Flag }
-                    invariant String.startsWith("y", a.value)
+                    invariant UNREAD
 
                 data Ok = { n: Int }
 
@@ -627,14 +627,15 @@ class CompileExampleGenerateTest {
                     constructs Ok
 
                 let take (request) = Ok { n = 0 }
-                """.formatted(declarations, fields);
+                """.formatted(declarations, fields)
+                .replace("UNREAD", ARuleNoReadingTakesIn.about("a.value"));
 
         List<Generator.UnresolvedCombination> left = generated(source).get("take").composed()
                 .unresolved();
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
         for (Generator.UnresolvedCombination each : left) {
-            assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, each.reason(),
+            assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, each.reason(),
                     each.toString());
             assertTrue(each.subject().startsWith("request.flag="),
                     "and it is still about the combination: " + each.subject());
@@ -687,14 +688,25 @@ class CompileExampleGenerateTest {
 
     // --- the block, put back through the compiler ------------------------------------------------
 
-    /** The rows of the block, with the placeholder answered the way an author answers it. */
+    /** The rows of the block, with the mark answered the way an author answers it. */
     private static String answered(String source, String expected) {
-        String block = blockOf(source, "example.trip", false);
-        String rows = block.lines()
-                .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
-                .map(line -> line.substring("// ".length()).replace("<?>", expected))
-                .reduce("", (all, line) -> all + line + "\n");
+        String rows = sourceOf(blockOf(source, "example.trip"))
+                .replace("<?>", expected);
         return source + rows;
+    }
+
+    /**
+     * The block's rows, which is every line of it that is not prose.
+     *
+     * <p>Read by what a line starts with, because that is what tells the two apart now: the rows and
+     * the heading over them are source, and everything said about them is a comment. Nothing here
+     * takes a marker off, which is the whole of what the block being rows means — an author pastes
+     * it as it stands.
+     */
+    private static String sourceOf(String block) {
+        return block.lines()
+                .filter(line -> !line.startsWith("//"))
+                .reduce("", (all, line) -> all + line + "\n");
     }
 
     /** The rows a source's examples left, across every file that writes one. */
@@ -734,7 +746,7 @@ class CompileExampleGenerateTest {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
         }
-        assertEquals("", blockOf(source, "example.trip", false),
+        assertEquals("", blockOf(source, "example.trip"),
                 "nothing is left to fill");
     }
 
@@ -754,22 +766,36 @@ class CompileExampleGenerateTest {
     }
 
     /**
-     * Pasted as it comes, the block changes nothing.
+     * Pasted as it comes, the block is rows the module keeps and asserts nothing with.
      *
-     * <p>Which is what being commented out means, said as something the compiler can answer. A row that
-     * compiled would be an assertion nobody made, and the next build would hold the model to it.
+     * <p>Both halves, because either alone is a different design. The rows arrive — the module goes
+     * on compiling with them in it, so an author answers them one at a time and everything that
+     * keeps source keeps these. And nothing is asserted: a row whose answer nobody wrote states no
+     * answer, which is what stops the paste from holding the model to a claim nobody made.
+     *
+     * <p>And the block does not offer them again. What was owed is written down now, so a second
+     * run has a row at every point the first composed one for; offered twice, an author who pasted
+     * the block and came back would be handed the same questions beside the ones they are already
+     * looking at.
      */
     @Test
-    void theBlockPastedUnchangedLeavesTheModelWhereItWas() {
-        String block = blockOf(TRIP, "example.trip", false);
-        String pasted = TRIP + block;
+    void theBlockPastedUnchangedIsRowsThatStateNoAnswer() {
+        String pasted = TRIP + sourceOf(blockOf(TRIP, "example.trip"));
 
         Compilation compilation = Compilation.ofSource(pasted, "Main");
         compilation.answerEverything();
+        List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
-        assertEquals(1, outcomes(compilation).size(), "no row was added");
-        assertEquals(block, blockOf(pasted, "example.trip", false),
-                "the same rows are still owed");
+        assertEquals(3, rows.size(), "the row that was there, and the two pasted");
+        assertEquals(List.of(souther.compiler.observe.Disposition.HELD,
+                        souther.compiler.observe.Disposition.NOTHING_TO_HOLD,
+                        souther.compiler.observe.Disposition.NOTHING_TO_HOLD),
+                rows.stream().map(souther.compiler.observe.RowOutcome::disposition).sorted()
+                        .toList(),
+                "the row that was answered holds, and the two pasted hold nothing: " + rows);
+
+        assertEquals("", blockOf(pasted, "example.trip"),
+                "and nothing is offered a second time");
     }
 
     /**
@@ -838,7 +864,7 @@ class CompileExampleGenerateTest {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.identity().shown() + " -> " + row.failurePhase());
         }
-        assertEquals("", blockOf(source, "example.trip", false),
+        assertEquals("", blockOf(source, "example.trip"),
                 "and nothing is left to offer once they are answered");
     }
 
@@ -909,7 +935,7 @@ class CompileExampleGenerateTest {
      * {@code lo} set to a value of the class it already stood in.
      *
      * <p>Which says less than the value it was written from. A reader is told to write
-     * {@code Request &#123;...mid, lo = Amount(51)&#125;} where {@code mid} covers the class, and
+     * {@code Request {...mid, lo = Amount(51)}} where {@code mid} covers the class, and
      * has to compare two numbers against a range to see the spread changes nothing.
      */
     @Test
@@ -926,7 +952,7 @@ class CompileExampleGenerateTest {
      *
      * <p>The spread is what says the row is a value the reader recognises with something changed.
      * Where the row changes the whole record, the value it spreads contributes nothing to what is
-     * built — {@code Request &#123;...mid, hi = Amount(0), lo = Amount(0)&#125;} names {@code mid}
+     * built — {@code Request {...mid, hi = Amount(0), lo = Amount(0)}} names {@code mid}
      * and keeps none of it — and a reader comparing the row against the file finds every field
      * different.
      *
@@ -1037,21 +1063,18 @@ class CompileExampleGenerateTest {
      * <p>These lines are meant to be pasted into a file the formatter then runs over. A block in a
      * shape the formatter would change turns a paste into a diff on the next commit.
      *
-     * <p>Asked of the block and not of a block somebody has answered. A row is written with the
-     * hole in it, and an answer is wider than the hole — so the line an author ends up with is a
+     * <p>Asked of the block and not of a block somebody has answered. A row is written with the mark
+     * in it, and an answer is wider than the mark — so the line an author ends up with is a
      * different width from the one offered, and what the formatter does about <em>that</em> is the
      * author's own {@code fmt} run rather than anything this block chose. What this holds is that
      * nothing the block does to the formatter's output afterwards — taking off the header it needed
-     * to parse, putting the hole back where the placeholder was — leaves a line the formatter would
-     * not have written.
+     * to parse, writing the prose beside the rows — leaves a line the formatter would not have
+     * written.
      */
     @Test
     void theBlockIsWrittenInTheFormattersOwnShape() {
-        String block = blockOf(TRIP, "example.trip", false);
-        String rows = block.lines()
-                .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
-                .map(line -> line.substring("// ".length()).replace("<?>", "unanswered__"))
-                .reduce("examples for example.trip\n\n", (all, line) -> all + line + "\n");
+        String rows = "examples for example.trip\n\n"
+                + sourceOf(blockOf(TRIP, "example.trip"));
 
         assertEquals(rows, souther.compiler.fmt.Formatter.format(rows));
     }
@@ -1105,11 +1128,11 @@ class CompileExampleGenerateTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String block = GeneratedRows.of(compilation, null, null, false, SourceNameResolver.identity()).text();
+        String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
 
         assertEquals(declared, block.lines()
-                        .filter(line -> line.startsWith("// example "))
-                        .map(line -> line.substring("// example ".length()))
+                        .filter(line -> line.startsWith("example "))
+                        .map(line -> line.substring("example ".length()))
                         .toList(),
                 block);
     }
@@ -1123,12 +1146,17 @@ class CompileExampleGenerateTest {
                     | (Request { kind = Overseas, urgent = false }) -> Accepted { at = "now" }
                 """;
 
-        assertEquals("", blockOf(covered, "example.trip", false));
+        assertEquals("", blockOf(covered, "example.trip"));
     }
 
     /**
      * A model with a gap at every point of a border, and a search that composes a row for none of
      * them: the string the rules admit is one the generator's candidates never spell.
+     *
+     * <p>A rule this compiler cannot read is what leaves it there. Rules it can read are met with
+     * each other and a value clearing all of them is composed, so a position whose rules are all
+     * readable is one a row is offered at — what is left unspelled is what a reading stopped short
+     * of, and the candidates are then the other rules' alone.
      *
      * <p>What it is for is the note beside a withheld row. A run asking for no edges withholds the
      * rows at them, so a line saying why one could not be composed is a line about work that run did
@@ -1143,40 +1171,38 @@ class CompileExampleGenerateTest {
             data Tag = Big | Small
 
             data C = String
-                invariant String.length(value) >= 2 && String.matches("[0-9]+", value)
+                invariant String.length(value) >= 2 && String.matches("(a+)\\\\1", value)
 
             behavior label : (c: C, s: Size) -> Tag
 
             let label (c, s) = if s.value >= 5 then Big else Small
 
             example label
-                | "digits" : (C("123"), Size(9)) -> Big
+                | "doubled" : (C("aa"), Size(9)) -> Big
             """;
 
     /**
-     * The edges are said where the edges were asked for, at every point of them.
+     * A point of a border is said at every point of it, beside everything else a block says.
      *
      * <p>A border owes rows at four points and they are reported under two kinds — the two against
-     * the line and the two away from it. Written to one of the kinds, the flag withheld the rows at
-     * all four and printed the notes for two of them.
+     * the line and the two away from it. Said of one kind alone, a block tells an author about half
+     * of what one line is owed, which reads as the other half being answered.
      */
     @Test
-    void aNoteAboutABorderPointIsSaidWhereTheBordersWereAskedFor() {
-        String asked = blockOf(EVERY_POINT_UNFILLED, "sz.gen", true);
-        String notAsked = blockOf(EVERY_POINT_UNFILLED, "sz.gen", false);
+    void aNoteAboutABorderPointIsSaidAtEveryPointOfIt() {
+        String block = blockOf(EVERY_POINT_UNFILLED, "sz.gen");
 
         // One against the line and one away from it, so neither kind is answering for the other.
-        assertTrue(asked.contains("// no row for `s = 5` in `label`"), asked);
-        assertTrue(asked.contains("// no row for `1 < s < 5` in `label`"), asked);
-        assertFalse(notAsked.contains("`s = 5`"),
-                "no edge is spoken of in a run that asked for none: " + notAsked);
-        assertFalse(notAsked.contains("`1 < s < 5`"),
-                "and no point away from one either: " + notAsked);
-        // And what a run that asked for no edges does still say, so this is not passing on a block
-        // with nothing in it. The arm is looked for at the classes the way into it leaves, and
-        // every value of them is refused here — which is the search's answer and is said as one.
-        assertTrue(notAsked.contains("// no row for `else` in `label`: every value tried was"
-                + " refused at construction"), notAsked);
+        assertTrue(block.contains("// no row for `s = 5` in `label`"), block);
+        assertTrue(block.contains("// no row for `1 < s < 5` in `label`"), block);
+        // And what the block says about the rest of the account, beside the points rather than in
+        // place of them. The arm is looked for at the classes the way into it leaves and every
+        // value of them was refused, and the rule this compiler could not read is why those were
+        // the values — so the sentence is the one the search can stand behind rather than the one
+        // that reads as the model refusing what it states.
+        assertTrue(block.contains("// no row for `else` in `label`: every value tried was refused"
+                + " at construction, and what was tried was not everything the rules leave, and"
+                + " invariant C #1 at `c` gave none of them"), block);
     }
 
     /**

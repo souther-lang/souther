@@ -2,16 +2,14 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.FieldDomains;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleKey;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
@@ -71,10 +69,10 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     void oneNameAtASumIsFiledUnderEachCase() {
         InputDomain read = reading(SHARED, "atTheSum");
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(TermPath.of("q"), "limit"),
+                new RuleAddress(TermPath.of("q"), RuleKey.of("limit")),
                 new PlacementSeed.Placed.ANumberOfIt(
-                        new FieldDomains.CoordinateKind.OfItsOwnValue()),
-                aRule(read), someCitation(aRule(read))));
+                        new NumberAt.OfWhatNumber.OfItsOwnValue()),
+                someCitation(aRule(read))));
 
         assertEquals(List.of("q@A.limit", "q@B.limit"),
                 filedAt(filing));
@@ -92,8 +90,8 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     void aNameFromTheValueAboveReachesTheSameCases() {
         InputDomain read = reading(SHARED, "read");
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(TermPath.of("h"), "q.limit"),
-                new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
+                new RuleAddress(TermPath.of("h"), new RuleKey(List.of("q", "limit"))),
+                new PlacementSeed.Placed.TheValuesThere(), someCitation(aRule(read))));
 
         assertEquals(List.of("h.q@A.limit", "h.q@B.limit"),
                 filedAt(filing));
@@ -111,8 +109,8 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
         // A clause of `Cons` naming a field of the link below it. The link is where the input
         // returns to `Chain`, so the name gets that far and no further.
         PlacementFiling filing = read.file(new PlacementSeed(
-                new RuleAddress(pathOf(read, "c@Cons"), "tail.head"),
-                new PlacementSeed.Placed.TheValuesThere(), aRule(read), someCitation(aRule(read))));
+                new RuleAddress(pathOf(read, "c@Cons"), new RuleKey(List.of("tail", "head"))),
+                new PlacementSeed.Placed.TheValuesThere(), someCitation(aRule(read))));
 
         assertEquals(List.of(), filedAt(filing));
         assertTrue(filing.anythingUnresolved(), "and nothing else stands in its place");
@@ -221,10 +219,6 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 .toList();
     }
 
-    private static void assertThrows(Class<? extends Throwable> expected, Runnable run) {
-        org.junit.jupiter.api.Assertions.assertThrows(expected, run::run);
-    }
-
     /**
      * Where the filings among a placement's outcomes are, as this test wants to read them.
      *
@@ -262,7 +256,7 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
     /** How a report would send a reader to it. */
     private static souther.compiler.check.RuleCitation someCitation(
             souther.compiler.check.RuleRef.Invariant rule) {
-        return souther.compiler.check.RuleCitation.named(rule);
+        return new souther.compiler.check.RuleCitation.Named(rule);
     }
 
     private static InputDomain reading(String source, String behavior) {
@@ -270,11 +264,9 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 }

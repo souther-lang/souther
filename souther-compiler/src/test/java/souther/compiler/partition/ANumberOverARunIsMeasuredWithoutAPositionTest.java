@@ -6,9 +6,10 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ValueName;
 
@@ -41,10 +42,11 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
             ValueName.Stdlib.operation("List", "sum"),
             new RunSource.ProjectedOccurrences(UNDER),
             souther.compiler.types.Type.Prim.INT,
+            souther.compiler.check.NewtypeInners.NONE,
             souther.compiler.check.Symbols.none(souther.compiler.DefaultStdlib.get()));
 
     private static final TermOrders WHOLE =
-            TermOrders.itself(new Carrier.Whole());
+            TermOrdersFixtures.itself(TOTAL, new Carrier.Whole());
 
     /** The capability question, which is the one every reader that would act on a place asks. */
     @Test
@@ -66,15 +68,15 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
     /** The number is what the values come to, not what any one of them is. */
     @Test
     void theNumberIsWhatTheValuesAddUpTo() {
-        assertEquals(Count.of(100000), number(TOTAL.readOver(
-                List.of(whole(60000), whole(40000)), WHOLE)),
+        assertEquals(Count.of(100000),
+                number(WHOLE.readOver(List.of(whole(60000), whole(40000)))),
                 "sixty thousand and forty thousand come to the hundred thousand a rule compares");
     }
 
     /** A container holding nothing comes to what the walk starts from. */
     @Test
     void anEmptyRunComesToWhatTheWalkStartsFrom() {
-        assertEquals(Count.of(0), number(TOTAL.readOver(List.of(), WHOLE)),
+        assertEquals(Count.of(0), number(WHOLE.readOver(List.of())),
                 "a row writing no element is a row an author can write, and its total is nought");
     }
 
@@ -82,7 +84,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
     @Test
     void aValueThatCouldNotBeReadLeavesTheTotalUnread() {
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                TOTAL.readOver(List.of(whole(1), new ObservedValue.Unknown("not read")), WHOLE),
+                WHOLE.readOver(List.of(whole(1), new ObservedValue.Unknown("not read"))),
                 "a total is over every value, so one that could not be read is not a total short"
                         + " of a part");
     }
@@ -107,52 +109,34 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
                 "and one that comes to anything else does not");
     }
 
-    /** Nothing composes a row for such a line, and the search says so rather than assigning a
-     *  value somewhere. */
+    /**
+     * The search reaches the level and demands the sequence, which is where such a number is
+     * realized.
+     *
+     * <p>What it hands back is a demand and not a value: the sequence the run is read from is what a
+     * row rebuilds to move the total, and no total is written at it
+     * ({@link RealizationTarget.OverARun}). Whether anything writes such a value is
+     * {@link TermRealizations}' question, asked once, of every number — held here as well, this
+     * would be a second reading of what can be built, free to say no on a day that one says yes.
+     */
     @Test
-    void nothingComposesARowForIt() {
+    void theSearchDemandsTheSequenceTheRunIsReadFrom() {
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("decide",
                 LinearForm.atom((NumericTerm) TOTAL),
                 Map.of(TOTAL, WHOLE));
         Standing standing = over.standingAt(
                 new Criterion.AtTheLevel(new Level.ACount(Count.of(100000))));
 
-        Realization made = new LevelRealizer().realize(standing, nothingIsKnown());
+        Realization made = new LevelRealizer().realize(standing, NothingTheRulesSay.REGION,
+                NothingTheDeclarationsRefuse.at());
 
-        assertEquals(new Realization.Unknown(
-                        Realization.Unknown.Reason.NOTHING_COMPOSED_ONE),
+        assertEquals(new Realization.Found(
+                        Map.of(new RealizationTarget.OverARun(TOTAL), Count.of(100000))),
                 made,
-                "a search hands back an assignment, and there is no place here to assign at — which"
-                        + " leaves the point owed rather than proven unwritable");
-    }
-
-    /** A region the rules say nothing about, so what the search does is its own answer and not the
-     *  region refusing a level. */
-    private static souther.compiler.inputs.SearchRegion nothingIsKnown() {
-        return new souther.compiler.inputs.SearchRegion() {
-
-            @Override
-            public souther.compiler.inputs.SearchRegion assuming(
-                    LinearForm<NumericTerm> form, souther.compiler.numeric.NumericDomain.Rel rel) {
-                return this;
-            }
-
-            @Override
-            public souther.compiler.inputs.SearchRegion given(Map<NumericTerm, Count> fixed) {
-                return this;
-            }
-
-            @Override
-            public souther.compiler.numeric.NumericDomain.Bounds runsBetween(
-                    LinearForm<NumericTerm> form) {
-                return souther.compiler.numeric.NumericDomain.Bounds.OPEN;
-            }
-
-            @Override
-            public java.util.Optional<souther.compiler.inputs.EmptyInput> emptiness() {
-                return java.util.Optional.empty();
-            }
-        };
+                "the level is reached, and what the row has to do to be at it is come to it");
+        assertEquals(TermPath.of("lines"),
+                new RealizationTarget.OverARun(TOTAL).writeRoot(),
+                "and the value it rebuilds is the sequence, which the run holds to one of them");
     }
 
     private static ObservedValue whole(long at) {
@@ -172,15 +156,15 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         return new BorderQuantity.Observation() {
 
             @Override
-            public ObservedValue at(TermPath path) {
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
                 throw new AssertionError("a number over a run is not read from one value, and"
                         + " asking for one is the defect this term exists to stop");
             }
 
             @Override
-            public List<ObservedValue> everyValueAt(TermPath path) {
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
                 assertEquals(UNDER, path, "read from where the run says its values are");
-                return values;
+                return WalkResult.reached(values);
             }
         };
     }

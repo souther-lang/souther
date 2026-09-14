@@ -77,6 +77,33 @@ public final class UninhabitableTypes {
     }
 
     /**
+     * What came of counting a module's declarations, for a reader that is handed the count rather
+     * than taking it.
+     *
+     * <p>Two answers and not a list. A count that came to nothing and a count nobody took are
+     * opposite facts about a module — the first says every declaration has a value, the second says
+     * nothing at all — and a reader given a list is given the same empty list for both.
+     *
+     * <p>Why there was no count is not in here. It is said where the count is taken, as what that
+     * attempt found, and this says only what a reader of it may conclude. Carried in the value, a
+     * reason would be a thing with no equality of its own sitting in an answer everything a module
+     * states is compared by.
+     */
+    public sealed interface WithNoValue {
+
+        /** The groups this module has to report, worked out from what its rules state. */
+        record Counted(List<UninhabitableGroup> groups) implements WithNoValue {
+
+            public Counted {
+                groups = List.copyOf(groups);
+            }
+        }
+
+        /** No count was taken, so nothing here says whether any declaration has a value. */
+        record NotCounted() implements WithNoValue {}
+    }
+
+    /**
      * The groups to report, each at the first of {@code declarations} it holds.
      *
      * <p>Only groups holding one of {@code declarations}: a type of another module having no value

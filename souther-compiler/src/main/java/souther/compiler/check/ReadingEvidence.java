@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.UnreadReason;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -50,10 +47,10 @@ import java.util.Set;
 final class ReadingEvidence {
 
     /** Where each reading took a clause in. */
-    private final Map<RuleRef, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
+    private final Map<RuleRef.Invariant, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
 
     /** Where a part of a clause was taken in by nothing, which no other part makes up for. */
-    private final Map<RuleRef, Set<FactSubject>> left = new LinkedHashMap<>();
+    private final Map<RuleRef.Invariant, Set<FactSubject>> left = new LinkedHashMap<>();
 
     /**
      * What stopped the reading of values at each position of each rule.
@@ -66,12 +63,21 @@ final class ReadingEvidence {
      *
      * <p>Empty for a rule this reading took in, and empty as well for one it was short of without
      * recording why. The second is what {@link #stoppedBy} answers for.
+     *
+     * <p><b>Facts and not a map of positions to reasons.</b> Each of these says the written place
+     * the reading decided it at as well as the position and the reason, and a map keyed by position
+     * has nowhere to put the third — two choices of one rule each offering an alternative nothing
+     * could read leave one position open, and an author has two of them to look at. Held as reasons
+     * per position they were one, and which of the two a reader was sent to was whichever the walk
+     * met first.
+     *
+     * <p>A set, because nothing here is in an order anybody may read. Which of two an author wrote
+     * first is the source's to say and is asked where a document is written.
      */
-    private final Map<RuleRef, Map<FactSubject, List<UnreadReason>>> stopped =
-            new LinkedHashMap<>();
+    private final Map<RuleRef.Invariant, Set<RuleShortfall>> stopped = new LinkedHashMap<>();
 
     /** A reading took {@code rule} in at {@code position}. */
-    void record(RuleRef rule, FactSubject position) {
+    void record(RuleRef.Invariant rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
     }
 
@@ -82,13 +88,13 @@ final class ReadingEvidence {
      * nothing read, however well the other half went — so an end placed by one conjunct does not
      * answer for the conjunct beside it.
      */
-    boolean anyLeftStanding(RuleRef rule, Collection<FactSubject> positions) {
+    boolean anyLeftStanding(RuleRef.Invariant rule, Collection<FactSubject> positions) {
         Set<FactSubject> standing = left.get(rule);
         return standing != null && positions.stream().anyMatch(standing::contains);
     }
 
     /** A part of {@code rule} was taken in by nothing, of the positions it named. */
-    void leftStanding(RuleRef rule, Set<FactSubject> positions) {
+    void leftStanding(RuleRef.Invariant rule, Set<FactSubject> positions) {
         left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
     }
 
@@ -100,35 +106,24 @@ final class ReadingEvidence {
      * whole what stopped it at a position is asking about the position and hearing whichever rule
      * reached it.
      *
-     * <p><b>What the reading wrote down, and not what it answers when asked about a position.</b>
-     * {@link AdmissibleValues#standing} is the record: a part this reading gave up on, at each
-     * position that part named. {@link AdmissibleValues#whyUnread} is a reading of that record
-     * against the set the alternatives arrived at, and it answers a different question — whether
-     * the set at a position is as narrow as the rules leave it. The two part company exactly where
-     * a choice covers a position: the set is exact and nothing is answerable for it, and the rule
-     * is still one nobody took in. Asked through the second, a rule left standing under alternatives
-     * that cover it came back with no reason at all, and an accounting with the decision from one
-     * question and the reason from the other has a seam to fill.
+     * <p><b>What the reading wrote down where it wrote it, and never a position's answer read
+     * back.</b> What arrives is a {@link RuleShortfall}, made where the reading still had the
+     * written place in hand. {@link AdmissibleValues#standing} answers for the position and is
+     * deliberately not the source of this: it holds the reasons of every rule that reached the
+     * place and names none of them, so an account built out of it is a list of reasons and no
+     * clause. {@link AdmissibleValues#whyUnread} reads that record against the set the alternatives
+     * arrived at and answers a third question — whether the set at a position is as narrow as the
+     * rules leave it — and parts company with both exactly where a choice covers a position: the
+     * set is exact and nothing is answerable for it, and the rule is still one nobody took in.
      *
      * <p><b>And only what a rule is answerable for.</b> Everything filed here is filed under a rule,
      * so a reason about no rule may not arrive: an allowance run down by everything a position
      * admits is a fact about the answer, and the same rules in another order would have been built.
-     * Refused rather than dropped, because a caller handing one over has an account of a rule made
-     * out of something that is not about it, and that is worth stopping where it is written.
+     * Nothing is asked here because nothing of the wrong kind can be made: what arrives is refused
+     * where it would be built, which is one fact away from where a caller could have written it.
      */
-    void stoppedBy(RuleRef rule, Map<FactSubject, List<UnreadReason>> read) {
-        Map<FactSubject, List<UnreadReason>> here =
-                stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
-        read.forEach((position, why) -> {
-            why.forEach(each -> {
-                if (each.about() != UnreadReason.About.A_RULE) {
-                    throw new IllegalArgumentException(
-                            "a reason about " + each.about() + " is not one a rule is answerable"
-                                    + " for: " + each);
-                }
-            });
-            here.merge(position, why, ReadingEvidence::appended);
-        });
+    void stoppedBy(RuleRef.Invariant rule, Set<RuleShortfall> read) {
+        stopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(read);
     }
 
     /**
@@ -138,24 +133,14 @@ final class ReadingEvidence {
      * under whichever the reading recognised. Empty where this reading recorded nothing of the
      * rule there, which a caller has to answer for rather than fill in from the position.
      */
-    List<UnreadReason> stoppedBy(RuleRef rule, Collection<FactSubject> positions) {
-        Map<FactSubject, List<UnreadReason>> here = stopped.get(rule);
+    Set<RuleShortfall> stoppedBy(RuleRef.Invariant rule, Collection<FactSubject> positions) {
+        Set<RuleShortfall> here = stopped.get(rule);
         if (here == null) {
-            return List.of();
+            return Set.of();
         }
-        List<UnreadReason> out = new ArrayList<>();
-        for (FactSubject position : positions) {
-            out = appended(out, here.getOrDefault(position, List.of()));
-        }
-        return out;
-    }
-
-    /** The reasons of both, in the order they were met, and each said once. */
-    private static List<UnreadReason> appended(List<UnreadReason> these,
-                                               List<UnreadReason> those) {
-        List<UnreadReason> out = new ArrayList<>(these);
-        those.forEach(each -> {
-            if (!out.contains(each)) {
+        Set<RuleShortfall> out = new LinkedHashSet<>();
+        here.forEach(each -> {
+            if (positions.contains(each.position())) {
                 out.add(each);
             }
         });
@@ -169,7 +154,7 @@ final class ReadingEvidence {
      * algebra and another by everything else, and a clause reaching it is filed under whichever the
      * reading recognised.
      */
-    boolean tookIn(RuleRef rule, Collection<FactSubject> positions) {
+    boolean tookIn(RuleRef.Invariant rule, Collection<FactSubject> positions) {
         if (anyLeftStanding(rule, positions)) {
             return false;
         }

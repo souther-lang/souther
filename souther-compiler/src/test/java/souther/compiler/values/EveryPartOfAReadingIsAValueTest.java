@@ -3,6 +3,7 @@ package souther.compiler.values;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -89,9 +90,21 @@ class EveryPartOfAReadingIsAValueTest {
         if (type == UnreadReason.class) {
             return new Sample(UnreadReason.FORM_NOT_READ, List.of());
         }
+        // What a rule left standing, which holds its own entries and hands none of them out. There
+        // is nothing here for a caller to write into afterwards, and no way to ask it for one.
+        if (type == Standing.class) {
+            return new Sample(Standing.of(Set.of("a"), UnreadReason.FORM_NOT_READ), List.of());
+        }
+        // A block, which is what an answer of a reading is about. Its own members are a set this
+        // holds, and it makes its own copy of them, so there is nothing here for a caller to write
+        // into afterwards.
+        if (type == Sameness.Block.class) {
+            return new Sample(Sameness.Block.of("a"), List.of());
+        }
         if (type == AdmissibleValues.Held.class) {
             return new Sample(AdmissibleValues.Held.Alternatives.of(
-                    new AdmissibleValues.Box<String>(Map.of())), List.of());
+                    AdmissibleValues.Alternative.of(
+                            new AdmissibleValues.Box<String>(Map.of()))), List.of());
         }
         // A position, which this reading is generic over. What one is is the caller's; that two of
         // them are not the same one is all this needs.
@@ -135,18 +148,28 @@ class EveryPartOfAReadingIsAValueTest {
         return out;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Object made(Class<?> of, List<Sample> handed) throws Exception {
-        Constructor<?>[] every = of.getDeclaredConstructors();
-        Constructor<?> canonical = every[0];
+    /**
+     * A reading made of exactly what was handed over, by the one constructor there is.
+     *
+     * <p>Through the parts and not through an operation, because what is being asked about is what
+     * a reading does with what it is made of. Every way in composes or narrows what it is given, so
+     * a reading reached through one holds sets it made itself and a maker holding the map it passed
+     * in has nothing here to write into.
+     */
+    private static AdmissibleValues<?> made(List<Sample> handed) throws Exception {
+        Object[] args = handed.stream().map(Sample::value).toArray();
+        Class<?> parts = WhatAReadingIsMadeOf.held(AdmissibleValues.class);
+        Constructor<?>[] every = parts.getDeclaredConstructors();
+        Constructor<?> ofParts = every[0];
         for (Constructor<?> each : every) {
             if (each.getParameterCount() == handed.size()) {
-                canonical = each;
+                ofParts = each;
             }
         }
-        Object[] args = handed.stream().map(Sample::value).toArray();
+        ofParts.setAccessible(true);
+        Constructor<?> canonical = AdmissibleValues.class.getDeclaredConstructor(parts);
         canonical.setAccessible(true);
-        return canonical.newInstance(args);
+        return (AdmissibleValues<?>) canonical.newInstance(ofParts.newInstance(args));
     }
 
     /**
@@ -163,7 +186,7 @@ class EveryPartOfAReadingIsAValueTest {
      */
     @Test
     void nothingAReadingHoldsMayBeChangedAfterItIsMade() throws Exception {
-        RecordComponent[] parts = AdmissibleValues.class.getRecordComponents();
+        RecordComponent[] parts = WhatAReadingIsMadeOf.of(AdmissibleValues.class);
         assertTrue(parts.length > 0);
 
         for (int i = 0; i < parts.length; i++) {
@@ -173,8 +196,12 @@ class EveryPartOfAReadingIsAValueTest {
                 continue;
             }
             List<Sample> handed = handedOver(parts);
-            Object reading = made(AdmissibleValues.class, handed);
-            Object held = part.getAccessor().invoke(reading);
+            AdmissibleValues<?> reading = made(handed);
+            // Asked of what the reading hands out and not of what the parts hold. The reading is
+            // what a caller has, and a part it copied and then handed over by reference is one
+            // whose maker can still write into what somebody else is holding.
+            Method accessor = AdmissibleValues.class.getDeclaredMethod(part.getName());
+            Object held = accessor.invoke(reading);
 
             assertThrows(UnsupportedOperationException.class, () -> add(held),
                     part.getName() + " may be written to after the reading was made");
@@ -187,7 +214,7 @@ class EveryPartOfAReadingIsAValueTest {
             assertTrue(!writes.isEmpty(), part.getName() + " is a part with nothing to write into");
             for (Runnable write : writes) {
                 write.run();
-                assertEquals(said, String.valueOf(part.getAccessor().invoke(reading)),
+                assertEquals(said, String.valueOf(accessor.invoke(reading)),
                         part.getName() + " moved when the maker wrote into what it was made of");
             }
         }
@@ -198,18 +225,20 @@ class EveryPartOfAReadingIsAValueTest {
     void andNorMayAnAlternative() {
         Map<String, ValueSet> mine = new LinkedHashMap<>();
         mine.put("a", ValueSet.just(Value.text("5")));
-        AdmissibleValues.Box<String> box = new AdmissibleValues.Box<>(mine);
+        AdmissibleValues.Box<String> box = AdmissibleValues.Box.at(mine);
 
-        assertThrows(UnsupportedOperationException.class, () -> box.at().put("b", ValueSet.ANY));
+        assertThrows(UnsupportedOperationException.class,
+                () -> box.at().put(Sameness.Block.of("b"), ValueSet.ANY));
         mine.put("b", ValueSet.just(Value.text("6")));
-        assertEquals(Set.of("a"), box.at().keySet(), "what was said is what was said then");
+        assertEquals(Set.of(Sameness.Block.of("a")), box.at().keySet(),
+                "what was said is what was said then");
 
-        Set<AdmissibleValues.Box<String>> boxes = new LinkedHashSet<>();
-        boxes.add(box);
+        Set<AdmissibleValues.Alternative<String>> boxes = new LinkedHashSet<>();
+        boxes.add(AdmissibleValues.Alternative.of(box));
         AdmissibleValues.Held.Alternatives<String> held =
-                AdmissibleValues.Held.Alternatives.of(boxes, Allowance.ofAdmittedValues()).held();
+                AdmissibleValues.Held.Alternatives.of(boxes, AsACompilationAllows.forAdmittedValues()).held();
 
-        boxes.add(new AdmissibleValues.Box<>(Map.of("b", ValueSet.ANY)));
+        boxes.add(AdmissibleValues.Alternative.at(Map.of("b", ValueSet.ANY)));
         assertEquals(1, held.boxes().size(), "the alternatives are the ones it was made of");
     }
 

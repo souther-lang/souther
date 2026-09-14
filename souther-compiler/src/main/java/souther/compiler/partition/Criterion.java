@@ -5,16 +5,17 @@ import souther.compiler.numeric.Towards;
 /**
  * What a row has to do to be at one coverage item of a border.
  *
- * <p>Said of the border's {@link BorderQuantity} and of nothing else. Three shapes for every border
- * there is: a row is at one level of the quantity, or anywhere beyond one level, or at any level but
- * one. {@code ON} and {@code OFF} are the first; {@code IN} and {@code OUT} are the second, except
- * where the rule leaves a side that is not a run of the order and then they are the third.
+ * <p>Said of the border's {@link BorderQuantity} and of nothing else. Two shapes for every border
+ * there is: a row is at one level of the quantity, or anywhere in one run of them. A point against
+ * the line is the first, wherever the line falls and whatever kind of rule drew it; a point away
+ * from it is the second, because every region beside a line is a run — a rule that names a value
+ * leaves the run under it and the run over it, which the arrangement holds like any other pair.
  *
  * <p><b>Not one shape per kind of border.</b> A line at a place of one position and a line where two
  * positions stand apart used to ask for two vocabularies here, and every reader of an item had to
  * know which of the two it was holding — a criterion about a place handed to the reader of a pair was
  * an {@code IllegalStateException} rather than a build failure. What tells them apart is the
- * quantity, and the quantity is what the item is about; what it asks of a row is the same three
+ * quantity, and the quantity is what the item is about; what it asks of a row is the same two
  * questions whichever quantity it is on.
  *
  * <p>Which of the four roles a criterion belongs to is the border's to say ({@link PointRole}) and is
@@ -98,11 +99,8 @@ public sealed interface Criterion {
                 souther.compiler.check.Carrier carrier,
                 souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
             LevelSpace space = LevelSpace.onACarrier(carrier);
-            LevelInterval leaves = new LevelInterval(
-                    endOf(carrier, min), endOf(carrier, max));
-            for (LevelInterval part : region().parts()) {
-                LevelInterval look = part.intersect(leaves);
-                Level found = look == null ? null : space.witness(look, away).level();
+            for (LevelInterval look : runsInside(carrier, min, max)) {
+                Level found = space.witness(look, away).level();
                 if (found instanceof Level.OnACarrier on) {
                     return on.at();
                 }
@@ -110,33 +108,37 @@ public sealed interface Criterion {
             return null;
         }
 
+        /**
+         * The runs this item leaves inside what the rules leave the position, in the order they are
+         * to be looked in.
+         *
+         * <p>One reading of the geometry, because there is more than one thing to do with it. A
+         * caller with a set of admitted values crosses each of these with that set rather than
+         * taking a value out of one of them and putting it to the set afterwards
+         * ({@link souther.compiler.check.Carrier#somewhereIn}), and it has to be looking in the same
+         * runs and in the same order as the caller that wants a value and nothing else. Read twice,
+         * the two would be free to disagree about which end of the item is the near one.
+         */
+        public java.util.List<LevelInterval> runsInside(
+                souther.compiler.check.Carrier carrier,
+                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+            LevelInterval leaves = new LevelInterval(
+                    endOf(carrier, min), endOf(carrier, max));
+            java.util.List<LevelInterval> out = new java.util.ArrayList<>();
+            for (LevelInterval part : region().parts()) {
+                LevelInterval look = part.intersect(leaves);
+                if (look != null) {
+                    out.add(look);
+                }
+            }
+            return java.util.List.copyOf(out);
+        }
+
         /** What the rules leave the position, as an end of a run of its values. */
         private static Bound endOf(souther.compiler.check.Carrier carrier,
                                    souther.compiler.numeric.Endpoint end) {
             return end == null ? null
                     : Bound.at(new Level.OnACarrier(carrier, end.at()), end.inclusive());
-        }
-    }
-
-    /**
-     * A row at any level of the quantity other than one.
-     *
-     * <p>What a border that has no far side leaves. An invariant refuses everything outside its
-     * bound, so the side it bounds is the whole of what the quantity takes; a rule that singles a
-     * value out puts every other value in one class, and that class is what lies away from the point.
-     * Neither of them is a run of the order from somewhere, which is why it is a shape of its own
-     * rather than a {@link Beyond} with an end nobody wrote.
-     */
-    record AnythingBut(Level excluded) implements Criterion {
-
-        @Override
-        public LevelRegion region() {
-            return LevelRegion.EVERYTHING.without(excluded);
-        }
-
-        @Override
-        public String operator() {
-            return "/=";
         }
     }
 
@@ -173,17 +175,43 @@ public sealed interface Criterion {
             case AtTheLevel(Level at) -> new AtTheLevel(at.canonical());
             case Within(Band band, Level except, Towards away) -> new Within(band.canonical(),
                     except == null ? null : except.canonical(), away);
-            case AnythingBut(Level excluded) -> new AnythingBut(excluded.canonical());
+        };
+    }
+
+    /**
+     * The same demand on a row, about the quantity measured the other way round.
+     *
+     * <p><b>For a quantity that is how far two positions stand apart, which two positions have two
+     * of.</b> {@code a - b} and {@code b - a} are one relation said twice, and a demand written
+     * against the first is a demand against the second with every level negated. What that buys is
+     * which of the two positions a search settles first: neither is the pair's own, and a search
+     * that could only settle one of them answered about a relation from one side.
+     *
+     * <p>Every level moves, and the run's two ends change places with them — which is why this is
+     * the run's own answer ({@link Band#reflected}) and not a level-by-level mapping applied here.
+     * The side the point is named for moves too: a row above the line is a row below it once the
+     * quantity is measured backwards.
+     *
+     * <p>Not a second reading of what the criterion asks. What is asked is unchanged and the
+     * quantity it is asked of is the other one, so a row at this criterion over {@code a - b} is a
+     * row at the reflected one over {@code b - a} and there is nothing to keep in step.
+     */
+    default Criterion reflected() {
+        return switch (this) {
+            case AtTheLevel(Level at) -> new AtTheLevel(at.negated());
+            case Within(Band band, Level except, Towards away) ->
+                    new Within(band.reflected(), except == null ? null : except.negated(),
+                            away.opposite());
         };
     }
 
     /**
      * Whether two criteria ask a row for the same thing.
      *
-     * <p>The same shape asking for the same values, and not the same region: a rule that names a
-     * value and a run over everything else are two ways of writing one set of rows, and which of
-     * them a border owes is what says where a search starts and what a report prints. So this asks
-     * whether the two are one demand, which is narrower than whether one row answers both.
+     * <p>The same shape asking for the same values, and not the same set of rows: a level and a run
+     * one value wide hold the same rows, and which of them a border owes is what says where a search
+     * starts and what a report prints. So this asks whether the two are one demand, which is
+     * narrower than whether one row answers both.
      */
     default boolean sameAs(Criterion other) {
         if (!(this instanceof Within in)) {
@@ -209,15 +237,14 @@ public sealed interface Criterion {
      * The level this is written against, or null where what it is written against is a run rather
      * than a level.
      *
-     * <p>Two of the three shapes name a level and one names a region, so a reader that wanted one
-     * level from every shape was reading a witness of a run as though it were the run. What every
-     * shape does answer is {@link #asked}.
+     * <p>One shape names a level and the other names a run, so a reader that wanted one level from
+     * both was reading a witness of a run as though it were the run. What both do answer is
+     * {@link #asked}.
      */
     default Level against() {
         return switch (this) {
             case AtTheLevel at -> at.at();
             case Within _ -> null;
-            case AnythingBut other -> other.excluded();
         };
     }
 

@@ -2,7 +2,7 @@ package souther.compiler.observe;
 
 import souther.compiler.source.SourceId;
 
-import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourceRendering;
 
 /**
  * What an {@link Incompleteness} is about, as the thing itself rather than as a name and a word for
@@ -37,7 +37,7 @@ public sealed interface Target {
      * whose id for it may be a number. A renderer asking {@link #subject} and printing the answer
      * cannot tell those apart, and printed a source index as though it were a file name.
      */
-    String shown(SourceNameResolver names);
+    String shown(SourceRendering rendering);
 
     /**
      * The source this is about, where what it names is one. Empty otherwise.
@@ -79,7 +79,7 @@ public sealed interface Target {
         }
 
         @Override
-        public String shown(SourceNameResolver names) {
+        public String shown(SourceRendering rendering) {
             return behavior;
         }
 
@@ -117,8 +117,8 @@ public sealed interface Target {
         }
 
         @Override
-        public String shown(SourceNameResolver names) {
-            return names.nameOf(sourceId);
+        public String shown(SourceRendering rendering) {
+            return rendering.names().nameOf(sourceId);
         }
 
         @Override
@@ -146,7 +146,7 @@ public sealed interface Target {
         }
 
         @Override
-        public String shown(SourceNameResolver names) {
+        public String shown(SourceRendering rendering) {
             return module;
         }
 
@@ -174,19 +174,20 @@ public sealed interface Target {
      * behavior, they were one identity and the second was dropped wherever these are kept one per
      * identity (issue #996).
      */
-    record OfRow(RowRef row) implements Target {
+    record OfRow(RowRef rowRef) implements Target {
 
         @Override
         public String subject() {
-            return row.behavior() + "/" + row.source().value() + "/" + row.identity().shown();
+            return rowRef.behavior() + "/" + rowRef.source().value() + "/"
+                    + rowRef.identity().shown();
         }
 
         @Override
-        public String shown(SourceNameResolver names) {
+        public String shown(SourceRendering rendering) {
             // The row decides which of its parts a reader needs; the caller decides what its file
             // is called. Written the other way round, a renderer would be choosing how much of an
             // identity to show, which is the row's to say.
-            return row.shown(names.nameOf(row.source()));
+            return rowRef.shown(rendering.names().nameOf(rowRef.source()));
         }
 
         @Override
@@ -204,7 +205,7 @@ public sealed interface Target {
 
         @Override
         public java.util.Optional<String> onlyBehavior() {
-            return java.util.Optional.of(row.behavior());
+            return java.util.Optional.of(rowRef.behavior());
         }
     }
 
@@ -217,7 +218,7 @@ public sealed interface Target {
         }
 
         @Override
-        public String shown(SourceNameResolver names) {
+        public String shown(SourceRendering rendering) {
             return subject();
         }
 

@@ -1,10 +1,11 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,7 +31,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
         String said = Reasons.said(Incompleteness.ofSource(
-                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1")), id -> "trip.sou");
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1")).identity(),
+                new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
     }
@@ -48,7 +50,9 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
         Incompleteness gap = Incompleteness.ofSource(
                 Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1"));
 
-        String said = Reasons.said(gap, id -> "1".equals(id.value()) ? "b/model.sou" : id.value());
+        String said = Reasons.said(gap.identity(),
+                new SourceRendering(id -> "1".equals(id.value()) ? "b/model.sou" : id.value(),
+                        SourceLayouts.NONE));
 
         assertTrue(said.contains("`b/model.sou`"), said);
         assertFalse(said.contains("`1`"), "an id is not what a person is shown: " + said);
@@ -59,7 +63,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureDoesNotClaimTheRuntimeIsMissing() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
+                Incompleteness.Scope.BEHAVIOR, "submit").identity(),
+                SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertFalse(said.contains("runtime"), said);
         assertTrue(said.contains("would not link"), said);
@@ -81,7 +86,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureSaysWhatItsOneProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
+                Incompleteness.Scope.BEHAVIOR, "submit").identity(),
+                SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertEquals("the classes for `submit` would not link, so its rows did not run", said);
     }
@@ -98,7 +104,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void oneProducerLetsTheSentenceSayWhatThatProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                Incompleteness.Scope.MODULE, "example.trip"), SourceNameResolver.identity());
+                Incompleteness.Scope.MODULE, "example.trip").identity(),
+                SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertEquals("the classes `example.trip` needed for arm coverage could not be made,"
                 + " so none of its rows were read", said);
@@ -116,7 +123,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     void noCodeIsPrintedAsItsOwnName() {
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
             String said = Reasons.said(Incompleteness.of(code,
-                    Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
+                    Incompleteness.Scope.BEHAVIOR, "submit").identity(),
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
             assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
                     code + " is printed as itself");

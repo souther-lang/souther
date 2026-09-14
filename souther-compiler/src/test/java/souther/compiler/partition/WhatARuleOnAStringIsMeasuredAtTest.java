@@ -2,17 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -134,12 +132,19 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 measured("guard x /= QfooQ else Newer"));
     }
 
-    /** And where the least string is the one singled out, nothing else stands for the rest. */
+    /**
+     * And where the least string is the one singled out, the rest is still stood for.
+     *
+     * <p>The value is looked for in what the class holds, which is the strings the position admits
+     * less the one singled out. Looked for in what the position admits and refused afterwards
+     * where it turns out to be the singled one, the class would come back with nothing to stand
+     * for it — and every string but the empty one is in it.
+     */
     @Test
-    void singlingOutTheLeastStringLeavesTheRestWithoutOne() {
+    void singlingOutTheLeastStringStillLeavesTheRestOne() {
         assertEquals(new Measured(
                         List.of("= ", "/= "),
-                        List.of("[]", "none"),
+                        List.of("[]", "[a]"),
                         List.of("ON ")),
                 measured("guard x == QQ else Newer"));
     }
@@ -161,25 +166,28 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles: " + guard);
 
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Core body = checked.behaviorBodies().get("f");
-        GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
-        InputDomain read = InputDomain.of(spec, sigs.get("f"), symbols,
+        GuardThresholds.Guards guards = GuardThresholds.of("f",
+                checked.analysisBodies().get("f"), body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
+        InputDomain read = InputDomain.of(sigs.get("f"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        souther.compiler.inputs.Quantities reading = read.quantities(symbols);
+        souther.compiler.inputs.Quantities reading = read.quantities(rules);
+        RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("f", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
-                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, List.of(), guards.singled());
+                guards.thresholds(), ruleReading,
+                souther.compiler.inputs.RulesWithNoLine.NONE, guards.singled(),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
 
         List<String> classes = new ArrayList<>();
         List<String> stands = new ArrayList<>();
@@ -188,16 +196,19 @@ class WhatARuleOnAStringIsMeasuredAtTest {
             for (PartitionClass each : axis.classes()) {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
-                        Partitions.standingFor(each.representatives(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of());
+                        Partitions.standingFor(each.representatives(), ruleReading,
+                                java.util.Set.of());
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, symbols, reading.runsBetween(axis.term()), new LinesRead())
-                    .forEach(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
-                            .filter(role -> border.demand(role).criterion() != null)
-                            .forEach(role -> owed.add(role + " "
-                                    + border.demand(role).criterion().asked(border.cut().of()).substring(2))));
+            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())
+                    .forEach(border -> border.answers().keySet().stream()
+                            .filter(DomainPoint::againstTheLine)
+                            .filter(point -> border.demand(point).criterion() != null)
+                            .forEach(point -> owed.add(border.named(point) + " "
+                                    + border.demand(point).criterion()
+                                            .asked(border.cut().of()).substring(2))));
         }
         return new Measured(classes, stands, owed);
     }

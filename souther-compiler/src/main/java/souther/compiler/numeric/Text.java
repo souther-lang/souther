@@ -47,6 +47,23 @@ public record Text(String at) implements Place {
         return at.compareTo(text.at);
     }
 
+    /**
+     * The least string above this one, which every string has.
+     *
+     * <p>The order has no predecessor and this is not one: a string above another either begins
+     * with it and goes on, or parts from it at a unit and is above every string that begins with
+     * it — so the least of them is this string and the smallest unit there is. What has no answer is
+     * the other direction, which is why a row just below a line cannot be written
+     * ({@link souther.compiler.check.Carrier.Text}).
+     *
+     * <p>Here because the order is here. A reader working out whether two places have anything
+     * between them is asking about the order, and one that spelled the answer for itself would be a
+     * second definition of what "just above" means.
+     */
+    public Text justAbove() {
+        return new Text(at + (char) 0);
+    }
+
     /** What makes two of these one line: the string. There is no second spelling of one to fold. */
     @Override
     public String key() {

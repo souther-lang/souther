@@ -1,0 +1,201 @@
+package souther.compiler.frontend;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.observe.RowIdentity;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+
+/**
+ * The other half of what a reading is. What is written for one owner is numbered under one count,
+ * however many places of the file wrote it; what is written for another is numbered apart.
+ *
+ * <p>Two blocks may be written for one behavior — {@code example}s of it, and the stand-in it is
+ * given — and a reader shown the second row of {@code submit} is being shown one of that behavior's
+ * rows rather than one of that block's. So the second block carries on where the first left off,
+ * which is why a reading is made for an owner and handed back rather than made for each block. The
+ * alternative is a number saying which block, and that is the count over the file this is all here
+ * to be rid of.
+ *
+ * <p>And apart, because {@code example} rows and the {@code fake} beside them are two things to
+ * edit. A row added to one that renumbered the other would be the file-wide count again, narrowed
+ * to a behavior.
+ */
+class OneOwnerWrittenTwiceIsOneNumberingTest {
+
+    private static final String MODULE = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior twice : (n: Amount) -> Amount
+                constructs Amount
+            let twice (n) = Amount(n.value * 2)
+
+            behavior thrice : (n: Amount) -> Amount
+                constructs Amount
+            let thrice (n) = Amount(n.value * 3)
+            """;
+
+    private static final String ROWS_IN_TWO_BLOCKS = MODULE + """
+
+            example twice
+                | (Amount(1)) -> Amount(2)
+
+            example twice
+                | (Amount(2)) -> Amount(4)
+            """;
+
+    private static final String ROWS_IN_ONE_BLOCK = MODULE + """
+
+            example twice
+                | (Amount(1)) -> Amount(2)
+                | (Amount(2)) -> Amount(4)
+            """;
+
+    @Test
+    void aSecondBlockForOneBehaviorCarriesOnItsNumbering() {
+        List<RowIdentity> acrossTwoBlocks = rowsOf(ROWS_IN_TWO_BLOCKS);
+        List<RowIdentity> inOneBlock = rowsOf(ROWS_IN_ONE_BLOCK);
+
+        assertEquals(inOneBlock, acrossTwoBlocks,
+                "the rows are the same behavior's either way, so they are numbered the same way");
+        assertNotEquals(acrossTwoBlocks.get(0), acrossTwoBlocks.get(1),
+                "and the second block's row is not the first block's row over again");
+    }
+
+    /** And a behavior exampled after another one is numbered from its own start, the two owners
+     *  being two. */
+    @Test
+    void andABehaviorsRowsStartWhereverItsBlockIsWritten() {
+        String exampledAfterAnother = MODULE + """
+
+                example twice
+                    | (Amount(1)) -> Amount(2)
+
+                example thrice
+                    | (Amount(1)) -> Amount(3)
+                """;
+        String exampledAlone = MODULE + """
+
+                example thrice
+                    | (Amount(1)) -> Amount(3)
+                """;
+
+        assertEquals(rowsOf(exampledAlone), rowsOfTheLastBlock(exampledAfterAnother),
+                "`thrice`'s rows are `thrice`'s, whatever was exampled before them");
+    }
+
+    /** A behavior of its own to stand in for, so the module can write a {@code fake} beside the
+     *  rows of the behavior that depends on it. */
+    private static final String WITH_A_DEPENDENCY = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior rateFor : (n: Amount) -> Amount
+
+            behavior priced : (n: Amount) -> Amount
+                depends on rateFor
+            let priced (n, rateFor) = rateFor(n)
+            """;
+
+    private static final String STOOD_IN_FOR_IN_TWO_BLOCKS = WITH_A_DEPENDENCY + """
+
+            fake rateFor
+              | (Amount(1)) -> Amount(1 + 0)
+
+            fake rateFor
+              | (Amount(2)) -> Amount(2 + 0)
+            """;
+
+    private static final String STOOD_IN_FOR_IN_ONE_BLOCK = WITH_A_DEPENDENCY + """
+
+            fake rateFor
+              | (Amount(1)) -> Amount(1 + 0)
+              | (Amount(2)) -> Amount(2 + 0)
+            """;
+
+    /** And a stand-in written in two blocks is numbered as one, the owner being the behavior stood
+     *  in for rather than the block. */
+    @Test
+    void aSecondStandInBlockForOneBehaviorCarriesOnItsNumbering() {
+        assertEquals(numbersTakenByStandIns(STOOD_IN_FOR_IN_ONE_BLOCK),
+                numbersTakenByStandIns(STOOD_IN_FOR_IN_TWO_BLOCKS),
+                "the rows stand in for one behavior either way, so they are numbered the same way");
+    }
+
+    /**
+     * And what a behavior's rows are numbered as is none of its stand-in's business.
+     *
+     * <p>The two are written for one behavior and are two owners, which is what this asks. Under one
+     * owner the numbering would carry from the rows into the stand-in, and adding a row would move
+     * what the stand-in was numbered as — the count over the file again, narrowed to a behavior.
+     */
+    @Test
+    void andWhatIsWrittenInARowDoesNotNumberTheStandInBesideIt() {
+        // Rows of the behavior the stand-in stands in for, so that what separates the two is which
+        // kind of writing each is and nothing else. Written for another behavior, the two owners
+        // would differ by the name they carry as well, and a reading made per target rather than
+        // per writing would pass.
+        //
+        // And written ahead of the stand-in: under a count the two shared, what is written first is
+        // what moves what comes after it, so rows written below could not reach it however the
+        // counting went and the test would hold for the wrong reason.
+        String noRow = WITH_A_DEPENDENCY + """
+
+                fake rateFor
+                  | (Amount(1)) -> Amount(1 + 0)
+                """;
+        String aRowAhead = WITH_A_DEPENDENCY + """
+
+                example rateFor
+                  | (Amount(1)) -> Amount(1 + 0)
+
+                fake rateFor
+                  | (Amount(1)) -> Amount(1 + 0)
+                """;
+
+        assertEquals(numbersTakenByStandIns(noRow), numbersTakenByStandIns(aRowAhead),
+                "the stand-in says what it said, and a row written before it is not part of it");
+    }
+
+    /** Every number the builder handed out while reading the module's stand-ins. */
+    private static List<String> numbersTakenByStandIns(String source) {
+        List<String> taken = new ArrayList<>();
+        for (Ast.Fake table : CstFrontend.parse(source, null).fakes()) {
+            java.util.regex.Matcher origins = java.util.regex.Pattern
+                    .compile("ordinal=\\d+, lowered=\\d+").matcher(String.valueOf(table));
+            while (origins.find()) {
+                taken.add(origins.group());
+            }
+        }
+        return taken;
+    }
+
+    private static List<RowIdentity> rowsOf(String source) {
+        List<RowIdentity> identities = new ArrayList<>();
+        for (Ast.Example block : CstFrontend.parse(source, null).examples()) {
+            for (Ast.ExampleRow row : block.rows()) {
+                identities.add(row.identity());
+            }
+        }
+        return identities;
+    }
+
+    private static List<RowIdentity> rowsOfTheLastBlock(String source) {
+        List<Ast.Example> blocks = CstFrontend.parse(source, null).examples();
+        List<RowIdentity> identities = new ArrayList<>();
+        for (Ast.ExampleRow row : blocks.get(blocks.size() - 1).rows()) {
+            identities.add(row.identity());
+        }
+        return identities;
+    }
+}

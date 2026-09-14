@@ -11,6 +11,7 @@ import souther.compiler.diag.Severity;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.compiler.query.Shapes;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
@@ -95,7 +96,10 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
     /** The clauses as the module named {@code reading} reads them. */
     private static Clauses readBy(Compilation c, String reading) {
-        return new Clauses(Scopes.resolved(c.db(), reading).value(), Map.of());
+        return new Clauses(new RuleReadingSource(Scopes.resolved(c.db(), reading).value(),
+                RuleReadings.declaredBy(c.db(), reading), Shapes.publishedDeclarations(c.db()),
+                Shapes.declarationKinds(c.db()), Shapes.declarationNewtypes(c.db()),
+                ClauseLocations.NONE));
     }
 
     /**
@@ -110,7 +114,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Compilation c = compiled(reached);
 
             assertEquals(Map.of("lo", new BindingId(declaring, 0), "hi", new BindingId(declaring, 1)),
-                    readBy(c, "demo").bindingsOf(RANGE, range(c)),
+                    readBy(c, "demo").bindingsOf(RANGE),
                     "reached " + reached + ": a field is bound by the declaration that wrote it");
         }
     }
@@ -130,9 +134,10 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Hir.Data range = range(c);
             Hir.Expr clause = range.invariants().get(0).expr();
 
-            Core athome = readBy(c, "up").typed(clause, RANGE, range).orNull();
+            ClauseAsExpanded read = new ClauseAsExpanded(clause, CallsLeftStanding.NONE);
+            Core athome = readBy(c, "up").typed(read, RANGE).orNull();
             assertNotNull(athome, "the declaring module reads its own rule");
-            assertEquals(athome, readBy(c, "demo").typed(clause, RANGE, range).orNull(),
+            assertEquals(athome, readBy(c, "demo").typed(read, RANGE).orNull(),
                     "reached " + reached + ": one rule, read the same either side of the boundary");
         }
     }
@@ -180,10 +185,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         Clauses read = readBy(c, "demo");
 
         TypeSymbol.AtModule ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
-        Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours.key())).value();
-
-        assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
-                        read.bindingsOf(ours, mine).values()),
+        assertTrue(Collections.disjoint(read.bindingsOf(RANGE).values(),
+                        read.bindingsOf(ours).values()),
                 "two declarations of `Range` bind two sets of fields");
     }
 

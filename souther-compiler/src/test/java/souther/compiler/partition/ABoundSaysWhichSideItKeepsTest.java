@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
+import souther.compiler.check.DeclaredLine;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -75,14 +78,14 @@ class ABoundSaysWhichSideItKeepsTest {
      */
     @Test
     void theTwoEndsOfOneConjunctAreToldApartByTheSideTheyKeep() {
-        OriginRef least = new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true);
-        OriginRef most = new OriginRef.InvariantOrigin(aClause(), 0, EndSide.UPPER, true);
+        LineOrigin least = new LineOrigin.InvariantOrigin(aPart(), EndSide.LOWER, true);
+        LineOrigin most = new LineOrigin.InvariantOrigin(aPart(), EndSide.UPPER, true);
 
         assertNotEquals(least.lineFacts(), most.lineFacts(),
                 "which side of the line the value it stops at is on is what the two disagree about");
         assertNotEquals(least.authoredLine(), most.authoredLine(),
                 "so they are two lines of the model, and two rows to write");
-        assertEquals(least.authoredLine().rule(), most.authoredLine().rule(),
+        assertEquals(least.authoredLine().which().rule(), most.authoredLine().which().rule(),
                 "one clause placed both, which is what provenance answers");
     }
 
@@ -114,7 +117,7 @@ class ABoundSaysWhichSideItKeepsTest {
     void aBoundThatDoesNotStopWhereItsRangeStopsIsRefused() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> Border.at(aLineAt(100),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
+                        new LineOrigin.InvariantOrigin(aPart(), EndSide.LOWER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
                                 Endpoint.inclusive(Count.of(1000)))));
         assertTrue(refused.getMessage()
@@ -134,12 +137,12 @@ class ABoundSaysWhichSideItKeepsTest {
     void aMaximumIsHeldAgainstTheUpperEndAndNotTheLowerOne() {
         assertThrows(IllegalStateException.class,
                 () -> Border.at(aLineAt(5),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.UPPER, true),
+                        new LineOrigin.InvariantOrigin(aPart(), EndSide.UPPER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(5)), null)),
                 "the line is the low end of what the rules leave, and this bound placed the high"
                         + " one");
         assertEquals("= 5", Border.at(aLineAt(5),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
+                        new LineOrigin.InvariantOrigin(aPart(), EndSide.LOWER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(5)), null))
                 .demand(PointRole.ON).criterion().asked(aLineAt(5).of()),
                 "and the minimum that did place it is the border this range draws");
@@ -157,11 +160,12 @@ class ABoundSaysWhichSideItKeepsTest {
     private static BoundaryTarget aLineAt(int at) {
         Carrier carrier = new Carrier.Whole();
         AxisId axis = new AxisId("f", "n");
+        souther.compiler.inputs.NumericTerm.ValueOf term =
+                new souther.compiler.inputs.NumericTerm.ValueOf(
+                        souther.compiler.inputs.TermPath.of(axis.term()));
         return BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(axis,
-                        new souther.compiler.inputs.NumericTerm.ValueOf(
-                                souther.compiler.inputs.TermPath.of(axis.term())),
-                        souther.compiler.inputs.TermOrders.itself(carrier)),
+                new BorderQuantity.OfACoordinate(axis.behavior(), term,
+                        souther.compiler.inputs.TermOrdersFixtures.itself(term, carrier)),
                 new Level.OnACarrier(carrier, Count.of(at)));
     }
 
@@ -170,6 +174,12 @@ class ABoundSaysWhichSideItKeepsTest {
         return new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.one", "N")), 0),
                 Optional.of(new ClauseName("within"))));
+    }
+
+    /** The one statement of the one part that clause was written in. */
+    private static DeclaredLine aPart() {
+        return new DeclaredLine.OfAStatement(
+                new InvariantStatementId(new PartId<>(aClause(), 0), 0));
     }
 
     /** A clause whose two conjuncts leave the position one value. */

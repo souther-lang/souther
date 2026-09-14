@@ -47,7 +47,8 @@ final class NumericWitness {
      * condition relating two positions gives that up within a step or two of the end it is written
      * against — past which the values being tried are ones the same condition already refused.
      */
-    private static final int VALUES_A_POSITION_IS_TRIED_AT = 8;
+    private static final int VALUES_A_POSITION_IS_TRIED_AT =
+            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
 
     /**
      * Where each of {@code terms} may stand together inside {@code within}, or null where this found
@@ -57,11 +58,30 @@ final class NumericWitness {
      *           a position no value is chosen at here, and the whole assignment is refused rather
      *           than made without it
      */
-    static Map<NumericTerm.FromOnePosition, Place> of(
-            SearchRegion within, List<NumericTerm.FromOnePosition> terms,
-            Function<NumericTerm, Carrier> on) {
+    static Standing of(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
+                       Function<NumericTerm, Carrier> on) {
         Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
-        return walk(within, terms, 0, on, standing) ? standing : null;
+        java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        return walk(within, terms, 0, on, standing, stoppedBy)
+                ? new Standing(standing, java.util.Set.of())
+                : new Standing(null, stoppedBy);
+    }
+
+    /**
+     * Where the positions may stand together, or nothing, and what stopped this looking further.
+     *
+     * <p>Two halves of one answer. A walk that tried every value it had and one that stopped at a
+     * figure of this compiler's both come back with nothing, and only the second names something a
+     * reader could raise.
+     */
+    record Standing(Map<NumericTerm.FromOnePosition, Place> at,
+                    java.util.Set<CompositionBudget> stoppedBy) {
+
+        Standing {
+            at = at == null ? null : Map.copyOf(at);
+            stoppedBy = java.util.Set.copyOf(stoppedBy);
+        }
     }
 
     /**
@@ -74,7 +94,8 @@ final class NumericWitness {
     private static boolean walk(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
                                 int at,
                                 Function<NumericTerm, Carrier> on,
-                                Map<NumericTerm.FromOnePosition, Place> standing) {
+                                Map<NumericTerm.FromOnePosition, Place> standing,
+                                java.util.Set<CompositionBudget> stoppedBy) {
         if (at == terms.size()) {
             return true;
         }
@@ -88,20 +109,35 @@ final class NumericWitness {
         if (first == null) {
             return false;
         }
-        for (Place tried : Outwards.from(first, Count.of(1), carrier, runs,
-                VALUES_A_POSITION_IS_TRIED_AT)) {
-            if (!(tried instanceof Count count)) {
-                continue;
-            }
-            SearchRegion next = within.given(term, count);
+        Outwards.Walked walked =
+                Outwards.from(first, Count.of(1), carrier, runs, VALUES_A_POSITION_IS_TRIED_AT);
+        for (Place tried : walked) {
+            SearchRegion next = within.given(term, tried);
             if (next.emptiness().isPresent()) {
                 continue;
             }
             standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, standing)) {
+            if (walk(next, terms, at + 1, on, standing, stoppedBy)) {
                 return true;
             }
             standing.remove(term);
+        }
+        // What the walk of this position came to, read over the ways it can end rather than off one
+        // of them. Each says something different about an empty hand, and a reading that asked only
+        // whether a figure was met said the first of them about all three.
+        switch (walked.ended()) {
+            // Every value this position had to offer was tried and none of them led anywhere.
+            case HAVING_TRIED_THEM_ALL -> { }
+            // There were more, and a figure of this compiler's is why they were not tried, which is
+            // what the caller is owed beside the empty hand.
+            case AT_THE_FIGURE ->
+                    stoppedBy.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+            // And an order with no step to take, where the one place this named is not the whole of
+            // what the position holds. Nothing is recorded, because what was left is a population
+            // and what travels from here is figures: an entry made here would tell a reader to raise
+            // a number that reaches none of it. Said as the arm it is rather than left to the figure
+            // above being false, which is how the same fact was lost at the pair search.
+            case WITH_NO_STEP_TO_TAKE -> { }
         }
         return false;
     }

@@ -2,15 +2,12 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
-import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
@@ -54,12 +51,10 @@ class APositionUnderACaseIsAPositionTest {
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 
     private static List<String> positionsOf(String source, String behavior) {
@@ -179,11 +174,18 @@ class APositionUnderACaseIsAPositionTest {
 
                 behavior open : (b: Box) -> Ack
                 """, "open");
-        Position least = read.at(TermPath.of("b").refine(
-                Refinement.sumCase(caseNamed(read, "Held"))).then("least"));
+        Position least = read.at(TermPath.of("b")
+                .refine(toLeaf(caseNamed(read, "Held"))).then("least"));
         assertNotNull(least, "a field of the case is a position");
         assertTrue(least.rulesLeftUnread().isEmpty(),
                 "and the clause relating it to the field beside it was reached");
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
     }
 
     /** The case's own name, taken off the reading that holds it. */

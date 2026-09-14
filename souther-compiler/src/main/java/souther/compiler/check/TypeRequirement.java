@@ -22,8 +22,8 @@ import souther.compiler.types.Type;
  *
  * <p>What is asked of a type, and not what is asked of a signature. That two positions stand at one
  * type is a condition no constant here could answer, because nothing about a type on its own decides
- * it; {@link DischargeRules#holdShift} states that one where both ends are known, and holds the
- * position itself to {@link #ANY}.
+ * it; {@link OperationFactBinder} states that one where it holds a shift and both ends are known,
+ * and holds the position itself to {@link #ANY}.
  *
  * <p>Not read by {@link Question}, which reads the owners directly. The two sides ask the same
  * things of a type, but this is the vocabulary of one of them — what a fact requires of a

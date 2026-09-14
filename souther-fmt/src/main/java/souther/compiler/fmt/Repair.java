@@ -281,7 +281,7 @@ final class Repair {
             case Witness.TrailingComment t -> List.of(new Edit(
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
             case Witness.CommentAbove a -> List.of(under(source, a));
-            case Witness.CommentCarrier c -> moved(source, canonical, pairing, c);
+            case Witness.CommentCarrier c -> moved(canonical, pairing, c);
             case Witness.AtAColumn c -> columns(round, c);
         };
     }
@@ -512,7 +512,7 @@ final class Repair {
      * has it leaves it in exactly one. A comment is not cut out and pasted: the stretches say what
      * they hold, and the comment is part of what they hold.
      */
-    private static List<Edit> moved(String source, Formatter.CanonicalForm canonical,
+    private static List<Edit> moved(Formatter.CanonicalForm canonical,
             Witnesses.Pairing pairing, Witness.CommentCarrier witness) {
         String text = canonical.layout().text();
         List<SyntaxToken> had = pairing.hadCode();

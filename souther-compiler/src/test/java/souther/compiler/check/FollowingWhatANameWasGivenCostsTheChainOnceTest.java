@@ -6,7 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -50,14 +50,18 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
     /** The steps taken following names while the arithmetic of {@code x(links)} is read, where each
      * link is a name for the one before it and the first is arithmetic. */
     private static long followedOver(int links) {
-        PathEngine engine = new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        PathEngine engine = new PathEngine(
+                RuleReadingContext.unshared(
+                        RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Terms.Of.THE_DISCHARGE_TREE);
         Hir.Binders binders = new Hir.Binders(OWNER);
         Core.Binder first = CoreBinders.of(binders.binder("x0", POS));
         Denotations at = engine.enter(Terms.read(CoreBinders.of(binders.binder("a", POS)), Type.INT, POS),
                 Known.top(), Denotations.none()).at();
         Core arithmetic = new Core.Binary(BinOp.ADD,
                 new Core.Read("a", at.bound().keySet().iterator().next(), Type.INT, POS),
-                new Core.Int(1, Type.INT, POS), CoverageOrigin.unwritten(), Type.INT, POS);
+                new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(), Type.INT, POS);
         at = bound(engine, first, arithmetic, at);
         Core.Binder last = first;
         for (int i = 1; i <= links; i++) {

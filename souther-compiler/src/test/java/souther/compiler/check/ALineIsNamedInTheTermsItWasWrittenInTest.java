@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
-import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -36,8 +36,8 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
     @Test
     void aNewtypesClauseIsAboutTheValueItWraps() {
         var line = lineAt("String.length(u) = 1");
-        assertEquals("String.length(the value)",
-                declaredBy("UserId").at(line.rule(), line.conjunct()).toString());
+        assertEquals("String.length(value)",
+                declaredBy("UserId").nameOf(line.drawnBy()));
     }
 
     /**
@@ -52,8 +52,8 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         DeclaredBorders lines = declaredBy("Pair");
         var name = lineAt("String.length(p.name) = 1");
         var code = lineAt("String.length(p.code) = 1");
-        assertEquals("String.length(name)", lines.at(name.rule(), name.conjunct()).toString());
-        assertEquals("String.length(code)", lines.at(code.rule(), code.conjunct()).toString());
+        assertEquals("String.length(name)", lines.nameOf(name.drawnBy()));
+        assertEquals("String.length(code)", lines.nameOf(code.drawnBy()));
     }
 
     /** Both ends of a range are the one number, which is what tells this from the case above. */
@@ -62,9 +62,9 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
         DeclaredBorders lines = declaredBy("Range");
         var bottom = lineAt("r = 1");
         var top = lineAt("r = 10");
-        assertEquals("the value", lines.at(bottom.rule(), bottom.conjunct()).toString());
-        assertEquals("the value", lines.at(top.rule(), top.conjunct()).toString());
-        org.junit.jupiter.api.Assertions.assertNotEquals(bottom.conjunct(), top.conjunct(),
+        assertEquals("value", lines.nameOf(bottom.drawnBy()));
+        assertEquals("value", lines.nameOf(top.drawnBy()));
+        org.junit.jupiter.api.Assertions.assertNotEquals(bottom.part(), top.part(),
                 "the two ends are the one number and different lines");
     }
 
@@ -78,9 +78,9 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
     @Test
     void aDeclarationAnswersForTheClausesItWrote() {
         var line = lineAt("s.d = 0");
-        assertNotNull(declaredBy("Day").at(line.rule(), line.conjunct()),
+        assertNotNull(declaredBy("Day").at(line.drawnBy()),
                 "Day wrote the clause, so Day names the line");
-        assertNull(declaredBy("Span").at(line.rule(), line.conjunct()),
+        assertNull(declaredBy("Span").at(line.drawnBy()),
                 "and Span holds a value that is held to it, which is not the same thing");
     }
 
@@ -130,14 +130,14 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
 
     /** Every line the model draws, by what a report calls it. Read once: the whole point of the
      *  test is that both sides of the lookup come from the one compile. */
-    private static final Map<String, souther.compiler.partition.OriginRef> LINES = linesOf();
+    private static final Map<String, souther.compiler.partition.LineOrigin> LINES = linesOf();
 
-    private static Map<String, souther.compiler.partition.OriginRef> linesOf() {
+    private static Map<String, souther.compiler.partition.LineOrigin> linesOf() {
         Compilation compilation = compiled();
         Map<String, List<souther.compiler.query.BorderAssessment>> boundaries =
                 souther.compiler.query.Adequacy.boundariesOf(compilation.db(), "example.forms");
         assertNotNull(boundaries, "the model under test compiles");
-        Map<String, souther.compiler.partition.OriginRef> out = new java.util.LinkedHashMap<>();
+        Map<String, souther.compiler.partition.LineOrigin> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each ->
                 each.forEach(line -> out.put(line.label(), line.border().origin())));
         return out;
@@ -158,19 +158,20 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
      * key their answers differently and nothing would say so — which they did, over the name the
      * author gave the clause.
      */
-    private static souther.compiler.partition.OriginRef.InvariantOrigin lineAt(String label) {
-        souther.compiler.partition.OriginRef origin = LINES.get(label);
+    private static souther.compiler.partition.LineOrigin.InvariantOrigin lineAt(String label) {
+        souther.compiler.partition.LineOrigin origin = LINES.get(label);
         assertNotNull(origin, () -> label + " is not a line of the model: " + LINES.keySet());
-        return (souther.compiler.partition.OriginRef.InvariantOrigin) origin;
+        return (souther.compiler.partition.LineOrigin.InvariantOrigin) origin;
     }
 
     /** The lines {@code name} draws, in its own terms. */
     private static DeclaredBorders declaredBy(String name) {
         Compilation compilation = compiled();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.forms", name));
-        return DeclaredBorders.of(named, symbols, policy);
+        return DeclaredBorders.of(named, Shapes.publishedDeclarations(compilation.db()),
+                Shapes.declarationCitations(compilation.db()),
+                RuleReadings.of(compilation, module), policy);
     }
 }

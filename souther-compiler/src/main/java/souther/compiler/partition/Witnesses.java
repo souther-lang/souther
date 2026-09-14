@@ -1,16 +1,16 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.ReadingPolicy;
-import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
+import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -49,18 +49,17 @@ import java.util.Set;
  */
 final class Witnesses {
 
-    /** How many elements a proposed collection is worth building. A row is offered for somebody to read
-     * and complete, and a minimum past this asks for one nobody would. */
-    private static final int MOST_ELEMENTS = 64;
+    /** What this stops at, named where every budget of this compiler's is named. The figures are
+     *  {@link CompositionBudget}'s so that a reader of a stopped search reaches the one it ran out
+     *  of. */
+    private static final int MOST_ELEMENTS =
+            CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
 
-    /** How many characters a proposed string is worth building. Its own number, because a string of
-     * sixty-five is one literal where a collection of sixty-five is sixty-five values each built in
-     * turn — holding the two to one figure bounds a string by something about collections. */
-    private static final int MOST_CHARACTERS = 4096;
+    private static final int MOST_CHARACTERS =
+            CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
-    /** How many pairings of what a map's key and value propose are built at once. Every pair is built
-     * before any of them is tried, so this bounds what is allocated rather than what is walked. */
-    private static final int MOST_PAIRINGS = 64;
+    private static final int MOST_PAIRINGS =
+            CompositionBudget.PAIRINGS_BUILT_AT_ONCE.maximum();
 
     /**
      * Values of a count, and whether they are all the values of it there were.
@@ -69,19 +68,21 @@ final class Witnesses {
      * some were never built, which is a different thing to tell an author and a different thing for a
      * measure to record.
      */
-    record Sized(List<FixtureTemplate> values, Generator.UnresolvedCombination.Reason heldBack) {
+    record Sized(List<FixtureTemplate> values, Set<CompositionBudget> heldBack) {
 
         Sized {
             values = List.copyOf(values);
+            heldBack = Set.copyOf(heldBack);
         }
 
         static Sized all(List<FixtureTemplate> values) {
-            return new Sized(values, null);
+            return new Sized(values, Set.of());
         }
     }
 
     /**
-     * Values of {@code carrier} whose count is exactly {@code size}, or none where this can build none.
+     * Values of {@code position} whose count is exactly {@code size}, or none where this can build
+     * none.
      *
      * <p>The narrower of the two promises about a count. A caller holding a line drawn on one needs
      * the count itself and not a value that merely clears it: a row at {@code String.length = 5} is a
@@ -98,35 +99,49 @@ final class Witnesses {
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
      */
-    static Sized ofSize(Type carrier, int size, Symbols symbols, ReadingPolicy policy,
+    static Sized ofSize(TypeView position, int size, RuleReadingContext reading,
                         Set<TypeSymbol> expanding) {
+        Shape carrier = position.shape();
         if (size == 0) {
-            return Sized.all(carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
-                    : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
-                            || carrier instanceof Type.MapOf
-                                    ? List.of(FixtureTemplate.collection(List.of())) : List.of());
+            // The same shapes {@link #sized} builds for, and for the same reason they are written
+            // out: what a value of none looks like is a question about each shape.
+            return Sized.all(switch (carrier) {
+                case Shape.Scalar scalar when scalar.prim() == Type.Prim.STRING ->
+                        List.of(FixtureTemplate.string(""));
+                case Shape.Sequence _, Shape.Mapping _ ->
+                        List.of(FixtureTemplate.collection(List.of()));
+                case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
+                     Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
+                     Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
+                     Shape.Undecided _ -> List.<FixtureTemplate>of();
+            });
         }
-        Built built = sized(carrier, size, symbols, policy, expanding);
+        Built built = sized(position, size, reading, expanding);
         return new Sized(built.exactly(size), built.heldBack());
     }
 
     /**
-     * Why no value of {@code carrier} counting exactly {@code size} was built, or null where one was.
+     * Why no value of {@code position} counting exactly {@code size} was built, or null where one
+     * was.
      *
      * <p>The same decision {@link #ofSize} reads, asked for its other half, so that what could not be
      * built and why are one answer given twice rather than two answers that may disagree. Whenever
      * that one offers nothing this names a reason: a caller left to supply its own default for the
      * silence would be deciding again what this is here to answer.
+     *
+     * <p>The word and not which budget it was. A budget that stopped this is the build's own answer
+     * ({@link Sized#heldBack()}) and travels as itself; what is here is the word a search comes back
+     * with, for readers that have only ever wanted that.
      */
-    static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
-                                                                ReadingPolicy policy,
-                                                                Symbols symbols) {
-        Sized made = ofSize(carrier, size, symbols, policy, Set.of());
+    static Generator.UnresolvedCombination.Reason reasonForSize(TypeView position, int size,
+                                                                RuleReadingContext reading) {
+        Sized made = ofSize(position, size, reading, Set.of());
         if (!made.values().isEmpty()) {
             return null;
         }
-        return made.heldBack() == null
-                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : made.heldBack();
+        return made.heldBack().isEmpty()
+                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
+                : Generator.UnresolvedCombination.Reason.wordFor(made.heldBack());
     }
 
     /**
@@ -149,14 +164,14 @@ final class Witnesses {
      * too few values for comes back as nothing at all. The two read one build and neither is written
      * in terms of the other, so a cheaper value for a floor cannot move a line.
      */
-    static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
-                                         ReadingPolicy policy,
+    static List<FixtureTemplate> holding(TypeView position, int least, RuleReadingContext reading,
                                          Set<TypeSymbol> expanding) {
-        return least <= 0 ? List.of() : sized(carrier, least, symbols, policy, expanding).all();
+        return least <= 0 ? List.of() : sized(position, least, reading, expanding).all();
     }
 
     /**
-     * Why a value of {@code carrier} holding {@code least} was not built in full, or null where it was.
+     * Which budgets of this compiler's stopped a value of {@code position} holding {@code least} from
+     * being built in full, and empty where none did.
      *
      * <p>The same decision {@link #holding} reads, asked for its other half. Written once because the
      * two have to agree: a reader was told a search stopped short of pairings nothing had asked to
@@ -166,10 +181,10 @@ final class Witnesses {
      * floor nothing was built for is a position offering what it ordinarily offers, and naming a
      * reason there would put "nothing composes one" under every position that has no floor at all.
      */
-    static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least,
-                                                              Symbols symbols,
-                                                              ReadingPolicy policy) {
-        return least <= 0 ? null : sized(carrier, least, symbols, policy, Set.of()).heldBack();
+    static Set<CompositionBudget> heldBackFor(TypeView position, int least,
+                                              RuleReadingContext reading) {
+        return least <= 0 ? Set.of()
+                : sized(position, least, reading, Set.of()).heldBack();
     }
 
     /**
@@ -182,15 +197,18 @@ final class Witnesses {
      */
     private record Made(FixtureTemplate value, int count) {}
 
-    /** What a value of {@code carrier} counting {@code size} comes to: what was built, and what was
-     * not. */
-    private record Built(List<Made> proposals,
-                         Generator.UnresolvedCombination.Reason heldBack) {
+    /** What a value of the position counting {@code size} comes to: what was built, and which
+     * budgets of this compiler's stopped the rest of it being built. */
+    private record Built(List<Made> proposals, Set<CompositionBudget> heldBack) {
 
-        static final Built NONE = new Built(List.of(), null);
+        static final Built NONE = new Built(List.of(), Set.of());
 
         static Built of(List<Made> proposals) {
-            return new Built(List.copyOf(proposals), null);
+            return new Built(List.copyOf(proposals), Set.of());
+        }
+
+        static Built stoppedBy(CompositionBudget budget) {
+            return new Built(List.of(), Set.of(budget));
         }
 
         /** Those holding exactly {@code size}, which is what a line drawn at a count is met by. */
@@ -206,53 +224,91 @@ final class Witnesses {
         }
     }
 
-    private static Built sized(Type carrier, int least, Symbols symbols, ReadingPolicy policy,
+    private static Built sized(TypeView position, int least, RuleReadingContext reading,
                                Set<TypeSymbol> expanding) {
-        if (carrier == null || least <= 0) {
+        if (least <= 0) {
             return Built.NONE;
         }
-        // A string is counted by its characters, and one character is as good as another where the
-        // rule is about how many there are. What a format asks for instead is a proposal of its own,
-        // put beside this one by the caller.
-        if (carrier == Type.STRING) {
-            return least > MOST_CHARACTERS
-                    ? new Built(List.of(), Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : Built.of(List.of(new Made(FixtureTemplate.string("x".repeat(least)), least)));
+        // Exhaustive over what a position can be, with no `default`. Whether a value of a shape
+        // counts anything is a question about each of them, and a chain of tests answers "no" for a
+        // shape added later without being asked.
+        return switch (position.shape()) {
+            // A string is counted by its characters. Which characters is a question the count does
+            // not answer, so what the position's own rules admit of that many comes first and a
+            // string of any characters at all after it — both are proposals, and the one every rule
+            // admits is the one a caller with a single chance needs.
+            case Shape.Scalar scalar when scalar.prim() == Type.Prim.STRING ->
+                    least > MOST_CHARACTERS
+                            ? Built.stoppedBy(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)
+                            : Built.of(ofThatManyCharacters(position, least, reading));
+            case Shape.Sequence sequence -> least > MOST_ELEMENTS
+                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+                    : ofSequence(sequence, least, reading, expanding);
+            case Shape.Mapping mapping -> least > MOST_ELEMENTS
+                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+                    : ofMapping(mapping, least, reading, expanding);
+            // Nothing else has a count this builds to. A number is one value however many the rules
+            // ask for, a record holds its fields and not a number of them, and the shapes that are
+            // not value shapes have no value to count.
+            case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
+                 Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
+                 Shape.Undecided _ -> Built.NONE;
+        };
+    }
+
+    /**
+     * Strings of exactly {@code least} characters: the one the position's rules admit, and the one
+     * any string of that many is.
+     *
+     * <p>Both, and in that order. What a string of that length looks like is a question about
+     * strings and is the same answer for every position — which is why the second is always here,
+     * and why what this reports when nothing builds stays a claim about strings rather than an
+     * opinion about one type. The first is that answer narrowed by what the position's own rules
+     * say its strings are, which is a value the decoder can accept where the second is one a format
+     * refuses.
+     */
+    private static List<Made> ofThatManyCharacters(TypeView position, int least,
+                                                   RuleReadingContext reading) {
+        List<Made> out = new ArrayList<>();
+        for (FixtureTemplate each : Partitions.admittedStringOfSize(position, reading, least)) {
+            out.add(new Made(each, least));
         }
-        if (!(carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
-                || carrier instanceof Type.MapOf)) {
-            return Built.NONE;
-        }
-        if (least > MOST_ELEMENTS) {
-            return new Built(List.of(),
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        // A list may hold the same element as many times as it needs to.
-        if (carrier instanceof Type.ListOf list) {
-            List<Made> out = new ArrayList<>();
-            for (FixtureTemplate each : proposalsFor(list.element(), symbols, policy, expanding)) {
-                List<FixtureTemplate> elements = new ArrayList<>();
+        out.add(new Made(FixtureTemplate.string("x".repeat(least)), least));
+        return out;
+    }
+
+    /**
+     * A list of that many, or a set of that many no two of which are equal.
+     *
+     * <p>A list may hold the same element as many times as it needs to. A set of three is three
+     * elements no two of which are equal, which the element's own values have to supply.
+     */
+    private static Built ofSequence(Shape.Sequence carrier, int least, RuleReadingContext reading,
+                                    Set<TypeSymbol> expanding) {
+        List<Made> out = new ArrayList<>();
+        for (FixtureTemplate seed
+                : proposalsFor(carrier.element(), reading, expanding)) {
+            List<FixtureTemplate> elements = new ArrayList<>();
+            if (carrier.kind() == Shape.Sequence.Kind.LIST) {
                 for (int i = 0; i < least; i++) {
-                    elements.add(each);
+                    elements.add(seed);
                 }
-                out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
+            } else {
+                elements.addAll(
+                        distinctFrom(seed, carrier.element(), least, reading, expanding));
             }
-            return Built.of(out);
+            out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
         }
-        // A set of three is three elements no two of which are equal, and a map of three is three
-        // entries no two of which share a key. The values under a map's keys are free to repeat.
-        if (carrier instanceof Type.SetOf set) {
-            List<Made> out = new ArrayList<>();
-            for (FixtureTemplate seed : proposalsFor(set.element(), symbols, policy, expanding)) {
-                List<FixtureTemplate> elements =
-                        distinctFrom(seed, set.element(), least, policy, symbols, expanding);
-                out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
-            }
-            return Built.of(out);
-        }
-        Type.MapOf map = (Type.MapOf) carrier;
-        List<FixtureTemplate> keys = proposalsFor(map.key(), symbols, policy, expanding);
-        List<FixtureTemplate> values = proposalsFor(map.value(), symbols, policy, expanding);
+        return Built.of(out);
+    }
+
+    /** A map of that many entries, no two of which share a key. The values under the keys are free
+     *  to repeat. */
+    private static Built ofMapping(Shape.Mapping map, int least, RuleReadingContext reading,
+                                   Set<TypeSymbol> expanding) {
+        List<FixtureTemplate> keys = proposalsFor(map.key(), reading, expanding);
+        List<FixtureTemplate> values = proposalsFor(map.value(), reading, expanding);
         if (keys.isEmpty() || values.isEmpty()) {
             return Built.NONE;
         }
@@ -262,21 +318,39 @@ final class Witnesses {
         // a value's first — and taking them in step would offer only the pairs whose two proposals
         // happen to have been read in the same order. Nearest first is what makes the bound below cost
         // the least: what it drops is the pairs furthest from what either side proposed first.
-        for (int apart = 0;
-                apart <= keys.size() + values.size() - 2 && out.size() < MOST_PAIRINGS; apart++) {
+        // Recorded where the budget is reached and not worked out afterwards from how many were
+        // built. How many pairs there are and how many were made differ whenever this stops, and
+        // they are the same two numbers whether or not it was this that stopped it — so a reader
+        // asking which budget ran out would be reading it off a subtraction that does not know.
+        boolean stopped = false;
+        // What a key proposal's other keys are, worked out once however many values it is put
+        // beside. The question is the key's and the count's — what stands under them is not in it —
+        // so a reading per pair is one walk over the element's values run again for every value the
+        // other side proposed.
+        List<List<FixtureTemplate>> keysFrom =
+                new ArrayList<>(Collections.nCopies(keys.size(), null));
+        pairing:
+        for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
             for (int i = Math.max(0, apart - values.size() + 1);
-                    i <= Math.min(apart, keys.size() - 1) && out.size() < MOST_PAIRINGS; i++) {
+                    i <= Math.min(apart, keys.size() - 1); i++) {
+                if (out.size() == MOST_PAIRINGS) {
+                    stopped = true;
+                    break pairing;
+                }
+                if (keysFrom.get(i) == null) {
+                    keysFrom.set(i,
+                            distinctFrom(keys.get(i), map.key(), least, reading, expanding));
+                }
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
-                for (FixtureTemplate key
-                        : distinctFrom(keys.get(i), map.key(), least, policy, symbols, expanding)) {
+                for (FixtureTemplate key : keysFrom.get(i)) {
                     entries.add(FixtureTemplate.entry(key, value));
                 }
                 out.add(new Made(FixtureTemplate.collection(entries), entries.size()));
             }
         }
-        return new Built(out, keys.size() * values.size() > out.size()
-                ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null);
+        return new Built(out,
+                stopped ? Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE) : Set.of());
     }
 
     /**
@@ -288,36 +362,44 @@ final class Witnesses {
      * this list drops a candidate on the strength of how many rules were read before it. The minimum's
      * is added last of those, which is exactly the one such a budget takes away.
      */
-    private static List<FixtureTemplate> proposalsFor(Type type, Symbols symbols,
-                                                      ReadingPolicy policy,
+    private static List<FixtureTemplate> proposalsFor(Type type, RuleReadingContext reading,
                                                       Set<TypeSymbol> expanding) {
-        return Partitions.representativesOf(type, symbols, policy, null, expanding);
+        return Partitions.representativesOf(type, reading, null, expanding);
     }
 
     /**
-     * A collection of {@code carrier} holding {@code chosen} and counting at least {@code least}, or
-     * null where none was built.
+     * A collection of {@code carrier} holding {@code chosen} and counting {@code needed}, or null
+     * where none was built.
      *
      * <p>For a row being built around one element. What the rest are is not what was asked for, and
      * what they may be is: a list may hold the same value again and a set may not, and a caller
      * padding one by hand would have to know which — the thing this reader is for.
+     *
+     * <p><b>How many, and not a floor to read one off.</b> What the rules leave the position and
+     * what a collection holding the chosen value comes to are two numbers, and the second is made
+     * from the first in one place ({@link ConstructionPlan#neededToHold}). Read again here, the
+     * conversion would be written twice and a caller handing over the floor would build the same
+     * collection as one handing over the count.
      */
     static FixtureTemplate holdingAlso(souther.compiler.check.Shape.Sequence carrier,
-                                       FixtureTemplate chosen, int least,
-                                       Symbols symbols, ReadingPolicy policy) {
-        int want = Math.max(1, least);
+                                       FixtureTemplate chosen, int needed,
+                                       RuleReadingContext reading) {
+        if (needed < 1) {
+            throw new IllegalArgumentException(
+                    "a collection built around a value holds it: " + needed);
+        }
         if (carrier.kind() == souther.compiler.check.Shape.Sequence.Kind.LIST) {
             List<FixtureTemplate> elements = new ArrayList<>();
-            while (elements.size() < want) {
+            while (elements.size() < needed) {
                 elements.add(chosen);
             }
             return FixtureTemplate.collection(elements);
         }
         List<FixtureTemplate> elements =
-                distinctFrom(chosen, carrier.element(), want, policy, symbols, Set.of());
+                distinctFrom(chosen, carrier.element(), needed, reading, Set.of());
         // Fewer than asked for is a type with too few values, which is a set the rules want and
         // nothing can build — said as nothing built rather than as a set of the wrong size.
-        return elements.size() < want ? null : FixtureTemplate.collection(elements);
+        return elements.size() < needed ? null : FixtureTemplate.collection(elements);
     }
 
     /**
@@ -328,14 +410,14 @@ final class Witnesses {
      * answers the way it answers any other.
      */
     private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      ReadingPolicy policy,
-                                                      Symbols symbols, Set<TypeSymbol> expanding) {
+                                                      RuleReadingContext reading,
+                                                      Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
         out.add(seed);
         // One more than needed, since the seed is likely to be among them.
-        for (FixtureTemplate each : distinctValuesOf(type, least + 1, symbols, policy, expanding)) {
+        for (FixtureTemplate each : distinctValuesOf(type, least + 1, reading, expanding)) {
             if (out.size() >= least) {
                 break;
             }
@@ -355,18 +437,34 @@ final class Witnesses {
      *
      * <p>What the type divides into comes first. A {@code Bool} is two values and a sum is its cases,
      * and each of those is a value of the type rather than a proposal about it — a set of two booleans
-     * is built from both of them or from nothing. Then values made by stepping the carrier, which stay
-     * inside the rules the type carries. The type's own proposals come last: each is what one rule
-     * asked for and any of them may be one the whole of the rules refuses, so a collection filled from
-     * them is refused for its elements — which is still better than a collection short of its size,
-     * and is all there is where the carrier neither divides nor steps.
+     * is built from both of them or from nothing. Then the values the rules about the strings admit,
+     * which are values of the type in the same way and are as many as the rules leave. Then values
+     * made by stepping the carrier, which stay inside the rules the type carries. The type's own
+     * proposals come last: each is what one rule asked for and any of them may be one the whole of
+     * the rules refuses, so a collection filled from them is refused for its elements — which is
+     * still better than a collection short of its size, and is all there is where the carrier
+     * neither divides nor steps.
+     *
+     * <p><b>Which is why the rules about the strings are asked before the carrier is stepped.</b> A
+     * string stepped by a character is a value of the carrier and not of the type: what the carrier
+     * answers is how many characters, and a type whose rule says which of them gets a string it
+     * refuses at every element after the first. The rules are what tell the values apart there, the
+     * same as a range does for a number ({@link Partitions#numberInside}).
      */
-    private static List<FixtureTemplate> distinctValuesOf(Type type, int many, Symbols symbols,
-                                                          ReadingPolicy policy,
+    private static List<FixtureTemplate> distinctValuesOf(Type type, int many,
+                                                          RuleReadingContext reading,
                                                           Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : dividesInto(type, symbols, policy, expanding)) {
+        for (FixtureTemplate each : dividesInto(type, reading, expanding)) {
+            if (out.size() >= many) {
+                return List.copyOf(out);
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        for (FixtureTemplate each : Partitions.admittedStrings(type, reading, many)) {
             if (out.size() >= many) {
                 return List.copyOf(out);
             }
@@ -375,7 +473,7 @@ final class Witnesses {
             }
         }
         for (int i = 0; out.size() < many; i++) {
-            FixtureTemplate each = varied(type, i, symbols);
+            FixtureTemplate each = varied(type, i, reading);
             if (each == null) {
                 break;
             }
@@ -383,7 +481,13 @@ final class Witnesses {
                 out.add(each);
             }
         }
-        for (FixtureTemplate each : Partitions.representativesOf(type, symbols, policy, null, expanding)) {
+        if (out.size() >= many) {
+            return List.copyOf(out);
+        }
+        // Asked last and only where there is room for what it answers. What a position is offered
+        // is a reading of every rule on it and costs what that reading costs, and a loop that asks
+        // for the list and then leaves it alone pays for it at every count already filled.
+        for (FixtureTemplate each : Partitions.representativesOf(type, reading, null, expanding)) {
             if (out.size() >= many) {
                 break;
             }
@@ -404,12 +508,11 @@ final class Witnesses {
      * into was written here as well, and the two could differ about how far to look. The reading
      * goes through the names now and hands the values back written under them.
      */
-    private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols,
-                                                     ReadingPolicy policy,
+    private static List<FixtureTemplate> dividesInto(Type type, RuleReadingContext reading,
                                                      Set<TypeSymbol> expanding) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : PartitionClasses.of(type, symbols, policy)) {
-            out.addAll(Partitions.standingFor(each.representatives(), symbols, policy, expanding));
+        for (PartitionClass each : PartitionClasses.of(type, reading, expanding)) {
+            out.addAll(Partitions.standingFor(each.representatives(), reading, expanding));
         }
         return out;
     }
@@ -419,41 +522,31 @@ final class Witnesses {
      * has no order to step.
      *
      * <p>A string grows by a character from the length its rules ask for, and a whole number steps
-     * through the range they leave. A date or a record has no such step that keeps every rule the
+     * through the range they leave. Which characters is a question the carrier has no answer to, so
+     * a type whose rules say which of them is answered before this is reached
+     * ({@link Partitions#admittedStrings}) and what is left here is the length.
+     *
+     * <p>A date or a record has no such step that keeps every rule the
      * position carries, and inventing one would put a value in a row the type's own chooser had reason
      * not to offer — which is what the values a type divides into are for, above.
      */
-    private static FixtureTemplate varied(Type type, int index, Symbols symbols) {
-        Type carrier = TypeOps.base(type, symbols);
-        if (carrier == Type.STRING) {
-            return wrapped(type, FixtureTemplate.string(
-                    "x".repeat(Math.max(1, Partitions.leastHeld(type, symbols)) + index)), symbols);
+    private static FixtureTemplate varied(Type type, int index, RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.published());
+        if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
+            return WornNames.under(view.wrappers(), FixtureTemplate.string(
+                    "x".repeat(Math.max(1, Partitions.leastHeld(view, reading)) + index)),
+                    ruleSource);
         }
-        Place at = Partitions.numberInside(type, symbols, index);
+        Place at = Partitions.numberInside(view, reading, index);
         if (at == null) {
             return null;
         }
-        return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols.scope()::reach), symbols);
-    }
-
-    /**
-     * The value under every name the position wears, which is how it is written where the position
-     * declares a newtype rather than what the newtype carries.
-     *
-     * <p>Null where {@code bare} is, and where a name the position wears is one this module cannot
-     * write: a value goes under the names as it is written, so a name there is nothing here reaches
-     * leaves no way of writing the value at all.
-     */
-    static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
-        if (bare == null || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()) {
-            return bare;
-        }
-        TypeSymbol name = ref.name();
-        FixtureTemplate inner = wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols);
-        return inner != null && symbols.scope().reach(name) instanceof TypeReachName.Written written
-                ? FixtureTemplate.newtype(written, inner) : null;
+        Carrier carrier = view.shape() instanceof Shape.Scalar scalar
+                && scalar.prim() == Type.Prim.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
+        return WornNames.under(view.wrappers(), FixtureTemplate.on(
+                carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
     private Witnesses() {}

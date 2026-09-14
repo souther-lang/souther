@@ -1,9 +1,5 @@
 package souther.cli.init;
 
-import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.SoutherJvmAbi;
-
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,7 +12,7 @@ import java.util.List;
  *
  * <p>The model is a model and not a placeholder. A generated {@code 1 + 1 == 2} says nothing about
  * the language it is written in; what a first project is for is seeing a rule stated once, where the
- * value is built, and seeing the rows and the Java test both answer on the first build.
+ * value is built, and seeing the rows that pin it down answer on the first build.
  */
 final class Templates {
 
@@ -25,28 +21,17 @@ final class Templates {
     /** A file this command writes: where it goes, relative to the project, and what is in it. */
     record File(String path, String content) {}
 
-    /** The Java test the {@code full} model comes with, and the behavior it drives. */
+    /** The behavior the {@code full} model declares, and the one its rows are written for. */
     private static final String BEHAVIOR = "returnBook";
 
-    private static final String TEST_CLASS = "ReturnBookTest";
-
     /**
-     * The sources this project starts with: the model, its rows, and the test that drives it from
-     * Java.
+     * The source this project starts with: one file, holding the model and the rows that pin it down.
      *
      * <p>The build's own files are not among them. What a build file says depends on whether one is
-     * being written or one that exists is being added to, and the sources do not.
+     * being written or one that exists is being added to, and the source does not.
      */
     static List<File> sourcesOf(Project project) {
-        List<File> files = new ArrayList<>();
-        files.add(new File(modelPathOf(project), model(project)));
-        if (project.model() == Model.FULL) {
-            files.add(new File("src/main/souther/" + project.sourceStem() + ".examples.sou",
-                    examples(project)));
-            files.add(new File("src/test/java/" + project.packagePath() + "/" + TEST_CLASS + ".java",
-                    javaTest(project)));
-        }
-        return files;
+        return List.of(new File(modelPathOf(project), model(project)));
     }
 
     /** Where the module itself goes, which is the file the module header is in. */
@@ -114,26 +99,26 @@ final class Templates {
 
                         Returned { title = name, lentFor = lent }
                     }
-                    """.formatted(project.moduleName(), BEHAVIOR, BEHAVIOR);
+
+                    %s""".formatted(project.moduleName(), BEHAVIOR, BEHAVIOR, examples());
         };
     }
 
     /**
-     * The rows, in a file of their own.
+     * The rows, below the behavior they are written for.
      *
-     * <p>Beside the model rather than in it, which is what {@code examples for} is for: the model
-     * reads as the rules, and what pins them down is read as a set of cases. Both are compiled, and
-     * a row that stops holding is a compile error rather than a failure a suite has to be run to
-     * find.
+     * <p>In the same file as the model. A reader of a first project reads the rule and the cases that
+     * pin it down together, and both are compiled, so a row that stops holding is a compile error
+     * rather than a failure a suite has to be run to find. {@code examples for} puts them in a file
+     * of their own, and that is a move the reader makes once the rows outgrow the file the model is
+     * read in.
      */
-    private static String examples(Project project) {
+    private static String examples() {
         return """
                 // What the rules come to, one case at a time. These are checked by the compiler, so
-                // `mvn test` is not what finds a row that no longer holds — the build is.
+                // the build is what finds a row that no longer holds.
                 //
                 // `souther examples src/main/souther/*.sou` says how much of the model they cover.
-                examples for %s
-
                 example %s
                     | "a loan the desk can take back" :
                         ("Souther in Action", Date("2026-04-01"), 14, Date("2026-04-10"))
@@ -165,77 +150,7 @@ final class Templates {
                     | "nor a week before" :
                         ("Souther in Action", Date("2026-04-10"), 14, Date("2026-04-03"))
                             -> ReturnedBeforeItWentOut
-                """.formatted(project.moduleName(), BEHAVIOR);
-    }
-
-    /**
-     * The same model, driven from Java the way an application drives it.
-     *
-     * <p>What this covers is what the rows do not: that the generated types are there under the
-     * names the module gave them, and that a caller in another language reads the answer as a value
-     * rather than catching something.
-     */
-    private static String javaTest(Project project) {
-        return """
-                package %s;
-
-                import org.junit.jupiter.api.Test;
-
-                import java.time.LocalDate;
-
-                import static org.junit.jupiter.api.Assertions.assertEquals;
-                import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-
-                /**
-                 * The model, driven from Java.
-                 *
-                 * <p>The `example` rows in src/main/souther already pin the rules down at compile
-                 * time. What is left for a test here is the boundary: that the module's types arrive
-                 * in Java under their own names, and that what cannot be a loan comes back as a value
-                 * to read rather than as an exception to catch.
-                 */
-                class %s {
-
-                    @Test
-                    void aLoanTheDeskTakesBackComesBackAsAValue() {
-                        %s answer = %s.of().apply(
-                                "Souther in Action", LocalDate.of(2026, 4, 1), 14L,
-                                LocalDate.of(2026, 4, 16));
-
-                        Returned returned = assertInstanceOf(Returned.class, answer);
-                        assertEquals(14L, returned.lentFor().value());
-                    }
-
-                    @Test
-                    void anEmptyTitleIsAnAnswerAndNotAnException() {
-                        assertInstanceOf(NoTitle.class, %s.of().apply(
-                                "", LocalDate.of(2026, 4, 1), 14L, LocalDate.of(2026, 4, 10)));
-                    }
-                }
-                """.formatted(project.moduleName(), TEST_CLASS, resultType(project),
-                behaviorType(project), behaviorType(project));
-    }
-
-    /**
-     * The interface a behavior is declared as, as the Java beside it names it.
-     *
-     * <p>Asked of the one place that decides what a generated class is called. What the rule is —
-     * a capital here, a suffix there — is the ABI's to state, and a template restating it would be
-     * a second statement of it that a reader would only find wrong by compiling.
-     */
-    private static String behaviorType(Project project) {
-        return simpleNameOf(new GeneratedClass.BehaviorInterface(project.moduleName(), BEHAVIOR));
-    }
-
-    /** The sealed interface a behavior answering with several cases hands them back in. */
-    private static String resultType(Project project) {
-        return simpleNameOf(new GeneratedClass.BehaviorResult(project.moduleName(), BEHAVIOR));
-    }
-
-    /** What Java in the same package calls the class, which is its name without the package. */
-    private static String simpleNameOf(GeneratedClass generated) {
-        String binary = SoutherJvmAbi.nameOf(generated).binaryName();
-        return binary.substring(binary.lastIndexOf('.') + 1);
+                """.formatted(BEHAVIOR);
     }
 
     /**
@@ -247,7 +162,12 @@ final class Templates {
      * read the one version this file states.
      */
     static String pom(Project project) {
+        // No test ships with the project — the rows beside the model are checked by the compile. What
+        // this declares is where a test the reader writes will run: the level that starts with a
+        // behavior to drive is the level that gets the harness for driving it ready.
         String tests = project.model() == Model.FULL ? """
+                        <!-- For the tests this project's own reader writes. The `example` rows in
+                             src/main/souther are checked by the compile and need nothing here. -->
                         <dependency>
                             <groupId>org.junit.jupiter</groupId>
                             <artifactId>junit-jupiter</artifactId>
@@ -328,9 +248,9 @@ final class Templates {
      * was verified against.
      */
     static String buildScript(Project project) {
-        // Only where there is a test to run. A project that starts with none gets no dependencies
-        // block and no test task: an empty one says a project has something to declare and left it
-        // out, which is not what a model with no test beside it is.
+        // Where the project starts with a behavior to drive, so a test the reader writes has
+        // somewhere to run. A project that starts with a module header gets no dependencies block and
+        // no test task: an empty one says a project has something to declare and left it out.
         String tests = project.model() == Model.FULL ? """
 
                 dependencies {

@@ -1,15 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
-import java.util.Optional;
+import souther.compiler.numeric.Towards;
 
 /**
  * Where one conjunct of a numeric newtype's invariant leaves its value able to stop.
@@ -29,8 +25,6 @@ import java.util.Optional;
  * @param lower whether this bounds the value below; otherwise above
  */
 public record InvariantBound(boolean lower, Endpoint end) {
-
-    private static final String VALUE = "value";
 
     /**
      * What a reading of one ordered rule came to.
@@ -70,160 +64,49 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static final Read PAST_THE_END = new Read.PastWhereTheOrderStops();
 
     /**
-     * What {@code clause} says about a value on {@code carrier}.
-     *
-     * <p>The one reading of an ordered rule. Which literals a rule may be bounded by and how its
-     * values are spaced are facts about the order the value sits on, so both come from the carrier; the
-     * shape of the clause, which side of it the value is on, and where a strict comparison leaves the
-     * end are the same questions whatever the values are.
-     *
-     * <p>A second reader used to answer this for the sites that generate code, keyed on a list of
-     * types that did not include the temporal ones. So a bound a report read perfectly was a rule
-     * another reader called unreadable, and every boundary of the value it sat in — its siblings'
-     * included — was downgraded to one nothing promises is writable.
-     */
-    public static Read of(Hir.Expr clause, Carrier carrier) {
-        if (carrier == null || !(clause instanceof Hir.Binary bin)) {
-            return NO_END;
-        }
-        // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Hir.Expr left = bin.left();
-        Hir.Expr right = bin.right();
-        BinOp op = bin.op();
-        if (!isValue(left) && isValue(right)) {
-            Hir.Expr swap = left;
-            left = right;
-            right = swap;
-            op = mirrored(op);
-        }
-        if (!isValue(left)) {
-            return NO_END;
-        }
-        Place bound = carrier.literalOf(right);
-        if (bound == null) {
-            return NO_END;
-        }
-        return ordered(op, bound, carrier);
-    }
-
-    /**
-     * What {@code clause} says about the number {@code measure} takes of the value.
-     *
-     * <p>The same reading one operand in. A size is a whole number, so a strict bound names the
-     * adjacent one exactly as an {@code Int}'s does, and which size call this is does not come into
-     * it — every one of them counts something.
-     */
-    public static Read ofSize(Hir.Expr clause, ValueName measure) {
-        // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
-        // where one does.
-        return sizeComparedIn(clause, measure, VALUE)
-                .map(read -> ordered(read.op(), Count.of(read.count()), Carrier.WHOLE))
-                .orElse(NO_END);
-    }
-
-    /**
-     * A comparison of a counted number against a literal, as it was written.
-     *
-     * @param op    the operator, with the count on the left however the clause was spelled
-     * @param count what it is compared against
-     */
-    public record SizeComparison(BinOp op, BigDecimal count) {}
-
-    /**
-     * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
-     * where it makes none.
-     *
-     * <p>Before any reading of what it means. {@link #ofSize} turns one of these into an end of a
-     * range and answers nothing for the comparisons that are not ends — an equality states both ends
-     * at once and a disequality states neither, so a range has nowhere to put them. A reader asking
-     * something a range cannot hold, such as whether a count of none is refused, needs the comparison
-     * itself. Recognised here so that the shape is read in one place and what it means in as many as
-     * there are questions.
-     */
-    public static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
-                                                          String subject) {
-        if (!(clause instanceof Hir.Binary bin)) {
-            return Optional.empty();
-        }
-        Hir.Expr left = bin.left();
-        Hir.Expr right = bin.right();
-        BinOp op = bin.op();
-        if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
-            Hir.Expr swap = left;
-            left = right;
-            right = swap;
-            op = mirrored(op);
-        }
-        if (!takesSizeOf(left, measure, subject)) {
-            return Optional.empty();
-        }
-        BigDecimal count = wholeLiteral(right);
-        return count == null ? Optional.empty() : Optional.of(new SizeComparison(op, count));
-    }
-
-    /**
      * The end an ordering places on a coordinate already recognised, or empty where the comparison
      * places none.
      *
-     * <p>The same reading {@link #of} finishes with, entered one step later. {@link #of} recognises
-     * its coordinate by the word {@code value}, which is the only name a newtype's own clause can use
-     * for it; a clause written on the record holding a field names the field, or a size of it, or a
-     * field of a field, and which of those it named is settled before this by the naming the
-     * discharge check already does. What is left is where the comparison leaves the end, and that is
-     * one question with one answer whatever recognised the coordinate — asked again here, a strict
-     * bound would land on the neighbour in one reader and on the literal in the other.
+     * <p>Entered with the coordinate settled. Which number a clause is about, and whether what it
+     * states of that number is a cut at all, is the walk's answer: it goes inside the conjunct, so a
+     * rule stated through a helper and one written as the denial of its opposite arrive here as the
+     * cut they state. What is left is where the comparison leaves the end, which is one question
+     * with one answer whatever recognised the coordinate.
      *
-     * @param op    the comparison, with the coordinate on its left
+     * @param cut   what the comparison placed, stated of the coordinate
      * @param bound what the coordinate is compared against
      */
-    static Read at(BinOp op, Hir.Expr bound, Carrier carrier) {
+    static Read at(ComparisonClaim.Cut cut, Hir.Expr bound, Carrier carrier) {
         if (carrier == null || bound == null) {
             return NO_END;
         }
         Place at = carrier.literalOf(bound);
-        return at == null ? NO_END : ordered(op, at, carrier);
+        return at == null ? NO_END : ordered(cut, at, carrier);
     }
 
-    /** Which comparison an operand on the right states of one on the left. */
-    static BinOp flipped(BinOp op) {
-        return mirrored(op);
-    }
-
-    /** Whether {@code op} says where values stop rather than which one a value is. */
-    static boolean ordering(BinOp op) {
-        return ComparisonClaim.orders(op);
-    }
-
-    /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Read ordered(BinOp op, Place bound, Carrier carrier) {
-        boolean steps = carrier.spacing() == Granularity.DISCRETE;
-        return switch (op) {
-            case GE -> placed(true, Endpoint.inclusive(bound));
-            case LE -> placed(false, Endpoint.inclusive(bound));
-            case GT -> steps ? stepped(true, carrier.onTheGrid(Count.number(bound).plus(1)))
-                    : placed(true, Endpoint.exclusive(bound));
-            case LT -> steps ? stepped(false, carrier.onTheGrid(Count.number(bound).minus(1)))
-                    : placed(false, Endpoint.exclusive(bound));
-            default -> NO_END;
-        };
+    /**
+     * One end, from what the comparison placed and how the carrier's counts are spaced.
+     *
+     * <p>Which end it is and whether the end admits the number are the claim's two answers: a rule
+     * bounds a value below exactly where the values it admits are above the number it named, and
+     * the end is the number itself exactly where the rule holds there. What is left for this to
+     * decide is where a refused number leaves the end, which is a fact about the order and not
+     * about the comparison.
+     */
+    private static Read ordered(ComparisonClaim.Cut cut, Place bound, Carrier carrier) {
+        boolean lower = cut.satisfyingSide() == Towards.ABOVE;
+        if (cut.holdsAtTheValue()) {
+            return placed(lower, Endpoint.inclusive(bound));
+        }
+        if (carrier.spacing() != Granularity.DISCRETE) {
+            return placed(lower, Endpoint.exclusive(bound));
+        }
+        Count number = Count.number(bound);
+        return stepped(lower, carrier.onTheGrid(lower ? number.plus(1) : number.minus(1)));
     }
 
     private static Read placed(boolean lower, Endpoint end) {
         return new Read.AnEnd(new InvariantBound(lower, end));
-    }
-
-    /**
-     * Whether {@code e} is {@code measure} applied to the named subject: {@code value} inside a
-     * newtype's rule, a field's name inside the rule of the record that has it.
-     *
-     * <p>Asked of the name the application resolved to, not of how it was spelled: an import lets a
-     * library operation be written without its qualifier, and a reader comparing text would miss
-     * every clause written that way while looking as though it had read them.
-     */
-    private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
-        return e instanceof Hir.Apply call && call.args().size() == 1
-                && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
-                && call.function() instanceof Hir.Var.Denoting fn && measure.equals(fn.denotes());
     }
 
     /**
@@ -244,52 +127,4 @@ public record InvariantBound(boolean lower, Endpoint end) {
                 : placed(lower, Endpoint.inclusive(onto));
     }
 
-    private static boolean isValue(Hir.Expr e) {
-        return e instanceof Hir.Var v && v.name().equals(VALUE);
-    }
-
-    private static BinOp mirrored(BinOp op) {
-        return switch (op) {
-            case LT -> BinOp.GT;
-            case LE -> BinOp.GE;
-            case GT -> BinOp.LT;
-            case GE -> BinOp.LE;
-            default -> op;
-        };
-    }
-
-    /** A whole number a literal names, or null where it names one with a fraction: a value that
-     *  steps one at a time is not bounded at a place between two of its values. */
-    public static BigDecimal wholeLiteral(Hir.Expr e) {
-        BigDecimal read = literalOf(e);
-        return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
-    }
-
-    /** A numeric literal, negation included. A bare integer counts against a decimal, since a literal
-     * takes the other side's type. */
-    public static BigDecimal literalOf(Hir.Expr e) {
-        return switch (e) {
-            case Hir.IntLit lit -> BigDecimal.valueOf(lit.value());
-            case Hir.DecimalLit lit -> normalized(lit.value());
-            case Hir.Neg neg -> negated(literalOf(neg.operand()));
-            case null, default -> null;
-        };
-    }
-
-    /**
-     * The number a literal names, without how many places it was written to.
-     *
-     * <p>{@code 5.0m} and {@code 5.00m} are one constraint, so they have to reach a range as one
-     * number: two spellings of an end would be two lines through a position, both holding the same
-     * values, and one boundary owed twice under one printed figure. Trailing zeros left of the point
-     * are put back, so a hundred is written as one.
-     */
-    private static BigDecimal normalized(BigDecimal value) {
-        BigDecimal bare = value.stripTrailingZeros();
-        return bare.scale() < 0 ? bare.setScale(0) : bare;
-    }
-
-    private static BigDecimal negated(BigDecimal value) {
-        return value == null ? null : value.negate();
-    }
 }

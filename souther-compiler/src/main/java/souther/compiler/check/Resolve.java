@@ -4,6 +4,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.Reading;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -16,7 +17,6 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
@@ -87,16 +87,6 @@ public final class Resolve {
     /** The definition whose text is being read. Every binding met belongs to it. */
     private BindingOwner owner;
 
-    /**
-     * Whether what is being resolved was written in an {@code example} or {@code fake} row.
-     *
-     * <p>The one thing this decides is which node a bracketed literal becomes: in a row the brackets
-     * are the notation for whichever collection the position declares, and which one that is has no
-     * answer until the position is known, so the node says so rather than being read as a list here
-     * (spec §example-evaluable). Nothing else about a row is resolved differently, and nothing here
-     * reads a type.
-     */
-    private boolean inARow;
     /** Whether the definition being read is a value an attached file declares. */
     private boolean readingAnAttachedValue;
     /**
@@ -125,7 +115,7 @@ public final class Resolve {
     }
 
     /** A binder answered, and the bindings that hold under it. */
-    private record Answered(Hir.Binder binder, Bindings bound) {}
+    private record Answered(Hir.Binder binder, InForce bound) {}
 
     /**
      * {@code binder} given a binding of its own, and {@code bound} extended with it.
@@ -134,7 +124,7 @@ public final class Resolve {
      * are two answers however they were written. Where it was written is kept aside, for a reader
      * that is asking about the source rather than about the program.
      */
-    private Answered bind(Bindings bound, Ast.Binder binder) {
+    private Answered bind(InForce bound, Ast.Binder binder) {
         int ordinal = counts.merge(owner, 1, Integer::sum) - 1;
         BindingId id = new BindingId(owner, ordinal);
         if (binder.namePos() != null) {
@@ -149,10 +139,10 @@ public final class Resolve {
     }
 
     /** Several binders answered, and the bindings that hold under all of them. */
-    private record AnsweredAll(List<Hir.Binder> binders, Bindings bound) {}
+    private record AnsweredAll(List<Hir.Binder> binders, InForce bound) {}
 
     /** The same as {@link #bind}, for the names one binder writes at once — a block's parameters. */
-    private AnsweredAll bindAll(Bindings bound, List<Ast.Binder> written) {
+    private AnsweredAll bindAll(InForce bound, List<Ast.Binder> written) {
         List<Hir.Binder> out = new ArrayList<>();
         for (Ast.Binder b : written) {
             Answered a = bind(bound, b);
@@ -590,17 +580,18 @@ public final class Resolve {
             fns.add(r.fn(fn));
         }
         List<Hir.Example> examples = new ArrayList<>();
-        r.inARow = true;   // every operand below is written in a row (spec §example-evaluable)
         for (Ast.Example e : m.examples()) {
             r.owner = r.ownerOfValue(e.target());
             List<Hir.ExampleRow> rows = new ArrayList<>();
             for (Ast.ExampleRow row : e.rows()) {
                 List<Hir.With> withs = new ArrayList<>();
                 for (Ast.With w : row.withs()) {
-                    withs.add(new Hir.With(r.standsInFor(w.dep()), r.expr(w.value()), w.pos()));
+                    withs.add(new Hir.With(r.standsInFor(w.dep()),
+                            r.expr(w.value(), Reading.A_FIXTURE), w.pos()));
                 }
-                rows.add(new Hir.ExampleRow(row.identity(), r.exprs(row.inputs()), withs,
-                        r.expr(row.expected()), row.pos()));
+                rows.add(new Hir.ExampleRow(row.identity(),
+                        r.exprs(row.inputs(), Reading.A_FIXTURE), withs,
+                        r.expected(row.expected(), Reading.A_FIXTURE), row.pos()));
             }
             examples.add(new Hir.Example(e.target(), rows, e.pos()));
         }
@@ -612,12 +603,16 @@ public final class Resolve {
             Hir.Var target = r.standsInFor(f.target());
             List<Hir.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
-                rows.add(new Hir.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
-                        r.expr(row.output()), row.isDefault(), row.pos()));
+                Hir.Matched matched = switch (row.matched()) {
+                    case Ast.Matched.Arguments(List<Ast.Expr> inputs) ->
+                            new Hir.Matched.Arguments(r.exprs(inputs, Reading.A_FIXTURE));
+                    case Ast.Matched.Anything _ -> new Hir.Matched.Anything();
+                };
+                rows.add(new Hir.FakeRow(matched, r.expr(row.output(), Reading.A_FIXTURE),
+                        row.pos()));
             }
             fakes.add(new Hir.Fake(target, rows, f.pos()));
         }
-        r.inARow = false;
         Map<String, Hir.RetType> exposedOutputs = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.RetType> e : m.exposedOutputs().entrySet()) {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
@@ -735,7 +730,7 @@ public final class Resolve {
     private Hir.Var required(Ast.Var ref, String by) {
         return behaviorNamed(ref, (name, candidates) -> CompileException.of(Diagnostic
                 .at(name.written().reportedAt())
-                .suggestion(Suggest.candidate(name.name(), candidates))
+                .repair(name.written().reportedAt(), Suggest.candidate(name.name(), candidates))
                 .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
                 .say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
     }
@@ -751,7 +746,7 @@ public final class Resolve {
     private Hir.Var standsInFor(Ast.Var ref) {
         return behaviorNamed(ref, (name, candidates) -> CompileException.of(Diagnostic
                 .at(name.written().reportedAt())
-                .suggestion(Suggest.candidate(name.name(), candidates))
+                .repair(name.written().reportedAt(), Suggest.candidate(name.name(), candidates))
                 .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
                 .say(new ExampleMessage.AFakeNamesNoBehavior(name.written().quoted())).build()));
     }
@@ -832,7 +827,7 @@ public final class Resolve {
     private Hir.Var behaviorReached(Ast.Var ref, ValueName.Behavior name) {
         answered(ref.written(), name);
         return new Hir.Var.Denoting(ref.written(),
-                ReachName.of(name, ref.name(), reachable.module()), ref.region());
+                ReachName.of(name, ref.name(), reachable.module()), ref.origin(), ref.region());
     }
 
     /** What to say about a name no behavior answers to, given the names that were reachable. */
@@ -845,7 +840,7 @@ public final class Resolve {
         String name = written.canonical();
         return CompileException.of(Diagnostic
                 .at(written.reportedAt())
-                .suggestion(Suggest.candidate(name, candidates))
+                .repair(written.reportedAt(), Suggest.candidate(name, candidates))
                 .say(new NameMessage.NoBehaviorOfThatNameInThisPipeline(written.quoted())).build());
     }
 
@@ -857,14 +852,14 @@ public final class Resolve {
 
     /** A reference resolution read and found nothing for, keeping where it was written. */
     private static Hir.Var unanswered(Ast.Var ref) {
-        return new Hir.Var.Unanswered(ref.written(), ref.region());
+        return new Hir.Var.Unanswered(ref.written(), ref.origin(), ref.region());
     }
 
     private Hir.FnDef fn(Ast.FnDef f) {
         owner = ownerOfValue(f.name());
         readingAnAttachedValue = !f.role().isTheModels();
         List<Hir.FnParam> params = new ArrayList<>();
-        Bindings bound = Bindings.NONE;
+        InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.FnParam p : f.params()) {
             Answered a = bind(bound, p.binder());
             params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
@@ -892,7 +887,7 @@ public final class Resolve {
     private List<Hir.EnsuresClause> ensures(Ast.SpecBehavior behavior) {
         owner = new BindingOwner.OfSignature(
                 new ValueName.Behavior(reachable.module(), behavior.name()));
-        Bindings params = Bindings.NONE;
+        InForce params = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.Param p : behavior.params()) {
             params = bind(params, Ast.Binder.of(Ast.Name.written(p.written()))).bound();
         }
@@ -915,7 +910,7 @@ public final class Resolve {
     }
 
     /** A declaration's invariant clauses, each read against the fields it constrains. */
-    private List<Hir.InvariantClause> clauses(List<Ast.InvariantClause> clauses, Bindings bound) {
+    private List<Hir.InvariantClause> clauses(List<Ast.InvariantClause> clauses, InForce bound) {
         List<Hir.InvariantClause> out = new ArrayList<>();
         for (Ast.InvariantClause clause : clauses) {
             out.add(new Hir.InvariantClause(clause.name(), expr(clause.expr(), bound),
@@ -1004,7 +999,6 @@ public final class Resolve {
                 yield new Hir.Data(d.written(), declared, d.newtype(), names(d.includes()),
                         fields(d.fields()),
                         clauses(d.invariants(), boundFields(d, declared)),
-                        d.decoder().map(this::decoder), d.encoder().map(this::encoder),
                         d.pos());
             }
             case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s), s.pos());
@@ -1057,8 +1051,8 @@ public final class Resolve {
      * the ones a spread brings in, which are as much this declaration's fields as the written ones
      * (and are what a spread-in invariant was written against).
      */
-    private Bindings boundFields(Ast.Data d, TypeSymbol.AtModule declared) {
-        Bindings bound = Bindings.NONE;
+    private InForce boundFields(Ast.Data d, TypeSymbol.AtModule declared) {
+        InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f
@@ -1069,131 +1063,12 @@ public final class Resolve {
     }
 
 
-    // --- decoders ---
-
-    /** A decoder reads the value it is decoding under the name it gives it, and an object decoder
-     * reads what each of its binds took out of the object. Those are what bind its names. */
-    private Hir.DecoderDef decoder(Ast.DecoderDef d) {
-        return switch (d) {
-            case Ast.PrimDecoder p -> {
-                Answered input = bind(Bindings.NONE, p.input());
-                Bindings bound = input.bound();
-                List<Hir.DecStmt> stmts = new ArrayList<>();
-                for (Ast.DecStmt s : p.stmts()) {
-                    Ast.Let let = (Ast.Let) s;
-                    Hir.Expr value = expr(let.value(), bound);
-                    Answered a = bind(bound, let.binder());
-                    stmts.add(new Hir.Let(a.binder(), value, let.pos()));
-                    bound = a.bound();
-                }
-                yield new Hir.PrimDecoder(Hir.RawKind.valueOf(p.from().name()), input.binder(), stmts,
-                        construct(p.result(), bound), p.pos());
-            }
-            case Ast.ObjectDecoder o -> {
-                List<Hir.Bind> binds = new ArrayList<>();
-                Bindings bound = Bindings.NONE;
-                for (Ast.Bind b : o.binds()) {
-                    Answered a = bind(bound, b.binder());
-                    binds.add(new Hir.Bind(a.binder(), b.key(), decRef(b.ref()), b.pos()));
-                    bound = a.bound();
-                }
-                yield new Hir.ObjectDecoder(binds, construct(o.result(), bound), o.pos());
-            }
-            case Ast.NewtypeDecoder n -> {
-                Answered input = bind(Bindings.NONE, n.input());
-                yield new Hir.NewtypeDecoder(decRef(n.inner()), input.binder(),
-                        construct(n.result(), input.bound()), n.pos());
-            }
-        };
-    }
-
-    private Hir.DecRef decRef(Ast.DecRef ref) {
-        return switch (ref) {
-            case Ast.DecRef.Bare b -> bareDecRef(b);
-            case Ast.OptionDecRef o -> new Hir.OptionDecRef(bareDecRef(o.element()), o.pos());
-        };
-    }
-
-    /** Resolving keeps the shape it was given, so what an optional holds stays what an optional may
-     *  hold. Split here for that reason and not to say anything new about the arms. */
-    private Hir.DecRef.Bare bareDecRef(Ast.DecRef.Bare ref) {
-        return switch (ref) {
-            case Ast.PrimDecRef p -> new Hir.PrimDecRef(p.kind(), p.pos());
-            case Ast.DataDecRef d -> new Hir.DataDecRef(type(d.typeName()), d.pos());
-            case Ast.ListDecRef l -> new Hir.ListDecRef(decRef(l.element()), l.pos());
-            case Ast.SetDecRef s -> new Hir.SetDecRef(decRef(s.element()), s.pos());
-            // the key is already the classification the checker made, carrying a resolved name
-            case Ast.MapDecRef m -> new Hir.MapDecRef(decRef(m.value()), m.key(), m.pos());
-        };
-    }
-
-    private Hir.Construct construct(Ast.Construct c, Bindings bound) {
-        List<Hir.FieldInit> inits = new ArrayList<>();
-        for (Ast.FieldInit i : c.inits()) {
-            inits.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
-        }
-        return new Hir.Construct(type(c.typeName()), inits, c.pos());
-    }
-
-    // --- encoders ---
-
-    /** An encoder reads the value it is encoding under the name it gives it. */
-    private Hir.EncoderDef encoder(Ast.EncoderDef e) {
-        Answered self = bind(Bindings.NONE, e.self());
-        return new Hir.EncoderDef(self.binder(), rawExpr(e.result(), self.bound()), e.pos());
-    }
-
-    private Hir.RawExpr rawExpr(Ast.RawExpr r, Bindings bound) {
-        return switch (r) {
-            case Ast.TextRaw t -> new Hir.TextRaw(expr(t.arg(), bound), t.pos());
-            case Ast.IntRaw i -> new Hir.IntRaw(expr(i.arg(), bound), i.pos());
-            case Ast.BoolRaw b -> new Hir.BoolRaw(expr(b.arg(), bound), b.pos());
-            case Ast.DecimalRaw d -> new Hir.DecimalRaw(expr(d.arg(), bound), d.pos());
-            case Ast.IsoTextRaw i -> new Hir.IsoTextRaw(expr(i.arg(), bound), i.pos());
-            case Ast.EncodeRaw en ->
-                    new Hir.EncodeRaw(type(en.typeName()), expr(en.arg(), bound), en.pos());
-            case Ast.ListEnc l -> new Hir.ListEnc(expr(l.source(), bound), encElem(l.elem()), l.pos());
-            case Ast.SetEnc s -> new Hir.SetEnc(expr(s.source(), bound), encElem(s.elem()), s.pos());
-            case Ast.MapEnc m -> new Hir.MapEnc(expr(m.source(), bound), encElem(m.elem()),
-                    m.key(), m.pos());
-            // the inner expression reads the element the option holds, under the name given here
-            case Ast.OptionRaw o -> {
-                Answered elem = bind(bound, o.elem());
-                yield new Hir.OptionRaw(expr(o.access(), bound),
-                        rawExpr(o.inner(), elem.bound()), elem.binder(), o.pos());
-            }
-            case Ast.ObjectRaw o -> {
-                List<Hir.RawEntry> entries = new ArrayList<>();
-                for (Ast.RawEntry entry : o.entries()) {
-                    entries.add(new Hir.RawEntry(entry.key(), rawExpr(entry.value(), bound),
-                            entry.pos()));
-                }
-                yield new Hir.ObjectRaw(entries, o.pos());
-            }
-        };
-    }
-
-    private Hir.EncElem encElem(Ast.EncElem e) {
-        return switch (e) {
-            case Ast.EncElem.Bare b -> bareEncElem(b);
-            case Ast.OptionElemEnc o -> new Hir.OptionElemEnc(bareEncElem(o.elem()), o.pos());
-        };
-    }
-
-    private Hir.EncElem.Bare bareEncElem(Ast.EncElem.Bare e) {
-        return switch (e) {
-            case Ast.PrimEnc p -> new Hir.PrimEnc(p.kind(), p.pos());
-            case Ast.DataEnc d -> new Hir.DataEnc(type(d.typeName()), d.pos());
-            case Ast.ListElemEnc l -> new Hir.ListElemEnc(encElem(l.elem()), l.pos());
-            case Ast.SetElemEnc s -> new Hir.SetElemEnc(encElem(s.elem()), s.pos());
-            case Ast.MapElemEnc m -> new Hir.MapElemEnc(encElem(m.value()), m.key(), m.pos());
-        };
-    }
-
     // --- expressions ---
 
-    private Hir.Expr expr(Ast.Expr e) {
-        return expr(e, Bindings.NONE);
+    /** An expression written where nothing is bound over it, read under {@code reading} — which a
+     *  fixture is, a row writing its values where no parameter of anything stands over them. */
+    private Hir.Expr expr(Ast.Expr e, Reading reading) {
+        return expr(e, InForce.of(reading));
     }
 
     /**
@@ -1204,34 +1079,30 @@ public final class Resolve {
      * answer at all — and an expression kind added later stops the build here, which is the one
      * place it has to be accounted for.
      */
-    private Hir.Expr expr(Ast.Expr e, Bindings bound) {
+    private Hir.Expr expr(Ast.Expr e, InForce bound) {
         return switch (e) {
             case Ast.Var v -> reached(v, bound);
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
-            case Ast.Apply call when call.appliesAName() -> applied(call, bound);
-            case Ast.Apply call -> new Hir.Apply(callee(call.function(), bound),
-                    exprs(call.args(), bound), call.origin(), call.appliedAs(), call.pos(),
-                    call.region());
+            case Ast.Apply call when call.function() instanceof Ast.Var callee ->
+                    applied(call, callee, bound);
+            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call),
+                    callee(call.function(), bound), exprs(call.args(), bound));
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
             // everything else — which is a fact the parser and the AST builder do not have.
             case Ast.FieldAccess fa -> {
-                Hir.Var member = qualifiedName(fa, false, bound);
+                Hir.Var member = qualifiedName(fa, bound);
                 yield member != null ? member
                         : new Hir.FieldAccess(expr(fa.target(), bound), fa.name(), fa.pos(),
                                 fa.region());
             }
             // the type being built is this case's business; everything under it is a slot like any
             // other
-            // A construction written in a row does not write out an optional field it leaves
-            // absent; one written anywhere else says what each of its fields is.
-            case Ast.NewData nd -> new Hir.NewData(type(nd.typeName()), inits(nd.inits(), bound),
-                    vars(nd.spreads(), bound), nd.origin(),
-                    inARow ? Hir.Fields.OPTIONALS_MAY_BE_OMITTED : Hir.Fields.EVERY_ONE_WRITTEN,
-                    nd.pos(), nd.region());
+            case Ast.NewData nd -> Hir.NewData.read(nd, type(nd.typeName()),
+                    inits(nd.inits(), bound), vars(nd.spreads(), bound), bound.reading());
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -1259,7 +1130,7 @@ public final class Resolve {
                 List<Hir.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
                     Answered a = c.binding() == null ? null : bind(bound, c.binding());
-                    Bindings inArm = a == null ? bound : a.bound();
+                    InForce inArm = a == null ? bound : a.bound();
                     cases.add(new Hir.Case(caseNames(c.caseTypes()),
                             a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
@@ -1272,27 +1143,55 @@ public final class Resolve {
             case Ast.BoolLit x -> new Hir.BoolLit(x.value(), x.pos(), x.region());
             case Ast.Unreachable x -> new Hir.Unreachable(x.reason(), x.pos(), x.region());
             case Ast.Neg x -> new Hir.Neg(expr(x.operand(), bound), x.pos(), x.region());
-            case Ast.Binary x -> new Hir.Binary(BinOp.valueOf(x.op().name()),
+            case Ast.Binary x -> new Hir.Binary(binOp(x.op()),
                     expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
             case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
                     expr(x.els(), bound), x.origin(), x.pos(), x.region());
-            case Ast.ListLit x -> inARow
-                    ? new Hir.RowCollection(exprs(x.elements(), bound), x.pos(), x.region())
-                    : new Hir.ListLit(exprs(x.elements(), bound), x.pos(), x.region());
+            case Ast.ListLit x -> bound.readingAFixture()
+                    ? new Hir.RowCollection(exprs(x.elements(), bound), x.origin(), x.pos(),
+                            x.region())
+                    : new Hir.ListLit(exprs(x.elements(), bound), x.origin(), x.pos(), x.region());
             case Ast.ListComp x -> new Hir.ListComp(expr(x.element(), bound),
                     exprs(x.guards(), bound), x.origin(), x.pos(), x.region());
             case Ast.Tuple x -> new Hir.Tuple(exprs(x.elements(), bound), x.pos(), x.region());
             case Ast.TupleGet x -> new Hir.TupleGet(expr(x.tuple(), bound), x.index(), x.arity(),
                     x.pos(), x.region());
-            // An expansion is what the inliner writes, and the inliner runs on what this pass
-            // answers. One here is a tree that has been below this boundary and come back.
-            case Ast.Expansion x -> throw new IllegalStateException(
-                    "an expansion reached resolution at " + x.pos());
+        };
+    }
+
+    /**
+     * Which operator a written one is, in the vocabulary below this boundary.
+     *
+     * <p>An operator the parser can write and an operator the rest of the compiler gives a meaning
+     * to are separate types on purpose, and a written one becomes a meant one here or nowhere. Both
+     * sides are spelled out so that an operator added to what may be written stops the compile
+     * until somebody says which meaning it denotes — including when the two are given the same
+     * name, which says how they are typed and nothing about what they denote. The same reason
+     * {@code AstBuilder} writes out what each piece of syntax is an operator for.
+     *
+     * <p>The switch is an expression and has no {@code default} for that reason. A {@code default}
+     * would answer for an operator nobody had decided about, which is the whole of what this stops.
+     */
+    private static BinOp binOp(Ast.BinOp op) {
+        return switch (op) {
+            case EQ -> BinOp.EQ;
+            case NE -> BinOp.NE;
+            case LT -> BinOp.LT;
+            case LE -> BinOp.LE;
+            case GT -> BinOp.GT;
+            case GE -> BinOp.GE;
+            case AND -> BinOp.AND;
+            case OR -> BinOp.OR;
+            case ADD -> BinOp.ADD;
+            case SUB -> BinOp.SUB;
+            case MUL -> BinOp.MUL;
+            case DIV -> BinOp.DIV;
+            case CONCAT -> BinOp.CONCAT;
         };
     }
 
     /** A construction's field values, each a slot like any other. */
-    private List<Hir.FieldInit> inits(List<Ast.FieldInit> inits, Bindings bound) {
+    private List<Hir.FieldInit> inits(List<Ast.FieldInit> inits, InForce bound) {
         List<Hir.FieldInit> out = new ArrayList<>();
         for (Ast.FieldInit i : inits) {
             out.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
@@ -1301,7 +1200,7 @@ public final class Resolve {
     }
 
     /** The names in a construction's spreads — a name slot, where only a name may stand. */
-    private List<Hir.Var> vars(List<Ast.Var> vars, Bindings bound) {
+    private List<Hir.Var> vars(List<Ast.Var> vars, InForce bound) {
         List<Hir.Var> out = new ArrayList<>();
         for (Ast.Var v : vars) {
             out.add(name(v, bound));
@@ -1315,31 +1214,55 @@ public final class Resolve {
      * declaration in a spread as everywhere else.
      *
      */
-    private Hir.Var name(Ast.Var written, Bindings bound) {
+    private Hir.Var name(Ast.Var written, InForce bound) {
         return reached(written, bound);
     }
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
-    private Hir.Expr applied(Ast.Apply call, Bindings bound) {
-        ValueName denotes = calledName(call, bound);
+    private Hir.Expr applied(Ast.Apply call, Ast.Var callee, InForce bound) {
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
         // from the characters that spell it, which is short of what a parenthesized callee covers.
-        WrittenName written = call.function() instanceof Ast.Var applied ? applied.written()
-                : call.name();
-        Region over = call.function() instanceof Ast.Var applied ? applied.region()
-                : written.region();
+        WrittenName written = callee.written();
+        ValueName denotes = calledName(written, bound);
         Hir.Var name;
         if (denotes == null) {
-            name = new Hir.Var.Unanswered(written, over);
+            name = new Hir.Var.Unanswered(written, callee.origin(), callee.region());
         } else {
-            answered(call.name(), denotes);
+            answered(written, denotes);
             name = new Hir.Var.Denoting(written,
-                    ReachName.of(denotes, call.written(), reachable.module()), over);
+                    ReachName.of(denotes, written.canonical(), reachable.module()),
+                    callee.origin(), callee.region());
         }
-        return new Hir.Apply(name, exprs(call.args(), bound), call.origin(), call.appliedAs(),
-                call.pos(), call.region());
+        return Hir.Apply.read(call, appliedCallee(call), name,
+                exprs(call.args(), bound));
+    }
+
+    /**
+     * What the author applied, as a report says it — the name they wrote in the callee position and
+     * the characters they wrote it over.
+     *
+     * <p>Read here and nowhere later. A lowering replaces what is applied, and every one of them
+     * leaves the characters where they are: a report that asked the callee afterwards would quote
+     * the binding, the operation or the qualified spelling a pass put there. Which of the shapes
+     * spells a name is {@link #dottedName}'s answer, which is the same one a field read written on
+     * its own gets.
+     *
+     * <p>The name is taken from the surface and not from what the callee resolved to. A member of a
+     * namespace is folded into a name and a field of a value is not, so the same source shape would
+     * be read two ways depending on what it turned out to reach — and what the author wrote is not
+     * a thing that turns on that.
+     */
+    private static Hir.AppliedCallee appliedCallee(Ast.Apply call) {
+        Ast.Expr callee = call.function();
+        // Where the callee is written, or where the application is where the callee says nowhere at
+        // all. A report about what is applied points somewhere either way, and an application the
+        // parser read is somewhere — so this is the choice between two answers already held, and
+        // not a place worked out from one of them.
+        Region at = callee.reportedAt();
+        return new Hir.AppliedCallee(dottedName(callee),
+                at != null ? at : Region.point(call.pos()));
     }
 
     /**
@@ -1350,17 +1273,17 @@ public final class Resolve {
      * spelling would answer differently depending on which rewrites had run — which is the defect
      * this carries the answer to avoid.
      */
-    private Hir.Var reached(Ast.Var v, Bindings bound) {
+    private Hir.Var reached(Ast.Var v, InForce bound) {
         ValueName denotes = valueName(v.written(), bound);
         if (denotes == null) {
-            return new Hir.Var.Unanswered(v.written(), v.region());
+            return new Hir.Var.Unanswered(v.written(), v.origin(), v.region());
         }
         answered(v.written(), denotes);
         return new Hir.Var.Denoting(v.written(),
-                ReachName.of(denotes, v.name(), reachable.module()), v.region());
+                ReachName.of(denotes, v.name(), reachable.module()), v.origin(), v.region());
     }
 
-    private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
+    private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, InForce bound) {
         List<Hir.ElseArm> out = new ArrayList<>();
         for (Ast.ElseArm arm : arms) {
             out.add(new Hir.ElseArm(arm.clause(), expr(arm.body(), bound), arm.pos()));
@@ -1368,11 +1291,23 @@ public final class Resolve {
         return out;
     }
 
-    private List<Hir.Expr> exprs(List<Ast.Expr> es) {
-        return exprs(es, Bindings.NONE);
+    /** The names in a row's answer, rewritten where there is an answer to rewrite. What the row put
+     *  there is carried across as it is: whether an answer is owed or was not read is the source's
+     *  own state and nothing resolution has anything to say about. */
+    private Hir.Expected expected(Ast.Expected written, Reading reading) {
+        return switch (written) {
+            case Ast.Expected.Asserted(Ast.Expr e) ->
+                    new Hir.Expected.Asserted(expr(e, reading));
+            case Ast.Expected.Unanswered(SourcePos at) -> new Hir.Expected.Unanswered(at);
+            case Ast.Expected.Unwritten(SourcePos at) -> new Hir.Expected.Unwritten(at);
+        };
     }
 
-    private List<Hir.Expr> exprs(List<Ast.Expr> es, Bindings bound) {
+    private List<Hir.Expr> exprs(List<Ast.Expr> es, Reading reading) {
+        return exprs(es, InForce.of(reading));
+    }
+
+    private List<Hir.Expr> exprs(List<Ast.Expr> es, InForce bound) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
             out.add(expr(e, bound));
@@ -1400,7 +1335,7 @@ public final class Resolve {
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private Reach lookup(WrittenName name, boolean applied, Bindings bound) {
+    private Reach lookup(WrittenName name, InForce bound) {
         String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
@@ -1441,7 +1376,7 @@ public final class Resolve {
         // definitions and what the import lines were left with.
         Reach reached = reachable.reachIn(reaches, written);
         if (!(reached instanceof Reach.NotInScope)) {
-            refuseAnAttachedValueOutsideTheRows(name, reached);
+            refuseAnAttachedValueOutsideTheRows(name, reached, bound);
             return reached;
         }
         // A type written as a value, which is the construction of what it denotes. Read after the
@@ -1452,8 +1387,7 @@ public final class Resolve {
         // between them is reported, and what each means afterwards was decided by the order these
         // were consulted rather than by anything either says.
         if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
-            return new Reach.Reaches(new ValueName.OfType(written, d.type(),
-                    applied ? null : ConstructionOrigin.own()));
+            return new Reach.Reaches(new ValueName.OfType(written, d.type()));
         }
         return reached;
     }
@@ -1480,8 +1414,9 @@ public final class Resolve {
      * right; the module is one whose names did not all come out, which is what stops it being
      * emitted.
      */
-    private void refuseAnAttachedValueOutsideTheRows(WrittenName written, Reach reached) {
-        if (inARow || readingAnAttachedValue
+    private void refuseAnAttachedValueOutsideTheRows(WrittenName written, Reach reached,
+                                                     InForce bound) {
+        if (bound.readingAFixture() || readingAnAttachedValue
                 || !(reached instanceof Reach.Reaches(ValueName.Helper helper))
                 || !reachable.attachedValues().contains(helper.name())) {
             return;
@@ -1502,9 +1437,9 @@ public final class Resolve {
      * it is a newtype taking what it wraps. Anything else is the expression it is, and what may be
      * applied is the check's to say.
      */
-    private Hir.Expr callee(Ast.Expr function, Bindings bound) {
+    private Hir.Expr callee(Ast.Expr function, InForce bound) {
         if (function instanceof Ast.FieldAccess fa) {
-            Hir.Var name = qualifiedName(fa, true, bound);
+            Hir.Var name = qualifiedName(fa, bound);
             if (name != null) {
                 return name;
             }
@@ -1529,27 +1464,29 @@ public final class Resolve {
      *
      * <p>Positioned at the root, so what a reader asks about covers every token of the name.
      */
-    private Hir.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
+    private Hir.Var qualifiedName(Ast.FieldAccess fa, InForce bound) {
         Ast.Var root = rootName(fa);
         if (root == null || bound.binderOf(root.name()) != null) {
             return null;
         }
         WrittenName written = dottedName(fa);
-        switch (lookup(written, applied, bound)) {
+        switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName denotes) -> {
                 ValueName resolved = answered(written, denotes);
+                // The chain is one reference of the source and the root is where it starts, so
+                // which reference it is is the root's answer.
                 return new Hir.Var.Denoting(written,
                         ReachName.of(resolved, written.canonical(), reachable.module()),
-                        written.region());
+                        root.origin(), written.region());
             }
             // A qualified spelling an import line was to bring in and could not. Said on that line
             // already, so the chain is answered here rather than taken apart and reported again.
             case Reach.StandsForNothing _ -> {
                 unanswered();
-                return new Hir.Var.Unanswered(written, written.region());
+                return new Hir.Var.Unanswered(written, root.origin(), written.region());
             }
             case Reach.NotInScope _ -> {
-                return unknownMember(fa, written, applied, bound);
+                return unknownMember(fa, written, bound);
             }
         }
     }
@@ -1565,14 +1502,15 @@ public final class Resolve {
      * as the unknown identifier it is once the chain is read as the field access it turned out to
      * be.
      */
-    private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
-                                  Bindings bound) {
+    private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, InForce bound) {
         WrittenName qualifier = dottedName(fa.target());
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
         nothing(unknownIdentifier(written, bound));
-        return new Hir.Var.Unanswered(written, written.region());
+        Ast.Var root = rootName(fa);
+        return new Hir.Var.Unanswered(written, root == null ? null : root.origin(),
+                written.region());
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
@@ -1604,8 +1542,8 @@ public final class Resolve {
     }
 
     /** What a name used as a value denotes, or null where nothing does — reported here. */
-    private ValueName valueName(WrittenName written, Bindings bound) {
-        return switch (lookup(written, false, bound)) {
+    private ValueName valueName(WrittenName written, InForce bound) {
+        return switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             // Already accounted for on the import line that could not bring it in. Counted, so the
             // module is not emitted, and said nothing about, so the author is not sent to a body
@@ -1622,11 +1560,11 @@ public final class Resolve {
      * what a miss means does not. A name that resolved to nothing resolved to nothing, and the
      * position it was written in is a fact about the source rather than about the name.
      */
-    private ValueName calledName(Ast.Apply call, Bindings bound) {
-        return switch (lookup(call.name(), true, bound)) {
+    private ValueName calledName(WrittenName applied, InForce bound) {
+        return switch (lookup(applied, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             case Reach.StandsForNothing _ -> unanswered();
-            case Reach.NotInScope _ -> nothing(unknownIdentifier(call.name(), bound));
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(applied, bound));
         };
     }
 
@@ -1681,7 +1619,7 @@ public final class Resolve {
     }
 
     /** The names a body could have written where it wrote one nothing answers to. */
-    private List<String> reachable(Bindings bound) {
+    private List<String> reachable(InForce bound) {
         List<String> names = new ArrayList<>(bound.byName().keySet());
         names.addAll(reachable.helpers().keySet());
         names.addAll(reachable.behaviors().keySet());
@@ -1704,7 +1642,7 @@ public final class Resolve {
                         .at(written.reportedAt()).say(new NameMessage.NotAStandardLibraryFunction(written.quoted())).build());
     }
 
-    private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
+    private CompileException unknownIdentifier(WrittenName written, InForce bound) {
         String name = written.canonical();
         if (name.equals("null")) {
             return CompileException.of(Diagnostic.at(written.reportedAt()).say(new DeclarationMessage.NullIsNotPartOfTheLanguage()).build());
@@ -1724,7 +1662,7 @@ public final class Resolve {
         List<String> candidates = reachable(bound);
         Diagnostic.Builder report = Diagnostic
                 .at(written.reportedAt())
-                .suggestion(Suggest.candidate(name, candidates));
+                .repair(written.reportedAt(), Suggest.candidate(name, candidates));
         // A name another module of this compilation exposes is the one kind of unresolved name that
         // has somewhere to go, and it is what a name left off an import list looks like from here.
         // Said as what is known — that module has it — rather than as an instruction, since reaching
@@ -1739,21 +1677,36 @@ public final class Resolve {
 
 
     /**
-     * The names bound at a point in a body, each with the binding it is. Persistent: extending it
-     * leaves the outer scope as it was, which is what an inner binding shadowing an outer one is.
+     * What is in force where an expression is written: the names bound over it, each with the
+     * binding it is, and the reading it is being read under. Persistent: extending it leaves the
+     * outer scope as it was, which is what an inner binding shadowing an outer one is.
+     *
+     * <p>The reading travels with the bindings because it is in force the same way — it holds over
+     * everything written under the position that settled it, and nothing written there changes it.
+     * It is carried rather than remembered so that what a value is read as is an argument of the
+     * read and not a state the reader is left in: three rules turn on it, and each of them asks the
+     * value it was handed.
      */
-    record Bindings(Map<String, ValueName.Local> byName) {
+    record InForce(Map<String, ValueName.Local> byName, Reading reading) {
 
-        static final Bindings NONE = new Bindings(Map.of());
+        /** Nothing bound yet, under this reading — where a read of a written value starts. */
+        static InForce of(Reading reading) {
+            return new InForce(Map.of(), reading);
+        }
 
-        Bindings and(String name, ValueName.Local binding) {
+        InForce and(String name, ValueName.Local binding) {
             Map<String, ValueName.Local> next = new HashMap<>(byName);
             next.put(name, binding);
-            return new Bindings(Map.copyOf(next));
+            return new InForce(Map.copyOf(next), reading);
         }
 
         ValueName.Local binderOf(String name) {
             return byName.get(name);
+        }
+
+        /** Whether what is being read is a fixture. */
+        boolean readingAFixture() {
+            return reading == Reading.A_FIXTURE;
         }
     }
 
@@ -1836,7 +1789,7 @@ public final class Resolve {
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
     private Hir.Name answered(Hir.Name n) {
-        if (!(n.answered() instanceof Hir.Name.Denoting names)) {
+        if (!(n instanceof Hir.Name.Denoting names)) {
             failed++;
         } else if (n.pos() != null) {
             denotations.add(new TypeUse(n.name(), names.type()));

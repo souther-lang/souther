@@ -11,6 +11,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,9 +61,13 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         for (int each = 0; each < assumed.length; each += 2) {
             solution.put(TypeSymbols.declared(new TypeKey(symbols.module(), (String) assumed[each])), (Cardinality) assumed[each + 1]);
         }
-        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
+        for (Hir.Def def : compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Answers.settled(solution), _ -> false);
+                return CardinalityTransfer.upperOf(
+                        TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def),
+                        RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                        Answers.settled(solution), Set.of());
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);
@@ -106,12 +111,12 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
     @Test
     void rulesThatCannotAllHoldLeaveNoValue() {
-        assertTrue((upperOf("""
+        assertTrue(upperOf("""
                 module demo
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
-                """, "Bad")).none());
+                """, "Bad").none());
     }
 
     @Test
@@ -136,7 +141,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
     /** The row the product exists for: what has no value takes the record with it. */
     @Test
     void aRecordWithAFieldOfNoValueHasNoValueHoweverLittleIsKnownBeside() {
-        assertTrue((upperOf("""
+        assertTrue(upperOf("""
                 module demo
 
                 data Any = Int
@@ -144,7 +149,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Empty = Int
 
                 data Beside = { a: Any, b: Empty }
-                """, "Beside", "Any", Cardinality.UNKNOWN, "Empty", NO_VALUE)).none());
+                """, "Beside", "Any", Cardinality.UNKNOWN, "Empty", NO_VALUE).none());
     }
 
     @Test
@@ -158,8 +163,8 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 """;
         assertEquals(Cardinality.atMost(2), upperOf(source, "Either",
                 "Left", Cardinality.atMost(1), "Right", Cardinality.atMost(1)));
-        assertTrue((upperOf(source, "Either",
-                "Left", NO_VALUE, "Right", NO_VALUE)).none());
+        assertTrue(upperOf(source, "Either",
+                "Left", NO_VALUE, "Right", NO_VALUE).none());
     }
 
     /**
@@ -281,7 +286,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                     invariant some = Map.size(m) >= 1
                 """;
         assertEquals(Cardinality.atMost(1), upperOf(source, "Bare", "Empty", NO_VALUE));
-        assertTrue((upperOf(source, "Holding", "Empty", NO_VALUE)).none());
+        assertTrue(upperOf(source, "Holding", "Empty", NO_VALUE).none());
         assertEquals(Cardinality.UNKNOWN, upperOf(source, "Keyed", "One", Cardinality.atMost(1)),
                 "there is no end of keys to hold it under");
     }
@@ -310,7 +315,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
     /** A floor a record wrote about a field reaches the collection the field's name wraps. */
     @Test
     void aFloorWrittenAtTheFieldIsReadThereAndNotAtTheNamesOwnDeclaration() {
-        assertTrue((upperOf("""
+        assertTrue(upperOf("""
                 module demo
 
                 data One = Int
@@ -320,6 +325,6 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
                 data Outer = { held: Held }
                     invariant two = Set.size(held.value) >= 2
-                """, "Outer", "One", Cardinality.atMost(1), "Held", Cardinality.UNKNOWN)).none());
+                """, "Outer", "One", Cardinality.atMost(1), "Held", Cardinality.UNKNOWN).none());
     }
 }
