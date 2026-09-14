@@ -4,9 +4,16 @@
   <img src="docs/images/souther.png" alt="Souther" width="420">
 </p>
 
-Souther is a small JVM language for describing business data, value constraints, and state transitions, then generating types and behaviors that Java can use.
+Souther is a small JVM language for business rules that stay true: what a value may be, which states
+follow which, and what each decision answers. You write them once, as `data` and `behavior`, and
+they compile to Java types that keep the distinctions the model made.
 
-You write business rules with `data` and `behavior`. `invariant` makes value constraints explicit, while behaviors implemented in Java make dependencies such as a database or a clock explicit. This keeps the domain model's boundary intact as it becomes an implementation.
+What a rule is worth depends on whether anything holds it to account, so the examples that describe
+a behavior are part of the language rather than a suite beside it. An `example` is evaluated while
+the model compiles, and `souther examples` measures what those examples cover: which class of an
+input nothing stands in, which boundary value nothing sits at, which rule of a body nothing goes
+through. Where it cannot answer, it says what the question is still open on instead of reporting a
+clean result.
 
 ```text
 external input -> decoder -> Souther data / behavior -> encoder -> external output
@@ -14,7 +21,11 @@ external input -> decoder -> Souther data / behavior -> encoder -> external outp
                            Java injects dependencies
 ```
 
-Souther is intended to turn the specification DSL of [Specification Model-Driven Development (SMDD)](#specification-model-driven-development-smdd) into an executable implementation model. It makes executable the constraints, validated construction, and outside-world dependencies that the specification DSL leaves in comments.
+The rest of the language is there to keep that measurable. `invariant` puts a constraint next to the
+type it belongs to, so construction is the one place it is checked. A behavior's outcomes are
+ordinary data rather than exceptions, so a rejection is a case a caller can be held to. A dependency
+on the outside world is declared and injected from Java, so what the domain computes stays separate
+from what it reaches for.
 
 ## Start with an example
 
@@ -85,106 +96,71 @@ Either Windows archive unpacks to one directory with the launcher at its root, s
 
 A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
 
-The Java that runs Souther and the Java a Souther project's build runs on are separate questions, and a bundled runtime answers only the first. A project consuming Souther's output still needs JDK 25, for the reason the next section gives.
+Souther requires JDK 25, and so does an application consuming its output: generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact. The Java that runs Souther and the Java a project's build runs on are separate questions, and a bundled runtime answers only the first.
 
-## Try it
+## Start a project
 
-Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see the [examples repository](https://github.com/souther-lang/examples)), so a project using it as an annotation processor needs JDK 25 for that too.
-
-```sh
-# Build the runtime and compiler, run the tests, and produce
-# souther-cli/target/souther — a self-contained executable.
-mvn install
-
-# Compile a .sou file to .class files.
-./souther-cli/target/souther compile hello.sou -d /tmp/out
-```
-
-That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed. Most of what a small compile from the command line costs is the JVM loading and verifying the compiler's classes, so the first compile leaves an archive of them under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, named for the version, and the compiles after it start from that. Deleting it costs one slower compile; where it cannot be written, nothing is written and every compile is that one. An archive belongs to the binary that wrote it and to the JDK that wrote it, so one whose binary has been rebuilt or copied elsewhere, or which the JDK now running will not take, may be left unusable rather than rewritten — deleting it is what puts the next compile back to the faster one.
-
-`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin and one `.sou` holding a model with the `example` rows covering it, so the first compile checks those rows and `souther examples` answers on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin and one `.sou` holding a model with the `example` rows covering it, so the first compile checks those rows and `souther examples` answers on the first run.
 
 ```sh
 souther init com.example:hello
 cd hello && mvn compile
 ```
 
+`--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+
+The build plugins are released from their own repositories, and either compiles `.sou` under `src/main/souther` into the classes the rest of the build reads:
+
+- [souther-maven-plugin](https://github.com/souther-lang/souther-maven-plugin), which takes the Souther to compile with from the `souther-runtime` dependency the pom already declares
+- [souther-gradle-plugin](https://github.com/souther-lang/souther-gradle-plugin), where a project with a model names it as `southerVersion`
+
+A build may also run the compiler as the `SoutherProcessor` annotation processor, which is what a project holding Java beside its model can do without a separate plugin. The [examples repository](https://github.com/souther-lang/examples) has both, with the generated types used from Java, Kotlin and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
+
+## Measure what the examples cover
+
+`souther examples` reports, for every behavior, what the rows written beside it reach and what they do not:
+
+```sh
+souther examples businesstrip.sou
+```
+
+It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over exactly those, which is the form a build takes.
+
+An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model.
+
+```sh
+souther examples businesstrip.sou --behavior submitTrip   # one behavior
+souther examples businesstrip.sou --generate              # rows for what nothing covers
+souther examples businesstrip.sou --strict                # refuse over the gaps
+```
+
+`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
+
+## Run a behavior
+
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
 
 ```sh
-# Building souther-cli alone is quicker than the whole reactor.
-mvn -pl souther-cli -am -DskipTests install
-
 # hello.sou  (no module header needed)
 #   behavior greet : (name: String) -> String
 #   let greet (name) = "Hello, " ++ name
-./souther-cli/target/souther run hello.sou --behavior greet --input '"world"'
+souther run hello.sou --behavior greet --input '"world"'
 # => "Hello, world"
 ```
 
 `run` runs a behavior that is both runnable and exposed. It is runnable when it has a `let` and depends on nothing, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one with injected dependencies, or a pipeline with such a stage is refused with a reason. It is exposed when the module's `exposing` list names it — the runner reaches a behavior the way any reader outside the module does — and a file with no `exposing` list exposes everything in it. `--behavior` may be omitted when the module holds exactly one behavior that is both, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). The runner drives one file: stdlib imports resolve, and an import of another user module resolves against `-cp`, the same class path `compile` takes (`souther compile catalog.sou -d out` then `souther run enrollment.sou -cp out …`).
 
-The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows the build output to run is the plain jar beside it (`java -jar souther-cli/target/souther.jar …`), and `bin/package-windows.ps1` is what turns that jar into the distributions a release publishes.
+`souther compile hello.sou -d out` is the same binary writing `.class` files. Most of what a small compile from the command line costs is the JVM loading and verifying the compiler's classes, so the first compile leaves an archive of them under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, named for the version, and the compiles after it start from that. Deleting it costs one slower compile; where it cannot be written, nothing is written and every compile is that one. An archive belongs to the binary that wrote it and to the JDK that wrote it, so one whose binary has been rebuilt or copied elsewhere, or which the JDK now running will not take, may be left unusable rather than rewritten — deleting it is what puts the next compile back to the faster one.
 
-`souther-bench` measures what the compiler costs, and what the code it generates costs to run. It carries the sources it measures, so a number means the same thing on any machine, and it checks that they still compile before it times anything.
+## Formatting
 
-```sh
-mvn -pl souther-bench -am -DskipTests install
-java -jar souther-bench/target/souther-bench.jar
-
-# One measurement at a time: cold, warm, phase, edit, scale, run.
-java -jar souther-bench/target/souther-bench.jar phase edit
-```
-
-`souther-compiler` carries a conformance corpus: a model written for this compiler, held to reaching every top-level form, every reserved word and every standard library module the language declares, and checked against what the compiler answered about it last — the whole adequacy report and every diagnostic, written down beside the sources. A change that moves an answer is a change to those documents, made in the commit that moved it. This is what answers "did this break a model of the size someone writes"; running the examples repository is not part of it.
-
-```sh
-# Everything the corpus is held to. Ten seconds after an edited compiler source.
-mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test'
-
-# One corpus while iterating.
-mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
-  -Dsouther.conformance.corpus=catalog
-
-# Take up what a deliberate change did to the answers, then read the diff and commit it.
-mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
-  -Dsouther.conformance.update=true
-```
-
-The last one rewrites the expected documents and then fails: a run that rewrote what it was going to be measured against has not measured anything.
-
-To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
-
-Embedding the compiler goes through `souther.compiler.Compiler`, the one class name a caller outside this repository is meant to write down. It compiles a source string containing either one module or several linked modules:
-
-```java
-Map<String, byte[]> classes = Compiler.compile(source);
-Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
-```
-
-### Compact object headers suit the shape of a domain model
-
-A Souther model is many small immutable values — a newtype per identifier and per amount, a data per state. On JDK 25 the application running the generated code can take four bytes off every object header with `-XX:+UseCompactObjectHeaders` (JEP 519, production-ready and off by default). It is the deploying application's flag, not Souther's, and it needs no rebuild.
-
-Four bytes off a header turns into eight bytes off an allocation when it crosses the eight-byte alignment boundary, and into nothing when it does not — so the gain is uneven and worth measuring rather than assuming. Bytes actually allocated per instance, on GraalVM 25.0.3 (arm64):
-
-| value | default | compact |
-| --- | --- | --- |
-| a newtype over `Int` (one `long` field) | 24 | 16 |
-| a data with two fields | 24 | 16 |
-| a boxed `Long` — one element of a `List<Int>` | 24 | 16 |
-| a newtype over `String` (one reference) | 16 | 16 |
-| the 32-slot block a `List` grows in | 144 | 144 |
-
-End to end, a behavior building a 1000-element `List<Int>` through `List.map` goes from 66.1 to 57.8 bytes per element. A pure `PersistentVector.append` is unchanged at 50, because the vector's own size does not cross a boundary.
-
-The compiler suite and every example pass under the flag (`mvn test -DargLine="-XX:+UseCompactObjectHeaders"`), including the Spring Boot and jOOQ boundaries.
+`souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there. The layout is re-derived from the tree rather than patched into the text, so there is one form and nothing to configure.
 
 ## Editor support
 
 The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
 
-The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no stack flag — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there.
+The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no stack flag — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself.
 
 ## Documentation on the command line
 
@@ -233,6 +209,16 @@ it is one of them:
 { "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }
 ```
 
+## Embedding the compiler
+
+`souther.compiler.Compiler` is the one class name a caller outside this repository is meant to write
+down. It compiles a source string containing either one module or several linked modules:
+
+```java
+Map<String, byte[]> classes = Compiler.compile(source);
+Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
+```
+
 ## What Souther guarantees
 
 ### Construction of invalid data is confined
@@ -269,23 +255,19 @@ Souther is deliberately small:
 
 It intentionally does not provide exceptions, `null`, mutable state, asynchronous execution, arbitrary JVM calls, type classes or higher-kinded types, a package manager, or a REPL. These omissions keep construction paths, value constraints, and outside-world dependencies tractable.
 
-Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema / Wasm / JavaScript output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace (an invariant abort above all) points back to the `.sou` source line. An LSP server ships (`souther-lsp`), resolving names over the workspace the editor announces.
+Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace — an invariant abort above all — points back to the `.sou` source line.
+
+A model is many small immutable values, a newtype per identifier and per amount and a data per state, which is the shape `-XX:+UseCompactObjectHeaders` (JEP 519) suits: it takes bytes off every object header, and on JDK 25 the deploying application can turn it on without a rebuild. Whether that reaches an allocation depends on where the value sits against the alignment boundary, so it is worth measuring on the model at hand rather than assuming. The compiler suite and every example pass under the flag.
 
 ## Details and examples
 
 - [Language specification](specification.adoc): the normative syntax and semantics
+- [Tutorial](https://souther-lang.org/tutorial/) and [principles](https://souther-lang.org/principles/)
 - [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
-- [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; their build tracks `develop` here
+- [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; its `main` builds against the latest release and its `develop` against `develop` here
+- [souther-wasm-compiler](https://github.com/souther-lang/souther-wasm-compiler): a checked Souther program compiled to WebAssembly, developed in its own repository against a released compiler
 
-The repository has these Maven modules:
-
-- `souther-runtime`: `Option`, `Behavior`, `Fn`, boundary `Result`, `ConstraintViolation`, and numeric / collection helpers
-- `souther-syntax`: the lexer, the lossless CST, and the diagnostic types every other module reports through
-- `souther-compiler`: parser, name resolution, type checker, deriver, and ClassFile backend
-- `souther-fmt`: a canonical layout re-derived from the CST
-- `souther-lsp`: the language server
-- `souther-cli`: the `souther` executable
-- `souther-bench`: what the compiler costs, measured on a corpus the module carries
+Changing Souther itself, rather than using it, is [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Specification Model-Driven Development (SMDD)
 
