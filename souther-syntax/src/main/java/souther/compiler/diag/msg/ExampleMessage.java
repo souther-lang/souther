@@ -324,6 +324,17 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * No row is in one combination of two of a behavior's classes.
+     *
+     * <p>The classes and the positions, because that is the whole of what one of these is: two
+     * positions of one behavior divide into classes that read alike, so a sentence naming the
+     * classes alone is one two combinations answer to.
+     */
+    @Code(DiagnosticCode.E1937)
+    record NoRowIsInThatCombinationOfClasses(String classes, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
      * One condition of that rule: a comparison the author wrote, which the rule takes holding.
      *
      * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the

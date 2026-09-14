@@ -746,6 +746,17 @@ public final class GeneratedRows {
             // this compiler's spelling of their own body.
             case About.ACombinationNoRowMakes(var combination) ->
                     "a combination of the decisions of " + combination.behavior();
+            // The two classes, which is the whole of what one of these is and is something a
+            // reader can act on: where a value has to fall at each of two positions.
+            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                    combination.classes().stream()
+                            .sorted(java.util.Comparator
+                                    .comparing((souther.compiler.partition.ClassOfAPosition each) ->
+                                            each.at().toString())
+                                    .thenComparing(
+                                            souther.compiler.partition.ClassOfAPosition::classId))
+                            .map(each -> each.classId() + " at " + each.at())
+                            .collect(java.util.stream.Collectors.joining(" with "));
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.

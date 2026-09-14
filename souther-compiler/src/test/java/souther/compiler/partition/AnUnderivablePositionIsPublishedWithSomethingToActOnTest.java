@@ -184,6 +184,7 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // A way through the body no row takes, and a combination of its decisions no row
             // makes: both are about the rows and not about how far any reading of a position got.
                  About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
+                 About.ACombinationOfTwoClassesNoRowIsIn _,
                  About.AnUnansweredRow _ -> null;
         };
     }

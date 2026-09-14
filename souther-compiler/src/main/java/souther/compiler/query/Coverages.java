@@ -493,17 +493,20 @@ final class Coverages {
         }
         // One set of combinations per relation, in the order the relations were worked out. What is
         // counted is the same as it was; where the count goes is what changed.
-        SequencedMap<PartitionEvidence.PairSpace.Between, Set<String>> reached =
-                new LinkedHashMap<>();
+        SequencedMap<PartitionEvidence.PairSpace.Between,
+                Set<PartitionEvidence.PairSpace.Cell>> reached = new LinkedHashMap<>();
         space.forEach(pair -> reached.put(pair.between(), new LinkedHashSet<>()));
         // Which relation each pair of positions is, worked out once. Which two positions they are
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
-        Map<Long, Set<String>> byPositions = new LinkedHashMap<>();
+        Map<Long, Set<PartitionEvidence.PairSpace.Cell>> byPositions = new LinkedHashMap<>();
+        Map<Long, PartitionEvidence.PairSpace.Between> whichRelation = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                Set<String> here = reached.get(new PartitionEvidence.PairSpace.Between(
-                        axes.get(i).id(), axes.get(j).id()));
+                PartitionEvidence.PairSpace.Between relation =
+                        new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
+                whichRelation.put((long) i * axes.size() + j, relation);
+                Set<PartitionEvidence.PairSpace.Cell> here = reached.get(relation);
                 if (here != null) {
                     byPositions.put((long) i * axes.size() + j, here);
                 }
@@ -512,7 +515,8 @@ final class Coverages {
         for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
-                    Set<String> here = byPositions.get((long) i * axes.size() + j);
+                    Set<PartitionEvidence.PairSpace.Cell> here =
+                            byPositions.get((long) i * axes.size() + j);
                     if (here == null) {
                         continue;
                     }
@@ -527,14 +531,15 @@ final class Coverages {
                         // key above and a class id is unique within its axis, so what is written
                         // here needs to tell two combinations of these two positions apart and no
                         // more.
-                        here.add(pair.getKey() + " " + pair.getValue());
+                        here.add(new PartitionEvidence.PairSpace.Cell(
+                                whichRelation.get((long) i * axes.size() + j),
+                                pair.getKey(), pair.getValue()));
                     }
                 }
             }
         }
-        SequencedMap<PartitionEvidence.PairSpace.Between, Integer> counts = new LinkedHashMap<>();
-        reached.forEach((between, in) -> counts.put(between, in.size()));
-        PartitionEvidence.PairSpace.CoveredBetween made = new PartitionEvidence.PairSpace.CoveredBetween(counts);
+        PartitionEvidence.PairSpace.CoveredBetween made =
+                new PartitionEvidence.PairSpace.CoveredBetween(reached);
         WeakeningSet by = readings.weakening(read);
         return new PartitionEvidence.PairSpace(space, by.isEmpty()
                 ? new Measurement.Complete<>(made) : new Measurement.Partial<>(made, by));
@@ -571,6 +576,59 @@ final class Coverages {
             }
         }
         return count;
+    }
+
+    /**
+     * The combinations of a behavior's pair space no row is in, made where somebody asks for them.
+     *
+     * <p>Here rather than on the measure, and made rather than held. The space is as large as the
+     * positions make it and what is worth carrying about it is two numbers and the combinations the
+     * rows reached; which ones are left is wanted where something acts on them, and is worked out
+     * from the positions — which are the model's and are not part of an answer about the rows.
+     *
+     * <p>Compatible combinations only, asked the way the count is asked. A class of a position
+     * under one case of a sum and a class of a position under another are in no one value, so they
+     * make no combination and nothing is owed at them.
+     *
+     * <p>Empty where no count was made. A combination nothing was read about is not one no row is
+     * in, and a list of the whole space would be read as a list of gaps.
+     */
+    static List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> uncovered(
+            String behavior, souther.compiler.partition.MeasuredInput.MeasuredAxes axes,
+            PartitionEvidence.PairSpace pairs) {
+        if (pairs.counted().made().isEmpty()) {
+            return List.of();
+        }
+        PartitionEvidence.PairSpace.CoveredBetween made = pairs.counted().made().orElseThrow();
+        List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> out =
+                new ArrayList<>();
+        List<Axis> ordered = axes.axes();
+        for (int i = 0; i < ordered.size(); i++) {
+            for (int j = i + 1; j < ordered.size(); j++) {
+                PartitionEvidence.PairSpace.Between between =
+                        new PartitionEvidence.PairSpace.Between(
+                                ordered.get(i).id(), ordered.get(j).id());
+                if (!made.byPair().containsKey(between)) {
+                    continue;
+                }
+                Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
+                for (PartitionClass here : ordered.get(i).classes()) {
+                    for (PartitionClass there : ordered.get(j).classes()) {
+                        if (!ordered.get(i).requiring(here)
+                                .compatibleWith(ordered.get(j).requiring(there))) {
+                            continue;
+                        }
+                        PartitionEvidence.PairSpace.Cell cell =
+                                new PartitionEvidence.PairSpace.Cell(
+                                        between, here.id(), there.id());
+                        if (!reached.contains(cell)) {
+                            out.add(cell.owedBy(behavior));
+                        }
+                    }
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

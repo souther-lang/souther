@@ -2425,8 +2425,9 @@ public final class Adequacy {
             // A combination of the body's decisions. A row could answer one — the search already
             // walks the combinations looking for a row for an arm — and nothing is asked to look
             // for one yet, which is what this says.
-            case About.ACombinationNoRowMakes _ -> new GenerationOutcome.NotSupported(
-                    GenerationOutcome.NotSupported.Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
+            case About.ACombinationNoRowMakes _, About.ACombinationOfTwoClassesNoRowIsIn _ ->
+                    new GenerationOutcome.NotSupported(GenerationOutcome.NotSupported
+                            .Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
             // A row is written and is waiting for its answer, at an arm or on its own. What is left
             // is the answer, which is the author's to write and nothing a search can compose; a row
             // offered for either would be a second row for a question already written down.
@@ -3901,6 +3902,7 @@ public final class Adequacy {
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
                                     About.ACombinationNoRowMakes _,
+                                    About.ACombinationOfTwoClassesNoRowIsIn _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -4793,6 +4795,15 @@ public final class Adequacy {
          */
         INTERACTION_UNCOVERED(DiagnosticCode.E1936),
         /**
+         * A combination of two classes no row is in, where the pair space is the criterion.
+         *
+         * <p>Beside {@link #INTERACTION_UNCOVERED} and not among it. That one is a meeting of a
+         * body's own decisions and is settled by a run; this is two positions of a behavior whose
+         * decisions meet nowhere, and where a row's values fall is the whole of the evidence there
+         * is. A behavior is held to one of the two and never to both.
+         */
+        PAIR_UNCOVERED(DiagnosticCode.E1937),
+        /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
          * <p>Beside {@link #BOUNDARY_UNMET} rather than among its findings, and the difference is
@@ -4893,7 +4904,7 @@ public final class Adequacy {
                 // of the decision, and a row whose answer is owed. One account, so one answer.
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED,
                      UNANSWERED_ROW, DOMAIN_POINT_UNCOVERED, AXIS_CLASS_UNCOVERED,
-                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED -> true;
+                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED, PAIR_UNCOVERED -> true;
                 // An observation: what was seen rather than what is owed. A case nothing was
                 // observed producing is the rows' own account of themselves.
                 case OUTPUT_CASE_UNVERIFIED -> false;
@@ -4920,7 +4931,7 @@ public final class Adequacy {
         public AccountPart answeredBy() {
             return switch (this) {
                 case DECISION_RULE_UNCOVERED -> AccountPart.THE_DECISION;
-                case INTERACTION_UNCOVERED -> AccountPart.THE_MEASURES;
+                case INTERACTION_UNCOVERED, PAIR_UNCOVERED -> AccountPart.THE_MEASURES;
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET,
                      ARM_UNREACHED, UNANSWERED_ROW, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
                      DOMAIN_POINT_UNCOVERED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
@@ -5001,6 +5012,7 @@ public final class Adequacy {
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
+                    About.ACombinationOfTwoClassesNoRowIsIn _,
                     About.APointOfABorder _, About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
@@ -5213,6 +5225,7 @@ public final class Adequacy {
                 case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
                 case About.ARuleNoRowTakes _ -> Kind.DECISION_RULE_UNCOVERED;
                 case About.ACombinationNoRowMakes _ -> Kind.INTERACTION_UNCOVERED;
+                case About.ACombinationOfTwoClassesNoRowIsIn _ -> Kind.PAIR_UNCOVERED;
                 // The row and the arm whose rows are all owed answers are one thing to do, and it
                 // is not the thing an unreached arm is. A row goes through this arm, so publishing
                 // it as an arm nothing reaches would tell a consumer the opposite of what happened.
@@ -5731,7 +5744,7 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                interactionFindings(CombinationCriterion.of(
+                combinationFindings(behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()),
                         partitions == null ? null : partitions.get(behavior.name())), out);
             }
@@ -5741,7 +5754,7 @@ public final class Adequacy {
 
 
         /**
-         * The combinations of one behavior's decisions that no row was seen making.
+         * The combinations of one behavior no row covers, under the criterion it is held to.
          *
          * <p>Only where a reading of the runs was made, which is what every measure over a run is
          * asked first: a measure with no value has not found a combination nothing meets, it has
@@ -5752,17 +5765,34 @@ public final class Adequacy {
          * whether anything could compose a row for it is a further question, and the answer to it
          * is not part of whether the requirement stands.
          */
-        private static void interactionFindings(CombinationCriterion criterion, List<Finding> out) {
-            // Only where the interactions are what this behavior is held to, which the criterion
-            // says once for every surface. A behavior held to the pair space is owed nothing here,
-            // and asking the meetings directly would be this reader deciding that a second time.
-            if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))
-                    || meetings.made().made().isEmpty()) {
-                return;
-            }
-            for (ObligationIdentity.OfACombinationOfDecisions each : meetings.notMadeByRows()) {
-                out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()), meetings.made(),
-                        new About.ACombinationNoRowMakes(each)));
+        private static void combinationFindings(String behavior, CombinationCriterion criterion,
+                                                List<Finding> out) {
+            // Under the criterion the behavior is held to, which the one choice says for every
+            // surface. Asking the measures directly would be this reader deciding it a second
+            // time, and the two would part on the first behavior where one of them is short.
+            switch (criterion) {
+                case null -> { }
+                case CombinationCriterion.Interactions(var meetings) -> {
+                    if (meetings.made().made().isEmpty()) {
+                        return;
+                    }
+                    for (ObligationIdentity.OfACombinationOfDecisions each
+                            : meetings.notMadeByRows()) {
+                        out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()),
+                                meetings.made(), new About.ACombinationNoRowMakes(each)));
+                    }
+                }
+                // The combinations of two classes nothing is in, which the space can now name
+                // ({@link PartitionEvidence.PairSpace#uncovered}) and which nothing is asked for
+                // yet.
+                //
+                // <p>Held back until a row can be composed for one. What a block is for is that an
+                // author pastes it, answers it, and the report beside it names no gap; a gap
+                // nothing offers a row against leaves a run that cannot reach that state, which is
+                // the thing the account exists to make reachable. So the two arrive together: the
+                // search that composes a row at a combination of two classes, and the finding that
+                // asks for one.
+                case CombinationCriterion.PairFallback _ -> { }
             }
         }
 
@@ -6381,6 +6411,12 @@ public final class Adequacy {
                         case About.ACombinationNoRowMakes(var combination) ->
                                 new ExampleMessage.NoRowMakesACombinationOfDecisions(
                                         combination.behavior());
+                        // The two classes, which is the whole of what one of these is. Said in the
+                        // sentence rather than marked underneath: a class of a position is where a
+                        // value falls and is not a construct a reader can be sent to.
+                        case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                                new ExampleMessage.NoRowIsInThatCombinationOfClasses(
+                                        twoClasses(combination), combination.behavior());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
@@ -6491,7 +6527,7 @@ public final class Adequacy {
                 // it for now; sending a reader to the construct each decision is written at wants
                 // the reading that {@link DecisionRuleReading} makes from a rule, asked of a
                 // condition instead.
-                case About.ACombinationNoRowMakes _,
+                case About.ACombinationNoRowMakes _, About.ACombinationOfTwoClassesNoRowIsIn _,
                         About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
@@ -6501,6 +6537,26 @@ public final class Adequacy {
                         About.AQuestionNothingAnswered _ -> { }
             }
             return Report.of(built.build());
+        }
+
+        /**
+         * The two classes of a combination, in the words a report writes for a class of a position.
+         *
+         * <p>Both positions and both classes. A class id is unique within its axis and not across
+         * two, and two positions of one behavior divide into classes that read alike — so a
+         * sentence naming the classes alone is one two combinations answer to.
+         *
+         * <p>In a steady order, which is the order the positions are named in. What a combination
+         * is of is a pair and not an order of them, so the words have to come from something other
+         * than the set they are read out of.
+         */
+        private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
+            return combination.classes().stream()
+                    .sorted(java.util.Comparator
+                            .comparing((ClassOfAPosition each) -> each.at().toString())
+                            .thenComparing(ClassOfAPosition::classId))
+                    .map(each -> "`" + each.classId() + "` at " + each.at())
+                    .collect(java.util.stream.Collectors.joining(" with "));
         }
 
         /**

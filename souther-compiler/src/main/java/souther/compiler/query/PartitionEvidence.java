@@ -592,7 +592,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
         }
 
-        /** One relation of the model, and how many combinations it holds. */
+        /**
+         * One relation of the model: which two positions, and what each divides into.
+         *
+         * <p>The classes and not a list of the combinations. How many a relation holds is the
+         * product of its sides, and which one a row sits in is a pair of them — so the space is
+         * said by what it is made of, and a combination is made where something asks for one. Held
+         * as the product, a behavior of a few wide positions would carry a list nobody walks in
+         * every value a measure passes around.
+         */
         public record AxisPair(Between between, long total) {
 
             public AxisPair {
@@ -603,6 +611,35 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                     throw new IllegalArgumentException("a relation holds no negative number of"
                             + " combinations: " + total);
                 }
+            }
+        }
+
+        /**
+         * One combination of a relation: a class of each of its two positions.
+         *
+         * <p>What tells one from another within the relation, and what a row is read against. The
+         * relation beside it because a class id is unique within its axis and not across two —
+         * carried without it, two relations sharing a position would count one combination twice.
+         */
+        public record Cell(Between between, String one, String other) {
+
+            public Cell {
+                if (between == null || one == null || other == null) {
+                    throw new IllegalArgumentException(
+                            "a combination of a relation is a class of each of its positions");
+                }
+            }
+
+            /** What a row is owed for here, in the words the account keys on. */
+            public souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell owedBy(
+                    String behavior) {
+                return new souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell(
+                        behavior,
+                        java.util.Set.of(
+                                new souther.compiler.partition.ClassOfAPosition(
+                                        between.one(), one),
+                                new souther.compiler.partition.ClassOfAPosition(
+                                        between.other(), other)));
             }
         }
 
@@ -621,15 +658,24 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * outside — so {@link PairSpace#unknown()} answers that, and nothing here keeps a second
          * copy of the sizes to answer it from.
          */
-        public record CoveredBetween(SequencedMap<Between, Integer> byPair) {
+        public record CoveredBetween(SequencedMap<Between, java.util.Set<Cell>> byPair) {
 
             public CoveredBetween {
-                byPair = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byPair));
+                SequencedMap<Between, java.util.Set<Cell>> copy = new LinkedHashMap<>();
+                byPair.forEach((between, in) ->
+                        copy.put(between, Collections.unmodifiableSet(new LinkedHashSet<>(in))));
+                byPair = Collections.unmodifiableSequencedMap(copy);
             }
 
-            /** How many combinations the rows reach of one relation. */
-            public int covered(Between between) {
-                Integer said = byPair.get(between);
+            /**
+             * Which combinations of one relation the rows reach.
+             *
+             * <p>The combinations and not how many. What is left is what a row is owed for, and a
+             * count cannot be subtracted from a space to say which ones those are — which is what
+             * this measure used to hold, and why nothing could be asked for at a combination.
+             */
+            public java.util.Set<Cell> reached(Between between) {
+                java.util.Set<Cell> said = byPair.get(between);
                 if (said == null) {
                     throw new IllegalArgumentException(
                             "a relation this count is not over was read for its count: " + between);
@@ -637,9 +683,14 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return said;
             }
 
+            /** How many combinations the rows reach of one relation. */
+            public int covered(Between between) {
+                return reached(between).size();
+            }
+
             /** And of all of them, which is the one number the whole space is spoken of by. */
             public int covered() {
-                return byPair.values().stream().mapToInt(Integer::intValue).sum();
+                return byPair.values().stream().mapToInt(java.util.Set::size).sum();
             }
         }
 
@@ -683,8 +734,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          */
         public static PairSpace truncated(String behavior, List<AxisPair> space, long size,
                                           int limit) {
-            SequencedMap<Between, Integer> none = new LinkedHashMap<>();
-            space.forEach(pair -> none.put(pair.between(), 0));
+            SequencedMap<Between, java.util.Set<Cell>> none = new LinkedHashMap<>();
+            space.forEach(pair -> none.put(pair.between(), java.util.Set.of()));
             return new PairSpace(space, new Measurement.Partial<>(new CoveredBetween(none),
                     WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));
         }

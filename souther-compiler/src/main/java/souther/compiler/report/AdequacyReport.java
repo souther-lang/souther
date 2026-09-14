@@ -2135,25 +2135,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             interaction(out, meetings);
         } else if (partitioned.counted()) {
             String combinations = combinations(partition.pairs());
-            List<String> relations = new ArrayList<>();
-            if (partition.pairs().counted().made().isPresent()) {
-                for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
-                    if (partition.pairs().unknown(pair) > 0) {
-                        relations.add(String.format("      · %s × %s: %d covered, %d unknown%n",
-                                pair.between().one().term(), pair.between().other().term(),
-                                partition.pairs().counts().covered(pair.between()),
-                                partition.pairs().unknown(pair)));
-                    }
-                }
-            }
             if (!combinations.isEmpty()) {
                 out.append(String.format("    combination %s%n", combinations));
-                // And which relations hold what no row reaches. Summed, the count says how much of
-                // the product the rows cover and nothing about where it is: most of it sitting in
-                // the two relations one position takes part in is the whole of what a reader acts
-                // on, and it is invisible in one number. Only the relations with something unknown,
-                // since a relation the rows cover has nothing here to say.
-                relations.forEach(out::append);
+                // And which of them no row is in, one to a line, as every gap is named. Summed,
+                // the count says how much of the space the rows cover and nothing about where the
+                // rest of it is — and where it is is the whole of what a reader acts on.
+                for (ReportedFinding f : behavior.reported()) {
+                    if (f.finding().about()
+                            instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
+                        out.append(String.format("      %s no row is in %s%n",
+                                mark(f.finding()), twoClasses(combination)));
+                    }
+                }
             }
         }
         // Counted over the obligations and named as such. A border owes a row at up to four points,
@@ -2591,6 +2584,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The two classes of a combination, in the words a report writes for a class of a position.
+     *
+     * <p>Both positions and both classes, and in a steady order: a class id is unique within its
+     * axis and not across two, and what a combination is of is a pair rather than an order of them.
+     */
+    private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
+        return combination.classes().stream()
+                .sorted(java.util.Comparator
+                        .comparing((ClassOfAPosition each) -> each.at().toString())
+                        .thenComparing(ClassOfAPosition::classId))
+                .map(each -> "`" + each.classId() + "` at " + each.at())
+                .collect(java.util.stream.Collectors.joining(" with "));
+    }
+
+    /**
      * How many of the combinations the body settles a value by the rows were seen making.
      *
      * <p>The count and the gaps beside it, which the findings under the behavior name one to a
@@ -2872,10 +2880,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And whose rows, where not all of them were read. A combination none of the rows seen
         // reaches is not one none of the rows reaches, and the same number means the smaller thing.
         boolean whole = pairs.counted() instanceof Measurement.Complete<?>;
-        // And that nobody is behind on the second number. A count printed with no obligation
-        // beside it is read as one, which is what sent an author after a row that bought a
-        // combination and no evidence; a combination is not a thing this compiler finds a gap
-        // about, and nothing refuses over one (PairCombinationsAreNotRowObligationsTest).
+        // And that nobody is behind on the second number, which holds while nothing is asked for
+        // at one. The space can say which combinations are left ({@link Coverages#uncovered}) and
+        // the account does not ask for them yet: a gap nothing offers a row against is one an
+        // author cannot act on, so the sentence changes when the search does.
         return String.format("pairs %d covered, %d unknown%s%s",
                 pairs.counts().covered(), pairs.unknown(),
                 whole ? "" : " of the rows that were read",
@@ -5407,7 +5415,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             //
             // A combination is the same shape: it is a meeting and the decisions that reach it,
             // which are as many places as it has decisions.
-            case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _ -> false;
+            //
+            // And a combination of two classes stands at neither of the positions it is of.
+            case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
+                    About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
@@ -5461,6 +5472,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // held in the terms the account keys on, and a subject spelling those would publish
             // this compiler's own way of writing them as though it were the model's.
             case About.ACombinationNoRowMakes(var combination) -> words(combination.behavior());
+            // The behavior, and the classes under it. What a consumer joins on is the identity
+            // beside this; two combinations of one behavior are told apart there and not here.
+            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                    words(combination.behavior());
             // The behavior whose decision it is a rule of, and no more. What tells one rule from
             // another is the proposition each condition is keyed on, written the one way round
             // that makes a comparison and its denial one column — so a subject spelling it would

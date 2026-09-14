@@ -1658,6 +1658,7 @@
                     "axis_class_uncovered",
                     "decision_rule_uncovered",
                     "interaction_uncovered",
+                    "pair_uncovered",
                     "domain_point_uncovered"
                   ]
                 }
@@ -1914,10 +1915,32 @@
                         }
                       },
                       "else": {
-                        "not": {
+                        "if": {
+                          "properties": {
+                            "kind": {
+                              "const": "pair_uncovered"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        "then": {
                           "required": [
                             "obligationId"
-                          ]
+                          ],
+                          "properties": {
+                            "obligationId": {
+                              "$ref": "#/$defs/pairCellObligationId"
+                            }
+                          }
+                        },
+                        "else": {
+                          "not": {
+                            "required": [
+                              "obligationId"
+                            ]
+                          }
                         }
                       }
                     }
@@ -1940,6 +1963,7 @@
               "axis_class_uncovered",
               "decision_rule_uncovered",
               "interaction_uncovered",
+              "pair_uncovered",
               "domain_point_uncovered",
               "partition_not_derivable",
               "partition_not_read",
@@ -1976,6 +2000,9 @@
               },
               {
                 "$ref": "#/$defs/combinationObligationId"
+              },
+              {
+                "$ref": "#/$defs/pairCellObligationId"
               }
             ]
           },
@@ -2153,6 +2180,41 @@
                 "type": "integer",
                 "minimum": 0,
                 "description": "Which arm of the fork, for an arm."
+              }
+            }
+          }
+        }
+      }
+    },
+    "pairCellObligationId": {
+      "type": "object",
+      "description": "What tells one combination of two of a behavior's classes from every other, where the pair space is the criterion it is held to: the behavior and the two classes, each named by its position. A class id is unique within its axis and not across two, so a pair of ids without their positions is one two combinations answer to. Sorted by position and class, because a combination is a pair and not an order of them.",
+      "required": [
+        "behavior",
+        "classes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "type": "string"
+        },
+        "classes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "required": [
+              "axis",
+              "class"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "axis": {
+                "type": "string"
+              },
+              "class": {
+                "type": "string"
               }
             }
           }

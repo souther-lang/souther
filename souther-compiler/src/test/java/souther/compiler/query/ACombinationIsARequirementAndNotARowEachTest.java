@@ -51,6 +51,9 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // One combination of the decisions a body settles one value by, which is a
                 // requirement of the interaction criterion.
                 "ACombinationNoRowMakes",
+                // And one combination of two classes, which is what the fallback criterion asks
+                // for where a behavior's decisions meet nowhere.
+                "ACombinationOfTwoClassesNoRowIsIn",
                 "APointOfABorder", "APointOfADeclaredBorder",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
