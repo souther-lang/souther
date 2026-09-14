@@ -55,6 +55,10 @@ final class Subjects {
             // are what the walk met and are the reason; a behavior has one pair space, so they
             // tell no two of these apart.
             case Weakening.PairSpaceTruncated it -> new Subject.OfABehavior(it.behavior());
+            // The same of the other criterion, and the behavior for the same reason: how many of
+            // its groups went unwalked is what the walk met, and a behavior has one reading of its
+            // meetings.
+            case Weakening.MeetingsNotWalked it -> new Subject.OfABehavior(it.behavior());
             // The arm as the source wrote it, which is what the fact now carries: the number a run
             // through it was recorded at is resolved where the sites are, and nothing this far
             // along has them.

@@ -48,12 +48,21 @@ public sealed interface CombinationCriterion {
     /**
      * Which of the two this behavior is held to.
      *
-     * <p>Null where neither can be answered: a behavior whose measures were not made has no
-     * criterion rather than the fallback one, and answering the fallback would report the product
-     * of positions nobody divided as the thing this behavior is held to.
+     * <p>Null where nothing read the body's meetings. A reading that was never made does not say
+     * the decisions meet nowhere — it says nobody asked — and the two are one value only if this
+     * takes an absence for an answer. Falling back there would hold a behavior to the pair space
+     * because this compiler did not get far enough to read its body, which is the criterion moving
+     * with how the run went rather than with what the model says.
+     *
+     * <p>So the reading has to be present and the pair space has to be measurable before either
+     * word is said. A behavior with a body whose decisions meet nowhere, and one with no body at
+     * all, both have a reading: it finds no meeting, which is an answer.
      */
     static CombinationCriterion of(InteractionEvidence meetings, PartitionEvidence partition) {
-        if (meetings != null && meetings.asked().any()) {
+        if (meetings == null) {
+            return null;
+        }
+        if (meetings.asked().any()) {
             return new Interactions(meetings);
         }
         return partition == null ? null : new PairFallback(partition.pairs());

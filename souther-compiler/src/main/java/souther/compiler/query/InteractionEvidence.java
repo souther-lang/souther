@@ -130,9 +130,21 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
         }
         RowsMeeting rows =
                 new RowsMeeting(watched.size(), met, seen, watched.size() - seen);
-        WeakeningSet went = rows.everyRowWasWatched() ? weakening
+        // A row nothing watched leaves a meeting it may have made unread, and that is a shortfall
+        // only where there is a meeting to make. A behavior whose decisions meet nowhere is asked
+        // nothing here, and a measure a behavior has nothing to answer is not a degradation of it.
+        WeakeningSet went = rows.everyRowWasWatched() || !asked.any() ? weakening
                 : weakening.union(WeakeningSet.of(
                         new Weakening.DecisionRunNotWatched(behavior)));
+        // And the groups the measure would not walk. The rows were read and these combinations
+        // were never enumerated, so what this measurement is short of is a part of its own subject
+        // — a reader raising the limit may be handed a combination nothing here asked about. Said
+        // on the measure and not kept beside it: what a behavior went without is asked of its
+        // measures, and a shortfall held anywhere else reaches none of them.
+        if (!asked.notMeasured().isEmpty()) {
+            went = went.union(WeakeningSet.of(new Weakening.MeetingsNotWalked(
+                    behavior, asked.notMeasured().size())));
+        }
         return new InteractionEvidence(asked, went.isEmpty()
                 ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went));
     }

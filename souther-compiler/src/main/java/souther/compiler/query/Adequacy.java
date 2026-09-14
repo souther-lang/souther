@@ -1002,12 +1002,19 @@ public final class Adequacy {
         public Answer<Map<String, InteractionEvidence>> compute(Db db) {
             Answer<Map<String, CoverageRead.Read>> met = db.ask(new Meets(name));
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
-            if (!met.present() || !checked.present()) {
+            if (!met.present()) {
                 return Answer.absent();
             }
             boolean instrumented = levelOf(db).runsInstrumentedRows();
-            Optional<SiteNumbering> numbering =
-                    Optional.of(SiteNumbering.of(checked.value().numberingIdentity()));
+            // A module whose bodies were not elaborated is answered all the same, with nothing to
+            // number. The reading above already says what such a module's behaviors meet — nothing,
+            // there being no body to read — and that is an answer rather than an absence. Left
+            // absent, it would say the meetings could not be read, and what reads this to choose a
+            // criterion cannot tell a behavior whose decisions meet nowhere from one this compiler
+            // never got far enough to ask about.
+            Optional<SiteNumbering> numbering = checked.present()
+                    ? Optional.of(SiteNumbering.of(checked.value().numberingIdentity()))
+                    : Optional.empty();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             int cells = db.ask(new Front.Adequacy()).value().measures().cellsPerGroup();
             Map<String, InteractionEvidence> out = new LinkedHashMap<>();
@@ -3894,6 +3901,24 @@ public final class Adequacy {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
+                // A finding the account cannot call missing was not asked for, and this is where
+                // that is said. The reading of the runs is what is in the way rather than anything
+                // about the thing itself, and a row is not offered against an obligation nothing
+                // has established — so the search was never handed it and has no answer to read.
+                // One place, for every kind that is gathered from the findings: written at each
+                // reader, it was written at one of them.
+                //
+                // The two that are not. A row at a line is owed by the account and what became of
+                // it is the account's to say; a class is gathered from what the partition measure
+                // established rather than from a finding, so it was searched for and the search's
+                // own word for what stopped it is the better answer.
+                if (none == null && !finding.weakenedBy().isEmpty()
+                        && finding.kind().isAboutAnObligation()
+                        && !(finding.about() instanceof About.APointOfABorder)
+                        && !(finding.about() instanceof About.AClassNoRowIsIn)) {
+                    none = new GenerationOutcome.NotApplicable(
+                            GenerationOutcome.NotApplicable.Reason.THE_MEASURE_DOES_NOT_ESTABLISH_THIS);
+                }
                 out.add(new GenerationDisposition(finding, itemOf(finding),
                         none != null ? none
                         : switch (finding.about()) {
@@ -4104,13 +4129,6 @@ public final class Adequacy {
             Generator.GeneratedRow row = rules.byRule().get(rule);
             if (row != null) {
                 return new GenerationOutcome.Generated(List.of(row));
-            }
-            // A rule the account cannot call missing, which is not a measure nobody made. The
-            // reading of the runs is what is in the way rather than anything about the rule, and a
-            // row is not offered against an obligation nothing has established.
-            if (!finding.weakenedBy().isEmpty()) {
-                return new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable.Reason
-                        .THE_MEASURE_DOES_NOT_ESTABLISH_THIS);
             }
             if (rules.whyNotTheRest() == null) {
                 throw new IllegalStateException(
@@ -4621,8 +4639,20 @@ public final class Adequacy {
          * reason about the run and no word about the thing a reader was asking after.
          */
         private static souther.compiler.partition.GenerationPlan planFor(
-                souther.compiler.partition.MeasuredInput subject, List<Finding> owed,
+                souther.compiler.partition.MeasuredInput subject, List<Finding> said,
                 PartitionEvidence evidence, CoverageSites.Plan plan) {
+            // Only the findings the account can say are missing. A measurement that went without
+            // something leaves the thing it names as one a row may already take, and a proposal is
+            // work offered against an obligation established as missing — offered against one that
+            // is not, the block hands a person a row that may be in the file in front of them.
+            //
+            // Here and not at each gathering below. The rule is one rule, and it was written at one
+            // of them: the rows for the rules of a decision kept it, and everything else asked only
+            // what shape the finding was. A kind added to the plan inherits it now rather than
+            // being the next place it is forgotten.
+            List<Finding> owed = said.stream()
+                    .filter(finding -> finding.weakenedBy().isEmpty())
+                    .toList();
             // The arms this build is owed a row at, which the measure established and this reads.
             // A combination the body settles together is where one is looked for and is not itself
             // owed a row — nothing reports one — so what is searched follows from the findings

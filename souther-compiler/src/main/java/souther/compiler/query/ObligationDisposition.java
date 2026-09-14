@@ -245,6 +245,10 @@ public sealed interface ObligationDisposition {
                      // The same of a run nothing watched at all, which is short of the run rather
                      // than of the rules and is about neither of this sentence's questions.
                      Weakening.DecisionRunNotWatched _,
+                     // And a meeting of the body's decisions nothing walked the combinations of,
+                     // which is short of one criterion's universe and says nothing about where a
+                     // value stands against a line.
+                     Weakening.MeetingsNotWalked _,
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
                      Weakening.DecisionReadingIncomplete _ -> { }

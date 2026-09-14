@@ -137,6 +137,11 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
         // reaches a status, a verdict and a document without each of them asking the decision
         // itself.
         parts.put("decision", decision == null ? null : decision.took());
+        // And which combinations of those decisions the rows made, which is a measure of this
+        // behavior like the rest. Left out, a behavior whose meetings could not all be walked, or
+        // whose rows ran unwatched, came back whole — the status, the verdict and the document each
+        // read this map, and none of them was told.
+        parts.put("interaction", interaction == null ? null : interaction.made());
         return java.util.Collections.unmodifiableMap(parts);
     }
 
