@@ -694,6 +694,22 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
         }
 
+        /**
+         * Why a walk that was asked for came back with no account of the rows.
+         *
+         * <p>One reason, and it is about this run rather than about the model: the space is as
+         * large as the positions make it, and a compilation allowed more would walk it.
+         */
+        public enum TooLarge implements FailureReason {
+            /** More combinations than this compilation counts off the rows. */
+            TOO_MANY_COMBINATIONS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
+        }
+
         /** Why the combinations have no numbers. */
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing sits anywhere. */
@@ -728,15 +744,20 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /**
          * A space too large to walk to the end of.
          *
-         * <p>The pairs are known and none of them was walked, so what is written of each is what
-         * was reached of it: none. What it is measured in part by is the fact that stopped it, said
-         * once.
+         * <p>The pairs are known and not one row was placed in any of them, so there is no account
+         * of the rows here at all. Written as an account that reached none of the combinations, it
+         * said the rows are in nothing — which every reader then had to know to disbelieve by
+         * looking at what weakened the measurement first, and a reader that read the account
+         * straight took the whole space for a space of gaps.
+         *
+         * <p>Failed rather than not measured: this was asked for, and what surrounds it is worth
+         * less for its not having been finished. So the weakening stays, beside a reason saying
+         * what kind of nothing came back.
          */
         public static PairSpace truncated(String behavior, List<AxisPair> space, long size,
                                           int limit) {
-            SequencedMap<Between, java.util.Set<Cell>> none = new LinkedHashMap<>();
-            space.forEach(pair -> none.put(pair.between(), java.util.Set.of()));
-            return new PairSpace(space, new Measurement.Partial<>(new CoveredBetween(none),
+            return new PairSpace(space, new Measurement.FailedToMeasure<>(
+                    TooLarge.TOO_MANY_COMBINATIONS,
                     WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));
         }
 

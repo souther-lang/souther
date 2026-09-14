@@ -197,6 +197,10 @@ record ReasonProse(Introduction introduction, String said) {
             case Adequacy.RowReading.Unavailable it -> switch (it) {
                 case ROWS_UNAVAILABLE -> "nothing came back from the rows";
             };
+            case PartitionEvidence.PairSpace.TooLarge it -> switch (it) {
+                case TOO_MANY_COMBINATIONS ->
+                        "this behavior has more combinations of two classes than the build counts";
+            };
             case InteractionEvidence.Unreadable it -> switch (it) {
                 case NO_ROW_CAME_BACK -> "no row of this behavior came back to be read";
                 case THE_ROWS_CARRY_NO_ACCOUNT -> "the rows carry no account of where they went";

@@ -2860,14 +2860,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * be five impossibilities.
      */
     private static String combinations(PartitionEvidence.PairSpace pairs) {
-        if (pairs == null || pairs.total() == 0 || pairs.counted().made().isEmpty()) {
+        if (pairs == null || pairs.total() == 0) {
             return "";
         }
-        // A space too large to walk says so, and says it from what weakened the measurement rather
-        // than from a flag kept beside it that had to be held in step.
-        if (pairs.counted().weakening().causes().stream()
-                .anyMatch(Weakening.PairSpaceTruncated.class::isInstance)) {
+        // A space too large to walk says so, and says it from the reason the measure has no number
+        // rather than from what weakened it. The two used to be one thing here because the measure
+        // carried an account of the rows either way, and a reader had to know to ask the weakening
+        // before believing it.
+        if (pairs.counted() instanceof Measurement.FailedToMeasure<?>(
+                PartitionEvidence.PairSpace.TooLarge _, WeakeningSet _)) {
             return String.format("pairs %d, too many to enumerate", pairs.total());
+        }
+        if (pairs.counted().made().isEmpty()) {
+            return "";
         }
         if (pairs.decided()) {
             return String.format("pairs %d/%d", pairs.counts().covered(), pairs.total());

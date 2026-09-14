@@ -3378,10 +3378,11 @@
               "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
             },
             "reason": {
-              "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names, nor about a build that asked for no measurement (`not_asked`).",
+              "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names, nor about a build that asked for no measurement (`not_asked`). `too_many_combinations` is a space larger than the build counts off the rows: not one row was placed in any combination, so which of them the rows are in was never established — a consumer reading it as every combination being a gap would be reading a measurement that did not happen as a model that has none. What a wider build would have spent is under `weakening`.",
               "enum": [
                 "no_rows",
-                "not_asked"
+                "not_asked",
+                "too_many_combinations"
               ]
             },
             "between": {
