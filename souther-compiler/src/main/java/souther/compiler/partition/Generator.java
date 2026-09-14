@@ -213,6 +213,31 @@ public final class Generator {
         }
 
         /**
+         * One combination of the body's decisions: the row a meeting nothing makes is owed.
+         *
+         * <p>The decisions the meeting settles a value by, which is the requirement's identity
+         * everywhere. Where a search found a row for it is a cell of a group, and two cells of two
+         * groups can settle the same decisions — so a row named by where it was found would be
+         * named for one of the places rather than for the thing that was asked.
+         *
+         * <p>No label, for the reason an arm has none: what a combination of decisions is called is
+         * the report's word, written from the conditions and the places they are read at. A name
+         * made here would be a second vocabulary for one thing.
+         */
+        record ForACombinationOfDecisions(java.util.Set<souther.compiler.reading.Condition> settled)
+                implements Purpose {
+
+            public ForACombinationOfDecisions {
+                settled = java.util.Set.copyOf(settled);
+            }
+
+            @Override
+            public List<String> labels() {
+                return List.of();
+            }
+        }
+
+        /**
          * One arm of the body: the row an arm nothing reaches is owed.
          *
          * <p>The arm and not the combination a witness for it was found at. A combination is where
@@ -1009,7 +1034,7 @@ public final class Generator {
     public static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
                                           List<ArmProbe> arms) {
         return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList(),
-                List.of());
+                List.of(), List.of());
     }
 
     /**
@@ -1420,6 +1445,10 @@ public final class Generator {
         // What each set of values did when it was run, so that a row two arms were both composed
         // the same values for is applied once.
         Map<List<String>, Watched> ran = new LinkedHashMap<>();
+        // And what each row this run kept was watched doing, by the number it goes by. A meeting is
+        // settled by a run, so the question "does a row in hand already make this one" is a
+        // question about what was observed — asked of the values, it would be asked of a reading.
+        Map<RowId, AlignedObservation> seenOf = new LinkedHashMap<>();
         for (ArmProbe probe : armsOwed) {
             if (!left.contains(probe)) {
                 // A row already composed was watched going through it, which is the one thing that
@@ -1442,6 +1471,9 @@ public final class Generator {
                 // them on that belief is the reading certifying itself (issue #1009).
                 GeneratedRow row;
                 List<ArmProbe> also;
+                // What watched it, where anything did. Kept beside the row so that a meeting asked
+                // about below is answered by a row already seen making it.
+                AlignedObservation seen;
                 switch (place.tried) {
                     case Witness.NoCombination none -> {
                         noRow(unresolved, failed, probe, new UnresolvedCombination(List.of(),
@@ -1464,7 +1496,8 @@ public final class Generator {
                     }
                     case Witness.Certified made -> {
                         row = made.row();
-                        also = alsoThrough(made.by().seen(), left, probe);
+                        seen = made.by().seen();
+                        also = alsoThrough(seen, left, probe);
                     }
                     case Witness.Unconfirmed offer -> {
                         row = offer.row();
@@ -1472,6 +1505,7 @@ public final class Generator {
                         // and not what anything saw, and no other arm comes off the list for it.
                         // Said once for the behavior: it is one fact about this generation.
                         also = List.of();
+                        seen = null;
                         unconfirmed = true;
                     }
                 }
@@ -1479,6 +1513,9 @@ public final class Generator {
                 // an arm also goes through is one line and not two. What each of them is offered for
                 // is the entries naming it, so nothing is written on the row here.
                 RowId kept = keep(composed, row);
+                if (seen != null) {
+                    seenOf.putIfAbsent(kept, seen);
+                }
                 built.put(probe, kept);
                 left.remove(probe);
                 also.forEach(each -> {
@@ -1587,6 +1624,94 @@ public final class Generator {
                                 UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)));
             }
         }
+        // And the combinations the body settles a value by, where those are what this behavior is
+        // held to. Rows through every arm can leave one of them unmade, which is the whole reason
+        // it is asked about — so a row for one is looked for at a cell of the group that states it,
+        // which is where the search for an arm already looks.
+        //
+        // <p>Certified by the run and by nothing else. A row sitting where the cell leaves room is
+        // a reading of the body, and a reading is what may be wrong; what says the decisions were
+        // settled together is a run watched doing all of what the cell names, which is what a
+        // certified witness is.
+        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetingAnswers =
+                new LinkedHashMap<>();
+        Map<ObligationIdentity.OfACombinationOfDecisions, List<CellSelection>> waysTo =
+                waysTo(subject.behavior(), offered);
+        for (ObligationIdentity.OfACombinationOfDecisions asked : plan.meetingsOwed()) {
+            List<CellSelection> ways = waysTo.getOrDefault(asked, List.of());
+            if (ways.isEmpty()) {
+                // A meeting no group this run walked states. What is owed was read under the
+                // measure's limit and this search is held to its own, so a group held back here is
+                // a meeting with nowhere to be looked for — which is this run's news and not the
+                // model's.
+                UnresolvedCombination why = new UnresolvedCombination(List.of(),
+                        offered.notOffered().isEmpty()
+                                ? UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST
+                                : UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED);
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
+                unresolved.add(why);
+                continue;
+            }
+            // A row this run already composed that something watched making it. One row makes as
+            // many meetings as it makes, and the arms above compose rows that go through them.
+            RowId already = null;
+            for (Map.Entry<RowId, AlignedObservation> each : seenOf.entrySet()) {
+                if (ways.stream().anyMatch(way -> way.certifiedBy(each.getValue()))) {
+                    already = each.getKey();
+                    break;
+                }
+            }
+            if (already != null) {
+                meetingAnswers.put(asked, new ClassDisposition.Built(already));
+                continue;
+            }
+            if (composed.size() >= budget.rowLimit()) {
+                UnresolvedCombination why = new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
+                unresolved.add(why);
+                continue;
+            }
+            RowId made = null;
+            UnresolvedCombination why = null;
+            for (CellSelection at : ways) {
+                Witness tried = witnessFor(axes, at, check, trial, ran, claimed(at),
+                        List.of(new Purpose.ForACombinationOfDecisions(asked.settled())),
+                        origins, references, answers);
+                switch (tried) {
+                    case Witness.NoCombination none -> why = new UnresolvedCombination(List.of(),
+                            UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
+                            Optional.of(none.said()));
+                    case Witness.Exhausted none -> why = new UnresolvedCombination(none.classes(),
+                            none.reason(), none.detail(), none.said(), none.alsoShort());
+                    case Witness.Limited none -> why = new UnresolvedCombination(none.classes(),
+                            UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+                    case Witness.Certified it -> {
+                        made = keep(composed, it.row());
+                        seenOf.putIfAbsent(made, it.by().seen());
+                    }
+                    // Composed and watched by nothing. A meeting is settled by the run, so a row
+                    // nothing saw make it is not an answer here, and what holds of the candidates
+                    // is what that word says: none of them was a witness. A build that watches no
+                    // run asks for none of these in the first place, so this is the shape being
+                    // right rather than a state a report is written from.
+                    case Witness.Unconfirmed _ -> {
+                        unconfirmed = true;
+                        why = new UnresolvedCombination(List.of(),
+                                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS);
+                    }
+                }
+                if (made != null) {
+                    break;
+                }
+            }
+            if (made != null) {
+                meetingAnswers.put(asked, new ClassDisposition.Built(made));
+            } else {
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
+                unresolved.add(why);
+            }
+        }
         // And the combinations of two classes, where the pair space is what this behavior is held
         // to. The same search as a class, with both positions held instead of one: what the
         // requirement names is a hard pin at each, and everything else is chosen beside them — so a
@@ -1639,7 +1764,36 @@ public final class Generator {
             }
         }
         return new FillResult(plan, composed, unresolved, reasons,
-                new Discharge(classAnswers, armAnswers, pairAnswers));
+                new Discharge(classAnswers, armAnswers, pairAnswers, meetingAnswers));
+    }
+
+    /**
+     * Where each meeting of the body's decisions can be looked for, by the requirement it states.
+     *
+     * <p>Several cells to one requirement, because a body may record the same decisions in more
+     * than one place. A run down any one of them settles the value by those decisions, which is
+     * what the requirement asks — so they are ways to it rather than several requirements, and the
+     * search takes the first that composes a row.
+     *
+     * <p>Read off the groups this run was offered, which is the same walk the measure reads its
+     * requirements from. A cell whose factors leave a position nothing is no combination the body
+     * has a path to, and there is nothing to look in.
+     */
+    private static Map<ObligationIdentity.OfACombinationOfDecisions, List<CellSelection>> waysTo(
+            String behavior, InteractionCells.Offered offered) {
+        Map<ObligationIdentity.OfACombinationOfDecisions, List<CellSelection>> out =
+                new LinkedHashMap<>();
+        for (InteractionCells.Group group : offered.groups()) {
+            for (int index = 0; index < group.size(); index++) {
+                CellSelection selection = group.at(index);
+                if (selection == null) {
+                    continue;
+                }
+                out.computeIfAbsent(new ObligationIdentity.OfACombinationOfDecisions(
+                        behavior, group.settledAt(index)), _ -> new ArrayList<>()).add(selection);
+            }
+        }
+        return out;
     }
 
     /**
@@ -3805,8 +3959,28 @@ public final class Generator {
                                       Map<List<String>, Watched> applied, List<ArmProbe> takes,
                                       List<ResolvedOrigin> origins, FixtureReferences references,
                                       List<StoodInAnswer> answers) {
-        Reading reading = new Reading(axes, selection, check, trial, applied, takes, origins,
+        return witnessFor(axes, selection, check, trial, applied, takes, List.of(), origins,
                 references, answers);
+    }
+
+    /**
+     * The same, for a search that is not looking on an arm's behalf.
+     *
+     * <p>Two lists because the arms play two parts here and only one of them is a purpose. What the
+     * run is held against is {@code takes} — the claims a row filling this combination makes, which
+     * is what says a candidate arrived — and what the row is composed for is what somebody was owed.
+     * They are the same list where an arm is what was asked for, and they are not where a
+     * combination of the body's decisions is: a cell may claim no arm at all, and a row named after
+     * nothing is not a row.
+     */
+    private static Witness witnessFor(MeasuredInput.MeasuredAxes axes,
+                                      CellSelection selection, CandidateCheck check, Trial trial,
+                                      Map<List<String>, Watched> applied, List<ArmProbe> takes,
+                                      List<Purpose> alsoFor,
+                                      List<ResolvedOrigin> origins, FixtureReferences references,
+                                      List<StoodInAnswer> answers) {
+        Reading reading = new Reading(axes, selection, check, trial, applied, takes, alsoFor,
+                origins, references, answers);
         Traversal walked = selection.interpretations(reading);
         return walked == Traversal.SATISFIED ? reading.found : reading.nothing(walked);
     }
@@ -3839,6 +4013,9 @@ public final class Generator {
 
         private final List<ArmProbe> takes;
 
+        /** What else the row this composes answers, which the arms it takes do not say. */
+        private final List<Purpose> alsoFor;
+
         private final List<ResolvedOrigin> origins;
 
         /** Whether the combination offered anything at all, which tells a combination the model
@@ -3866,7 +4043,7 @@ public final class Generator {
 
         private Reading(MeasuredInput.MeasuredAxes axes, CellSelection selection,
                         CandidateCheck check, Trial trial, Map<List<String>, Watched> applied,
-                        List<ArmProbe> takes, List<ResolvedOrigin> origins,
+                        List<ArmProbe> takes, List<Purpose> alsoFor, List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
             this.selection = selection;
@@ -3874,6 +4051,7 @@ public final class Generator {
             this.trial = trial;
             this.applied = applied;
             this.takes = takes;
+            this.alsoFor = alsoFor;
             this.origins = origins;
             this.references = references;
             this.answers = answers;
@@ -4007,9 +4185,11 @@ public final class Generator {
                 // at. The combination is where the search went; the arms are what somebody is owed
                 // a row at. One row answering two of them is two answers and not one composite
                 // thing.
-                GeneratedRow named = new GeneratedRow(
-                        takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList(),
-                        last.row().inputs(), last.row().answers());
+                List<Purpose> composedFor = new ArrayList<>(
+                        takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
+                composedFor.addAll(alsoFor);
+                GeneratedRow named = new GeneratedRow(composedFor, last.row().inputs(),
+                        last.row().answers());
                 // Run once per line, however many places a row of it was looked for. What a run of
                 // one row did is one fact: two arms searched on their own can come to the same
                 // line, and running them again would be the same row applied twice and counted

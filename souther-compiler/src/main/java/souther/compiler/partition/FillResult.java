@@ -67,6 +67,12 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                             + " the same: asked " + plan.pairsOwed()
                             + ", answered " + discharge.pairs().keySet());
         }
+        if (!discharge.meetings().keySet().equals(new LinkedHashSet<>(plan.meetingsOwed()))) {
+            throw new IllegalStateException(
+                    "the meetings this run was asked for and the ones it answered for are not the"
+                            + " same: asked " + plan.meetingsOwed()
+                            + ", answered " + discharge.meetings().keySet());
+        }
         // And the rows against what the answers point at, in both directions. A row nothing points
         // at is one nobody was offered — it would come out of the projection below with nothing to
         // say it is for, which is not a row — and an answer pointing at a row that is not here is
@@ -83,6 +89,11 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             }
         }
         for (ClassDisposition each : discharge.pairs().values()) {
+            if (each instanceof ClassDisposition.Built built) {
+                answered.add(built.rowId());
+            }
+        }
+        for (ClassDisposition each : discharge.meetings().values()) {
             if (each instanceof ClassDisposition.Built built) {
                 answered.add(built.rowId());
             }
@@ -169,6 +180,16 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             }
             pairs.put(owed, offering(ClassDisposition.acrossRuns(runs), searched, composed, named));
         }
+        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
+                new LinkedHashMap<>();
+        for (ObligationIdentity.OfACombinationOfDecisions owed : plan.meetingsOwed()) {
+            List<ClassDisposition> runs = new ArrayList<>();
+            for (FillResult each : searched) {
+                runs.add(each.discharge().at(owed));
+            }
+            meetings.put(owed,
+                    offering(ClassDisposition.acrossRuns(runs), searched, composed, named));
+        }
         Set<Generator.UnresolvedCombination> unresolved = new LinkedHashSet<>();
         Set<GenerationReason> reasons = new LinkedHashSet<>();
         for (FillResult each : searched) {
@@ -176,7 +197,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             reasons.addAll(each.reasons());
         }
         return new FillResult(plan, composed, List.copyOf(unresolved), List.copyOf(reasons),
-                new Discharge(classes, arms, pairs));
+                new Discharge(classes, arms, pairs, meetings));
     }
 
     /**
@@ -291,8 +312,14 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                                     .toList(),
                             why)));
         }
+        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
+                new LinkedHashMap<>();
+        for (ObligationIdentity.OfACombinationOfDecisions owed : plan.meetingsOwed()) {
+            meetings.put(owed, new ClassDisposition.Unresolved(
+                    new Generator.UnresolvedCombination(List.of(), why)));
+        }
         return new FillResult(plan, new LinkedHashMap<>(), List.of(), reasons,
-                new Discharge(classes, arms, pairs));
+                new Discharge(classes, arms, pairs, meetings));
     }
 
     /**
@@ -347,6 +374,14 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                         owed.classes().stream()
                                 .map(each -> Generator.labelOf(plan.subject(), each))
                                 .sorted().toList()));
+            }
+        }
+        // And the combinations of the body's decisions this row makes. The same rule again: a row
+        // composed at one meeting may be watched making another, and each of them points at it.
+        for (ObligationIdentity.OfACombinationOfDecisions owed : plan.meetingsOwed()) {
+            if (discharge.at(owed) instanceof ClassDisposition.Built built
+                    && built.rowId().equals(id)) {
+                purposes.add(new Generator.Purpose.ForACombinationOfDecisions(owed.settled()));
             }
         }
         return new Generator.GeneratedRow(purposes, row.inputs(), row.answers());

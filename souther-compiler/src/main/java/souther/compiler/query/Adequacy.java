@@ -2433,14 +2433,12 @@ public final class Adequacy {
             // the other question and is the generation's ({@link #accountFor});
             // answered here, the two would be one and a reader asking whether a row could settle
             // this would be told what the search happens to be arranged to do.
+            // A combination of the body's decisions is answered here too: the search looks for one
+            // at a cell of the group that states it, and what it came to is the generation's.
             case About.APointOfABorder _, About.APointOfADeclaredBorder _,
                  About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
-                 About.AnArmNoRowGoesThrough _, About.ACombinationOfTwoClassesNoRowIsIn _ -> null;
-            // A combination of the body's decisions. A row could answer one — the search already
-            // walks the combinations looking for a row for an arm — and nothing is asked to look
-            // for one yet, which is what this says.
-            case About.ACombinationNoRowMakes _ -> new GenerationOutcome.NotSupported(
-                    GenerationOutcome.NotSupported.Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
+                 About.AnArmNoRowGoesThrough _, About.ACombinationOfTwoClassesNoRowIsIn _,
+                 About.ACombinationNoRowMakes _ -> null;
             // A combination of two classes: a row that sits in both is a row, and what composes one
             // is the search a class goes through with both positions held instead of one. What
             // became of it is that search's answer and is read where the rows are.
@@ -3910,6 +3908,8 @@ public final class Adequacy {
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
                             case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
                                     atPair(combination, composed);
+                            case About.ACombinationNoRowMakes(var meeting) ->
+                                    atMeeting(meeting, composed);
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
                                     atRule(finding, ruled.rule(), rules);
@@ -3919,7 +3919,6 @@ public final class Adequacy {
                             case About.APointOfADeclaredBorder _,
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
-                                    About.ACombinationNoRowMakes _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -4252,6 +4251,30 @@ public final class Adequacy {
             if (answer == null) {
                 throw new IllegalStateException(
                         "a finding names a class this run was not asked about: " + at + "=" + classId);
+            }
+            return switch (answer) {
+                case souther.compiler.partition.ClassDisposition.Built built ->
+                        new GenerationOutcome.Generated(List.of(composed.rowFor(built.rowId())));
+                case souther.compiler.partition.ClassDisposition.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+            };
+        }
+
+        /**
+         * What the search made of one combination of the body's decisions.
+         *
+         * <p>Read off the discharge, like the two beside it. What answers a meeting is a row a run
+         * was watched settling the value by those decisions, and which row that was is the search's
+         * to say.
+         */
+        private static GenerationOutcome atMeeting(
+                ObligationIdentity.OfACombinationOfDecisions meeting,
+                souther.compiler.partition.FillResult composed) {
+            souther.compiler.partition.ClassDisposition answer =
+                    composed.discharge().at(meeting);
+            if (answer == null) {
+                throw new IllegalStateException(
+                        "a finding names a meeting this run was not asked about: " + meeting);
             }
             return switch (answer) {
                 case souther.compiler.partition.ClassDisposition.Built built ->
@@ -4632,8 +4655,18 @@ public final class Adequacy {
                     pairs.add(combination);
                 }
             }
+            // And the combinations the body settles a value by, where those are the criterion. The
+            // same rule again: what a run is asked for is what the account says is missing. A
+            // meeting is not an arm — rows through every arm of a body can leave one unmade — so
+            // it is asked for in its own right and not reached through the arms it claims.
+            List<ObligationIdentity.OfACombinationOfDecisions> meetings = new ArrayList<>();
+            for (Finding finding : owed) {
+                if (finding.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                    meetings.add(combination);
+                }
+            }
             return new souther.compiler.partition.GenerationPlan(subject, classesOwed(evidence),
-                    arms.values().stream().map(Generator.ArmOwed::new).toList(), pairs);
+                    arms.values().stream().map(Generator.ArmOwed::new).toList(), pairs, meetings);
         }
 
         /**

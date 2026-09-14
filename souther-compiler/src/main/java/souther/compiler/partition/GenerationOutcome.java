@@ -243,19 +243,6 @@ public sealed interface GenerationOutcome {
                     "rows here are composed from what the input positions divide into, and nothing"
                             + " searches for one by the case it would answer with"),
 
-            /**
-             * Nothing composes a row for a combination of the body's decisions yet.
-             *
-             * <p>The search walks the combinations to find a row for an arm, and what it is asked
-             * for is the classes and the arms — so a combination nothing covers is measured and
-             * reported, and no row is composed for it. Said as its own reason rather than left to
-             * one of the reasons above: what stands here is a search that has not been asked to
-             * look, which is a different thing from one that looked and could not.
-             */
-            NOTHING_SEARCHES_FOR_A_COMBINATION(
-                    "nothing composes a row for a combination of this body's decisions yet, so what"
-                            + " covers one is a row written for something else"),
-
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
                     + " no classes were derived there to compose a row from");

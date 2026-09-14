@@ -19,10 +19,13 @@ import java.util.Map;
  */
 public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
                         Map<Generator.ArmOwed, ArmDisposition> arms,
-                        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs) {
+                        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs,
+                        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition>
+                                meetings) {
 
     /** Nothing asked for and nothing answered, which is the only run this is right for. */
-    public static final Discharge NOTHING = new Discharge(Map.of(), Map.of(), Map.of());
+    public static final Discharge NOTHING =
+            new Discharge(Map.of(), Map.of(), Map.of(), Map.of());
 
     public Discharge {
         // Neither half of an entry missing. A key with nothing under it is an obligation that was
@@ -34,6 +37,14 @@ public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
         // composed for it or none was, and why. What differs between them is the requirement and
         // not the news about it.
         pairs = Ordered.copyOf(pairs);
+        // And a combination of the body's decisions, under that shape again. What a row is for
+        // differs between the three; that a row was composed or none was does not.
+        meetings = Ordered.copyOf(meetings);
+    }
+
+    /** What became of one combination of the body's decisions, or null where nothing asked. */
+    public ClassDisposition at(ObligationIdentity.OfACombinationOfDecisions owed) {
+        return meetings.get(owed);
     }
 
     /** What became of one combination of two classes, or null where nothing asked about it. */

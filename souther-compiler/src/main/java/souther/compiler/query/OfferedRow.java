@@ -59,10 +59,11 @@ public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInA
             if (!(purpose instanceof Generator.Purpose.ForAClass
                     || purpose instanceof Generator.Purpose.ForAnArm
                     || purpose instanceof Generator.Purpose.ForADecisionRule
-                    || purpose instanceof Generator.Purpose.ForAFallbackPairCell)) {
+                    || purpose instanceof Generator.Purpose.ForAFallbackPairCell
+                    || purpose instanceof Generator.Purpose.ForACombinationOfDecisions)) {
                 throw new IllegalArgumentException(
-                        "a row is composed for a class, an arm, a rule or a combination of two"
-                                + " classes, and never for a line: " + purpose);
+                        "a row is composed for a class, an arm, a rule or a combination the body"
+                                + " settles a value by, and never for a line: " + purpose);
             }
         }
     }

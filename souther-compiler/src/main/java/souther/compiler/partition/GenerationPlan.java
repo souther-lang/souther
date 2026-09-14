@@ -31,21 +31,29 @@ import java.util.Set;
  *                    met by a value falling in it, and one of these by two values falling in two —
  *                    so a row for each of two classes is two rows and neither shows what the
  *                    behavior does where both hold
+ * @param meetingsOwed one combination of the body's decisions apiece, where those are the criterion
+ *                    this behavior is held to. Beside the arms and not among them: an arm is a
+ *                    place a run is at, and one of these is several decisions settling one value —
+ *                    so rows through every arm can leave one of these unmade, which is the whole
+ *                    reason it is asked about
  */
 public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> classesOwed,
                              List<Generator.ArmOwed> armsOwed,
-                             List<ObligationIdentity.OfAFallbackPairCell> pairsOwed) {
+                             List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
+                             List<ObligationIdentity.OfACombinationOfDecisions> meetingsOwed) {
 
     public GenerationPlan {
         classesOwed = List.copyOf(classesOwed);
         armsOwed = List.copyOf(armsOwed);
         pairsOwed = List.copyOf(pairsOwed);
+        meetingsOwed = List.copyOf(meetingsOwed);
         if (subject == null) {
             throw new IllegalArgumentException("a generation is asked for on behalf of a subject");
         }
         onlyOnce("class", classesOwed);
         onlyOnce("arm", armsOwed);
         onlyOnce("combination", pairsOwed);
+        onlyOnce("meeting", meetingsOwed);
         // A class of another behavior, which is the same disagreement a measured input refuses among its
         // axes. Held here, one run would be answering for two behaviors and every sentence about
         // what it was asked for would be right about one of them.
@@ -60,7 +68,8 @@ public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> class
 
     /** Whether anything at all is owed, which is what a run with nothing to do looks like. */
     public boolean isEmpty() {
-        return classesOwed.isEmpty() && armsOwed.isEmpty() && pairsOwed.isEmpty();
+        return classesOwed.isEmpty() && armsOwed.isEmpty() && pairsOwed.isEmpty()
+                && meetingsOwed.isEmpty();
     }
 
     private static void onlyOnce(String kind, List<?> owed) {

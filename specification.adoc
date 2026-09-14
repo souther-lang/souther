@@ -6631,6 +6631,8 @@ What is asked for is a combination the body has a path to: the way in to the mee
 
 Told apart from <<e1935>>, which is a rule of the decision no row takes. A rule is one way through the body and a combination is one meeting on it, so a row through every way can leave a combination unmade.
 
+A row is offered for one (<<a-block-offers-every-obligation-nothing-covers>>), and it is looked for at the meeting itself rather than through the arms it claims — those may all have rows already, which is the case this warning exists for. What is offered is a row a run was watched settling the value by those decisions; a combination a search composed nothing for says what stopped it, and a build may refuse over it either way.
+
 [#e1937]
 === No row is in a combination of two of a behavior's classes
 

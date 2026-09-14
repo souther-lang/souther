@@ -83,7 +83,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                                 Map.of(A_CLASS, new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT),
                                         ANOTHER_CLASS,
                                         new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
-                                Map.of(), Map.of())));
+                                Map.of(), Map.of(), Map.of())));
     }
 
     @Test
@@ -95,7 +95,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                                                 List.of(NOTHING_CAME_OF_IT)),
                                         ANOTHER_ARM, new ArmDisposition.Unresolved(
                                                 List.of(NOTHING_CAME_OF_IT))),
-                                Map.of())));
+                                Map.of(), Map.of())));
     }
 
     /**
@@ -112,7 +112,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
         nothing.put(A_CLASS, null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Discharge(nothing, Map.of(), Map.of()),
+                () -> new Discharge(nothing, Map.of(), Map.of(), Map.of()),
                 "a class the run was asked about and did not answer for");
     }
 
@@ -122,7 +122,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
         nothing.put(AN_ARM, null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Discharge(Map.of(), nothing, Map.of()));
+                () -> new Discharge(Map.of(), nothing, Map.of(), Map.of()));
     }
 
     /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */
@@ -142,7 +142,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
                         List.of(), new Discharge(
                                 Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
-                                Map.of(), Map.of())));
+                                Map.of(), Map.of(), Map.of())));
     }
 
     @Test
@@ -155,7 +155,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         List.of(), new Discharge(
                                 Map.of(A_CLASS,
                                         new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
-                                Map.of(), Map.of())));
+                                Map.of(), Map.of(), Map.of())));
     }
 
     /** One answer per obligation and one row apiece, which is what a run that composed both looks
@@ -168,7 +168,8 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
         FillResult filled = new FillResult(planOver(List.of(A_CLASS), List.of(AN_ARM)), composed,
                 List.of(), List.of(), new Discharge(
                         Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
-                        Map.of(AN_ARM, new ArmDisposition.Built(new RowId(0), ARM)), Map.of()));
+                        Map.of(AN_ARM, new ArmDisposition.Built(new RowId(0), ARM)),
+                        Map.of(), Map.of()));
 
         assertEquals(1, filled.rows().size(), "one line, offered for both");
     }
@@ -188,7 +189,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                                 Type.INT)),
                         SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return new GenerationPlan(subject, classes, arms, List.of());
+        return new GenerationPlan(subject, classes, arms, List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {
