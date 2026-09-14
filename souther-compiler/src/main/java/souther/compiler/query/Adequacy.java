@@ -3937,7 +3937,7 @@ public final class Adequacy {
                                     atMeeting(meeting, composed);
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
-                                    atRule(finding, ruled.rule(), rules);
+                                    atRule(ruled.rule(), rules);
                             // The ones above, which is what `none` was not null for.
                             // A line a declaration is owed is not one of this behavior's findings,
                             // so nothing reaches here with one.
@@ -4124,8 +4124,7 @@ public final class Adequacy {
          * it had run and seen take the way, so a finding here with no row is the two readings of
          * one search's answer disagreeing rather than a search that came to nothing.
          */
-        private static GenerationOutcome atRule(Finding finding, DecisionRule rule,
-                                                RowsForRules rules) {
+        private static GenerationOutcome atRule(DecisionRule rule, RowsForRules rules) {
             Generator.GeneratedRow row = rules.byRule().get(rule);
             if (row != null) {
                 return new GenerationOutcome.Generated(List.of(row));
