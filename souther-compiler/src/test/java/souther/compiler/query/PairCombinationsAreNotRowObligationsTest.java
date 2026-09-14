@@ -84,23 +84,24 @@ class PairCombinationsAreNotRowObligationsTest {
     }
 
     /**
-     * And nothing a row can be offered for is a combination either.
+     * What a row can be offered for now names two combinations, and nothing raises either yet.
      *
-     * <p>The other half of what this law says it rests on, and the half a check over the findings
-     * alone leaves open: a change that offered a row for a combination without giving it a finding
-     * would say a row is owed at one in the only way an author meets — the command that hands them
-     * the row to write.
+     * <p>The universe gained the combination of a body's decisions and the fallback pair, which is
+     * what a criterion states requirements in. What no measure does yet is raise one: the findings
+     * above have no arm about a combination, so nothing puts one in front of an author.
      *
-     * <p>Read from what says what a row can be offered for, and none of its shapes is a relation
-     * between two positions.
+     * <p>Written out, so that the two halves are asked separately. A reader of this file is owed
+     * the difference between a shape that exists to be asked about and a shape something asks
+     * about — and the day a measure raises one, the walk above is where it says so.
      */
     @Test
-    void nothingARowIsOfferedForIsACombination() {
+    void whatARowCanBeOfferedForNamesACombinationAndNothingRaisesOne() {
         List<String> every = new ArrayList<>();
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfAnArm", "OfADecisionRule", "OfAClass", "OfAnInputCase"),
+                List.of("OfALine", "OfAnArm", "OfADecisionRule", "OfACombinationOfDecisions",
+                        "OfAFallbackPairCell", "OfAClass", "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");
     }
 

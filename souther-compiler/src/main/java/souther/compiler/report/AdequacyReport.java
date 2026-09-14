@@ -19,8 +19,10 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ConditionReportAnchor;
+import souther.compiler.reading.Condition;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
@@ -3643,7 +3645,72 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
+            case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
+                    combinationId(into, behavior, settled);
+            // The behavior and the two classes, which is what a combination of two positions is
+            // told apart by where the body's decisions meet nowhere. Each written the way a class
+            // of a position is above, since that is the same thing being named.
+            case ObligationIdentity.OfAFallbackPairCell(var behavior, var classes) -> {
+                into.put("behavior", behavior);
+                ArrayNode of = into.putArray("classes");
+                classes.stream()
+                        .sorted(java.util.Comparator
+                                .comparing((ClassOfAPosition each) -> each.at().toString())
+                                .thenComparing(ClassOfAPosition::classId))
+                        .forEach(each -> {
+                            ObjectNode one = of.addObject();
+                            one.put("axis", each.at().toString());
+                            one.put("class", each.classId());
+                        });
+            }
         }
+    }
+
+    /**
+     * What tells one combination of a body's decisions from every other: the behavior, and each
+     * decision a run has to have made.
+     *
+     * <p>The decisions and not the places they are recorded at. Which probe a run lights is how
+     * this compilation instruments the body, and a consumer joining on it would be joining on
+     * something that moves when nothing about the model has.
+     *
+     * <p>Sorted by what each decision is written as, for the reason a rule's conditions are: what a
+     * run has to have done is a set, and a walk that met the way in before the outcomes is one
+     * order of writing it down.
+     */
+    private static void combinationId(ObjectNode into, String behavior,
+                                      Set<Condition> settled) {
+        into.put("behavior", behavior);
+        ArrayNode decisions = into.putArray("decisions");
+        settled.stream().map(AdequacyReport::decisionId)
+                .sorted(java.util.Comparator.comparing(each -> each.get("kind").asString()
+                        + "/" + each.get("decision").asString()))
+                .forEach(decisions::add);
+    }
+
+    /** One decision of a body, as the identity of a combination keys it. */
+    private static ObjectNode decisionId(Condition condition) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        switch (condition) {
+            case Condition.Case(var at, var name) -> {
+                out.put("kind", "case");
+                out.put("decision", at.toString());
+                out.put("outcome", name);
+            }
+            case Condition.Side(var at, var comparison, var held) -> {
+                out.put("kind", "comparison");
+                out.put("decision", at + " at " + comparison);
+                out.put("outcome", held ? "held" : "denied");
+            }
+            // A fork the reading could not say a position for. There is nothing to name it by but
+            // the occurrence, which is what the reading already decided rather than a second
+            // answer here.
+            case Condition.Arm(var arm) -> {
+                out.put("kind", "arm");
+                out.put("decision", String.valueOf(arm));
+            }
+        }
+        return out;
     }
 
     /**

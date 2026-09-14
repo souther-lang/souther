@@ -21,20 +21,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A combination's classes and its claims are two halves of one choice.
+ * A combination's classes, its claims and the decisions it is are all read off one choice.
  *
  * <p>Which combination of a group is being asked for is an index counted off the ways of settling
- * each factor. Both halves are read off that index — which classes are left open, and what a run
- * that settled the factors those ways would be seen to have done — so the two are the same choice
- * only for as long as they are counted off the same way. Read apart they would agree for a group of
- * one factor, agree for a square group by luck, and part on the first group whose factors have
- * different numbers of ways.
+ * each factor. All three are read off that index — which classes are left open, what a run that
+ * settled the factors those ways would be seen to have done, and which decisions of the model that
+ * is — so they are the same choice only for as long as they are counted off the same way. Read
+ * apart they would agree for a group of one factor, agree for a square group by luck, and part on
+ * the first group whose factors have different numbers of ways.
  *
  * <p>Built here rather than read off a model. A group of two factors with different widths and
  * choices that leave a position nothing is a shape a model in the corpus need not have, and a
  * mechanism is untested for shapes its data never takes.
  */
-class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
+class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
 
     /** One position with four classes; nothing said about it yet. */
     private static InteractionCells.Cell holding(int... classes) {
@@ -43,6 +43,20 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
             allowed[each] = true;
         }
         return new InteractionCells.Cell(new boolean[][] {allowed});
+    }
+
+    /** One way of settling something: the classes it leaves, the place a run that took it is
+     *  recorded at, and the decision that is. One number for all three, so that a fixture naming
+     *  it names one way. */
+    private static InteractionCells.Placed placed(InteractionCells.Cell cell, int probe) {
+        return new InteractionCells.Placed(cell, List.of(at(probe)), settling(probe));
+    }
+
+    /** What a run that passed the place at {@code probe} settled, in the model's words. Beside
+     *  {@link #at}, so that a fixture naming one number names one decision both ways. */
+    private static List<souther.compiler.reading.Condition> settling(int probe) {
+        return List.of(new souther.compiler.reading.Condition.Arm(
+                Numberings.armOfForkAt(probe)));
     }
 
     /** The numbering this fixture's places are of. One of them, so that two places written here as
@@ -80,13 +94,11 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
     @Test
     void aCombinationsClaimsAreOfTheWaysItsClassesCameFrom() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
+                placed(holding(0, 1, 2, 3), 9),
                 List.of(
-                        List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                                new InteractionCells.Placed(holding(2), List.of(at(11))),
-                                new InteractionCells.Placed(holding(3), List.of(at(12)))),
-                        List.of(new InteractionCells.Placed(holding(0, 2, 3), List.of(at(20))),
-                                new InteractionCells.Placed(holding(1, 2, 3), List.of(at(21))))));
+                        List.of(placed(holding(0, 1), 10), placed(holding(2), 11),
+                                placed(holding(3), 12)),
+                        List.of(placed(holding(0, 2, 3), 20), placed(holding(1, 2, 3), 21))));
 
         assertEquals(6, group.size(), "three ways and two ways");
         List<List<Integer>> byIndex = List.of(
@@ -98,22 +110,71 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
             assertTrue(selection.cell().admits(0, expected.get(0)),
                     "combination " + index + " leaves the class its two ways share");
             assertEquals(expected.subList(1, expected.size()).stream().map(
-                            ASelectionsClassesAndClaimsAreOfTheSameChoiceTest::at).toList(),
+                            AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest::at).toList(),
                     selection.claims(),
                     "and claims the way in and the two ways it settles the factors");
         }
+    }
+
+    /**
+     * And the decisions it is are the decisions of those same ways.
+     *
+     * <p>What a combination is asked for by is the decisions; where a row for it is looked for is
+     * the classes. Counted off the index apart, the two would name different choices of the same
+     * group — and what a run was held to would be the decisions of one combination while the
+     * requirement it answered was named after another.
+     *
+     * <p>Over all six, and against the ways rather than against the claims: the claims are the
+     * other half of this law, and a reading that took its decisions off them would pass by saying
+     * nothing.
+     */
+    @Test
+    void aCombinationsDecisionsAreOfTheWaysItsClassesCameFrom() {
+        InteractionCells.Group group = new InteractionCells.Group(
+                placed(holding(0, 1, 2, 3), 9),
+                List.of(
+                        List.of(placed(holding(0, 1), 10), placed(holding(2), 11),
+                                placed(holding(3), 12)),
+                        List.of(placed(holding(0, 2, 3), 20), placed(holding(1, 2, 3), 21))));
+
+        List<List<Integer>> byIndex = List.of(
+                List.of(9, 10, 20), List.of(9, 11, 20), List.of(9, 12, 20),
+                List.of(9, 10, 21), List.of(9, 11, 21), List.of(9, 12, 21));
+        for (int index = 0; index < byIndex.size(); index++) {
+            Set<souther.compiler.reading.Condition> expected = new LinkedHashSet<>();
+            byIndex.get(index).forEach(each -> expected.addAll(settling(each)));
+            assertEquals(expected, group.settledAt(index),
+                    "combination " + index + " is the way in and the two ways it settles the"
+                            + " factors");
+        }
+    }
+
+    /** A choice the classes leave nothing at is no combination to be named either. */
+    @Test
+    void aChoiceThatIsNotACombinationIsNoRequirement() {
+        InteractionCells.Group group = new InteractionCells.Group(
+                placed(holding(0, 1, 2, 3), 9),
+                List.of(List.of(placed(holding(0), 10), placed(holding(1), 11)),
+                        List.of(placed(holding(0), 20), placed(holding(1), 21))));
+
+        assertNull(group.at(1), "the two ways agree on nothing");
+        assertNull(group.settledAt(1), "so there is nothing there to ask a row for");
+        assertEquals(Set.of(new souther.compiler.reading.Condition.Arm(
+                        Numberings.armOfForkAt(9)),
+                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(10)),
+                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(20))),
+                group.settledAt(0),
+                "while the choice they do agree on is one");
     }
 
     /** A choice whose ways leave the position nothing is not a combination, and carries no claim. */
     @Test
     void aChoiceWithNothingLeftIsNotACombination() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of()),
+                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(), List.of()),
                 List.of(
-                        List.of(new InteractionCells.Placed(holding(0), List.of(at(10))),
-                                new InteractionCells.Placed(holding(1), List.of(at(11)))),
-                        List.of(new InteractionCells.Placed(holding(0), List.of(at(20))),
-                                new InteractionCells.Placed(holding(1), List.of(at(21))))));
+                        List.of(placed(holding(0), 10), placed(holding(1), 11)),
+                        List.of(placed(holding(0), 20), placed(holding(1), 21))));
 
         assertEquals(2, group.left(0), "two of the four choices are combinations");
         assertNull(group.at(1), "the first way of one factor and the second of the other agree "
@@ -133,9 +194,8 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
     @Test
     void aWitnessIsOfARowTheCombinationLeavesRoomFor() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
-                List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                placed(holding(0, 1, 2, 3), 9),
+                List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
         CellSelection selection = group.at(0);
 
         assertTrue(selection.certifying(new int[] {1}, lit(9, 10)).isPresent(),
@@ -168,9 +228,8 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
     @Test
     void aWitnessIsMadeOnlyFromARunThatDidWhatTheCombinationNames() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
-                List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                placed(holding(0, 1, 2, 3), 9),
+                List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
         CellSelection selection = group.at(0);
         int[] where = {0};
 
@@ -195,9 +254,8 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
     @Test
     void aCombinationIsCertifiedByARunThatDidEverythingItNames() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(at(9))),
-                List.of(List.of(new InteractionCells.Placed(holding(0, 1), List.of(at(10))),
-                        new InteractionCells.Placed(holding(2, 3), List.of(at(11))))));
+                placed(holding(0, 1, 2, 3), 9),
+                List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
         CellSelection selection = group.at(0);
 
         assertTrue(selection.certifiedBy(lit(9, 10)), "a run that did both did this combination");

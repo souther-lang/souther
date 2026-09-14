@@ -948,12 +948,18 @@ public final class Adequacy {
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
-            if (!prepared.present() || !reading.present() || !sigs.present()
-                    || !checked.present()) {
+            if (!prepared.present() || !reading.present() || !sigs.present()) {
                 return Answer.absent();
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            CoverageSites.Plan plan = checked.value().plan();
+            // A module whose bodies were not elaborated is read all the same, with no body and no
+            // arms to number. What comes back says the behavior's decisions meet nowhere, which is
+            // what a reading of a body nobody has is: the measure is the one the fallback answers,
+            // and a generation asked about it goes on offering whatever else it can.
+            CoverageSites.Plan plan =
+                    checked.present() ? checked.value().plan() : CoverageSites.Plan.NONE;
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked.present() ? checked.value().behaviorBodies() : Map.of();
             Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 // Read off the one classification every other reader of this walk reads. A
@@ -968,13 +974,8 @@ public final class Adequacy {
                 // The lowered body, which is the tree the plan numbers its arms in. The analysis
                 // tree beside it holds the operations the language's own combinators stand for,
                 // and a walk of that one would find meetings at nodes no arm of the plan is in.
-                souther.compiler.core.Core body =
-                        checked.value().behaviorBodies().get(spec.name());
-                if (body == null) {
-                    continue;
-                }
-                out.put(spec.name(),
-                        CoverageRead.of(spec.name(), body, plan, read, reading.value()));
+                out.put(spec.name(), CoverageRead.of(spec.name(), bodies.get(spec.name()), plan,
+                        read, reading.value()));
             }
             return Answer.of(Ordered.map(out));
         }

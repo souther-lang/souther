@@ -1028,7 +1028,7 @@ public final class Generator {
             AdequacyPolicy.OfTheGeneration budget) {
         Set<ArmProbe> out = new LinkedHashSet<>();
         InteractionCells.Offered offered =
-                InteractionCells.of(groups, ordered(subject).axes(), budget);
+                InteractionCells.of(groups, ordered(subject).axes(), budget.cellsPerGroup());
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
@@ -1375,7 +1375,7 @@ public final class Generator {
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
         InteractionCells.Offered offered =
-                InteractionCells.of(read.interactions(), axes.axes(), budget);
+                InteractionCells.of(read.interactions(), axes.axes(), budget.cellsPerGroup());
         // The combinations worth looking in, built once. A group builds a cell where it is asked
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.

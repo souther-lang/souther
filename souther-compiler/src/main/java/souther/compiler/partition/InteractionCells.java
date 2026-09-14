@@ -111,17 +111,24 @@ public final class InteractionCells {
     }
 
     /**
-     * What one way of settling something leaves open, and what a run that settled it that way would
-     * be seen to have done.
+     * What one way of settling something leaves open, what a run that settled it that way would be
+     * seen to have done, and which decisions of the model that is.
      *
-     * <p>The pair travels together from here on. Kept apart, the classes and the claims would be two
-     * lists indexed alike, and an outcome dropped from one of them for narrowing nothing would leave
-     * the other saying what a different outcome takes.
+     * <p>The three travel together from here on. Kept apart, they would be lists indexed alike, and
+     * an outcome dropped from one of them for narrowing nothing would leave the others saying what
+     * a different outcome takes.
+     *
+     * <p>Each answers a different reader and none of them stands in for another. The classes are
+     * where a search steers a candidate; the claims are what a run is held to; the decisions are
+     * what the combination is, in the words the model states it in, and are what tells one
+     * combination from every other.
      */
-    public record Placed(Cell cell, List<souther.compiler.coverage.ControlClaim> claims) {
+    public record Placed(Cell cell, List<souther.compiler.coverage.ControlClaim> claims,
+                         List<souther.compiler.reading.Condition> settles) {
 
         public Placed {
             claims = List.copyOf(claims);
+            settles = List.copyOf(settles);
         }
     }
 
@@ -184,6 +191,38 @@ public final class InteractionCells {
                 left /= factor.size();
             }
             return new CellSelection(cell, claims);
+        }
+
+        /**
+         * Which decisions the {@code index}th choice is, or null where it is not a combination.
+         *
+         * <p>The way in and the outcome taken at each factor, in the model's own words. This is
+         * what the combination is; the cell beside it is that projected into the classes a search
+         * steers by, and the claims are how a run is held to it. So a requirement is named here and
+         * certified there, and a reading of the classes that is off moves where a candidate is
+         * looked for without moving what is being asked for.
+         *
+         * <p>A set, because what a run has to have done is what it has to have done. Two choices
+         * that come to the same decisions ask one thing of a row, however the way in and the
+         * factors divided them up between them.
+         *
+         * <p>Null under the same condition {@link #at} is, and read off it rather than worked out
+         * again: a choice whose factors leave a position nothing is no combination the body has a
+         * path to, and a requirement raised here that no cell answers would be one nothing could
+         * ever be steered to.
+         */
+        public java.util.Set<souther.compiler.reading.Condition> settledAt(int index) {
+            if (at(index) == null) {
+                return null;
+            }
+            java.util.LinkedHashSet<souther.compiler.reading.Condition> out =
+                    new java.util.LinkedHashSet<>(reach.settles());
+            int left = index;
+            for (List<Placed> factor : byFactor) {
+                out.addAll(factor.get(left % factor.size()).settles());
+                left /= factor.size();
+            }
+            return java.util.Collections.unmodifiableSet(out);
         }
 
         /** How many cells the group has from {@code from} on, which is what a stopped search left. */
@@ -272,8 +311,7 @@ public final class InteractionCells {
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
-    public static Offered of(List<Interaction> groups, List<Axis> axes,
-                             AdequacyPolicy.OfTheGeneration budget) {
+    public static Offered of(List<Interaction> groups, List<Axis> axes, int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
         for (Interaction group : groups) {
@@ -288,7 +326,7 @@ public final class InteractionCells {
             // Past the limit, and said so rather than dropped. What this costs is the combinations
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
-            if (productOf(placed, budget.cellsPerGroup()) > budget.cellsPerGroup()) {
+            if (productOf(placed, mostCellsPerGroup) > mostCellsPerGroup) {
                 held.add(new NotOffered(claimsOf(reach, placed)));
                 continue;
             }
@@ -364,8 +402,9 @@ public final class InteractionCells {
         Cell cell = narrowedBy(
                 made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
         return cell == null ? null
-                : new Placed(cell, made.stream()
-                        .map(souther.compiler.reading.Decision::claims).toList());
+                : new Placed(cell,
+                        made.stream().map(souther.compiler.reading.Decision::claims).toList(),
+                        made.stream().map(souther.compiler.reading.Decision::constrains).toList());
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
@@ -458,7 +497,7 @@ public final class InteractionCells {
                 return wantedIsUp ? only(axes, axis, edge, last) : only(axes, axis, 0, edge);
             }
             // A fork this reading could not name a position for narrows nothing.
-            case souther.compiler.reading.Condition.Arm ignored -> {
+            case souther.compiler.reading.Condition.Arm _ -> {
                 return null;
             }
         }

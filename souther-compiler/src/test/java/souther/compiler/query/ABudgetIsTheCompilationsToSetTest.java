@@ -83,10 +83,14 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void aBudgetBelowOneIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(0,
+                () -> new AdequacyPolicy.OfTheMeasures(0, 4096,
                         PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS), "a pair space of nought");
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(20_000, null),
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 0,
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                "no combination of a group");
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 4096, null),
                 "nothing to build a behavior's distinctions with");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheGeneration(0, 4096), "no rows");
@@ -150,6 +154,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(TELLS_STRINGS_APART, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
+                                Budgets.measures().cellsPerGroup(),
                                 new PatternPlan.Budget(1, 1)),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
@@ -233,6 +238,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(pairSpace,
+                                Budgets.measures().cellsPerGroup(),
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());

@@ -455,7 +455,7 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
             case Allowance.ToMeasureWith(PatternPlan.Budget distinctions) ->
                     compilation.withAdequacyPolicy(new AdequacyPolicy(
                             new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
-                                    distinctions),
+                                    Budgets.measures().cellsPerGroup(), distinctions),
                             Budgets.generation()));
             case Allowance.ToReadWith(ReadingPolicy reading) ->
                     compilation.withReadingPolicy(reading);
