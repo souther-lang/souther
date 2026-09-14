@@ -38,26 +38,6 @@ public record PlacesApart(List<Place> places) {
         return places.isEmpty() ? NONE : new PlacesApart(List.copyOf(places));
     }
 
-    /**
-     * These places and {@code other}'s, which is what a chooser must not offer where two things
-     * hold a position away from something.
-     *
-     * <p>One set and not two lists side by side. What a value tried and did not stand at and what
-     * a rule refuses are different facts about where the search has been, and a chooser asking
-     * them separately would offer a place one of them holds because the other does not.
-     */
-    public PlacesApart and(PlacesApart other) {
-        if (other == null || other.places.isEmpty()) {
-            return this;
-        }
-        if (places.isEmpty()) {
-            return other;
-        }
-        List<Place> both = new ArrayList<>(places);
-        both.addAll(other.places);
-        return new PlacesApart(both);
-    }
-
     /** Whether {@code at} is one of these, which is a question about the order. */
     public boolean has(Place at) {
         return at != null && places.stream().anyMatch(at::sameAs);
