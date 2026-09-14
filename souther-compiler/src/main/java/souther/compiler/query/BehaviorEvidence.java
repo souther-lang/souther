@@ -51,6 +51,11 @@ import java.util.Set;
  *                         Beside {@code branch} and not among it: two rules can go through one
  *                         arm, and a body whose arms answer alike states two rules that one row
  *                         through each arm covers
+ * @param interaction      the combinations of decisions its body settles a value by and which of
+ *                         them the rows made, or null where the compile did not get far enough.
+ *                         Beside {@code decision} for the reason that one is beside {@code branch}:
+ *                         a rule is one way through the body and a combination is one meeting on
+ *                         it, so a row through every way can leave a combination unmade
  */
 public record BehaviorEvidence(Adequacy.RowReading reading,
                                Adequacy.SignatureEvidence signature,
@@ -58,7 +63,8 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
                                Measure<java.util.List<BorderAssessment>> boundaryReadings,
                                Measure<java.util.List<BorderObligationPointAssessment>> account,
                                Adequacy.BranchEvidence branch,
-                               DecisionEvidence decision) implements RuleCitations {
+                               DecisionEvidence decision,
+                               InteractionEvidence interaction) implements RuleCitations {
 
     public BehaviorEvidence {
         java.util.Objects.requireNonNull(reading,

@@ -24,6 +24,7 @@ public sealed interface FailureReason extends MeasureReason
                 Adequacy.BranchEvidence.Unreadable,
                 Adequacy.RowReading.Unavailable,
                 DecisionEvidence.Unreadable,
+                InteractionEvidence.Unreadable,
                 BoundaryDerivation.TheReadingDidNotRunOut,
                 BoundaryForMeasurement.NotDerived,
                 ItemAssessment.Coverage.CouldNotAsk,

@@ -75,6 +75,7 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmDisposition;
@@ -211,7 +212,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 21;
+    public static final int SCHEMA_VERSION = 22;
 
     /**
      * Where the schema this writes documents ships.
@@ -723,6 +724,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // what a page costs would grow with its behaviors reading one another's bodies.
         Map<String, DecisionEvidence> decisions =
                 compilation.db().ask(new Adequacy.Decides(name)).value();
+        // And the combinations of those decisions, asked the same way and for the same reason.
+        Map<String, InteractionEvidence> meetings =
+                compilation.db().ask(new Adequacy.Interacts(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
         // one: this report is where the two are put together.
         Map<String, ClaimAnnotations> claims =
@@ -775,7 +779,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // is the one thing that has to be in reach for that question to be asked at all.
             BehaviorEvidence evidence = new BehaviorEvidence(reading, signature, partition, read,
                     accounts == null ? null : accounts.get(behavior.name()), branch,
-                    decisions == null ? null : decisions.get(behavior.name()));
+                    decisions == null ? null : decisions.get(behavior.name()),
+                    meetings == null ? null : meetings.get(behavior.name()));
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
                     evidence,
@@ -4255,6 +4260,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         behavior.rulePlace(), behavior.partPlace());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
+                interaction(b, behavior);
                 findings(b, behavior, sources);
             }
         }
@@ -4849,6 +4855,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The combinations of one body's decisions, and which of them a row was seen making.
+     *
+     * <p>The account itself and not the findings about it, for the reason the rules above are
+     * published: a finding names the combination it is about by an identity, and a consumer acting
+     * on one looks it up here.
+     *
+     * <p>One entry per combination the body has a path to, whatever the rows did. Whether a row
+     * made it is the entry's own answer and is absent where the coverage has no value — a
+     * combination nothing was read about is not one no row makes.
+     *
+     * <p>The groups the measure would not walk are counted beside the entries rather than left out
+     * of the number. What they hold is combinations nobody counted, and an account whose total said
+     * only what it walked would call a behavior measured in full over the part of it that fitted.
+     */
+    static void interaction(ObjectNode into, BehaviorReport behavior) {
+        InteractionEvidence meetings = behavior.evidence().interaction();
+        if (meetings == null || meetings.counted() == 0) {
+            return;
+        }
+        ObjectNode out = into.putObject("interaction");
+        measured(out.putObject("coverage"), meetings.made());
+        out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        ArrayNode all = out.putArray("obligations");
+        Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
+        for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
+            ObjectNode one = all.addObject();
+            combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
+            met.ifPresent(rows -> one.put("made", rows.met().contains(each)));
+        }
+    }
+
+    /**
      * What gave the offer no value, one entry per thing that gave none.
      *
      * <p>The structure and not the sentence. What a reader of the page is shown is words, and a
@@ -5266,7 +5304,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A rule is a way through the whole body and stands at no one place in it. Where its
             // conditions are is said under the finding, one note apiece, so a coordinate here
             // would name whichever of them a walk reached first.
-            case About.ARuleNoRowTakes _ -> false;
+            //
+            // A combination is the same shape: it is a meeting and the decisions that reach it,
+            // which are as many places as it has decisions.
+            case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _ -> false;
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
@@ -5315,6 +5356,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // file. A row that wrote no name answers to nothing outside it and is shown as the
             // place it is written, which the entry carries beside this.
             case About.AnUnansweredRow(var _, var row, var _) -> words(row.shown());
+            // The behavior whose decisions the combination is of, for the reason a rule's subject
+            // is the behavior: what tells one combination from another is the decisions it is of,
+            // held in the terms the account keys on, and a subject spelling those would publish
+            // this compiler's own way of writing them as though it were the model's.
+            case About.ACombinationNoRowMakes(var combination) -> words(combination.behavior());
             // The behavior whose decision it is a rule of, and no more. What tells one rule from
             // another is the proposition each condition is keyed on, written the one way round
             // that makes a comparison and its denial one column — so a subject spelling it would

@@ -2,6 +2,7 @@ package souther.compiler.publish;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.NotMeasuredReason;
@@ -63,6 +64,9 @@ public enum NotMeasuredWord {
             case Adequacy.RowReading.NotAsked it -> throw new IllegalArgumentException(
                     "a reading nobody asked for does not hold a verdict open: " + it);
             case DecisionEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> NOT_ASKED;
+            };
+            case InteractionEvidence.NotAsked it -> switch (it) {
                 case NOT_ASKED -> NOT_ASKED;
             };
             case NothingWasAsked _ -> NOT_ASKED;

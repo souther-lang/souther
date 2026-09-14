@@ -5,6 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryDerivation;
 import souther.compiler.query.BoundaryForMeasurement;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.FailureReason;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.ItemAssessment;
@@ -154,6 +155,9 @@ record ReasonProse(Introduction introduction, String said) {
             case DecisionEvidence.NotAsked it -> switch (it) {
                 case NOT_ASKED -> "the build did not ask where the rows went";
             };
+            case InteractionEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> "the build did not ask where the rows went";
+            };
             case Adequacy.SignatureEvidence.NoRows it -> switch (it) {
                 case NO_ROWS -> "no row names this behavior";
             };
@@ -192,6 +196,10 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
                 case ROWS_UNAVAILABLE -> "nothing came back from the rows";
+            };
+            case InteractionEvidence.Unreadable it -> switch (it) {
+                case NO_ROW_CAME_BACK -> "no row of this behavior came back to be read";
+                case THE_ROWS_CARRY_NO_ACCOUNT -> "the rows carry no account of where they went";
             };
             case DecisionEvidence.Unreadable it -> switch (it) {
                 case THE_BODY_WAS_NOT_READ -> "this behavior's body was not elaborated";

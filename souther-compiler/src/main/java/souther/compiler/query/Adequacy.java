@@ -982,6 +982,85 @@ public final class Adequacy {
     }
 
     /**
+     * The combinations each of one module's bodies states, and which of them the rows made.
+     *
+     * <p>Beside {@link Decides} and not part of it. A rule is one way through the body and is about
+     * every decision on that way; a combination is one meeting and is about the decisions that
+     * settle a value there — so a body states as many rules as it has ways and as many combinations
+     * as its meetings have choices, and neither count is a projection of the other.
+     *
+     * <p>Absent where the bodies were not read, for the reason the readings beside it are.
+     */
+    public record Interacts(String name) implements Key<Map<String, InteractionEvidence>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, InteractionEvidence>> compute(Db db) {
+            Answer<Map<String, CoverageRead.Read>> met = db.ask(new Meets(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            if (!met.present() || !checked.present()) {
+                return Answer.absent();
+            }
+            boolean instrumented = levelOf(db).runsInstrumentedRows();
+            Optional<SiteNumbering> numbering =
+                    Optional.of(SiteNumbering.of(checked.value().numberingIdentity()));
+            Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
+            int cells = db.ask(new Front.Adequacy()).value().measures().cellsPerGroup();
+            Map<String, InteractionEvidence> out = new LinkedHashMap<>();
+            met.value().forEach((behavior, read) -> {
+                souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
+                if (subject == null) {
+                    return;
+                }
+                souther.compiler.partition.InteractionRequirements asked =
+                        souther.compiler.partition.InteractionRequirements.of(behavior,
+                                read.interactions(), subject.axes().axes(), cells);
+                out.put(behavior, whatTheRowsMade(asked, instrumented,
+                        RowReadings.readingFor(byTarget, behavior), numbering));
+            });
+            return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * What the rows of one behavior made of its combinations.
+         *
+         * <p>The same four states every measure of a run has, settled in the same order they are
+         * for the rules of a decision: a build that does not instrument asks nothing, rows that ran
+         * without an account answer nothing, and a behavior whose rows could not be read at all
+         * leaves what they meet unknown — because the rows meeting them may be sitting in the
+         * source nothing could evaluate.
+         */
+        private static InteractionEvidence whatTheRowsMade(
+                souther.compiler.partition.InteractionRequirements asked, boolean instrumented,
+                RowReading observed, Optional<SiteNumbering> numbering) {
+            if (!instrumented) {
+                return new InteractionEvidence(asked,
+                        new Measurement.NotMeasured<>(InteractionEvidence.NotAsked.NOT_ASKED));
+            }
+            if (observed.armsUnseen()) {
+                return new InteractionEvidence(asked, new Measurement.FailedToMeasure<>(
+                        InteractionEvidence.Unreadable.THE_ROWS_CARRY_NO_ACCOUNT,
+                        observed.measured().weakening()));
+            }
+            List<RowOutcome> rows = observed.rowsSeen();
+            if (rows.isEmpty() && observed.someRowsUnseen()) {
+                return new InteractionEvidence(asked, new Measurement.FailedToMeasure<>(
+                        InteractionEvidence.Unreadable.NO_ROW_CAME_BACK,
+                        observed.measured().weakening()));
+            }
+            List<Generator.Watched> watched = new ArrayList<>();
+            for (RowOutcome row : rows) {
+                watched.add(ObservedInputs.of(row, numbering).watched());
+            }
+            return InteractionEvidence.of(asked, watched, observed.measured().weakening());
+        }
+    }
+
+    /**
      * How a run of each body is placed among the rules its decision states.
      *
      * <p>One answer for the three readers of it: the coverage the account keeps, the search that
@@ -2343,6 +2422,11 @@ public final class Adequacy {
             case About.APointOfABorder _, About.APointOfADeclaredBorder _,
                  About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                  About.AnArmNoRowGoesThrough _ -> null;
+            // A combination of the body's decisions. A row could answer one — the search already
+            // walks the combinations looking for a row for an arm — and nothing is asked to look
+            // for one yet, which is what this says.
+            case About.ACombinationNoRowMakes _ -> new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
             // A row is written and is waiting for its answer, at an arm or on its own. What is left
             // is the answer, which is the author's to write and nothing a search can compose; a row
             // offered for either would be a second row for a question already written down.
@@ -3816,6 +3900,7 @@ public final class Adequacy {
                             case About.APointOfADeclaredBorder _,
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
+                                    About.ACombinationNoRowMakes _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -4694,6 +4779,20 @@ public final class Adequacy {
          */
         DECISION_RULE_UNCOVERED(DiagnosticCode.E1935),
         /**
+         * A combination of the decisions a body settles one value by that no row was seen making.
+         *
+         * <p>Beside {@link #DECISION_RULE_UNCOVERED} and not among it. A rule is one way through
+         * the body and is about every decision on that way; a combination is one meeting and is
+         * about the decisions that settle a value there — so a body whose two decisions are summed
+         * into one answer states as many rules as it has ways and, at that meeting, the product of
+         * what each decision comes to. A row through each way covers the rules and leaves the
+         * combination where both decisions are live unwritten.
+         *
+         * <p>Said of a combination the body has a path to. A choice whose decisions leave a
+         * position no class is not a combination the body has, and a row is owed at none of those.
+         */
+        INTERACTION_UNCOVERED(DiagnosticCode.E1936),
+        /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
          * <p>Beside {@link #BOUNDARY_UNMET} rather than among its findings, and the difference is
@@ -4794,7 +4893,7 @@ public final class Adequacy {
                 // of the decision, and a row whose answer is owed. One account, so one answer.
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED,
                      UNANSWERED_ROW, DOMAIN_POINT_UNCOVERED, AXIS_CLASS_UNCOVERED,
-                     DECISION_RULE_UNCOVERED -> true;
+                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED -> true;
                 // An observation: what was seen rather than what is owed. A case nothing was
                 // observed producing is the rows' own account of themselves.
                 case OUTPUT_CASE_UNVERIFIED -> false;
@@ -4821,6 +4920,7 @@ public final class Adequacy {
         public AccountPart answeredBy() {
             return switch (this) {
                 case DECISION_RULE_UNCOVERED -> AccountPart.THE_DECISION;
+                case INTERACTION_UNCOVERED -> AccountPart.THE_MEASURES;
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET,
                      ARM_UNREACHED, UNANSWERED_ROW, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
                      DOMAIN_POINT_UNCOVERED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
@@ -4900,7 +5000,7 @@ public final class Adequacy {
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
-                    About.ARuleNoRowTakes _,
+                    About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.APointOfABorder _, About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
@@ -5112,6 +5212,7 @@ public final class Adequacy {
                 case About.AQuestionNothingAnswered _ -> Kind.RULE_UNACCOUNTED;
                 case About.AnArmNoRowGoesThrough _ -> Kind.ARM_UNREACHED;
                 case About.ARuleNoRowTakes _ -> Kind.DECISION_RULE_UNCOVERED;
+                case About.ACombinationNoRowMakes _ -> Kind.INTERACTION_UNCOVERED;
                 // The row and the arm whose rows are all owed answers are one thing to do, and it
                 // is not the thing an unreached arm is. A row goes through this arm, so publishing
                 // it as an arm nothing reaches would tell a consumer the opposite of what happened.
@@ -5606,6 +5707,7 @@ public final class Adequacy {
             Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
                     db.ask(new BodyBorders(name)).value();
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
+            Map<String, InteractionEvidence> meetings = db.ask(new Interacts(name)).value();
 
             // One list and not a block per behavior. What each finding is about is its own
             // ({@link FindingSubject}), and a map keyed by behavior has no key for a finding about
@@ -5629,11 +5731,35 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
+                interactionFindings(
+                        meetings == null ? null : meetings.get(behavior.name()), out);
             }
             declaredFindings(db, name, out);
             return Answer.of(List.copyOf(out));
         }
 
+
+        /**
+         * The combinations of one behavior's decisions that no row was seen making.
+         *
+         * <p>Only where a reading of the runs was made, which is what every measure over a run is
+         * asked first: a measure with no value has not found a combination nothing meets, it has
+         * found nothing — and a list of all of them would be read as a list of gaps.
+         *
+         * <p>No search beside it. What a combination asks for is that the decisions were made
+         * together, and the measure that counts them is the whole of what says one is uncovered;
+         * whether anything could compose a row for it is a further question, and the answer to it
+         * is not part of whether the requirement stands.
+         */
+        private static void interactionFindings(InteractionEvidence meetings, List<Finding> out) {
+            if (meetings == null || meetings.made().made().isEmpty()) {
+                return;
+            }
+            for (ObligationIdentity.OfACombinationOfDecisions each : meetings.notMadeByRows()) {
+                out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()), meetings.made(),
+                        new About.ACombinationNoRowMakes(each)));
+            }
+        }
 
         /**
          * The rules of one behavior's decision that no row takes and something can stand in.
@@ -6244,6 +6370,12 @@ public final class Adequacy {
                         // said underneath, one note per condition.
                         case About.ARuleNoRowTakes(var behavior, var _) ->
                                 new ExampleMessage.NoRowTakesADecisionRule(behavior);
+                        // The behavior, for the reason above: what the combination is of is held
+                        // in the account's own terms, and an author reading a sentence spelling
+                        // them would be shown decisions they did not write.
+                        case About.ACombinationNoRowMakes(var combination) ->
+                                new ExampleMessage.NoRowMakesACombinationOfDecisions(
+                                        combination.behavior());
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
@@ -6346,7 +6478,16 @@ public final class Adequacy {
                                 missing.axis().path(), missing.name()));
                 // The message says all there is to say. Written out rather than defaulted, for the
                 // reason the switch above gives.
-                case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
+                //
+                // A combination is here and is owed more than it gets. What tells one from the
+                // others of its behavior is the decisions it is of, and the sentence above names
+                // only the behavior — so two of them read alike in a warning, the way a rule
+                // without its conditions would. What the report prints beside each is the whole of
+                // it for now; sending a reader to the construct each decision is written at wants
+                // the reading that {@link DecisionRuleReading} makes from a rule, asked of a
+                // condition instead.
+                case About.ACombinationNoRowMakes _,
+                        About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                         About.ARuleNothingClassified _,

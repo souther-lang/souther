@@ -401,6 +401,14 @@ class EverySchemaWordIsAccountedForTest {
             Vocabulary.of("decision.coverage.reason",
                     List.of("$defs", "decision", "properties", "coverage", "properties", "reason"),
                     souther.compiler.query.DecisionEvidence.class),
+            // Why nobody read which combinations of a body's decisions the rows made. Its own
+            // field beside the decision's, because the two measures fall short of different
+            // things: a reading that placed no run has said nothing about the rules, and one that
+            // read no account has said nothing about the meetings.
+            Vocabulary.of("interaction.coverage.reason",
+                    List.of("$defs", "interaction", "properties", "coverage", "properties",
+                            "reason"),
+                    souther.compiler.query.InteractionEvidence.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a

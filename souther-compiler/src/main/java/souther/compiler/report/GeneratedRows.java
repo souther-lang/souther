@@ -741,6 +741,11 @@ public final class GeneratedRows {
             // on, written the one way round that makes a comparison and its denial one column —
             // and printing that would show an author a comparison they did not write.
             case About.ARuleNoRowTakes(var behavior, var _) -> "a decision rule of " + behavior;
+            // The behavior again, and for the same reason: what the combination is of is written
+            // in the terms the account keys on, and a block printing those would hand an author
+            // this compiler's spelling of their own body.
+            case About.ACombinationNoRowMakes(var combination) ->
+                    "a combination of the decisions of " + combination.behavior();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.
