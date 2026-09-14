@@ -515,25 +515,23 @@ final class Coverages {
         // Which relation each pair of positions is, worked out once. Which two positions they are
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
-        Map<Long, Set<PartitionEvidence.PairSpace.Cell>> byPositions = new LinkedHashMap<>();
-        Map<Long, PartitionEvidence.PairSpace.Between> whichRelation = new LinkedHashMap<>();
+        Map<Long, ReachedBetween> byPositions = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
                 PartitionEvidence.PairSpace.Between relation =
                         new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
-                whichRelation.put((long) i * axes.size() + j, relation);
                 Set<PartitionEvidence.PairSpace.Cell> here = reached.get(relation);
                 if (here != null) {
-                    byPositions.put((long) i * axes.size() + j, here);
+                    byPositions.put((long) i * axes.size() + j,
+                            new ReachedBetween(relation, here));
                 }
             }
         }
         for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
-                    Set<PartitionEvidence.PairSpace.Cell> here =
-                            byPositions.get((long) i * axes.size() + j);
-                    if (here == null) {
+                    ReachedBetween at = byPositions.get((long) i * axes.size() + j);
+                    if (at == null) {
                         continue;
                     }
                     // Every pairing the row reaches, and only those. A row whose list holds
@@ -547,9 +545,8 @@ final class Coverages {
                         // key above and a class id is unique within its axis, so what is written
                         // here needs to tell two combinations of these two positions apart and no
                         // more.
-                        here.add(new PartitionEvidence.PairSpace.Cell(
-                                whichRelation.get((long) i * axes.size() + j),
-                                pair.getKey(), pair.getValue()));
+                        at.cells().add(new PartitionEvidence.PairSpace.Cell(
+                                at.between(), pair.getKey(), pair.getValue()));
                     }
                 }
             }
@@ -592,6 +589,17 @@ final class Coverages {
             }
         }
         return count;
+    }
+
+    /**
+     * One relation of two positions, beside the combinations of it the rows have reached.
+     *
+     * <p>The two together because the walk over the rows wants both at once, and which relation a
+     * position and the one beside it make does not turn on the row. Looked up separately, the
+     * relation is fetched again for every combination every row is in.
+     */
+    private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
+                                  Set<PartitionEvidence.PairSpace.Cell> cells) {
     }
 
     /**
