@@ -14,6 +14,8 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -201,6 +203,28 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
                         Set.of(Optional.of("a word"), List.of("a word"))),
                 "while a container of words holds what a collection may hold, which is why this is"
                         + " asked of what is in hand and not of the container");
+    }
+
+    /**
+     * And a container the comparison has no arm for is not read through, holding a binding or not.
+     *
+     * <p>The other side of reading through one. What is read through is what the comparison reads
+     * through — an optional, a list, a set, a map — and a container it has no arm for is one it
+     * hands to its own equality whole, which is the answer a collection reaches as well. Read
+     * through here and nowhere else, a set of them would be refused for what this comparison never
+     * looks at.
+     */
+    @Test
+    void andAContainerWithNoArmIsHeldWholeTheWayThisComparisonHoldsIt() {
+        Deque<ValueName.Local> queued = new ArrayDeque<>();
+        queued.add(new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0)));
+
+        assertFalse(StructuralParts.areHandedOver(queued.getClass()),
+                "the walk stops at it, which is what hands it to its own equality");
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(queued)),
+                "so what it holds is read by that equality on both sides, binding or no binding");
     }
 
     /**

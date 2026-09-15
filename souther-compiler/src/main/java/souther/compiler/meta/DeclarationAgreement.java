@@ -18,7 +18,6 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
@@ -652,8 +651,16 @@ public final class DeclarationAgreement {
         if (value instanceof Optional<?> maybe) {
             return comparedTheSame(maybe.orElse(null), asking);
         }
-        if (value instanceof Collection<?> many) {
-            for (Object one : many) {
+        if (value instanceof List<?> written) {
+            for (Object one : written) {
+                if (!comparedTheSame(one, asking)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (value instanceof Set<?> held) {
+            for (Object one : held) {
                 if (!comparedTheSame(one, asking)) {
                     return false;
                 }

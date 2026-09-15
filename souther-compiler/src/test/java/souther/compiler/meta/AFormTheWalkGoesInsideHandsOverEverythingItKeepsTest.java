@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -69,8 +70,7 @@ class AFormTheWalkGoesInsideHandsOverEverythingItKeepsTest {
         assertTrue(StructuralParts.areHandedOver(Hir.RetType.class),
                 "a written type is one the walk goes inside, which is the shape this stands for");
 
-        IllegalStateException refused = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalStateException.class,
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> StructuralParts.of(KeepsOneBack.class),
                 "a form holding a part it hands to nobody is not one this reads the parts of");
         assertTrue(refused.getMessage().contains("hands it to"),
