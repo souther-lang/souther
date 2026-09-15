@@ -5,6 +5,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
 import java.util.Objects;
@@ -62,7 +63,7 @@ final class TermReading {
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), at, on);
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), at, on);
         };
     }
 
@@ -97,8 +98,8 @@ final class TermReading {
         }
         return switch (term.takenAs()) {
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
-                    new Reading.NotNumber();
+            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+                    TakenAs.TheTruncatingQuotient _ -> new Reading.NotNumber();
         };
     }
 
@@ -127,13 +128,43 @@ final class TermReading {
      * nothing to say so with — and a container is written on no order at all, so the one that adds
      * its elements up is handed nothing.
      */
-    private static Reading taken(TakenAs how, ObservedValue at, TermOrders on) {
+    private static Reading taken(TakenAs how, TakenArguments arguments, ObservedValue at,
+                                 TermOrders on) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, on);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, on.observed());
             case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
+            case TakenAs.TheTruncatingQuotient taken ->
+                    quotient(taken.read(arguments), at, on.observed());
         };
+    }
+
+    /**
+     * The whole-number quotient of an observed value by the divisor the term carries.
+     *
+     * <p>Divided the way the operator divides — toward zero — so what is read off a row is the
+     * number that row's run computes and not a rounding of it. Both ends are the same order here: a
+     * whole number and its quotient are counted by one, so the value is read and the answer given
+     * on the order the position is written on.
+     *
+     * <p>No divisor is a term nothing built: a taking whose divisor reads as no constant, or as
+     * nought, is refused where the term is made. Answered here as an observation of the wrong shape
+     * is, so that a reader reaching it is told what it has rather than stopped.
+     */
+    private static Reading quotient(java.math.BigDecimal by, ObservedValue at, Carrier observed) {
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Reading.NotNumber();
+        }
+        Place read = observed.placeOf(at);
+        if (!(read instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        // A quotient past the end of what a whole number holds is one no run answers: the smallest
+        // of them over minus one is a number the operator aborts at rather than a number a row has.
+        // Asked of the carrier, which is where what a whole number stops at is answered.
+        Place quotient = observed.onTheGrid(new Count(count.at().divideToIntegralValue(by)));
+        return quotient == null ? new Reading.NotNumber() : new Reading.Number(quotient);
     }
 
     /**

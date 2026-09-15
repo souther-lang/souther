@@ -301,15 +301,23 @@ public sealed interface OperationFact {
      * each would be true of the operations that share it and of no others, which is what a term
      * standing for one operation and answering for a kind of operation already was (#1027).
      *
-     * <p>The one value is the whole of what such a term can be about. A number taken of two
+     * <p>One value is the whole of what such a term can be <em>about</em>. A number taken of two
      * locations is not one of these: what it would be read off is a pair, and a term names one
      * path. An operation over several whose result the model can state says so as the form it
      * answers ({@link AnswersAFormOfItsArguments}) and is read into that form instead, which is why
      * the two cannot both be declared of one operation.
+     *
+     * <p><b>Being about one value is not taking only one.</b> An operation may be given values
+     * beside the one it measures, and those decide which number of it is taken: a divisor says
+     * which quotient. Such an argument is read as the constant it stands for and carried as part of
+     * which number this is ({@code semantics.TakenArguments}), so a rule about the quotient by two
+     * and one about the quotient by three are rules about two numbers of one place. An argument
+     * that reads as no constant leaves a taking nothing names — which number it would be is not
+     * settled, and a term built without it would be the quotient by whatever a reader assumed.
      */
-    record AnswersANumberTakenOfTheOneValueItIsGiven(TakenAs how) implements OperationFact {
+    record AnswersANumberTakenOfAValueItIsGiven(TakenAs how) implements OperationFact {
 
-        public AnswersANumberTakenOfTheOneValueItIsGiven {
+        public AnswersANumberTakenOfAValueItIsGiven {
             Objects.requireNonNull(how, "this one says what the number is taken as");
         }
     }

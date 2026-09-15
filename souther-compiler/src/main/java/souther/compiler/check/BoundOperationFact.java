@@ -4,12 +4,14 @@ import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
@@ -166,12 +168,55 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
 
     /** The operation computes a number, and this says which arithmetic and where it answers it. */
     record ComputesANumber(DeclaredOperation operation, NumericResult<DeclaredArgument> result)
-            implements OneAboutAnOperation {}
+            implements OneAboutAnOperation {
+
+        /**
+         * This arithmetic put as a way of taking a number of the value it computes over, for a call
+         * whose other arguments read as {@code arguments} — or null where it is arithmetic this has
+         * no such reading of, or where those arguments leave the number unsettled.
+         *
+         * <p><b>A reading of a call and not a second account of the operation.</b> What the
+         * operation computes is the arithmetic, and that is the one representation of its number
+         * ({@link NumericReadings}). This is that representation read for the calls it fits: a
+         * quotient whose divisor the reading has as a constant is a number taken of what it divides,
+         * exactly as an hour is a number taken of a time, and every other call of the same operation
+         * is not. Declared beside the arithmetic instead, one operation would carry two accounts of
+         * one number and the library would be refused where it was written.
+         *
+         * <p>Only the truncating quotient. What the operator arithmetic computes is a number of two
+         * values and stays one when one of them is written down — {@code x + 2} is arithmetic the
+         * affine walk composes rather than a number taken of {@code x} — so nothing is derived for
+         * it: the walk that reads a form already reads those, and a term beside it would be a second
+         * reader of one expression. A remainder is the quotient's companion and has an account of
+         * its own to be written when something asks for it; a quotient rounded to a scale answers
+         * on a grid the call chooses, which is not this arm.
+         *
+         * <p><b>And only where the call names a quotient there is.</b> Such an operation answers
+         * its number at one case and something else at another, and which argument decides that is
+         * what the declaration states — that argument is the divisor, and it is where the account
+         * is written for. Whether the number this call takes is one the position has is the
+         * account's own answer ({@link TakenAs#settledBy}), so what the operation may answer and
+         * what this call takes stay two sentences.
+         */
+        public TakenAs takenAs(TakenArguments arguments) {
+            if (!(result.computes() instanceof Arithmetic.ATruncatingQuotient)
+                    || result.unless() == null) {
+                return null;
+            }
+            // Which argument the divisor is, is the declaration's. Such an operation answers its
+            // other case when one of its arguments stands a certain way, and for a quotient that
+            // argument is the one it divides by — so the account is written for the position the
+            // condition names rather than for a place written down here.
+            TakenAs.TheTruncatingQuotient how =
+                    new TakenAs.TheTruncatingQuotient(result.unless().argument().position());
+            return how.settledBy(arguments) ? how : null;
+        }
+    }
 
     /** The operation answers a number taken of the one value it is given — {@code of}, the one
      *  argument its declaration takes — and {@code how} is what it takes of it; {@code answers} is
      *  the number it was held to answer. */
-    record AnswersANumberTakenOfTheOneValueItIsGiven(DeclaredOperation operation,
+    record AnswersANumberTakenOfAValueItIsGiven(DeclaredOperation operation,
                                                      DeclaredArgument of, Type answers,
                                                      TakenAs how)
             implements OneAboutAnOperation {}

@@ -153,7 +153,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("List", "howManyThereAreNot"),
-                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                new OperationFact.AnswersANumberTakenOfAValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -190,7 +190,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Int", "abs"),
-                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                new OperationFact.AnswersANumberTakenOfAValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -220,7 +220,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Decimal", "fromInt"),
-                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                new OperationFact.AnswersANumberTakenOfAValueItIsGiven(
                         new souther.compiler.semantics.TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,

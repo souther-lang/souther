@@ -11,6 +11,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Place;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
@@ -211,7 +212,12 @@ final class TermRealizations {
             switch (taken.takenAs()) {
                 case TakenAs.PartOfTime part -> times.add(part.part());
                 case TakenAs.PartOfDate part -> dates.add(part.part());
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
+                // A quotient is here rather than beside the parts. Two of them at one place do
+                // leave values that answer both — a whole number divides by two and by three at
+                // once — and working out which is solving for a value from two numbers of it,
+                // which is not what putting parts side by side does.
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
+                        TakenAs.TheTruncatingQuotient _ -> {
                     return false;
                 }
             }
@@ -269,7 +275,8 @@ final class TermRealizations {
             switch (taken.takenAs()) {
                 case TakenAs.PartOfTime part -> times.put(part.part(), count);
                 case TakenAs.PartOfDate part -> dates.put(part.part(), count);
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
+                        TakenAs.TheTruncatingQuotient _ -> {
                     return new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
@@ -317,8 +324,8 @@ final class TermRealizations {
             case NumericTerm.ValueOf _ ->
                     oneValue(FixtureTemplate.on(orders.answered(), answer, ruleSource.symbols().scope()::reach),
                             sourceType, ruleSource);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), sourceType, orders,
-                    answer, within, reading);
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
+                    orders, answer, within, reading);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
                     answer, within, reading);
         };
@@ -333,7 +340,7 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, Type sourceType,
+    private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
                                      TermOrders orders, Place answer,
                                      souther.compiler.inputs.SearchRegion within,
                                      RuleReadingContext reading) {
@@ -356,7 +363,43 @@ final class TermRealizations {
                     atThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
             case TakenAs.PartOfDate taken ->
                     onThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
+            // And this one multiplies back. What a quotient is taken of is a whole number and what
+            // it answers is one, so both ends are the order the value is written on.
+            case TakenAs.TheTruncatingQuotient taken ->
+                    atThatQuotient(taken.read(arguments), sourceType, orders.observed(), answer,
+                            ruleSource);
         };
+    }
+
+    /**
+     * A value whose quotient by that divisor is that number: the number times the divisor.
+     *
+     * <p><b>A right inverse and not an inverse.</b> A run of values answers each quotient — half of
+     * them where the divisor is two — and this writes one of them. What it owes is that what it
+     * writes reads back as the number it was asked for, and the product does: dividing it by the
+     * divisor leaves the quotient exactly, truncation or no truncation, because the product is a
+     * multiple of what it is divided by. Which of the run this is is a choice about the value to
+     * write down and not something the model said, as the first of January is for a year.
+     *
+     * <p>Where the product is past the end of what the position's own order holds, nothing is
+     * composed. Asked of the carrier and not worked out here: what a whole number stops at is the
+     * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
+     */
+    private static Realization atThatQuotient(java.math.BigDecimal by, Type sourceType,
+                                              Carrier observed, Place answer,
+                                              RuleReadingSource ruleSource) {
+        if (observed == null || by == null || by.signum() == 0 || !(answer instanceof Count wanted)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Place dividend = observed.onTheGrid(new Count(wanted.at().multiply(by)));
+        if (dividend == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return oneValue(
+                FixtureTemplate.on(observed, dividend, ruleSource.symbols().scope()::reach),
+                sourceType, ruleSource);
     }
 
     /**
@@ -379,8 +422,8 @@ final class TermRealizations {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
                     orders, within, reading);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
-                    new Realization.None(
+            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+                    TakenAs.TheTruncatingQuotient _ -> new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }

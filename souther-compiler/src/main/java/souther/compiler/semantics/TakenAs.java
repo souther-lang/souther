@@ -2,6 +2,8 @@ package souther.compiler.semantics;
 
 import souther.compiler.types.Type;
 
+import java.math.BigDecimal;
+
 /**
  * How the number an operation answers is taken of the one value it is given.
  *
@@ -40,6 +42,19 @@ public sealed interface TakenAs {
      * than read as that arm at a row.
      */
     boolean takenOf(Type source, Type answered);
+
+    /**
+     * Whether {@code arguments} settle which number this account takes.
+     *
+     * <p>Asked where a term is built ({@code inputs.NumericTerm.TakenOf}), so that a taking whose
+     * arguments leave the number unsettled is no term rather than a term every reader below has to
+     * answer for. What counts as settled is the account's: a divisor has to be there and has to be
+     * a number the operation answers a quotient for, and an account reading no argument is settled
+     * by anything.
+     */
+    default boolean settledBy(TakenArguments arguments) {
+        return true;
+    }
 
     /**
      * How many a container holds: a string's length, a list's, the size of a set or a map.
@@ -84,6 +99,74 @@ public sealed interface TakenAs {
             // what may be read as a number is asked of the answer afterwards.
             Type element = Type.elementOfAContainer(source);
             return element != null && element.equals(answered);
+        }
+    }
+
+    /**
+     * The whole-number quotient of the value by what the divisor argument reads as, truncated
+     * toward zero.
+     *
+     * <p><b>An observation and not a composition.</b> The quotient of a position by a constant is
+     * not an affine form of that position — a truncating divide is a step and not a line — and
+     * nothing here says it is. What it is is a number taken of one place, exactly as the hour is a
+     * number taken of a time: read off the value that stands there, and answered for by a value
+     * that can be built. So a rule written over it is a rule over two numbers — the position's own
+     * and this one — and the arithmetic between them stays affine without anything approximating
+     * the divide.
+     *
+     * <p>Which is what makes it realizable rather than invertible. There is no inverse: every
+     * dividend in a run of them answers one quotient. What a search needs is a value that reads
+     * back as the number asked for, and the divisor gives one exactly — the quotient times the
+     * divisor divides back to the quotient, truncation or no truncation, wherever whole numbers
+     * hold the product.
+     *
+     * <p><b>Not declared of an operation.</b> What a divide is, is the arithmetic it computes, and
+     * that is what the operation declares; this is that account read at a call whose divisor the
+     * reading has as a constant. Declared beside the arithmetic, it would be a second
+     * representation of one operation's number, which is what the library may not have
+     * ({@code check.NumericReadings}) — and rightly, since which of the two a report showed would
+     * be whichever reader arrived. A call where the divisor is a name, or is nought, has no account
+     * here and is a rule nothing draws a line for.
+     *
+     * <p>Which argument the divisor is, is the declaration's, read where this is derived and
+     * carried here as the position it resolved to. A word for an argument is what a fact is
+     * authored in and is resolved once ({@code check.OperationFactBinder}); an account below the
+     * binding that held one would be asking the binder's question again.
+     */
+    record TheTruncatingQuotient(int divisor) implements TakenAs {
+
+        public TheTruncatingQuotient {
+            if (divisor < 1) {
+                throw new IllegalArgumentException(
+                        "a quotient is taken of the value at the first argument and divided by one"
+                                + " beside it, and argument " + (divisor + 1) + " is not beside it");
+            }
+        }
+
+        @Override
+        public boolean takenOf(Type source, Type answered) {
+            return source == Type.Prim.INT && answered == Type.Prim.INT;
+        }
+
+        /**
+         * Settled by a divisor these arguments have as a number, and that number is not nought.
+         *
+         * <p>Which quotient of the place it is, is what the divisor says, so a call whose divisor
+         * the reading does not have is a number nothing here names. And a quotient by nought is a
+         * number no value at the position has — nothing is divided by it — so an account of one is
+         * a line drawn where no row can stand. Said of the account rather than read off the cases
+         * the operation answers in: what those say is which answer comes back, and this says which
+         * numbers there are to take.
+         */
+        @Override
+        public boolean settledBy(TakenArguments arguments) {
+            BigDecimal by = read(arguments);
+            return by != null && by.signum() != 0;
+        }
+
+        /** What the divisor reads as, or null where these arguments do not say. */
+        public BigDecimal read(TakenArguments arguments) {
+            return arguments.at(divisor);
         }
     }
 

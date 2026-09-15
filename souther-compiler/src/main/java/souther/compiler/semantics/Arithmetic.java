@@ -27,6 +27,24 @@ public sealed interface Arithmetic {
      */
     List<Reads> reads();
 
+    /**
+     * The operator the language writes this arithmetic as, or null where it writes none.
+     *
+     * <p>Declared with the arithmetic because it is a fact about which arithmetic it is: what
+     * {@code /} computes over whole numbers is the truncating quotient, and a reader holding the
+     * operator and wanting the operation that owns the account is asking exactly this. Kept
+     * anywhere else, which operation an operator reaches would be a second list beside the one the
+     * declarations already are.
+     *
+     * <p>Not every arithmetic has one. A remainder is written as a call only, and a quotient
+     * rounded to a scale is not what {@code /} over decimals computes. What an operator names is
+     * the arithmetic and not the operation: two operations computing one arithmetic are two the
+     * operator reaches, and a reader that needs one of them has nothing here to pick with.
+     */
+    default BinOp writtenAs() {
+        return null;
+    }
+
     /** Two numbers of the kind the operation answers, which is what all the arithmetic over a pair
      *  of them takes. */
     List<Reads> TWO_OF_ITS_OWN =
@@ -60,6 +78,11 @@ public sealed interface Arithmetic {
         public List<Reads> reads() {
             return TWO_OF_ITS_OWN;
         }
+
+        @Override
+        public BinOp writtenAs() {
+            return op;
+        }
     }
 
     /** A division of whole numbers truncated toward zero — the quotient {@code /} answers, reached
@@ -69,6 +92,11 @@ public sealed interface Arithmetic {
         @Override
         public List<Reads> reads() {
             return TWO_OF_ITS_OWN;
+        }
+
+        @Override
+        public BinOp writtenAs() {
+            return BinOp.DIV;
         }
     }
 

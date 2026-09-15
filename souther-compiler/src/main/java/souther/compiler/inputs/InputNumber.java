@@ -40,7 +40,7 @@ public final class InputNumber {
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
                                  RuleReadingSource source) {
         Symbols symbols = source.symbols();
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
         if (measured != null) {
             // A taking is of a location, so an argument that stands at none is one there is no
             // location to take it of.
@@ -53,7 +53,7 @@ public final class InputNumber {
                 case PathResolution.MayStandAt _ -> null;
             };
             if (of != null) {
-                return NumericTerm.TakenOf.of(measured.operation(), of,
+                return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
                         inputs.typeAt(of, source), source.inners(), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
@@ -106,6 +106,12 @@ public final class InputNumber {
     private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
                                         InputReads reads, RuleReadingSource source) {
         Symbols symbols = source.symbols();
+        // A number over a run is named by the operation and where the values are read from, and a
+        // taking given a value beside them is a number those two do not name. Read without it, the
+        // total of one part of each element would be the total of another.
+        if (!measured.arguments().none()) {
+            return null;
+        }
         // The walk and the names it stands under, which travel together: a name bound inside a
         // helper stands for what the call handed over, and what is read of that afterwards is read
         // where it stands rather than where the name was.

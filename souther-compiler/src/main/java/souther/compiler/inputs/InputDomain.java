@@ -19,6 +19,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -1550,7 +1551,8 @@ public final class InputDomain {
     private static List<NumberAt.OfWhatNumber> numbersOf(ValueName.Stdlib taken) {
         NumberAt.OfWhatNumber own = new NumberAt.OfWhatNumber.OfItsOwnValue();
         return taken == null ? List.of(own)
-                : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken));
+                : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken,
+                        TakenArguments.NONE));
     }
 
     /** What the rules leave one of a position's numbers, or null where the position has no such

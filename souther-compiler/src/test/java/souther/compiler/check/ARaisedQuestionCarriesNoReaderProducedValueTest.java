@@ -88,6 +88,14 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * {@code TermPath} are the two spellings of a place, which is what the crossing translates;
      * {@link NumberAt} is a place and which number of it; {@code ValueName} is the operation
      * that number is taken by, as the call resolved and not as it was written.
+     *
+     * <p>{@code TakenArguments} is the last of those and belongs for the same reason the operation
+     * does. A taking may be given values beside the one it measures, and those say which number of
+     * the place it is — the quotient by two is not the quotient by three — so a question about one
+     * of them names them. What is carried is the number each argument reads as, which is what the
+     * author wrote there however they spelled it, exactly as the operation is the name their call
+     * resolved to. Nothing about a reading is in it: a taking whose arguments this compiler could
+     * not read raises the question all the same, as the rule with no line does.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -102,6 +110,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/inputs/InputQuestion$AboutAPosition",
             "souther/compiler/inputs/InputQuestion$AboutANumber",
             "souther/compiler/inputs/TermPath",
+            "souther/compiler/semantics/TakenArguments",
             "souther/compiler/types/ValueName");
 
     @Test

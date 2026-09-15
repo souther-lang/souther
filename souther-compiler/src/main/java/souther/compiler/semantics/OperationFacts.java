@@ -571,7 +571,7 @@ public final class OperationFacts {
     }
 
     private static OperationFact takenAs(TakenAs how) {
-        return new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(how);
+        return new OperationFact.AnswersANumberTakenOfAValueItIsGiven(how);
     }
 
     /** The answer is what {@code container} holds, started from {@code identity} and carried

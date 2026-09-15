@@ -17,12 +17,14 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -99,23 +101,73 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     }
 
     /**
-     * Every account of what an operation takes is one some operation declares.
+     * Every account of what an operation takes is one some call of some operation answers for.
      *
      * <p>The runtime half of a compile-time closure. That an account added is one the reader and the
      * realizer cannot compile without is the switches' to say, and Java says it at build time; what
-     * it cannot say is that the account was ever declared of anything, and an account nothing
-     * declares is an arm nothing below would exercise.
+     * it cannot say is that the account is ever reached, and an account nothing answers for is an
+     * arm nothing below would exercise.
+     *
+     * <p>Answered for and not declared of. What an operation takes of a value it is given may turn
+     * on what the call handed it beside that value — a quotient is the number of one place its
+     * divisor says — so the population is the takings a call makes and not the operations alone.
      */
     @Test
-    void everyAccountOfWhatIsTakenIsDeclaredOfSomeOperation() {
+    void everyAccountOfWhatIsTakenIsOneSomeTakingAnswersFor() {
         List<Class<?>> arms = List.of(TakenAs.class.getPermittedSubclasses());
         assertFalse(arms.isEmpty(), "the accounts are a sealed set and there is at least one");
         for (Class<?> arm : arms) {
-            assertTrue(DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument().stream()
-                            .anyMatch(each -> arm.isInstance(DefaultBoundOperationFacts.get().takenAs(each))),
-                    arm.getSimpleName() + " is an account no operation is declared under, so"
-                            + " nothing reads or writes it");
+            assertTrue(takings().stream().anyMatch(each -> arm.isInstance(each.takenAs())),
+                    arm.getSimpleName() + " is an account nothing answers for, so nothing reads or"
+                            + " writes it");
         }
+    }
+
+    /**
+     * The takings to walk: every operation that answers a number taken of a value it is given,
+     * under the arguments a call of it would hand over beside that value.
+     *
+     * <p>Enumerated from the declarations and the signatures, so an operation whose number becomes
+     * readable tomorrow is inside every law below without a line being added here. The population
+     * is wider than the takings there are — an operation whose arithmetic answers nothing of one
+     * place is asked and answers nothing — and what keeps it honest is that the machinery under
+     * test is what says which of them is a taking.
+     *
+     * <p>The arguments beside the value are written as one number, which is the only thing a
+     * constant argument is here. What a call may hand over is a number the reading has, and which
+     * number it is decides which taking this is rather than whether it is one.
+     */
+    private static List<NumericTerm.TakenOf> takings() {
+        List<NumericTerm.TakenOf> out = new ArrayList<>();
+        List<ValueName> operations = new ArrayList<>(
+                DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument());
+        DefaultBoundOperationFacts.get().computesANumber().stream()
+                .filter(each -> !operations.contains(each)).forEach(operations::add);
+        for (ValueName operation : operations) {
+            TakenArguments beside = besideTheValue(operation);
+            if (DefaultBoundOperationFacts.get().takenAs(operation, beside) == null) {
+                continue;
+            }
+            NumericTerm.TakenOf term = NumericTerm.TakenOf.of((ValueName.Stdlib) operation, AT,
+                    beside, sourceOf(operation),
+                    souther.compiler.check.NewtypeInners.asWritten(SYMBOLS), SYMBOLS);
+            if (term != null) {
+                out.add(term);
+            }
+        }
+        return out;
+    }
+
+    /** A number at every argument the operation takes after the value, and nothing where it takes
+     *  none. */
+    private static TakenArguments besideTheValue(ValueName operation) {
+        Map<Integer, java.math.BigDecimal> written = new java.util.LinkedHashMap<>();
+        int arity = DefaultStdlib.get()
+                .entry((ValueName.Stdlib.Operation) operation).signature().params().size();
+        for (int position = 1; position < arity; position++) {
+            written.put(position, java.math.BigDecimal.valueOf(2));
+        }
+        return new TakenArguments(written);
     }
 
     /**
@@ -129,12 +181,9 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     @Test
     void everyValueBuiltForANumberReadsBackAsIt() {
         int checked = 0;
-        for (ValueName operation : DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument()) {
+        for (NumericTerm.TakenOf term : takings()) {
+            ValueName operation = term.operation();
             Type source = sourceOf(operation);
-            NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
-                    (ValueName.Stdlib) operation, AT, source,
-                    souther.compiler.check.NewtypeInners.asWritten(SYMBOLS), SYMBOLS);
-            assertNotNull(term, operation + " is taken of what its own signature says it takes");
             souther.compiler.inputs.TermOrders orders =
                     souther.compiler.inputs.TermOrdersFixtures.at(term, source, SYMBOLS);
             assertNotNull(orders.answered(),
@@ -174,15 +223,12 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void everyNumberAnOperationSaysHasAValueIsOneSomethingIsBuiltFor() {
-        for (ValueName operation : DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument()) {
+        for (NumericTerm.TakenOf term : takings()) {
+            ValueName operation = term.operation();
             if (!DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)) {
                 continue;
             }
             Type source = sourceOf(operation);
-            NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
-                    (ValueName.Stdlib) operation, AT, source,
-                    souther.compiler.check.NewtypeInners.asWritten(SYMBOLS), SYMBOLS);
-            assertNotNull(term, operation + " is taken of what its own signature says it takes");
             souther.compiler.inputs.TermOrders orders =
                     souther.compiler.inputs.TermOrdersFixtures.at(term, source, SYMBOLS);
             for (long each : answerable(term)) {

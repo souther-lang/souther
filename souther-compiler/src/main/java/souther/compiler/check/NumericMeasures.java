@@ -1,11 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.types.ReachName;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -58,43 +61,77 @@ public final class NumericMeasures {
         return calls().contains(operation);
     }
 
-    /** One such call: which operation, and what it is taken of. */
-    public record Measured(ValueName.Stdlib operation, Core of) {}
+    /** One such call: which operation, what it is taken of, and what it was given beside that. */
+    public record Measured(ValueName.Stdlib operation, Core of, TakenArguments arguments) {}
 
     /**
      * The number {@code e} takes of one value and where it takes it, or null where it takes none.
      *
-     * <p>Asked here rather than matched on a call's shape, because the same call arrives in two
+     * <p>Asked here rather than matched on a call's shape, because one number arrives in three
      * shapes and which of them is not a detail of the walk. The tree that runs holds a
      * language-defined operation as a call of what it resolved to; the tree a declaration's own
-     * rules are read in keeps it standing ({@link Core.PreservedCall}). A reader that knew one shape
-     * drew the line a {@code guard} puts on a length and not the one a clause puts on the same
-     * length — the same drift the list above exists to stop, one representation down.
+     * rules are read in keeps it standing ({@link Core.PreservedCall}); and where the language
+     * writes an operator for what an operation computes, an author writes the operator. A reader
+     * that knew one shape drew the line a {@code guard} puts on a length and not the one a clause
+     * puts on the same length — the same drift the list above exists to stop, one representation
+     * down.
      *
-     * <p>The argument has to be one thing. A measure of several is not one of these, and what it
-     * would be counted at is not a place either.
+     * <p>The number is taken of the first argument. What stands at the others decides which number
+     * of it this is — a divisor says which quotient — so each of them has to read as a constant, and
+     * a taking given a value nothing here reads is a taking this names no number for. A measure of
+     * several values is not one of these either, and what it would be counted at is not a place.
      */
-    public static Measured takenIn(Core e) {
-        ValueName operation = switch (e) {
-            case Core.Call call when call.fn() instanceof Core.Reached reached
-                    && reached.name() instanceof ReachName.OfLibrary library ->
-                    library.denotes();
-            case Core.PreservedCall preserved -> preserved.operation();
-            case null, default -> null;
-        };
-        List<Core> args = switch (e) {
-            case Core.Call call -> call.args();
-            case Core.PreservedCall preserved -> preserved.args();
-            case null, default -> List.of();
-        };
-        // Any operation that answers a number taken of the one value it is given, and not the
-        // measures alone. `Time.hour(t)` names a number of `t` the way `String.length(s)` names one of
+    public static Measured takenIn(Core e, Symbols symbols) {
+        ValueName operation = Terms.operationOf(e);
+        List<Core> args = Terms.argsOf(e);
+        if (operation == null && e instanceof Core.Binary written) {
+            // The operator spelling of a number the library also answers as a call. Which operation
+            // computes what an operator computes is declared with the arithmetic, so the two
+            // spellings reach one operation and one term. Held to the number that operation answers,
+            // which is what leaves a name wrapped round a whole number out: what such a scaling
+            // answers is the name, and the account declared here is of the number.
+            ValueName computing = DefaultBoundOperationFacts.get().computingWhat(written.op());
+            if (computing != null
+                    && written.type() != null
+                    && written.type().equals(NumericAnswers.typeOf(computing, symbols))) {
+                operation = computing;
+                args = List.of(written.left(), written.right());
+            }
+        }
+        // Any operation that answers a number taken of the value it is given, and not the measures
+        // alone. `Time.hour(t)` names a number of `t` the way `String.length(s)` names one of
         // `s`, and a reading that asked the narrower question drew a line on the second and none on
         // the first — with nothing said about the guard it passed over (#1027).
-        return operation instanceof ValueName.Stdlib named
-                && DefaultBoundOperationFacts.get().takenAs(named) != null
-                && args.size() == 1
-                ? new Measured(named, args.get(0)) : null;
+        if (!(operation instanceof ValueName.Stdlib named) || args.isEmpty()) {
+            return null;
+        }
+        // What the call was given beside the value comes first, because for some operations it is
+        // what decides whether this call is a number taken of one place at all.
+        TakenArguments beside = besideTheValue(args, symbols);
+        return beside != null && DefaultBoundOperationFacts.get().takenAs(named, beside) != null
+                ? new Measured(named, args.getFirst(), beside) : null;
+    }
+
+    /**
+     * What the arguments after the first read as, or null where any of them reads as no constant.
+     *
+     * <p>Null and not an entry left out. What is missing is which number of the place this is, and
+     * a term built without it would be the quotient by whatever the next reader assumed — so the
+     * taking is one nothing here names, which is the answer every caller already has a place for.
+     */
+    private static TakenArguments besideTheValue(List<Core> args, Symbols symbols) {
+        if (args.size() == 1) {
+            return TakenArguments.NONE;
+        }
+        Map<Integer, BigDecimal> read = new LinkedHashMap<>();
+        for (int position = 1; position < args.size(); position++) {
+            BigDecimal constant = Terms.constantNumber(args.get(position), symbols);
+            if (constant == null) {
+                return null;
+            }
+            read.put(position, constant);
+        }
+        return new TakenArguments(read);
     }
 
     /**
