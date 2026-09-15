@@ -526,7 +526,17 @@ public sealed interface ItemAssessment {
             EstablishmentGap by();
         }
 
-        /** Built, and read back standing where it was built for. */
+        /**
+         * Built, and read back standing where it was built for.
+         *
+         * <p>What it was not composed against is this compiler's shortfall and never the model's
+         * word, which is why {@link #unaccountedFor()} answers nothing for one of these: a row that
+         * stands where it was built for settles the point, and what could not be composed on the way
+         * to it is not something a reader has to act on. A proof that the way leaves nothing says
+         * the opposite of standing there, so it cannot be one of these — held as one, the sentence
+         * saying the point is settled and the proof saying no row reaches it would be the same
+         * answer.
+         */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
                          List<souther.compiler.partition.ReachabilityGap> uncomposed)
@@ -534,6 +544,13 @@ public sealed interface ItemAssessment {
 
             public Certified {
                 uncomposed = List.copyOf(uncomposed);
+                for (souther.compiler.partition.ReachabilityGap gap : uncomposed) {
+                    if (gap instanceof souther.compiler.partition.ReachabilityGap
+                            .ProvedImpossible) {
+                        throw new IllegalArgumentException("a row stands where the rules leave"
+                                + " nothing standing: " + gap.anchor());
+                    }
+                }
             }
         }
 

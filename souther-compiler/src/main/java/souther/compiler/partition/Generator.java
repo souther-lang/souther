@@ -2962,12 +2962,33 @@ public final class Generator {
          */
         List<ReachabilityGap> unrepresented();
 
-        /** A value with the edge in it, built and accepted. */
+        /**
+         * A value with the edge in it, built and accepted.
+         *
+         * <p><b>What it was not composed against is what this compiler could not do, and never what
+         * the model settles.</b> A reader holding one of these has a row, and every entry beside it
+         * says the row may not arrive for a reason somebody could work on — so a reader that acts on
+         * the row and leaves the list is reading it the way it is meant. A proof that the way leaves
+         * nothing is not that: it says the row does not arrive, and a list that could hold one would
+         * make every existing reader of a built row wrong without a word to any of them.
+         *
+         * <p>Refused here rather than left to whoever assembles one. There is one place a proof can
+         * come from and one place a row is assembled, and they are the same method — which is what
+         * makes this cheap to hold and worth holding: the next word added beside these has the same
+         * question to answer, and this is where it gets asked.
+         */
         record Built(GeneratedRow row, List<ReachabilityGap> unrepresented)
                 implements BoundaryAttempt {
 
             public Built {
                 unrepresented = List.copyOf(unrepresented);
+                for (ReachabilityGap gap : unrepresented) {
+                    if (gap instanceof ReachabilityGap.ProvedImpossible) {
+                        throw new IllegalArgumentException("a row was built for a way the rules"
+                                + " leave nothing standing on, which is a row that does not arrive:"
+                                + " " + gap.anchor());
+                    }
+                }
             }
         }
 
@@ -3243,6 +3264,22 @@ public final class Generator {
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
+        // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
+        // to compose for this point and the rest of this would be composing one. What comes back is
+        // the model's word, which is the same word the realizer's proof comes back with and is
+        // reached here by the other of the two routes to it.
+        //
+        // <p>Said before a row is built rather than beside one. A row assembled here is a row that
+        // does not arrive, and handing it over with the proof attached asks every reader of it to
+        // know that the second component can take the first one away — which is what they were
+        // written before this word existed and is not what {@link BoundaryAttempt.Built} means.
+        for (ReachabilityGap gap : where.unrepresented()) {
+            if (gap instanceof ReachabilityGap.ProvedImpossible) {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        where.unrepresented());
+            }
+        }
         Map<RealizationTarget, Place> standing = where.at();
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a

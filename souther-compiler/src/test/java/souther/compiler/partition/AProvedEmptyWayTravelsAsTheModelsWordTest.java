@@ -24,6 +24,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A way whose conditions leave nothing standing reaches a reader as the model's word, and not as
@@ -71,6 +72,47 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 "the rules settled it, which is not the composer having fallen short");
         assertEquals(WHERE, said.anchor(),
                 "and a reader is sent to where the proof was met, which is the condition's place");
+    }
+
+    /**
+     * And no row comes of it, which is what the proof says.
+     *
+     * <p><b>The half a reader of the answer sees.</b> What the gap list holds is read by a report;
+     * what everything else reads is which of the shapes the attempt is, and a row handed over with a
+     * proof attached would be taken by every one of them as a row. The proof says the way leaves
+     * nothing standing, so the row assembled on it does not arrive — and an answer built from it
+     * travels on as a value of the dependency it was composed for.
+     */
+    @Test
+    void noRowIsHandedOverForAWayTheRulesLeaveNothingOn() {
+        Generator.BoundaryAttempt attempt = composing(NothingTheRulesLeave.REGION, CUT);
+
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
+                assertInstanceOf(Generator.BoundaryAttempt.Unresolved.class, attempt,
+                        "a way that leaves nothing standing is a way no row arrives by").why()
+                        .reason(),
+                "and the word is the model's, which is the one a reader may act on");
+    }
+
+    /**
+     * A built row cannot be handed over carrying the proof at all.
+     *
+     * <p>Where the invariant is, rather than in each of the readers that rests on it. Every one of
+     * them takes a built row as a row and reads the list beside it as what somebody could work on —
+     * which was true of every entry that list could hold until this word was added to it, and would
+     * have gone on being assumed by readers nothing told. Refused here, the assumption is a fact
+     * about the type and the readers are right without having been changed.
+     */
+    @Test
+    void aBuiltRowCannotCarryTheProof() {
+        Generator.BoundaryAttempt built = composing(NothingTheRulesSay.REGION, CUT);
+        Generator.GeneratedRow row = assertInstanceOf(Generator.BoundaryAttempt.Built.class, built,
+                "a way that stands is a way a row is built on").row();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new Generator.BoundaryAttempt.Built(row,
+                        List.of(new ReachabilityGap.ProvedImpossible(CUT))),
+                "a row on a way that leaves nothing standing is a row that does not arrive");
     }
 
     /**
