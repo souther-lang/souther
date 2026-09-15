@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * How many values every type has at most, over the declarations a module reaches.
@@ -202,7 +203,8 @@ public final class TypeCardinality {
         }
 
         /**
-         * Every declaration answered again with {@code granted} taken as having values.
+         * What {@code these} and everything they read come to with {@code granted} taken as having
+         * values.
          *
          * <p>Read again rather than kept a record of. What a count was is not what it would have
          * been: a record whose only field is an absent value has one value because what the field
@@ -211,13 +213,46 @@ public final class TypeCardinality {
          * that out. Granting the names and taking the answers afresh does. The proofs come back with
          * the counts, so what a declaration is shown by under one supposing is not read off what it
          * was shown by under another.
+         *
+         * <p>Asked over what {@code these} reach and not over the module. A declaration answers from
+         * its own rules and from what it reads, so a name it never reaches has no part in what it
+         * comes to however it was supposed — and answering the rest of the module besides would read
+         * every declaration of it to say what a few of them come to. The names granted are cut to
+         * the same reach for the same reason.
          */
-        Map<TypeSymbol, Cardinality> granting(Set<TypeSymbol> granted) {
+        Map<TypeSymbol, Cardinality> granting(List<? extends TypeSymbol> these,
+                                              Set<TypeSymbol> granted) {
+            Set<TypeSymbol> reach = reaching(these);
+            List<List<TypeSymbol>> within = new ArrayList<>();
+            for (List<TypeSymbol> component : components) {
+                // A component is reached or it is not: its members read each other, so one of them
+                // being reached is all of them being reached.
+                if (component.stream().anyMatch(reach::contains)) {
+                    within.add(component);
+                }
+            }
+            Set<TypeSymbol> supposed = new LinkedHashSet<>(granted);
+            supposed.retainAll(reach);
             // The readings are made afresh — what is asked here is what a declaration would hold if
             // another had values, and no reading with something supposed is a declaration's own —
             // but what has already been made of the declarations is borrowed all the same: what a
             // rule's strings come to is settled by the rule and not by what is supposed beside it.
-            return pass(components, declared, edges, cuts, source, policy, granted, machines);
+            return pass(within, declared, edges, cuts, source, policy, supposed, machines);
+        }
+
+        /** {@code these} and every declaration they read, at whatever remove. */
+        private Set<TypeSymbol> reaching(List<? extends TypeSymbol> these) {
+            Set<TypeSymbol> reach = new LinkedHashSet<>(these);
+            List<TypeSymbol> left = new ArrayList<>(reach);
+            while (!left.isEmpty()) {
+                TypeSymbol name = left.remove(left.size() - 1);
+                for (TypeSymbol read : edges.getOrDefault(name, Set.of())) {
+                    if (reach.add(read)) {
+                        left.add(read);
+                    }
+                }
+            }
+            return reach;
         }
     }
 
@@ -252,7 +287,7 @@ public final class TypeCardinality {
             }
             if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
                 TypeSymbol one = asked.get(0);
-                answers.settle(one, CardinalityTransfer.upperOf(
+                answers.settle(one, transfer(
                         one, declared.get(one), source, policy, answers, granted,
                         machines));
                 continue;
@@ -280,7 +315,7 @@ public final class TypeCardinality {
             moved = false;
             for (TypeSymbol each : component) {
                 Cardinality before = answers.settledAt(each);
-                Cardinality next = round(cuts, CardinalityTransfer.upperOf(
+                Cardinality next = round(cuts, transfer(
                         each, declared.get(each), source, policy, answers, granted,
                         machines));
                 // Written every round, and the rising is over the counts alone. Two readings that
@@ -302,6 +337,41 @@ public final class TypeCardinality {
         return one instanceof Cardinality.None
                 ? other instanceof Cardinality.None : one.equals(other);
     }
+
+    /**
+     * What one declaration comes to under the answers so far, asked from here and counted.
+     *
+     * <p>Every asking a count makes goes through this, which is what makes the number below mean
+     * something. A transfer is what a count spends per declaration per round, and the two places it
+     * is asked from — a declaration that settles alone and a declaration in a rising component —
+     * are the same spending.
+     */
+    private static Cardinality transfer(TypeSymbol named, Hir.Def def, RuleReadingSource source,
+                                        ReadingPolicy policy, Answers answers,
+                                        Set<TypeSymbol> granted, DeclarationReadings machines) {
+        TRANSFERS.incrementAndGet();
+        return CardinalityTransfer.upperOf(named, def, source, policy, answers, granted, machines);
+    }
+
+    /**
+     * How many times a count has asked what a declaration comes to, for a test holding a caller to
+     * what a count costs.
+     *
+     * <p>Beside {@link InvariantChecker#readingsMade()} and not in place of it, because the two
+     * answer different questions. A reading is made once per declaration per revision and lent to
+     * everyone after, so the readings say which declarations an edit reached and say nothing about
+     * how often they were worked over. A count that asked the same declaration a hundred times
+     * borrows one reading and makes a hundred transfers.
+     *
+     * <p>Counted rather than timed, for the reason the readings are: what a caller is held to is
+     * that a count over a graph twice the size asks twice as much of it, which is a shape and not a
+     * speed.
+     */
+    public static long transfersMade() {
+        return TRANSFERS.get();
+    }
+
+    private static final AtomicLong TRANSFERS = new AtomicLong();
 
     private static Cardinality round(CardinalityCuts cuts, Cardinality of) {
         return of instanceof Cardinality.Standing standing ? cuts.round(standing) : of;
