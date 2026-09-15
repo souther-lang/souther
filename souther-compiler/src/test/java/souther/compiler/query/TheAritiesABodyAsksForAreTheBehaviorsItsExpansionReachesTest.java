@@ -1,13 +1,17 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.DefinitionName;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,6 +68,123 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
             new ValueName.Behavior("shop.values", "twice");
     private static final ValueName.Behavior THRICE =
             new ValueName.Behavior("shop.values", "thrice");
+
+    /**
+     * A helper reaching a behavior through a value, which is what the language refuses.
+     *
+     * <p>Written into a helper rather than named in it: {@code carried} is a value and is
+     * substituted where it is written, so what stands in {@code spin} after expansion is the
+     * behavior. E1818 is asked of the tree the expansion made and not of the one the author wrote,
+     * so this is refused as a helper calling a behavior.
+     */
+    private static final String A_HELPER_REACHING_A_BEHAVIOR = """
+            module shop.values exposing ( twice, thrice, caller )
+
+            behavior twice : (n: Int) -> Int
+            let twice (n) = n * 2
+
+            behavior thrice : (n: Int) -> Int
+            let thrice (n) = n * 3
+
+            let carried = thrice
+            let through (f: (Int) -> Int, n: Int) = f(n)
+
+            partial let spin (n: Int): Int =
+                if n <= 0 then through(carried, 0) else spin(n - 1)
+
+            behavior caller : (n: Int) -> Int
+            let caller (n) = spin(n)
+            """;
+
+    /**
+     * A helper reached only through a recursion.
+     *
+     * <p>{@code spin} recurses, so a call to it is left standing and it is lowered to a method of
+     * its own. What {@code deep} is written into is that method; what {@code caller} holds is the
+     * call.
+     */
+    private static final String THROUGH_A_RECURSION = """
+            module shop.values exposing ( caller )
+
+            let deep (n: Int) = n + 1
+
+            partial let spin (n: Int): Int = if n <= 0 then deep(0) else spin(n - 1)
+
+            behavior caller : (n: Int) -> Int
+            let caller (n) = spin(n)
+            """;
+
+    /** The definitions one of the two relations answers with, under the names they are held at. */
+    private static Set<String> relation(Key<Set<ReachName.Declaration>> asked) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("values.sou", THROUGH_A_RECURSION);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(),
+                () -> "the module compiles to begin with: " + c.db().allReports());
+        Set<String> out = new TreeSet<>();
+        c.db().ask(asked).value().forEach(each -> out.add(DefinitionName.of(each).text()));
+        return out;
+    }
+
+    /**
+     * What is written into a body stops where a recursion is left standing.
+     *
+     * <p>Where the two relations part, and the reason there are two. A recursion is lowered to a
+     * method of its own, so what its body reaches is written into that method — followed through
+     * here, every name those definitions hold would be a name this body is answered about, and an
+     * edit to one of them would be an edit to this body.
+     */
+    @Test
+    void whatIsWrittenIntoABodyStopsAtARecursion() {
+        assertEquals(Set.of(), relation(new Bodies.WrittenIntoBody("shop.values", "caller",
+                        InliningPolicy.FULL)),
+                "a definition reached only through a recursion was read as written into the body"
+                        + " that calls the recursion");
+    }
+
+    /**
+     * And what a body reaches goes through it.
+     *
+     * <p>The other relation, and the control that says the one above is a boundary rather than a
+     * walk that found nothing. What a recursion constructs is attributed to whoever called it, and
+     * so is what the recursions it calls construct.
+     */
+    @Test
+    void andWhatABodyReachesGoesThroughIt() {
+        assertEquals(Set.of("deep", "spin"), relation(new Bodies.ReachedByBody("shop.values",
+                        "caller", InliningPolicy.FULL)),
+                "what a body reaches stopped at a recursion, so what that recursion constructs is"
+                        + " attributed to nobody");
+    }
+
+    /** What the compiler says about {@code source}, by code. */
+    private static List<String> saidAbout(String source) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("values.sou", source);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        return c.db().allReports().stream()
+                .map(each -> each.report().diagnostic().code()).toList();
+    }
+
+    /**
+     * A helper may not reach a behavior at all, however the name gets there.
+     *
+     * <p>Held as a check rather than said in a comment, because what rests on it is a boundary that
+     * is otherwise invisible. What is written into a body stops where a recursion is: the recursion
+     * is left standing and lowered to a method of its own, so a behavior named in it is named there
+     * and not here. A walk that went on through it would hand this body the names of everything its
+     * recursions reach — and that this is a difference nobody can write a program to see is exactly
+     * what this holds. The day a helper may name a behavior, the walk that goes through a recursion
+     * starts answering about names that are not in this tree, and the failure arrives here.
+     */
+    @Test
+    void aHelperMayNotReachABehaviorHoweverItIsCarriedIn() {
+        assertEquals(List.of("E1818"), saidAbout(A_HELPER_REACHING_A_BEHAVIOR),
+                "a helper reached a behavior through a value, so what a recursion's body names is"
+                        + " no longer something no program can put there");
+    }
 
     /**
      * A behavior a value carries into this body is one this body asks about.

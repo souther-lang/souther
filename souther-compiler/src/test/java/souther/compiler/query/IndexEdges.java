@@ -117,11 +117,14 @@ final class IndexEdges {
      *                  projection over nothing but those was never asked the question
      * @param everyEdge every edge shape in the graph, moved or not, which is what says an edge no
      *                  edit reaches is an edge nothing here has judged
+     * @param unread every component of every question this walk met that nobody has read, which is
+     *               what the census rests on and cannot be defaulted either way
      * @param instances how many edges were read, which says a census of nothing is a census of
      *                  nothing rather than a clean one
      */
     record Census(Map<Edge, Set<WhatItIs>> whereTheIndexMoved, List<String> neither,
-                  Set<Edge> exercised, Set<Edge> witnessed, Set<Edge> everyEdge, int instances) {}
+                  Set<Edge> exercised, Set<Edge> witnessed, Set<Edge> everyEdge, Set<Part> unread,
+                  int instances) {}
 
     /**
      * What the graph held before the edit, read against what it held after.
@@ -137,8 +140,10 @@ final class IndexEdges {
         Set<Edge> witnessed = new TreeSet<>();
         Set<Edge> everyEdge = new TreeSet<>();
         int instances = 0;
+        Set<Part> unread = new TreeSet<>();
         for (Map.Entry<Key<?>, Answer<?>> each : before.answers().entrySet()) {
             Key<?> reader = each.getKey();
+            unread(reader, unread);
             if (!aboutOneDefinition(reader)) {
                 continue;
             }
@@ -172,7 +177,7 @@ final class IndexEdges {
             }
         }
         Collections.sort(neither);
-        return new Census(moved, neither, exercised, witnessed, everyEdge, instances);
+        return new Census(moved, neither, exercised, witnessed, everyEdge, unread, instances);
     }
 
     /** How much of the index a reader's answer was seen to be entries of. */
@@ -215,12 +220,13 @@ final class IndexEdges {
                     && table.entrySet().containsAll(mine.entrySet())
                     ? Projection.OF_SOMETHING : Projection.OF_NOTHING_OF_THIS_INDEX;
         }
-        if (held instanceof Collection<?> mine) {
-            if (mine.isEmpty()) {
-                return Projection.OF_NOTHING_AT_ALL;
-            }
-            return all instanceof Collection<?> table && table.containsAll(mine)
-                    ? Projection.OF_SOMETHING : Projection.OF_NOTHING_OF_THIS_INDEX;
+        if (held instanceof Collection<?>) {
+            // Not a projection, whatever it holds. What containment says about two collections
+            // depends on which collection they are: it drops multiplicity over a list and order
+            // over a sequence, so a reader answering [x, x] is entries of an index holding [x].
+            // Nothing in this graph answers a collection off an index, and a word for it written
+            // before there is one would be a word for whichever of those somebody meant.
+            return Projection.OF_NOTHING_OF_THIS_INDEX;
         }
         return entriesOf(all).contains(held)
                 ? Projection.OF_SOMETHING : Projection.OF_NOTHING_OF_THIS_INDEX;
@@ -233,6 +239,37 @@ final class IndexEdges {
             case Collection<?> all -> all;
             case null, default -> null;
         };
+    }
+
+    /**
+     * What a key holds at a component, which decides what the key is about.
+     *
+     * <p><b>There is no safe default, so there is no default.</b> The two questions this settles
+     * want opposite things of a component nobody has read. A reader holding an unread component is
+     * safer read as naming something, because that puts its reads of an index into the census; an
+     * index holding one is safer read as saying which module, because reading it as naming
+     * something takes the index itself out of the census and every edge into it with it. One
+     * word cannot be both, and a word that leaned either way would be quietly wrong about the
+     * other.
+     *
+     * <p>So {@link #UNREAD} is a third thing and it is nobody's default: a census that meets one
+     * says so, and the check fails until somebody writes down which of the two it is.
+     */
+    enum WhatAComponentHolds {
+
+        /** The module the question is about. */
+        THE_MODULE,
+
+        /** A name of something the module holds — a declaration, a definition, a clause, a place in
+         *  a file — so a question holding it means less than its module does. */
+        SOMETHING_THE_MODULE_HOLDS,
+
+        /** How what is asked for is to be read: which of a module's files, under which policy. A
+         *  question holding nothing else is a question about the module. */
+        HOW_TO_READ_IT,
+
+        /** Nobody has said. Not a reading of the component and not a way of treating one. */
+        UNREAD
     }
 
     /**
@@ -257,7 +294,7 @@ final class IndexEdges {
             return false;
         }
         for (RecordComponent part : parts) {
-            if (narrows(key, part)) {
+            if (roleOf(key, part) == WhatAComponentHolds.SOMETHING_THE_MODULE_HOLDS) {
                 return true;
             }
         }
@@ -265,29 +302,40 @@ final class IndexEdges {
     }
 
     /**
-     * Whether what a key holds at one of its components names something inside the module it is
-     * about.
+     * What {@code key} holds at {@code part}.
      *
      * <p>Read off the component rather than off how many there are. A key naming one declaration
      * holds one thing ({@link Shapes.FieldBindingsOf}) and a key about a module holds more than one
      * where the rest say how to read it ({@link Bodies.Expanding} takes a policy), so a count
      * misreads both ways.
      *
-     * <p><b>Narrower unless somebody said otherwise, and the default is the safe half.</b> A
-     * component read as naming something puts its key among the readers, so its reads of an index
-     * are counted and have to be judged; read as saying which module, they leave the census without
-     * a word. So an unjudged component makes this ask more, never less, and the register below is
-     * only the components somebody had to excuse.
-     *
-     * <p>A name written as text is the one case decided by what is there rather than by a judgement:
-     * the key says which module it is about, and a component holding that name is that module while
-     * one holding another name is something in it.
+     * <p>A name written as text is the one case decided by what is there rather than by a
+     * judgement: the key says which module it is about, and a component holding that name is that
+     * module while one holding another name is something in it. Everything else is
+     * {@link #whatEachComponentHolds}'s to say, and {@link WhatAComponentHolds#UNREAD} where it has
+     * not.
      */
-    private static boolean narrows(Key<?> key, RecordComponent part) {
+    private static WhatAComponentHolds roleOf(Key<?> key, RecordComponent part) {
         if (part.getType() == String.class) {
-            return !(held(key, part) instanceof String named) || !named.equals(key.module());
+            return held(key, part) instanceof String named && named.equals(key.module())
+                    ? WhatAComponentHolds.THE_MODULE
+                    : WhatAComponentHolds.SOMETHING_THE_MODULE_HOLDS;
         }
-        return !saysWhichModuleOrHowToReadIt().contains(new Part(key.getClass(), part.getName()));
+        return whatEachComponentHolds().getOrDefault(new Part(key.getClass(), part.getName()),
+                WhatAComponentHolds.UNREAD);
+    }
+
+    /** Every component of a key this census met that nobody has read. */
+    private static void unread(Key<?> key, Set<Part> out) {
+        RecordComponent[] parts = key.getClass().getRecordComponents();
+        if (parts == null) {
+            return;
+        }
+        for (RecordComponent part : parts) {
+            if (roleOf(key, part) == WhatAComponentHolds.UNREAD) {
+                out.add(new Part(key.getClass(), part.getName()));
+            }
+        }
     }
 
     /** One component of one question. */
@@ -307,8 +355,7 @@ final class IndexEdges {
     }
 
     /**
-     * The components that say which module a question is about, or how what it asks for is to be
-     * read, rather than naming something the module holds.
+     * What each component a census meets is held for, where the type alone does not say.
      *
      * <p>Per component and not per type, because the role is the component's. That a question holds
      * a source says which file its module was written in at one key and which of a module's
@@ -316,32 +363,80 @@ final class IndexEdges {
      * one and could say how deep to look at the next. The type is what is held, and this is what it
      * is held for.
      */
-    static Set<Part> saysWhichModuleOrHowToReadIt() {
-        Set<Part> out = new LinkedHashSet<>();
-        out.add(new Part(Bodies.Expanding.class, "policy"));
-        out.add(new Part(Bodies.RecursiveCallSigs.class, "policy"));
-        out.add(new Part(Output.Evaluated.class, "arms"));
-        out.add(new Part(Output.EvaluationLinked.class, "arms"));
-        out.add(new Part(Output.Examples.class, "arms"));
-        out.add(new Part(Output.Examples.class, "sourceId"));
-        out.add(new Part(Adequacy.Obligations.class, "scope"));
+    static Map<Part, WhatAComponentHolds> whatEachComponentHolds() {
+        Map<Part, WhatAComponentHolds> out = new LinkedHashMap<>();
+        holds(out, Bodies.Expanding.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.RecursiveCallSigs.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.WrittenIntoBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.ReachedByBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.BehaviorAritiesForBody.class, "policy",
+                WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Output.Evaluated.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Output.EvaluationLinked.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Output.Examples.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Output.Examples.class, "sourceId", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Adequacy.Obligations.class, "scope", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.AttachedTo.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.Declares.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.LayoutOf.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.ModuleOf.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.Parsed.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.RowNames.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Front.Text.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Names.StandInBlocks.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
+        names(out, Bodies.LoweredBody.class, "fn");
+        names(out, Bodies.Assumptions.class, "behavior");
+        names(out, Machines.OfDeclaration.class, "named");
+        names(out, Names.CompilationDeclares.class, "named");
+        names(out, Names.Declaration.class, "named");
+        names(out, Names.DeclarationIsNewtype.class, "named");
+        names(out, Names.DeclarationKindOf.class, "named");
+        names(out, Names.Definition.class, "named");
+        names(out, Names.ResolvedDeclaration.class, "named");
+        names(out, Shapes.CardinalityPremiseOf.class, "named");
+        names(out, Shapes.ClausesExpandedFor.class, "named");
+        names(out, Shapes.DerivedDef.class, "named");
+        names(out, Shapes.EffectiveFieldTypesOf.class, "named");
+        names(out, Shapes.FieldBindingsOf.class, "named");
+        names(out, Shapes.MeaningOf.class, "named");
+        names(out, Shapes.NewtypeInnerOf.class, "named");
+        names(out, Shapes.NormalizedDef.class, "named");
         return out;
     }
 
-    /** Whether every component this register excuses is one a question still holds. */
+    private static void names(Map<Part, WhatAComponentHolds> out, Class<?> key, String component) {
+        holds(out, key, component, WhatAComponentHolds.SOMETHING_THE_MODULE_HOLDS);
+    }
+
+    private static void holds(Map<Part, WhatAComponentHolds> out, Class<?> key, String component,
+                              WhatAComponentHolds what) {
+        out.put(new Part(key, component), what);
+    }
+
+    /**
+     * Every line of the register that nothing reads: one naming a component no question holds any
+     * more, and one naming a component whose role is read off what it holds.
+     *
+     * <p>Both are lines that say nothing, and a line that says nothing beside lines that decide the
+     * census is a line somebody will read as deciding something. A name written as text is settled
+     * against the module the key names, so writing a word beside one here would be writing a word
+     * that is never asked for.
+     */
     static Set<Part> staleIn(List<Class<?>> questions) {
-        Set<Part> held = new LinkedHashSet<>();
+        Set<Part> read = new LinkedHashSet<>();
         for (Class<?> question : questions) {
             RecordComponent[] parts = question.getRecordComponents();
             if (parts == null) {
                 continue;
             }
             for (RecordComponent part : parts) {
-                held.add(new Part(question, part.getName()));
+                if (part.getType() != String.class) {
+                    read.add(new Part(question, part.getName()));
+                }
             }
         }
-        Set<Part> stale = new TreeSet<>(saysWhichModuleOrHowToReadIt());
-        stale.removeAll(held);
+        Set<Part> stale = new TreeSet<>(whatEachComponentHolds().keySet());
+        stale.removeAll(read);
         return stale;
     }
 

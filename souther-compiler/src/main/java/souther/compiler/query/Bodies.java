@@ -1211,21 +1211,49 @@ public final class Bodies {
      * The declarations one body's expansion writes into it, and the ones those write into
      * themselves.
      *
-     * <p>What a body reaches, asked once. Three answers a body is checked against are the module's
-     * index narrowed to what this body reaches — what the behaviors it names take, what the
-     * recursions it calls are typed as, what those construct — and each narrowing is the same
-     * question about the same body. Worked out where each is wanted, it is the same walk written
-     * three times, and three walks that have to agree about what a body reaches are three chances
-     * for one of them to be narrower than what the expansion actually writes in.
+     * <p>What ends up in this body's tree, asked once. Two of the answers a body is checked against
+     * are the module's index narrowed to the names its tree holds, and each narrowing is the same
+     * question about the same body. Worked out where each is wanted, it is one walk written twice,
+     * and two walks that have to agree about what an expansion writes in are two chances for one of
+     * them to be wrong about it.
      *
      * <p>Over every name that reaches a declaration rather than over what is applied. A value is
      * handed over by writing its name and is substituted there, so a walk that followed only calls
      * would miss the definition that carries something in — and the closure, because what is
      * substituted may itself name something that is.
      *
-     * <p>Which definitions a body reaches is what the policy decides, so the policy is part of the
+     * <p><b>It stops at a recursion.</b> A call to a helper that recurses is left standing and
+     * lowered to a method of its own, so what that helper's body names is written into that method
+     * and not into this one. Followed through, this would hand a body the names of everything its
+     * recursions reach and make an edit to one of those an edit to this body — which is the breadth
+     * a narrowing is for.
+     *
+     * <p>Which definitions a body writes in is what the policy decides, so the policy is part of the
      * question: the discharge representation leaves the language's own operations standing where the
      * emitted one expands them.
+     */
+    public record WrittenIntoBody(String module, String fn, InliningPolicy policy)
+            implements Key<Set<ReachName.Declaration>> {
+
+        @Override
+        public Answer<Set<ReachName.Declaration>> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
+            if (!def.present() || !against.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(Ordered.set(walked(def.value(), against.value(), true)));
+        }
+    }
+
+    /**
+     * The declarations one body reaches, through the recursions it calls as well as into what is
+     * written into it.
+     *
+     * <p>The other relation, and it is not the one above. What a recursion constructs is attributed
+     * to the behavior that calls it and so are the recursions it calls in turn (spec §blocks), so
+     * what is wanted here is the closure through them — while what a body's own tree holds stops
+     * where a recursion is left standing.
      */
     public record ReachedByBody(String module, String fn, InliningPolicy policy)
             implements Key<Set<ReachName.Declaration>> {
@@ -1237,20 +1265,42 @@ public final class Bodies {
             if (!def.present() || !against.present()) {
                 return Answer.absent();
             }
-            HelperTable table = against.value().table();
-            Set<ReachName.Declaration> reached = new LinkedHashSet<>();
-            Deque<Hir.FnDef> todo = new ArrayDeque<>();
-            todo.add(def.value());
-            while (!todo.isEmpty()) {
-                for (ReachName.Declaration each : writtenInto(todo.poll(), table)) {
-                    Hir.FnDef written = reached.add(each) ? table.reached(each) : null;
-                    if (written != null) {
-                        todo.add(written);
-                    }
+            return Answer.of(Ordered.set(walked(def.value(), against.value(), false)));
+        }
+    }
+
+    /**
+     * The declarations reached from {@code def}, going into a recursion's body only where
+     * {@code stoppingAtRecursions} says the walk may.
+     *
+     * <p>The two relations are one walk with one question asked at each step, because the step is
+     * the same: what a definition names is what it names, and what differs is whether the walk goes
+     * on from a declaration that is left standing.
+     */
+    private static Set<ReachName.Declaration> walked(Hir.FnDef def, Expanding.Of against,
+                                                     boolean stoppingAtRecursions) {
+        HelperTable table = against.table();
+        Set<ReachName.Declaration> reached = new LinkedHashSet<>();
+        Deque<Hir.FnDef> todo = new ArrayDeque<>();
+        todo.add(def);
+        while (!todo.isEmpty()) {
+            for (ReachName.Declaration each : writtenInto(todo.poll(), table)) {
+                // A recursion is left where it was called, so neither it nor anything it reaches is
+                // written into this body. It is left out of the answer and not merely unfollowed:
+                // what a reader does with this is read the names its declarations write.
+                if (stoppingAtRecursions && against.graph().recurses(each)) {
+                    continue;
+                }
+                if (!reached.add(each)) {
+                    continue;
+                }
+                Hir.FnDef written = table.reached(each);
+                if (written != null) {
+                    todo.add(written);
                 }
             }
-            return Answer.of(Ordered.set(reached));
         }
+        return reached;
     }
 
     /**
@@ -1288,7 +1338,9 @@ public final class Bodies {
      * body names is written into it, so a behavior named in one of those is a behavior this body's
      * expansion asks the arity of: taken from the body alone, a value written {@code let f = twice}
      * and handed on would be left standing as a name where it has to become the behavior it denotes.
-     * {@link ReachedByBody} is what those definitions are.
+     * {@link WrittenIntoBody} is what those definitions are — which stops where a recursion does,
+     * because a behavior named inside one is named in the method that recursion is lowered to and
+     * not here.
      */
     public record BehaviorAritiesForBody(String module, String fn, InliningPolicy policy)
             implements Key<Map<ValueName.Behavior, Integer>> {
@@ -1297,20 +1349,20 @@ public final class Bodies {
         public Answer<Map<ValueName.Behavior, Integer>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
-            Answer<Set<ReachName.Declaration>> reached =
-                    db.ask(new ReachedByBody(module, fn, policy));
+            Answer<Set<ReachName.Declaration>> written =
+                    db.ask(new WrittenIntoBody(module, fn, policy));
             Answer<Map<ValueName.Behavior, Integer>> arities =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !against.present() || !reached.present()
+            if (!def.present() || !against.present() || !written.present()
                     || !arities.present()) {
                 return Answer.absent();
             }
             Set<ValueName.Behavior> named = new LinkedHashSet<>();
             namesIn(def.value(), named);
-            for (ReachName.Declaration each : reached.value()) {
-                Hir.FnDef written = against.value().table().reached(each);
-                if (written != null) {
-                    namesIn(written, named);
+            for (ReachName.Declaration each : written.value()) {
+                Hir.FnDef into = against.value().table().reached(each);
+                if (into != null) {
+                    namesIn(into, named);
                 }
             }
             Map<ValueName.Behavior, Integer> out = new LinkedHashMap<>();

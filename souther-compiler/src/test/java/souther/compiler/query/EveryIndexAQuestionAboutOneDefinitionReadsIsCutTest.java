@@ -426,19 +426,38 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     }
 
     /**
-     * And every component excused from naming something is one a question still holds.
+     * And somebody has read every component of every question the census met.
      *
-     * <p>The register's only obligation, because its default is the strict half: a component nobody
-     * has judged puts its key among the readers of an index, which asks more rather than less. What
-     * would go quiet is a line left behind by a key that has moved on, and that is what this reads.
+     * <p>No default either way, because the two halves of the census want opposite ones. A reader
+     * holding an unread component is safer read as naming something, which puts its reads of an
+     * index into the census; an index holding one is safer read as saying which module, because
+     * reading it as naming something takes the index itself out of the census and every edge into it
+     * along with it. A word that leaned either way would be quietly wrong about the other half, so
+     * an unread component is a failure and not a reading.
      */
     @Test
-    void everyComponentExcusedIsOneAQuestionStillHolds() throws Exception {
+    void somebodyHasReadEveryComponentTheCensusMet() {
+        Set<IndexEdges.Part> unread = new TreeSet<>();
+        CENSUS.values().forEach(census -> unread.addAll(census.unread()));
+
+        assertEquals(Set.of(), unread,
+                "a question holds something at a component that nobody has said whether it names"
+                        + " something the module holds");
+    }
+
+    /**
+     * And every component that register reads is one a question still holds.
+     *
+     * <p>The other side of the same table. A line left behind by a key that has moved on says
+     * nothing and is read by nothing, and the register is what the census rests on.
+     */
+    @Test
+    void everyComponentReadIsOneAQuestionStillHolds() throws Exception {
         List<Class<?>> questions = DeclaredQuestions.found(DeclaredQuestions.scan());
 
         assertTrue(questions.size() > 100,
                 () -> "a vocabulary of " + questions.size() + " is not this compiler's");
         assertEquals(Set.of(), IndexEdges.staleIn(questions),
-                "a component written down as saying which module, which no question holds");
+                "a component written down here, which no question holds");
     }
 }
