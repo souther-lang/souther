@@ -115,6 +115,20 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
     }
 
     @Test
+    void aRisingWhoseCountOnlyAReaderAsksAbout() {
+        reportsAlike("a rising whose count only a reader asks about", List.of(List.of("NeedTwo")),
+                """
+                module demo exposing ( Loop, NeedTwo )
+
+                data Loop = Set<Loop>
+                    invariant empty = Set.size(value) <= 0
+
+                data NeedTwo = Set<Loop>
+                    invariant two = Set.size(value) >= 2
+                """);
+    }
+
+    @Test
     void aLackReachingAnotherThroughADeclarationThatHasValues() {
         reportsAlike("a lack reaching another through a declaration that has values",
                 List.of(List.of("Bad")), """

@@ -123,6 +123,22 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
     }
 
     /**
+     * A declaration written beside them is paid for by itself.
+     *
+     * <p>Which declarations are answered together is worked out once for the module, so a
+     * declaration written beside the others is an answer every count of the module reads. What
+     * keeps that from being a count of the module taken again is that what it says about each of
+     * them comes out the same, and this is where that is held: a count that read the module's
+     * components rather than its own would be paid for by every declaration there is.
+     */
+    @Test
+    void aDeclarationWrittenBesideThemIsPaidForByItself() {
+        assertEquals(askingsFor(besideSpares(1, 99), besideSpares(2, 99)),
+                askingsFor(besideSpares(32, 99), besideSpares(33, 99)),
+                "a declaration was written beside them and the rest were counted again for it");
+    }
+
+    /**
      * And the same over a chain, where which rule moved is what decides who pays.
      *
      * <p>Both rules in one test because neither says anything alone. That the rule only the top of

@@ -903,11 +903,52 @@ public final class Shapes {
             if (!reading.present()) {
                 return Answer.absent();
             }
+            TypeSymbol self = TypeSymbols.declared(named);
+            // Read off the module's, because which declarations are one answer is a fact about the
+            // graph and not about any declaration in it: worked out here, every declaration of a
+            // module would walk everything it reaches to be told what one walk tells all of them.
+            Answer<Map<TypeSymbol, List<TypeSymbol>>> module =
+                    db.ask(new CardinalityComponentsOf(named.module()));
+            if (module.present() && module.value().containsKey(self)) {
+                return Answer.of(module.value().get(self));
+            }
+            // And worked out here for a declaration no module of this compilation indexes, which a
+            // count reaches where it walks into a module nobody is editing.
             try {
-                return Answer.of(TypeCardinality.componentOf(
-                        TypeSymbols.declared(named), reading.value()));
+                return Answer.of(TypeCardinality.componentOf(self, reading.value()));
             } catch (CompileException e) {
                 return Answer.of(List.of(), Report.of(e));
+            }
+        }
+    }
+
+    /**
+     * Which declarations have to be answered together, for every declaration this module writes and
+     * everything they reach.
+     *
+     * <p>One walk for the module rather than one per declaration. What it answers is read off the
+     * shapes, so an author changing what a rule allows leaves it where it was, and a declaration
+     * written beside the others changes it without changing what it says about any of them — which
+     * is what keeps the counts built on it where they are.
+     */
+    public record CardinalityComponentsOf(String name)
+            implements Key<Map<TypeSymbol, List<TypeSymbol>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, List<TypeSymbol>>> compute(Db db) {
+            Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            if (!written.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(TypeCardinality.componentsOf(written.value(), reading.value()));
+            } catch (CompileException e) {
+                return Answer.of(Map.of(), Report.of(e));
             }
         }
     }

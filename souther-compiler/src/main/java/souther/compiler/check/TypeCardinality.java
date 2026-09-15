@@ -124,16 +124,43 @@ public final class TypeCardinality {
     }
 
     /**
-     * The declarations that have to be answered together with {@code named}, in the order two
-     * readers of them would both write.
+     * Which declarations have to be answered together, for everything {@code roots} reach, each of
+     * them against the whole of the component it is in.
      *
-     * <p>Canonical and not the order the walk found them in: this says which declarations are one
-     * answer, and a set said twice has to be said the same way both times. Where the declarations
-     * are reported is another question and is asked of what a module declares.
+     * <p>All of them from one walk. Which declarations are one answer is a fact about the graph
+     * rather than about any declaration in it, and asking it of one declaration at a time means
+     * walking everything that one reaches — so asking it of each of a module's declarations in turn
+     * walks the module once per declaration, where the question was the same question every time.
+     *
+     * <p>In the order two readers of a component would both write it. This says which declarations
+     * are one answer, and a set said twice has to be said the same way both times; where they are
+     * reported is another question and is asked of what a module declares.
      *
      * <p>Read off the shapes and not off the rules. What reads what is written in the fields and in
      * the names they are written in terms of, so an author changing what a rule allows leaves this
      * where it was.
+     */
+    public static Map<TypeSymbol, List<TypeSymbol>> componentsOf(List<? extends TypeSymbol> roots,
+                                                                 RuleReadingSource source) {
+        Symbols symbols = source.symbols();
+        Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
+        declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
+        Map<TypeSymbol, List<TypeSymbol>> of = new LinkedHashMap<>();
+        for (List<TypeSymbol> component : TypeComponents.of(edges)) {
+            List<TypeSymbol> members = component.stream().sorted().toList();
+            members.forEach(each -> of.put(each, members));
+        }
+        return of;
+    }
+
+    /**
+     * The same for one declaration, worked out from that declaration alone.
+     *
+     * <p>What a caller with nowhere to ask does. Finding a component means walking everything the
+     * declaration reaches, so a caller that did this for each of a module's declarations in turn
+     * would walk the module once per declaration; where the components of the module are answered
+     * together ({@link #componentsOf}) that walk is made once and this is not wanted.
      */
     public static List<TypeSymbol> componentOf(TypeSymbol named, RuleReadingSource source) {
         Symbols symbols = source.symbols();
@@ -440,7 +467,34 @@ public final class TypeCardinality {
                 }
             }
         }
+        settleUnrounded(component, declared, source, policy, answers, granted, machines);
         discharge(component, answers);
+    }
+
+    /**
+     * What the risen declarations come to once nothing is rounded, which is what they answer with.
+     *
+     * <p>The rounding is what makes the rising stop and is no part of what it found. A count rounded
+     * up is a count as far as the questions the cuts were gathered from can tell apart, so an answer
+     * carrying one is an answer about those questions as much as about the declaration — and two
+     * readers who asked different things of the same declarations would need two of them. Read once
+     * more without it and the answer is the declarations' own, whoever holds it.
+     *
+     * <p>Sound because the rising's answers are upper bounds and a reading over upper bounds is one:
+     * what comes out is no wider than what was rounded, since rounding only ever went up. And every
+     * member is read from what the rising settled rather than from what this pass has written, so
+     * what each comes to is settled by the rising and not by where it sits among the others.
+     */
+    private static void settleUnrounded(List<TypeSymbol> component,
+                                        Map<TypeSymbol, Hir.Def> declared, RuleReadingSource source,
+                                        ReadingPolicy policy, Answers answers,
+                                        Set<TypeSymbol> granted, DeclarationReadings machines) {
+        Map<TypeSymbol, Cardinality> found = new LinkedHashMap<>();
+        for (TypeSymbol each : component) {
+            found.put(each, transfer(
+                    each, declared.get(each), source, policy, answers, granted, machines));
+        }
+        found.forEach(answers::settle);
     }
 
     /** Whether two answers are the same one to rise through, which the proofs have no part in. */
