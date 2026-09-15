@@ -8,8 +8,10 @@ import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -130,7 +132,6 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             "souther.compiler.types.ApplicationOrigin$ComposedFixture",
             "souther.compiler.types.ApplicationOrigin$Derived",
             "souther.compiler.types.ApplicationOrigin$Eta",
-            "souther.compiler.types.ApplicationOrigin$Written",
             "souther.compiler.types.BindingOwner$OfData",
             "souther.compiler.types.BindingOwner$OfFields",
             "souther.compiler.types.BindingOwner$OfSignature",
@@ -153,7 +154,6 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             "souther.compiler.types.ReferenceDerivationCause$CollectionLiteral",
             "souther.compiler.types.ReferenceDerivationCause$ReferenceWrittenBack",
             "souther.compiler.types.ReferenceDerivationCause$SizeMeaningOfReference",
-            "souther.compiler.types.RuleOrigin",
             "souther.compiler.types.SourceReferenceOrigin",
             "souther.compiler.types.Type$Erroneous",
             "souther.compiler.types.Type$FnOf",
@@ -260,6 +260,54 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertNotSame(DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotName.class),
                 DeclarationAgreement.erasedAs(SourcePos.class),
                 "and two erased kinds stay two, so a text is not held against a position");
+    }
+
+    /**
+     * Which rule a source wrote is one thing not compared, and it is that by a decision.
+     *
+     * <p>It is a record of the front end's, so the package rule answered for it and a crossing read
+     * it on those terms. What it holds is an identity — which owner wrote the block, and which of
+     * that owner's blocks it is — and the reader that needs one is the coverage that files what a
+     * row exercised, not a crossing.
+     *
+     * <p>Its own kind, like every other erased thing. Held against a position or a text, a rule
+     * would come back equal to them, and what is erased is a part a crossing cannot see rather than
+     * a slot anything may turn up in.
+     */
+    @Test
+    void whichBlockOfItsOwnerARuleIsIsNotWhatACrossingReadsItBy() {
+        assertTrue(DeclarationAgreement.erases(RuleOrigin.class),
+                "what a crossing depends on is what a rule admits, not the number its owner gave"
+                        + " the block");
+        assertNotSame(DeclarationAgreement.erasedAs(RuleOrigin.class),
+                DeclarationAgreement.erasedAs(SourcePos.class),
+                "and two erased kinds stay two, so a rule is not held against a position");
+    }
+
+    /**
+     * Where an author put a call is not compared, and the other reasons an application is there
+     * still are.
+     *
+     * <p>Erased one arm at a time, which is what the answers are. An application the author wrote
+     * carries the construct it was written as, and that construct is answered where it is answered;
+     * the arms beside it say a pass put the application there and name what it was following, which
+     * is a question of its own and open.
+     *
+     * <p>So the arm and never what it is an arm of. Erased at the interface, a call the author wrote
+     * and one a pass derived would be one thing not compared — two applications that are there for
+     * different reasons, arriving as the same.
+     */
+    @Test
+    void whereAnAuthorPutACallIsNotComparedAndTheOtherReasonsAreLeftOpen() {
+        assertTrue(DeclarationAgreement.erases(ApplicationOrigin.Written.class),
+                "what an application is is what it applies and what it is handed, and where it was"
+                        + " written is not one of those");
+        assertFalse(DeclarationAgreement.erases(ApplicationOrigin.Derived.class),
+                "an application a pass wrote is there for a reason nobody has answered about yet,"
+                        + " and it goes on being asked");
+        assertNotSame(DeclarationAgreement.erasedAs(ApplicationOrigin.Written.class),
+                DeclarationAgreement.erasedAs(RuleOrigin.class),
+                "and two erased kinds stay two, so a call is not held against a rule");
     }
 
     /**
