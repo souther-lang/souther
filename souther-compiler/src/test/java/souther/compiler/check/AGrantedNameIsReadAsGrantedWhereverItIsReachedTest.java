@@ -51,7 +51,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` has no value while nothing is granted");
@@ -138,7 +138,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+        assertTrue(CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                         .granting(
                                 // Asked of the holder, so that what it reaches is read: the name
@@ -178,7 +178,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertEquals(List.of(true, true),

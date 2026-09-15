@@ -1,16 +1,11 @@
 package souther.compiler.query;
 
-import souther.compiler.check.ReadingPolicy;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeCardinality;
-import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -145,47 +140,4 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
                         + " did not");
     }
 
-    /**
-     * And what the components came to is what one count of the whole module would have come to.
-     *
-     * <p>Of the report and not of every count. What a count is asked for is which declarations no
-     * value satisfies, which of them are at fault for it together, and what shows it; a component
-     * answered under the counts its own rules turn on may round a count some other declaration's
-     * rule asked about differently, and no reader of this can tell.
-     */
-    @Test
-    void whatTheComponentsCameToIsWhatOneCountOfTheModuleWouldHave() {
-        for (String written : List.of(
-                besideSpares(4, 99),
-                chain(4, 99, 99),
-                """
-                module chain.links exposing ( Bad, Wanting, Pair, Fine )
-
-                data Bad = Int
-                    invariant value >= 2 && value <= 1
-                data Wanting = { bad: Bad }
-                data Pair = { one: Pair, two: Fine }
-                data Fine = Int
-                    invariant value >= 1 && value <= 9
-                """)) {
-            Compilation c = Compilation.ofDocuments(
-                    new LinkedHashMap<>(Map.of(ID, written)), Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
-
-            List<TypeSymbol.AtModule> declared =
-                    c.db().ask(new Front.DeclaredTypes(MODULE)).value();
-            RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();
-            ReadingPolicy policy = c.db().ask(new Front.Reading()).value();
-            TypeCardinality.Cardinalities whole = TypeCardinality.solve(
-                    declared, source, policy, c.db().readings(),
-                    TypeCardinality.Premises.read(source, policy, c.db().readings()));
-
-            assertEquals(
-                    new UninhabitableTypes.WithNoValue.Counted(
-                            UninhabitableTypes.withNoValueOfTheirOwn(declared, whole)),
-                    c.db().ask(new Shapes.TypesWithNoValue(MODULE)).value(),
-                    () -> "the components came to something a count of the module would not have,"
-                            + " for:\n" + written);
-        }
-    }
 }

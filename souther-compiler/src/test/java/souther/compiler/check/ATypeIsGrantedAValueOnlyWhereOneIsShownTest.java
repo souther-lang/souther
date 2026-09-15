@@ -36,7 +36,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
         Map<TypeSymbol, Cardinality> solution =
-                TypeCardinality.solve(
+                CountsByComponent.of(
                         compilation.module("demo").defs().stream()
                                 .map(each -> each.declaration().node()).toList(),
                         RuleReadings.of(compilation, "demo"),

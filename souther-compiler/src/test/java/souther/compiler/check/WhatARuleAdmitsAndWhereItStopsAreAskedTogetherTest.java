@@ -284,7 +284,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
                 .map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         String named = source.contains("data Code") ? "Code" : "Held";
-        return TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+        return CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                         ReadAs.THE_COMPILATION_DOES)
                 .of(TypeSymbols.declared(new TypeKey(symbols.module(), named))).why();
     }

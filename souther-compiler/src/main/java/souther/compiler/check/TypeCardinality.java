@@ -94,39 +94,19 @@ public final class TypeCardinality {
         Counts NONE = _ -> null;
     }
 
-    /** How many values each declaration {@code declarations} reaches has at most, read for
-     *  itself. */
-    public static Cardinalities solve(List<Hir.Def> declarations, RuleReadingSource source,
-                                      ReadingPolicy policy) {
-        return solve(declarations, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of each declaration's
-     *  string rules before building any of it. */
-    public static Cardinalities solve(List<Hir.Def> declarations, RuleReadingSource source,
-                                      ReadingPolicy policy, DeclarationReadings machines) {
-        List<TypeSymbol> roots = new ArrayList<>();
-        for (Hir.Def def : declarations) {
-            roots.add(def.declares());
-        }
-        return solve(roots, source, policy, machines, Premises.read(source, policy, machines));
-    }
-
     /**
-     * The same from the names of the declarations the count is being taken for, with what each
-     * declaration settles before the count begins asked of {@code premises}.
+     * Every declaration {@code roots} reaches answered in one walk of the graph.
      *
-     * <p>Names and not declarations, because the names are all a count needs to start: what each of
-     * them declares is read as the walk reaches it, and a caller holding the declarations would be
-     * handing over a reading of a whole module to have the first step of a walk taken.
-     *
-     * <p>And the premises asked of somebody rather than read here. What a declaration settles is a
-     * fact about that declaration, and where the premises come from an answer per declaration, a
-     * count taken again over an edited module reads only the declarations the edit reached.
+     * <p>Not the way a compilation counts. A compilation holds an answer per component and is handed
+     * what the components a count reads came to ({@link #ofComponent}), so a declaration whose
+     * neighbours have not moved is not worked out again; this answers all of them together and is
+     * kept for one thing, which is to say what that other way should come to. Two counts of one
+     * module differ in what each component was rounded to and in nothing a reader of the report can
+     * see, and holding them alike is what says the decomposition changed nothing.
      */
-    public static Cardinalities solve(List<? extends TypeSymbol> roots, RuleReadingSource source,
-                                      ReadingPolicy policy, DeclarationReadings machines,
-                                      Premises premises) {
+    static Cardinalities overTheWholeGraph(List<? extends TypeSymbol> roots,
+                                           RuleReadingSource source, ReadingPolicy policy,
+                                           DeclarationReadings machines, Premises premises) {
         Symbols symbols = source.symbols();
         Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();

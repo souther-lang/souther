@@ -352,7 +352,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         List<Hir.Def> defs = compilation.module("demo").defs().stream()
                 .map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+        return CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                         ReadAs.THE_COMPILATION_DOES)
                 .of(named(symbols, source.contains("data Span") ? "Span" : "Held")).why();
     }
