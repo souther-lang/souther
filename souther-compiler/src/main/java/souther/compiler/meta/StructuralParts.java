@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
@@ -19,10 +20,11 @@ import java.util.List;
  * reaches less and stays green. Asked here, the three see the same parts or none of them do.
  *
  * <p>A record hands over its components. Anything else hands over what it declares and lets be read
- * — an instance field with a no-argument method of the same name, which is the shape a record has
- * and the one a form written by hand keeps. A field with no such method is refused rather than
- * passed over: a part nothing can read is a part a comparison would decide without, which is the
- * failure this exists to stop. Nothing reaches into what a form does not hand out.
+ * — a final instance field with a no-argument method of the same name answering the type the field
+ * holds, which is the shape a record has and the one a form written by hand keeps. Each of those is
+ * refused rather than passed over, since a part nothing can read is a part a comparison would decide
+ * without and a part handed over as something else is the two readers here looking at two things.
+ * Nothing reaches into what a form does not hand out.
  */
 final class StructuralParts {
 
@@ -69,25 +71,46 @@ final class StructuralParts {
             return parts;
         }
         List<Part> parts = new ArrayList<>();
-        for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+        for (Field field : type.getDeclaredFields()) {
             if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
                 continue;
             }
-            parts.add(new Part(field.getName(), field.getGenericType(),
-                    handsOver(type, field.getName())));
+            parts.add(new Part(field.getName(), field.getGenericType(), handsOver(type, field)));
         }
         parts.sort(Comparator.comparing(Part::name));
         return parts;
     }
 
-    /** The method a form hands one of its parts over by. */
-    private static Method handsOver(Class<?> type, String part) {
+    /**
+     * The method a form hands one of its parts over by.
+     *
+     * <p>Held to what a record's accessor is, because the two readers here would otherwise come
+     * apart again: what a part may hold is read off the field and what it does hold is read off the
+     * method, so a method answering something else is a static reader and a walking reader looking
+     * at two things — which is what reading parts in one place was for. A part written where it can
+     * be set again is refused for the same reason, a form being compared for what it says now and
+     * asked about for what it can ever say.
+     */
+    private static Method handsOver(Class<?> type, Field field) {
+        String part = field.getName();
+        if (!Modifier.isFinal(field.getModifiers())) {
+            throw new IllegalStateException(type.getName() + " can write `" + part + "` again, so"
+                    + " what it is made of is not what it was made of. Hold it as written once, or"
+                    + " hold it somewhere this does not read.");
+        }
+        Method handedOver;
         try {
-            return type.getMethod(part);
+            handedOver = type.getMethod(part);
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException(type.getName() + " holds `" + part + "` and hands it to"
                     + " nobody, so a comparison over what it is made of would pass it over without"
                     + " saying so. Hand it over, or hold it somewhere this does not read.", e);
         }
+        if (!handedOver.getGenericReturnType().equals(field.getGenericType())) {
+            throw new IllegalStateException(type.getName() + " hands `" + part + "` over as "
+                    + handedOver.getGenericReturnType() + " and holds it as " + field.getGenericType()
+                    + ", so what this walks and what it reads off the class are two things.");
+        }
+        return handedOver;
     }
 }

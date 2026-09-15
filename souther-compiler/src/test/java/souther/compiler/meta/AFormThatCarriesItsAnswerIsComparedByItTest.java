@@ -9,9 +9,9 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenTypeMeaning;
 
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -24,6 +24,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A form that carries both a spelling and what the front end settled it to be is compared by the
@@ -85,6 +86,22 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                         + " with no arm is compared by how it was written");
     }
 
+    /**
+     * The control for the walk: it goes through a form of the grammar that is not a record.
+     *
+     * <p>What a written type comes to is held nowhere else, so reaching it says the walk went
+     * through the written type rather than stopping at it. Most of what a form holds is held by some
+     * other form too, and a walk that stopped would go on finding those by the other route and
+     * saying nothing — which is how this test went on passing while the set it was reading over got
+     * smaller.
+     */
+    @Test
+    void andTheWalkGoesThroughAFormOfTheGrammarThatIsNotARecord() {
+        assertTrue(reachable().contains(WrittenTypeMeaning.Settled.class),
+                "what a written type comes to is reached through the written type and nowhere"
+                        + " else, so a walk that stops at one never sees it");
+    }
+
     /** The control: the walk can tell a form that carries only a spelling from one that carries both. */
     @Test
     void andAFormCarryingOnlyASpellingIsNotAmongThem() {
@@ -97,20 +114,21 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
 
     /** Whether {@code form} holds a spelling and, beside it, what that spelling was settled to be. */
     private static boolean carriesASpellingAndItsAnswer(Class<?> form) {
-        if (!form.isRecord()) {
+        if (!StructuralParts.areHandedOver(form)) {
             return false;
         }
         boolean spelling = false;
         boolean answer = false;
-        for (RecordComponent part : form.getRecordComponents()) {
-            spelling |= part.getType() == WrittenName.class || part.getType() == String.class;
-            answer |= part.getType() == TypeSymbol.class || part.getType() == ValueName.class
-                    || part.getType() == BindingId.class || part.getType() == Type.class
+        for (StructuralParts.Part part : StructuralParts.of(form)) {
+            Class<?> held = part.held() instanceof Class<?> plain ? plain : null;
+            spelling |= held == WrittenName.class || held == String.class;
+            answer |= held == TypeSymbol.class || held == ValueName.class
+                    || held == BindingId.class || held == Type.class
                     // A use is settled to a reference, which carries the declaration it reaches.
                     // Read for the same reason `ValueName` is: what the front end put beside the
                     // spelling is the answer, whether the answer is the declaration or the
                     // reference that reached it.
-                    || part.getType() == ReachName.class;
+                    || held == ReachName.class;
         }
         return spelling && answer;
     }
@@ -128,11 +146,11 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 todo.addAll(List.of(type.getPermittedSubclasses()));
                 continue;
             }
-            if (!type.isRecord()) {
+            if (!StructuralParts.areHandedOver(type)) {
                 continue;
             }
-            for (RecordComponent part : type.getRecordComponents()) {
-                todo.addAll(held(part.getGenericType()));
+            for (StructuralParts.Part part : StructuralParts.of(type)) {
+                todo.addAll(held(part.held()));
             }
         }
         return seen;
