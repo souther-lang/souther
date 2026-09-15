@@ -579,9 +579,12 @@ final class ReadQuantities implements Quantities {
      * ({@link #stands}). A fixing at a position no value under this context has is a rule about a
      * row other than the one being asked about.
      *
-     * <p>And only where one value was fixed there. A term fixed at two is a contradiction, and it is
-     * said as one where the fixings are read ({@link #emptiness}); put onto the arithmetic as the
-     * range between them, it would come back as a position with room to move.
+     * <p>And what this puts on is only what one value was fixed at. A term fixed at two is a
+     * contradiction and is said as one where the fixings are read ({@link #emptiness}); carried
+     * here as the range between them, it would be a second account of that, and one that reads as a
+     * position with room to move. Which is not a promise about the rules a question is answered
+     * against: a term the question itself names is put on by {@link #runsIn} whatever it was fixed
+     * at, and that is the older reading of the same helper.
      */
     private ConstraintState<InputAtom> effectiveConstraints(StructuralContext under) {
         // Nothing fixed, which is every reading that answers about the declarations rather than

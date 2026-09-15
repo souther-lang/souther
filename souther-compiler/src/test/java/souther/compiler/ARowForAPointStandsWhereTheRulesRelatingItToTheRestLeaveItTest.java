@@ -7,6 +7,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,11 +50,15 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
      */
     @Test
     void aCompanionStandsWhereTheRelationLeavesIt() {
-        List<int[]> offered = pointsOfTheYBorder();
+        List<long[]> offered = pointsOfTheYBorder();
 
         assertFalse(offered.isEmpty(), "the y border is one this model has points at");
-        for (int[] row : offered) {
-            assertTrue(row[1] <= 2 * row[0],
+        for (long[] row : offered) {
+            // The rule as the model writes it, and not in the width this test happens to read the
+            // values at: doubling the greatest x an `Int` holds is not an `Int`, and a product that
+            // wrapped would report a row that stands as one that turns back.
+            assertTrue(BigInteger.valueOf(row[1])
+                            .compareTo(BigInteger.valueOf(row[0]).shiftLeft(1)) <= 0,
                     () -> "(" + row[0] + ", " + row[1] + ") is offered for a point of the y border"
                             + " and turns back at `y <= 2 * x`");
         }
@@ -73,13 +78,14 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
             missed.addAll(each.classes());
         }
 
-        assertTrue(missed.stream().noneMatch(label -> label.contains("y")),
+        assertTrue(missed.stream().noneMatch(
+                        ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest::aboutYAlone),
                 () -> "every point of the y border has a row, and these had none: " + missed);
     }
 
     /** The rows offered for a point the {@code y} border draws, as the pair they stand at. */
-    private static List<int[]> pointsOfTheYBorder() {
-        List<int[]> out = new ArrayList<>();
+    private static List<long[]> pointsOfTheYBorder() {
+        List<long[]> out = new ArrayList<>();
         for (Generator.GeneratedRow row : OFFERED.rows()) {
             if (row.purposes().stream().anyMatch(
                     purpose -> purpose instanceof Generator.Purpose.ForAPoint point
@@ -95,14 +101,21 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
         return label.contains("y") && !label.contains("x");
     }
 
-    private static int[] pairOf(Generator.GeneratedRow row) {
+    /**
+     * The pair a row stands at.
+     *
+     * <p>Read as the width the carrier has. {@code Int} runs to what a long holds, and {@code x}
+     * here is bounded below and by nothing above — so a companion past what an int holds is a value
+     * this model admits, and reading one as an int turns a row that stands into a parse that threw.
+     */
+    private static long[] pairOf(Generator.GeneratedRow row) {
         List<FixtureTemplate> inputs = row.inputs();
         if (inputs.size() != 2) {
             throw new AssertionError("a row for `f` stands at two positions, and this one is "
                     + inputs.stream().map(FixtureTemplate::text).toList());
         }
-        return new int[] {Integer.parseInt(inputs.get(0).text()),
-                Integer.parseInt(inputs.get(1).text())};
+        return new long[] {Long.parseLong(inputs.get(0).text()),
+                Long.parseLong(inputs.get(1).text())};
     }
 
     /**
