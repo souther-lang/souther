@@ -3,15 +3,13 @@ package souther.compiler;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule compared against a quotient of written numbers is the rule it states with that quotient
@@ -62,17 +60,51 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
                 """.formatted(guard);
     }
 
-    /** The lines a model's rules draw, by the value each is drawn at. */
-    private static List<String> lines(String source) {
+    /**
+     * What a model's rules came to: the lines they drew, and what they left unread with the reason
+     * the position was left with.
+     *
+     * <p>Both, always, because a line nobody drew and a rule nobody read are two answers and the
+     * difference between them is what this whole measure is about. Read off the drawn lines alone,
+     * a rule this stopped reading for some other reason would pass for a quotient it declined to
+     * fold.
+     */
+    private record Measured(List<String> lines, List<String> notRead) {}
+
+    private static Measured measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
                 "the model under test compiles");
-        Map<String, List<BorderAssessment>> all =
-                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test was measured");
-        return all.getOrDefault("f", List.of()).stream().map(BorderAssessment::value).toList();
+        AdequacyReport.BehaviorReport behavior =
+                AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
+        return new Measured(
+                behavior.lines().stream().map(BorderAssessment::value).toList(),
+                behavior.partition().notRead().stream()
+                        .map(each -> each.at() + ": " + each.reason()).toList());
+    }
+
+    /**
+     * The lines a model's rules draw, by the value each is drawn at — of a model whose rule divides
+     * the position it names, so that nothing is left unread and the lines are the whole answer.
+     *
+     * <p>A rule relating two positions divides neither and says so, which is a different answer
+     * from this one; the models written that way are compared whole ({@link #measured}) rather than
+     * through here.
+     */
+    private static List<String> lines(String source) {
+        Measured measured = measured(source);
+        assertEquals(List.of(), measured.notRead(), "every rule of the model was read");
+        return measured.lines();
+    }
+
+    /** What a model whose rule this could not read is left with, which is the rule reported unread
+     *  and no line anywhere. */
+    private static void unread(String source) {
+        Measured measured = measured(source);
+        assertEquals(List.of("x: UNSUPPORTED_SYNTAX"), measured.notRead());
+        assertEquals(List.of(), measured.lines());
     }
 
     /** A quotient standing where a bound belongs draws the line its value draws. */
@@ -102,26 +134,32 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
      */
     @Test
     void aQuotientWrittenAsACoefficientIsTheNumberItMultipliesBy() {
-        assertEquals(lines(overTwo("y < x + 30")), lines(overTwo("y < 3 / 2 * x + 30")));
-        assertEquals(lines(overTwo("y < 30")), lines(overTwo("y < -1 / 2 * x + 30")));
+        Measured carried = measured(overTwo("y < 3 / 2 * x + 30"));
+        Measured vanished = measured(overTwo("y < -1 / 2 * x + 30"));
+
+        assertEquals(measured(overTwo("y < x + 30")), carried);
+        assertEquals(List.of("x + 30"), carried.lines());
+        assertEquals(measured(overTwo("y < 30")), vanished);
+        assertEquals(List.of("30"), vanished.lines());
     }
 
     /** Nothing is divided by nought, so the rule is left where a rule this cannot read is left. */
     @Test
     void aDivisorOfNoughtLeavesTheRuleUnread() {
-        assertEquals(List.of(), lines(overOne("Int", "x < 7 / 0")));
+        unread(overOne("Int", "x < 7 / 0"));
         assertEquals(List.of("7"), lines(overOne("Int", "x < 7 / 1")));
     }
 
     /**
-     * The one quotient of two whole numbers that is not one. The control divides the same dividend
-     * by one, so what is read here is the quotient and not the size of the number written.
+     * The quotient whose value is outside the range an {@code Int} holds. The control divides the
+     * same dividend by one, so what is read here is the quotient and not the size of the number
+     * written.
      */
     @Test
     void theQuotientOutsideTheRangeAnIntHoldsLeavesTheRuleUnread() {
         String least = "(0 - 9223372036854775807 - 1)";
 
-        assertEquals(List.of(), lines(overOne("Int", "x < " + least + " / -1")));
+        unread(overOne("Int", "x < " + least + " / -1"));
         assertEquals(List.of("-9223372036854775808"), lines(overOne("Int", "x < " + least + " / 1")));
     }
 
@@ -129,7 +167,7 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
      *  rule states what it always stated. */
     @Test
     void aDecimalDivideLeavesTheRuleUnread() {
-        assertEquals(List.of(), lines(overOne("Decimal", "x < 7.0m / 2.0m")));
+        unread(overOne("Decimal", "x < 7.0m / 2.0m"));
         assertEquals(List.of("3.5"), lines(overOne("Decimal", "x < 3.5m")));
     }
 
@@ -151,6 +189,6 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
                 }
                 """);
 
-        assertTrue(lines.contains("2"), lines.toString());
+        assertEquals(List.of("2"), lines);
     }
 }
