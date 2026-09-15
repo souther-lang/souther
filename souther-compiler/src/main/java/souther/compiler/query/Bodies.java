@@ -1185,6 +1185,10 @@ public final class Bodies {
      *
      * <p>Its own question rather than a read of {@link CalleeSigs} at the expansion, so a change to a
      * behavior's input <em>types</em> does not expand every body of the module again.
+     *
+     * <p>The module's index, and no expansion reads it. What one body wants is the entries for the
+     * behaviors it reaches, which {@link BehaviorAritiesForBody} projects out of this — read whole,
+     * a behavior declared anywhere in the module would expand every body in it again.
      */
     public record NamedBehaviorArity(String name)
             implements Key<Map<ValueName.Behavior, Integer>> {
@@ -1211,28 +1215,31 @@ public final class Bodies {
      * the module's identity: declaring a behavior nothing here names moves the index, and every body
      * of the module is expanded again against arities none of them wrote differently.
      *
-     * <p>Over the names the body wrote rather than over what it reaches once its helpers are
-     * expanded, which is the same set: a helper may not name a behavior at all (E1818), so expanding
-     * one into a body brings no behavior name the body has not got. A name a helper wrote anyway is
-     * one this body may not name, which is what an arity of none already says of it.
+     * <p>Over the tree the expansion walks and not over the one the author wrote. A definition this
+     * body names is written into it — a helper is expanded where it is called, a value is
+     * substituted where it is named — so a behavior named in one of those is a behavior this body's
+     * expansion asks the arity of. Taken from the body alone, a value written {@code let f = twice}
+     * and handed on would be left standing as a name where it has to become the behavior it denotes.
      *
-     * <p>The body as its module settled it, so the two representations an expansion is asked for
-     * read the same names — what a body writes is what it writes, whichever of its helpers a policy
-     * goes on to expand into it.
+     * <p>Which definitions those are is what the policy decides, so it is part of the question. The
+     * table {@link Expanding} holds is what a body may reach, and this walks the ones it does reach:
+     * a behavior a definition elsewhere in the module names is not one this body asks about.
      */
-    public record BehaviorAritiesForBody(String module, String fn)
+    public record BehaviorAritiesForBody(String module, String fn, InliningPolicy policy)
             implements Key<Map<ValueName.Behavior, Integer>> {
 
         @Override
         public Answer<Map<ValueName.Behavior, Integer>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
             Answer<Map<ValueName.Behavior, Integer>> arities =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !arities.present()) {
+            if (!def.present() || !against.present() || !arities.present()) {
                 return Answer.absent();
             }
             Map<ValueName.Behavior, Integer> out = new LinkedHashMap<>();
-            for (ValueName.Behavior each : behaviorsNamedIn(def.value())) {
+            for (ValueName.Behavior each
+                    : behaviorsThisBodyExpandsTo(def.value(), against.value().table())) {
                 Integer takes = arities.value().get(each);
                 if (takes != null) {
                     out.put(each, takes);
@@ -1242,10 +1249,43 @@ public final class Bodies {
         }
     }
 
-    /** Every behavior {@code def} writes the name of, in the order the body writes them. A kernel
-     *  the language ships writes no body here and so names none. */
-    private static Set<ValueName.Behavior> behaviorsNamedIn(Hir.FnDef def) {
+    /**
+     * Every behavior named in {@code def} or in anything {@code table} would write into it.
+     *
+     * <p>The closure and not one step of it: a value substituted into this body may name a value
+     * that names a behavior, and what arrives in the tree is the end of that chain.
+     *
+     * <p>Over every name that reaches a declaration rather than over calls alone. A value is handed
+     * over by writing its name and is substituted there, so a walk that followed only what is
+     * applied would miss the definition that carries the behavior in.
+     */
+    private static Set<ValueName.Behavior> behaviorsThisBodyExpandsTo(Hir.FnDef def,
+                                                                     HelperTable table) {
         Set<ValueName.Behavior> named = new LinkedHashSet<>();
+        Set<ReachName.Declaration> walked = new LinkedHashSet<>();
+        Deque<Hir.FnDef> todo = new ArrayDeque<>();
+        todo.add(def);
+        while (!todo.isEmpty()) {
+            for (ReachName.Declaration reaches : namesIn(todo.poll(), named)) {
+                if (!walked.add(reaches)) {
+                    continue;
+                }
+                Hir.FnDef written = table.reached(reaches);
+                if (written != null) {
+                    todo.add(written);
+                }
+            }
+        }
+        return named;
+    }
+
+    /**
+     * What {@code def}'s body names: the behaviors into {@code named}, and the declarations it
+     * reaches as the answer. A kernel the language ships writes no body here and names nothing.
+     */
+    private static Set<ReachName.Declaration> namesIn(Hir.FnDef def,
+                                                      Set<ValueName.Behavior> named) {
+        Set<ReachName.Declaration> reaches = new LinkedHashSet<>();
         List<Hir.Expr> todo = new ArrayList<>();
         switch (def.body()) {
             case Hir.FnBody.Written written -> todo.add(written.expr());
@@ -1256,13 +1296,18 @@ public final class Bodies {
             if (at == null) {
                 continue;
             }
-            if (at instanceof Hir.Var.Denoting name
-                    && name.denotes() instanceof ValueName.Behavior each) {
-                named.add(each);
+            if (at instanceof Hir.Var.Denoting name) {
+                if (name.denotes() instanceof ValueName.Behavior each) {
+                    named.add(each);
+                }
+                ReachName.Declaration reached = name.reachesADeclaration();
+                if (reached != null) {
+                    reaches.add(reached);
+                }
             }
             Hir.forEachChild(at, todo::add);
         }
-        return named;
+        return reaches;
     }
 
     /** A module with every helper parameter the author left unwritten carrying the type its body
@@ -1742,7 +1787,7 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn.text()));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
-                    db.ask(new BehaviorAritiesForBody(module, fn.text()));
+                    db.ask(new BehaviorAritiesForBody(module, fn.text(), InliningPolicy.FULL));
             if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
@@ -1785,7 +1830,7 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
-                    db.ask(new BehaviorAritiesForBody(module, fn));
+                    db.ask(new BehaviorAritiesForBody(module, fn, InliningPolicy.DISCHARGE));
             if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }

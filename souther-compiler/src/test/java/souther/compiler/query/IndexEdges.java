@@ -77,6 +77,11 @@ final class IndexEdges {
         /**
          * The reader answers with entries of the index, so an entry beside them moves the index and
          * this comes out equal. The index is still built once, and what reads this stops here.
+         *
+         * <p>That it projects and not how much of the index it takes. A reader answering with every
+         * entry is entries of it and reads as this, and it cuts nothing; what says a projection is
+         * narrow is a question about that reader's own meaning, and it is asked where that reader
+         * is.
          */
         A_PROJECTION,
 
@@ -206,15 +211,19 @@ final class IndexEdges {
         };
     }
 
-    /** Whether {@code key} is a collection its module gathered: it names its module and nothing
-     *  narrower, and it answers with a table. */
+    /**
+     * Whether {@code key} is a collection its module gathered: it names its module and nothing
+     * narrower, and it answers with a table.
+     *
+     * <p>Not counted. A key about a module may hold more than the module — {@link Bodies.Expanding}
+     * takes a policy — and reading how many things it holds would leave every index that takes one
+     * out of the census.
+     */
     private static boolean anIndex(Key<?> key, Answer<?> answer) {
-        RecordComponent[] parts = key.getClass().getRecordComponents();
-        if (parts == null || parts.length != 1 || answer == null || !answer.present()) {
+        if (answer == null || !answer.present() || aboutOneDefinition(key)) {
             return false;
         }
-        return !narrows(parts[0], held(key, parts[0]), key.module())
-                && entriesOf(answer.value()) != null;
+        return key.getClass().getRecordComponents() != null && entriesOf(answer.value()) != null;
     }
 
     /** Whether {@code key} means something about one definition rather than about its module. */
@@ -273,6 +282,7 @@ final class IndexEdges {
         projection(out, Shapes.DerivedDef.class, Shapes.DerivedDeclarations.class);
         projection(out, Shapes.NormalizedDef.class, Shapes.NormalizedDeclarations.class);
         equalUnderASiblingEdit(out, Bodies.Assumptions.class, Bodies.StatedContracts.class);
+        equalUnderASiblingEdit(out, Bodies.CheckedBehavior.class, Bodies.RecursiveCallSigs.class);
         equalUnderASiblingEdit(out, Bodies.CheckedBehavior.class, Bodies.ReqSigs.class);
         equalUnderASiblingEdit(out, Bodies.CheckedBehavior.class,
                 Bodies.RecursiveHelperConstructs.class);

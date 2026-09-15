@@ -3,11 +3,13 @@ package souther.compiler.query;
 import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,6 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * through a helper and a branch is not something a reading of the file settles, and a register
  * written by hand would be a register of what somebody looked at. {@link IndexEdges} asks the store
  * what a compile actually built.
+ *
+ * <p><b>Over the graph one compile built, which is narrower than the vocabulary.</b> A question this
+ * fixture never asks has no edges here, and the register would not miss it. That is the price of a
+ * classification an edit has to settle: what the compiler declares can be walked without running
+ * anything, and what an edge is cannot. What holds the gap down is the register — a shape written
+ * here is a shape the fixture has to go on reaching, so a fixture that stopped reaching one fails
+ * rather than quietly checking less.
  *
  * <p><b>The classification is not the graph's.</b> Which of the two sound forms an edge is takes the
  * graph, what equality says about the answers, and an edit — so the edit is here, and it is a
@@ -121,25 +130,35 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 .toList();
     }
 
-    /** The same set of types, as a failure reads them. */
+    /** A set of types as a failure reads them. */
     private static Set<String> named(Set<Class<?>> types) {
         Set<String> out = new TreeSet<>();
         types.forEach(each -> out.add(each.getName()));
         return out;
     }
 
-    /** What is written down, by what makes each edge sound. */
-    private static Map<String, Set<String>> written() {
-        Map<String, Set<String>> out = new TreeMap<>();
-        IndexEdges.written().forEach((edge, is) -> out.put(edge.toString(),
-                new TreeSet<>(is.stream().map(Enum::name).toList())));
-        return out;
-    }
-
-    private static Map<String, Set<String>> met() {
-        Map<String, Set<String>> out = new TreeMap<>();
-        CENSUS.whatEachEdgeIs().forEach((edge, is) -> out.put(edge.toString(),
-                new TreeSet<>(is.stream().map(Enum::name).toList())));
+    /**
+     * What two accounts differ over, in an order a reader can follow.
+     *
+     * <p>Built from the comparison rather than compared. Two edges that read alike are one line of
+     * anything rendered, so comparing the text is a comparison that cannot see one of them going
+     * missing — and an edge is told from an edge by the classes it holds, which is what a rendering
+     * drops. What reads well is what a failure is written with, and nothing else.
+     */
+    private static List<String> differencesBetween(Map<IndexEdges.Edge, Set<IndexEdges.WhatItIs>>
+                                                           written,
+                                                   Map<IndexEdges.Edge, Set<IndexEdges.WhatItIs>>
+                                                           met) {
+        Set<IndexEdges.Edge> every = new TreeSet<>(written.keySet());
+        every.addAll(met.keySet());
+        List<String> out = new ArrayList<>();
+        every.forEach(edge -> {
+            Set<IndexEdges.WhatItIs> theirs = written.get(edge);
+            Set<IndexEdges.WhatItIs> ours = met.get(edge);
+            if (!Objects.equals(theirs, ours)) {
+                out.add(edge + ": written down " + theirs + ", met as " + ours);
+            }
+        });
         return out;
     }
 
@@ -172,7 +191,8 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     /** And each is what is written down beside it. */
     @Test
     void everyEdgeIsWhatIsWrittenDownBesideIt() {
-        assertEquals(written(), met(),
+        assertEquals(List.of(),
+                differencesBetween(IndexEdges.written(), CENSUS.whatEachEdgeIs()),
                 "an edge of the store's graph that nobody has said what it is");
     }
 
@@ -185,16 +205,14 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      */
     @Test
     void everyProjectionWrittenDownWasSeenProjectingSomething() {
-        Set<String> written = new TreeSet<>();
+        Set<IndexEdges.Edge> written = new TreeSet<>();
         IndexEdges.written().forEach((edge, is) -> {
             if (is.contains(IndexEdges.WhatItIs.A_PROJECTION)) {
-                written.add(edge.toString());
+                written.add(edge);
             }
         });
-        Set<String> witnessed = new TreeSet<>();
-        CENSUS.witnessed().forEach(edge -> witnessed.add(edge.toString()));
 
-        assertEquals(written, witnessed,
+        assertEquals(written, new TreeSet<>(CENSUS.witnessed()),
                 "a projection nothing was ever seen to project, which is what an answer holding"
                         + " nothing reads as");
     }
@@ -214,9 +232,13 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
 
         assertTrue(questions.size() > 100,
                 () -> "a vocabulary of " + questions.size() + " is not this compiler's");
-        assertEquals(named(IndexEdges.whatAComponentHolds().keySet()),
-                named(IndexEdges.componentTypes(questions)),
-                "a question holds something at a component that nobody has said whether it names"
-                        + " something the module holds");
+        Set<Class<?>> written = IndexEdges.whatAComponentHolds().keySet();
+        Set<Class<?>> held = IndexEdges.componentTypes(questions);
+        Set<Class<?>> unsaid = new LinkedHashSet<>(held);
+        unsaid.removeAll(written);
+
+        assertEquals(written, held,
+                () -> "a question holds something at a component that nobody has said whether it"
+                        + " names something the module holds: " + named(unsaid));
     }
 }
