@@ -62,7 +62,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
 
-        assertTrue(TypeCardinality.solve(declarationsOf(compilation, module), whole, policy)
+        assertTrue(CountsByComponent.of(declarationsOf(compilation, module), whole, policy)
                         .everyRuleReached(),
                 "a reading that stopped where it could go no further was given every rule there is,"
                         + " and a count over it is a count of what the model states");
@@ -74,7 +74,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
         assertFalse(email.clausesNotExpanded(),
                 "and stops for a reason that is not a rule failing to arrive");
 
-        assertFalse(TypeCardinality.solve(declarationsOf(compilation, module),
+        assertFalse(CountsByComponent.of(declarationsOf(compilation, module),
                         refusing(new TypeKey(module, "Held"), whole), policy).everyRuleReached(),
                 "and the same count is short as soon as one declaration's clauses are ones nobody"
                         + " could work out");
@@ -104,12 +104,12 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                         RuleReadings.of(compilation, module)));
         DeclarationReadings lender = compilation.db().readings();
 
-        assertFalse(TypeCardinality.solve(declarations, source, policy, lender).everyRuleReached(),
+        assertFalse(CountsByComponent.of(declarations, source, policy, lender).everyRuleReached(),
                 "the count that read the clauses is short of the one it was refused");
         int read = asked.get();
         assertTrue(read > 0, "and it read some");
 
-        assertFalse(TypeCardinality.solve(declarations, source, policy, lender).everyRuleReached(),
+        assertFalse(CountsByComponent.of(declarations, source, policy, lender).everyRuleReached(),
                 "and so is the count that was lent those readings");
         assertEquals(read, asked.get(),
                 "which is lent them, rather than reading the clauses a second time");

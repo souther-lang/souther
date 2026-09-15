@@ -62,7 +62,7 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
                         .map(each -> each.declaration().node()).map(Hir.Def.class::cast).toList();
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
 
-        assertTrue(TypeCardinality.solve(declarations, whole, policy).everyRuleReached(),
+        assertTrue(CountsByComponent.of(declarations, whole, policy).everyRuleReached(),
                 "every rule of this model can be read");
 
         TypeKey held = new TypeKey(module, "Held");
@@ -70,7 +70,7 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
                 named -> named.equals(held) ? null : whole.published().of(named),
                 whole.kinds(), whole.newtypes(), whole.written());
 
-        assertFalse(TypeCardinality.solve(declarations, shortOfOne, policy).everyRuleReached(),
+        assertFalse(CountsByComponent.of(declarations, shortOfOne, policy).everyRuleReached(),
                 "a count that walked into a declaration whose rules could not be worked out has not"
                         + " read every rule, whatever numbers it arrived at");
     }

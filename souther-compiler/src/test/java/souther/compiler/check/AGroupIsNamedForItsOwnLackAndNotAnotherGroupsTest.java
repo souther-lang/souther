@@ -34,7 +34,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 .map(each -> each.declaration().node()).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(
                         defs.stream().map(souther.compiler.ast.Hir.Def::declares).toList(),
-                        TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+                        CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }

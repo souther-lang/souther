@@ -230,12 +230,16 @@ public final class UninhabitableTypes {
      * <p>The reading a group is established by, and so the reading its proofs are taken from. What
      * is granted is settled by the group alone, so asking twice about one group gives one answer and
      * the search reaching it by two paths cannot make it two.
+     *
+     * <p>Answered over what {@code these} read, which is where the question stops. A lack outside
+     * them is granted because it may be what they came to none by — and a declaration they never
+     * reach is one they came to none without, so what it would hold is no part of this.
      */
     private static Map<TypeSymbol, Cardinality> establishing(List<TypeSymbol> these,
                                                              Set<TypeSymbol> none,
                                                              TypeCardinality.Cardinalities solved) {
         Set<TypeSymbol> elsewhere = new LinkedHashSet<>(none);
         elsewhere.removeAll(these);
-        return solved.granting(elsewhere);
+        return solved.granting(these, elsewhere);
     }
 }

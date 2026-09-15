@@ -422,6 +422,8 @@ final class IndexEdges {
         names(out, Names.DeclarationKindOf.class, "named");
         names(out, Names.Definition.class, "named");
         names(out, Names.ResolvedDeclaration.class, "named");
+        names(out, Shapes.CardinalityComponentOf.class, "named");
+        names(out, Shapes.CardinalityOf.class, "named");
         names(out, Shapes.CardinalityPremiseOf.class, "named");
         names(out, Shapes.ClausesExpandedFor.class, "named");
         names(out, Shapes.DerivedDef.class, "named");

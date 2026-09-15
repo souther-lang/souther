@@ -392,6 +392,14 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
         equalUnderASiblingEdit(out, Shapes.ClausesExpandedFor.class,
                 Shapes.ExpandedDeclarationClauses.class, Edit.A_DATA_DECLARED_BESIDE,
                 Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        // Which declarations are answered together is a fact about the graph rather than about any
+        // declaration in it, so it is worked out once for the module and each declaration is handed
+        // the component it is in. A declaration written beside them is a component of its own and
+        // leaves every other component where it was, which is what keeps the counts built on this
+        // from being taken again.
+        equalUnderASiblingEdit(out, Shapes.CardinalityComponentOf.class,
+                Shapes.CardinalityComponentsOf.class, Edit.A_DATA_DECLARED_BESIDE,
+                Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
         return out;
     }
 
