@@ -337,23 +337,23 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      */
     private static Map<IndexEdges.Edge, Set<Witness>> written() {
         Map<IndexEdges.Edge, Set<Witness>> out = new TreeMap<>();
-        projection(out, Bodies.BehaviorAritiesForBody.class, Bodies.NamedBehaviorArity.class,
+        eitherWay(out, Bodies.BehaviorAritiesForBody.class, Bodies.NamedBehaviorArity.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
-        projection(out, Bodies.CalleeSigsForBody.class, Bodies.CalleeSigs.class,
+        eitherWay(out, Bodies.CalleeSigsForBody.class, Bodies.CalleeSigs.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
         projection(out, Bodies.DeclaredSignature.class, Bodies.DeclaredSignatures.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE,
                 Edit.A_BEHAVIOR_BESIDE_TAKING_A_REQUIREMENT, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
-        projection(out, Bodies.RecursiveCallSigsForBody.class, Bodies.RecursiveCallSigs.class,
+        eitherWay(out, Bodies.RecursiveCallSigsForBody.class, Bodies.RecursiveCallSigs.class,
                 Edit.A_RECURSIVE_HELPER_BESIDE);
-        projection(out, Bodies.RecursiveHelperConstructsForBody.class,
+        eitherWay(out, Bodies.RecursiveHelperConstructsForBody.class,
                 Bodies.RecursiveHelperConstructs.class, Edit.A_RECURSIVE_HELPER_BESIDE);
         projection(out, Bodies.SettledFn.class, Bodies.RowFixtureDefs.class,
                 Edit.A_ROW_WRITTEN_BESIDE);
-        projection(out, Bodies.Stated.class, Bodies.StatedContracts.class,
+        eitherWay(out, Bodies.Stated.class, Bodies.StatedContracts.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);
         projection(out, Names.Declaration.class, Names.Declarations.class,
                 Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
@@ -381,6 +381,21 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 under));
     }
 
+    /**
+     * An edge whose answer is an entry of the index where the definition has one and nothing where
+     * it has none.
+     *
+     * <p>Both words and not the stronger of them. A behavior that names none is answered an empty
+     * map, and nothing is not entries of the index however true it is that the answer held; the
+     * reading that says so is the one that says an answer holding nothing says nothing.
+     */
+    private static void eitherWay(Map<IndexEdges.Edge, Set<Witness>> out, Class<?> reader,
+                                  Class<?> index, Edit... under) {
+        Set<Witness> both = new TreeSet<>(witnesses(IndexEdges.WhatItIs.A_PROJECTION, under));
+        both.addAll(witnesses(IndexEdges.WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
+        out.put(new IndexEdges.Edge(reader, index), both);
+    }
+
     private static void equalUnderASiblingEdit(Map<IndexEdges.Edge, Set<Witness>> out,
                                                Class<?> reader, Class<?> index, Edit... under) {
         out.put(new IndexEdges.Edge(reader, index),
@@ -400,29 +415,6 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     void everyEdgeIsWhatIsWrittenDownBesideIt() {
         assertEquals(List.of(), differencesBetween(written(), met()),
                 "an edge of the store's graph that nobody has said what it is");
-    }
-
-    /**
-     * And every edge written down as a projection was seen projecting something.
-     *
-     * <p>Its own sentence because an answer holding nothing is entries of every index there is. A
-     * reader that folds an index in and came to nothing over this fixture reads as a projection, so
-     * what says a projection is a projection is an instance where there was something to project.
-     */
-    @Test
-    void everyProjectionWrittenDownWasSeenProjectingSomething() {
-        Set<IndexEdges.Edge> written = new TreeSet<>();
-        written().forEach((edge, was) -> {
-            if (was.stream().anyMatch(each -> each.is() == IndexEdges.WhatItIs.A_PROJECTION)) {
-                written.add(edge);
-            }
-        });
-        Set<IndexEdges.Edge> witnessed = new TreeSet<>();
-        CENSUS.values().forEach(census -> witnessed.addAll(census.witnessed()));
-
-        assertEquals(written, witnessed,
-                "a projection nothing was ever seen to project, which is what an answer holding"
-                        + " nothing reads as");
     }
 
     /**

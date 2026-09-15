@@ -1242,20 +1242,28 @@ public final class Bodies {
             if (!def.present() || !against.present()) {
                 return Answer.absent();
             }
-            return Answer.of(Ordered.set(walked(def.value(), against.value(), true)));
+            return Answer.of(Ordered.set(walked(def.value(), against.value(), false)));
         }
     }
 
     /**
-     * The declarations one body reaches, through the recursions it calls as well as into what is
-     * written into it.
+     * The recursions one body's expansion leaves standing in it.
      *
-     * <p>The other relation, and it is not the one above. What a recursion constructs is attributed
-     * to the behavior that calls it and so are the recursions it calls in turn (spec §blocks), so
-     * what is wanted here is the closure through them — while what a body's own tree holds stops
-     * where a recursion is left standing.
+     * <p>The calls that are still calls when the expansion is done. A helper that recurses is not
+     * written into whoever called it — it is lowered to a method of its own and the call stays — so
+     * a body holds the ones its own tree calls, through whatever non-recursive definitions were
+     * written into it, and no others.
+     *
+     * <p><b>Not the closure through them.</b> What one of these constructs is attributed to whoever
+     * calls it, and what the recursions <em>it</em> calls construct is already in that answer: the
+     * index says what each recursion constructs transitively, so one entry carries the chain. A body
+     * handed the entries of everything down that chain would be handed a recursion its tree never
+     * names, and an edit to that one would be an edit to this body.
+     *
+     * <p>Which definitions a body reaches is what the policy decides, so the policy is part of the
+     * question.
      */
-    public record ReachedByBody(String module, String fn, InliningPolicy policy)
+    public record StandingRecursionsOfBody(String module, String fn, InliningPolicy policy)
             implements Key<Set<ReachName.Declaration>> {
 
         @Override
@@ -1265,34 +1273,40 @@ public final class Bodies {
             if (!def.present() || !against.present()) {
                 return Answer.absent();
             }
-            return Answer.of(Ordered.set(walked(def.value(), against.value(), false)));
+            return Answer.of(Ordered.set(walked(def.value(), against.value(), true)));
         }
     }
 
     /**
-     * The declarations reached from {@code def}, going into a recursion's body only where
-     * {@code stoppingAtRecursions} says the walk may.
+     * The declarations reached from {@code def} without going into a recursion, answering with the
+     * ones that recurse or the ones that do not.
      *
-     * <p>The two relations are one walk with one question asked at each step, because the step is
-     * the same: what a definition names is what it names, and what differs is whether the walk goes
-     * on from a declaration that is left standing.
+     * <p>One walk, because the walk is the same: a recursion is where it stops either way, and what
+     * differs is which side of that boundary the caller wants. Written as two, the two would have to
+     * go on agreeing about what an expansion writes into a body.
      */
     private static Set<ReachName.Declaration> walked(Hir.FnDef def, Expanding.Of against,
-                                                     boolean stoppingAtRecursions) {
+                                                     boolean wantingTheRecursions) {
         HelperTable table = against.table();
-        Set<ReachName.Declaration> reached = new LinkedHashSet<>();
+        Set<ReachName.Declaration> out = new LinkedHashSet<>();
+        Set<ReachName.Declaration> walked = new LinkedHashSet<>();
         Deque<Hir.FnDef> todo = new ArrayDeque<>();
         todo.add(def);
         while (!todo.isEmpty()) {
             for (ReachName.Declaration each : writtenInto(todo.poll(), table)) {
-                // A recursion is left where it was called, so neither it nor anything it reaches is
-                // written into this body. It is left out of the answer and not merely unfollowed:
-                // what a reader does with this is read the names its declarations write.
-                if (stoppingAtRecursions && against.graph().recurses(each)) {
+                if (!walked.add(each)) {
                     continue;
                 }
-                if (!reached.add(each)) {
+                if (against.graph().recurses(each)) {
+                    // Left where it was called and lowered to a method of its own. Neither its body
+                    // nor what that body reaches arrives here.
+                    if (wantingTheRecursions) {
+                        out.add(each);
+                    }
                     continue;
+                }
+                if (!wantingTheRecursions) {
+                    out.add(each);
                 }
                 Hir.FnDef written = table.reached(each);
                 if (written != null) {
@@ -1300,7 +1314,7 @@ public final class Bodies {
                 }
             }
         }
-        return reached;
+        return out;
     }
 
     /**
@@ -1391,7 +1405,7 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs =
                     db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
             Answer<Set<ReachName.Declaration>> reached =
-                    db.ask(new ReachedByBody(module, behavior, InliningPolicy.FULL));
+                    db.ask(new StandingRecursionsOfBody(module, behavior, InliningPolicy.FULL));
             if (!sigs.present() || !reached.present()) {
                 return Answer.absent();
             }
@@ -1421,7 +1435,7 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Set<ReachName.Declaration>> reached =
-                    db.ask(new ReachedByBody(module, behavior, InliningPolicy.FULL));
+                    db.ask(new StandingRecursionsOfBody(module, behavior, InliningPolicy.FULL));
             if (!constructs.present() || !reached.present()) {
                 return Answer.absent();
             }

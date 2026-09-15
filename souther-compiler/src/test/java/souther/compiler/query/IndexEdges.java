@@ -26,16 +26,18 @@ import java.util.TreeSet;
  * the index hands the finer question the coarser one's identity, and an edit anywhere in the module
  * arrives as an edit to every definition in it.
  *
- * <p><b>Two ways out and no third.</b> {@link WhatItIs} is what makes an edge sound, and which of
- * the two an edge is cannot be read off the graph — it takes the graph, what equality says about
- * the answers, and an edit. An edge that is neither is not written down and has no word here, so
- * the check that reads this fails on it.
+ * <p><b>What is asked is not what shape an edge has.</b> It is whether an edit wider than what the
+ * reader means moves what the reader answers: the index moved, and the reader came to what it came
+ * to before. That is one question and it is the whole of it, and it cannot be read off the graph —
+ * it takes the graph, what equality says about the answers, and an edit.
  *
- * <p><b>Both ways out can be had for nothing, so neither is taken on its own.</b> An answer holding
- * nothing is entries of every index there is, and an index that does not move under the edit leaves
- * every reader of it alone whatever the reader means. So a reading here says what the edit moved as
- * well as what it found: a verdict over an index that stayed put says nothing about the edge, and
- * is not one.
+ * <p>{@link WhatItIs} is read afterwards and says why the answer held. Asked first, it lets through
+ * exactly what this is for: a reader answering with every entry of an index is entries of it,
+ * reads as a projection, and moves with the index whenever it moves.
+ *
+ * <p><b>And an index that stayed put asks nothing.</b> It leaves every reader of it alone whatever
+ * the reader means, so a verdict taken under such an edit is a verdict about the edit. A reading
+ * here says which edit moved the index as well as what came of it.
  */
 final class IndexEdges {
 
@@ -64,30 +66,26 @@ final class IndexEdges {
         }
     }
 
-    /** What makes an edge sound, asked only of an edit that moved the index. */
+    /**
+     * Why an edge that was sound was sound.
+     *
+     * <p>Not what makes it sound. What makes it sound is one thing and it is the same for both: the
+     * index moved and the reader came to what it came to before. These are read after that, and
+     * they say which of the two ways it happened — a classification of a fact rather than the fact.
+     *
+     * <p>Held apart from it because the two came apart once already. Read as the test, a reader
+     * answering with every entry of the index is entries of it, reads as a projection, and cuts
+     * nothing: the index moves, the answer moves with it, and every reader downstream is asked
+     * again while this says the edge is fine.
+     */
     enum WhatItIs {
 
-        /**
-         * The reader answers with entries of the index, so an entry beside them moves the index and
-         * this comes out equal. The index is still built once, and what reads this stops here.
-         *
-         * <p>Entries and not the values at them. A reader holding what happens to equal some value
-         * of the index is not holding part of the index: an arity of one is an arity of one
-         * wherever it was read, and a fold that came out to a handful of those would read as a
-         * projection of everything. So a map is asked whether its entries are the index's entries,
-         * keys and all.
-         *
-         * <p>That it projects and not how much of the index it takes. A reader answering with every
-         * entry is entries of it and reads as this, and it cuts nothing; what says a projection is
-         * narrow is a question about that reader's own meaning, and it is asked where that reader
-         * is.
-         */
+        /** The reader answers with entries of the index, so what it comes to is what those entries
+         *  are. */
         A_PROJECTION,
 
-        /**
-         * The reader folds the index in and the index moved, and what the reader came to is what it
-         * was — so what travels along this edge is stopped by an equality rather than by a cut.
-         */
+        /** The reader folds the index in and came to what it came to before, so what travels along
+         *  this edge is stopped by an equality rather than by a cut. */
         AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT
     }
 
@@ -112,9 +110,6 @@ final class IndexEdges {
      *                follow
      * @param exercised every edge this edit moved the index of, whatever came of it — so an edge
      *                  nothing here asks is told from one that was asked and answered badly
-     * @param witnessed the shapes some instance of which was seen to project something: an answer
-     *                  holding nothing is entries of every index there is, so a shape read as a
-     *                  projection over nothing but those was never asked the question
      * @param everyEdge every edge shape in the graph, moved or not, which is what says an edge no
      *                  edit reaches is an edge nothing here has judged
      * @param unread every component of every question this walk met that nobody has read, which is
@@ -123,21 +118,20 @@ final class IndexEdges {
      *                  nothing rather than a clean one
      */
     record Census(Map<Edge, Set<WhatItIs>> whereTheIndexMoved, List<String> neither,
-                  Set<Edge> exercised, Set<Edge> witnessed, Set<Edge> everyEdge, Set<Part> unread,
+                  Set<Edge> exercised, Set<Edge> everyEdge, Set<Part> unread,
                   int instances) {}
 
     /**
      * What the graph held before the edit, read against what it held after.
      *
-     * <p>A projection is a projection whatever is edited, so it is asked first; what is left is
-     * asked of the reader, which either came to what it came to before or was dragged by an index
-     * that means more than it does.
+     * <p>One question per edge and it is asked of the reader: an index that moved, and an answer
+     * that did or did not move with it. What shape the reader's answer has is read after that and
+     * only to say why it held.
      */
     static Census taken(Snapshot before, Snapshot after) {
         Map<Edge, Set<WhatItIs>> moved = new LinkedHashMap<>();
         Set<Edge> exercised = new TreeSet<>();
         List<String> neither = new ArrayList<>();
-        Set<Edge> witnessed = new TreeSet<>();
         Set<Edge> everyEdge = new TreeSet<>();
         int instances = 0;
         Set<Part> unread = new TreeSet<>();
@@ -155,43 +149,31 @@ final class IndexEdges {
                 instances++;
                 Edge edge = new Edge(reader.getClass(), read.getClass());
                 everyEdge.add(edge);
-                Projection projection = projects(each.getValue(), index);
-                if (projection == Projection.OF_SOMETHING) {
-                    witnessed.add(edge);
-                }
                 if (Objects.equals(index, after.answers().get(read))) {
                     // This edit put no question to this edge. Saying what the reader is over an
                     // index that stayed where it was is saying what any reader of it is.
                     continue;
                 }
                 exercised.add(edge);
-                WhatItIs is = projection != Projection.OF_NOTHING_OF_THIS_INDEX
-                        ? WhatItIs.A_PROJECTION
-                        : Objects.equals(each.getValue(), after.answers().get(reader))
-                                ? WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT : null;
-                if (is == null) {
+                // The one thing that is asked. The index moved, so what the reader means is
+                // whether it moved with it — and what stops an edit is what an answer's equality
+                // says, whatever shape the answer has.
+                if (!Objects.equals(each.getValue(), after.answers().get(reader))) {
                     neither.add(edge + ", at " + reader + ", reading " + read);
                     continue;
                 }
-                moved.computeIfAbsent(edge, _ -> new TreeSet<>()).add(is);
+                moved.computeIfAbsent(edge, _ -> new TreeSet<>())
+                        .add(projectsSomething(each.getValue(), index)
+                                ? WhatItIs.A_PROJECTION
+                                : WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT);
             }
         }
         Collections.sort(neither);
-        return new Census(moved, neither, exercised, witnessed, everyEdge, unread, instances);
-    }
-
-    /** How much of the index a reader's answer was seen to be entries of. */
-    private enum Projection {
-        /** Entries of it, and there is something there to have been projected. */
-        OF_SOMETHING,
-        /** Entries of it the way an empty hand is entries of every index there is. */
-        OF_NOTHING_AT_ALL,
-        /** Something else: the reader folds the index into an answer of its own. */
-        OF_NOTHING_OF_THIS_INDEX
+        return new Census(moved, neither, exercised, everyEdge, unread, instances);
     }
 
     /**
-     * Whether what the reader answers with is entries of the index's answer.
+     * Whether what the reader answers with is entries of the index's answer, and some.
      *
      * <p>Asked of what is there rather than of the types, because that is what an author of a
      * {@code compute} can get wrong: a key that once looked an entry up and now folds the index into
@@ -199,37 +181,26 @@ final class IndexEdges {
      *
      * <p>Two shapes and no others. A reader answering with a table of its own is its entries against
      * the index's, keys included; a reader answering with one thing is that thing against the
-     * index's entries, and which entry it took is not something this can see — what it says is that
-     * recomputing the reader is a lookup, which is what the edge costs. A reader answering with a
-     * table against an index that is not one is not projecting anything.
+     * index's entries, and which entry it took is not something this can see. An answer holding
+     * nothing is not one of them: it is entries of every index there is, so reading it as a
+     * projection would be reading nothing at all.
+     *
+     * <p>A reader answering with a collection off a collection is not asked. What containment says
+     * about two of those depends on which collection they are — it drops multiplicity over a list
+     * and order over a sequence — and nothing in this graph is that shape, so a word for it written
+     * now would be a word for whichever of them somebody meant.
      */
-    private static Projection projects(Answer<?> reader, Answer<?> index) {
-        if (reader == null || !reader.present()) {
-            return Projection.OF_NOTHING_AT_ALL;
-        }
-        if (index == null || !index.present()) {
-            return Projection.OF_NOTHING_OF_THIS_INDEX;
+    private static boolean projectsSomething(Answer<?> reader, Answer<?> index) {
+        if (reader == null || !reader.present() || index == null || !index.present()) {
+            return false;
         }
         Object held = reader.value();
         Object all = index.value();
         if (held instanceof Map<?, ?> mine) {
-            if (mine.isEmpty()) {
-                return Projection.OF_NOTHING_AT_ALL;
-            }
-            return all instanceof Map<?, ?> table
-                    && table.entrySet().containsAll(mine.entrySet())
-                    ? Projection.OF_SOMETHING : Projection.OF_NOTHING_OF_THIS_INDEX;
+            return !mine.isEmpty() && all instanceof Map<?, ?> table
+                    && table.entrySet().containsAll(mine.entrySet());
         }
-        if (held instanceof Collection<?>) {
-            // Not a projection, whatever it holds. What containment says about two collections
-            // depends on which collection they are: it drops multiplicity over a list and order
-            // over a sequence, so a reader answering [x, x] is entries of an index holding [x].
-            // Nothing in this graph answers a collection off an index, and a word for it written
-            // before there is one would be a word for whichever of those somebody meant.
-            return Projection.OF_NOTHING_OF_THIS_INDEX;
-        }
-        return entriesOf(all).contains(held)
-                ? Projection.OF_SOMETHING : Projection.OF_NOTHING_OF_THIS_INDEX;
+        return !(held instanceof Collection<?>) && entriesOf(all).contains(held);
     }
 
     /** What a table holds, or null where what was handed over is not one. */
@@ -309,17 +280,18 @@ final class IndexEdges {
      * where the rest say how to read it ({@link Bodies.Expanding} takes a policy), so a count
      * misreads both ways.
      *
-     * <p>A name written as text is the one case decided by what is there rather than by a
-     * judgement: the key says which module it is about, and a component holding that name is that
-     * module while one holding another name is something in it. Everything else is
-     * {@link #whatEachComponentHolds}'s to say, and {@link WhatAComponentHolds#UNREAD} where it has
-     * not.
+     * <p>One thing is settled by what is there and it is the only one: a component holding the name
+     * the key says it is about <em>is</em> that module, and no judgement can make it something else.
+     * A component holding any other text is not thereby a name — it could as well say how to read
+     * what is asked for — so it is asked of {@link #whatEachComponentHolds} like everything else,
+     * and is {@link WhatAComponentHolds#UNREAD} where nobody has said. Read the other way, a module
+     * index taking a mode written as text would drop out of the census, which is the failure the
+     * word {@code UNREAD} exists to prevent.
      */
     private static WhatAComponentHolds roleOf(Key<?> key, RecordComponent part) {
-        if (part.getType() == String.class) {
-            return held(key, part) instanceof String named && named.equals(key.module())
-                    ? WhatAComponentHolds.THE_MODULE
-                    : WhatAComponentHolds.SOMETHING_THE_MODULE_HOLDS;
+        if (part.getType() == String.class && held(key, part) instanceof String named
+                && named.equals(key.module())) {
+            return WhatAComponentHolds.THE_MODULE;
         }
         return whatEachComponentHolds().getOrDefault(new Part(key.getClass(), part.getName()),
                 WhatAComponentHolds.UNREAD);
@@ -368,7 +340,8 @@ final class IndexEdges {
         holds(out, Bodies.Expanding.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.RecursiveCallSigs.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.WrittenIntoBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
-        holds(out, Bodies.ReachedByBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.StandingRecursionsOfBody.class, "policy",
+                WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.BehaviorAritiesForBody.class, "policy",
                 WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Output.Evaluated.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
@@ -386,6 +359,21 @@ final class IndexEdges {
         holds(out, Names.StandInBlocks.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);
         names(out, Bodies.LoweredBody.class, "fn");
         names(out, Bodies.Assumptions.class, "behavior");
+        names(out, Adequacy.InputsOf.class, "behavior");
+        names(out, Bodies.BehaviorAritiesForBody.class, "fn");
+        names(out, Bodies.BehaviorsReached.class, "behavior");
+        names(out, Bodies.BodyForInvariantDischarge.class, "fn");
+        names(out, Bodies.CalleeSigsForBody.class, "behavior");
+        names(out, Bodies.CheckedBehavior.class, "behavior");
+        names(out, Bodies.ContractsForBody.class, "behavior");
+        names(out, Bodies.DeclaredSignature.class, "behavior");
+        names(out, Bodies.RecursiveCallSigsForBody.class, "behavior");
+        names(out, Bodies.RecursiveHelperConstructsForBody.class, "behavior");
+        names(out, Bodies.SettledFn.class, "fn");
+        names(out, Bodies.Spec.class, "behavior");
+        names(out, Bodies.StandingRecursionsOfBody.class, "fn");
+        names(out, Bodies.Stated.class, "behavior");
+        names(out, Bodies.WrittenIntoBody.class, "fn");
         names(out, Machines.OfDeclaration.class, "named");
         names(out, Names.CompilationDeclares.class, "named");
         names(out, Names.Declaration.class, "named");
@@ -414,13 +402,10 @@ final class IndexEdges {
     }
 
     /**
-     * Every line of the register that nothing reads: one naming a component no question holds any
-     * more, and one naming a component whose role is read off what it holds.
+     * Every line of the register naming a component no question holds any more.
      *
-     * <p>Both are lines that say nothing, and a line that says nothing beside lines that decide the
-     * census is a line somebody will read as deciding something. A name written as text is settled
-     * against the module the key names, so writing a word beside one here would be writing a word
-     * that is never asked for.
+     * <p>A line that says nothing, beside lines that decide the census, is a line somebody will read
+     * as deciding something.
      */
     static Set<Part> staleIn(List<Class<?>> questions) {
         Set<Part> read = new LinkedHashSet<>();
@@ -430,9 +415,7 @@ final class IndexEdges {
                 continue;
             }
             for (RecordComponent part : parts) {
-                if (part.getType() != String.class) {
-                    read.add(new Part(question, part.getName()));
-                }
+                read.add(new Part(question, part.getName()));
             }
         }
         Set<Part> stale = new TreeSet<>(whatEachComponentHolds().keySet());

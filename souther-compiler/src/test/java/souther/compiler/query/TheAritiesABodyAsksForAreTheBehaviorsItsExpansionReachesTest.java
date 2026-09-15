@@ -97,18 +97,20 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
             """;
 
     /**
-     * A helper reached only through a recursion.
+     * A recursion calling a recursion, and a helper reached only through the first.
      *
-     * <p>{@code spin} recurses, so a call to it is left standing and it is lowered to a method of
-     * its own. What {@code deep} is written into is that method; what {@code caller} holds is the
-     * call.
+     * <p>{@code caller}'s expansion holds one call that is still a call when it is done: the one to
+     * {@code spin}. {@code spin} is lowered to a method of its own, and what stands in that method
+     * is the call to {@code deeper} and whatever {@code deep} was written into it.
      */
     private static final String THROUGH_A_RECURSION = """
             module shop.values exposing ( caller )
 
             let deep (n: Int) = n + 1
 
-            partial let spin (n: Int): Int = if n <= 0 then deep(0) else spin(n - 1)
+            partial let deeper (n: Int): Int = if n <= 0 then deep(0) else deeper(n - 1)
+
+            partial let spin (n: Int): Int = if n <= 0 then deeper(0) else spin(n - 1)
 
             behavior caller : (n: Int) -> Int
             let caller (n) = spin(n)
@@ -144,18 +146,36 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
     }
 
     /**
-     * And what a body reaches goes through it.
+     * And the recursions standing in it are the ones its own tree calls.
      *
      * <p>The other relation, and the control that says the one above is a boundary rather than a
-     * walk that found nothing. What a recursion constructs is attributed to whoever called it, and
-     * so is what the recursions it calls construct.
+     * walk that found nothing. It stops at a recursion too, and answers with it: what
+     * {@code caller} is checked against is the signature of the call its tree holds. Not the closure
+     * through it — what {@code deeper} constructs is already inside what {@code spin} constructs,
+     * because that index answers transitively, so an entry for it here would be an entry for a
+     * recursion this tree never names.
      */
     @Test
-    void andWhatABodyReachesGoesThroughIt() {
-        assertEquals(Set.of("deep", "spin"), relation(new Bodies.ReachedByBody("shop.values",
+    void andTheRecursionsStandingInABodyAreTheOnesItsOwnTreeCalls() {
+        assertEquals(Set.of("spin"), relation(new Bodies.StandingRecursionsOfBody("shop.values",
                         "caller", InliningPolicy.FULL)),
-                "what a body reaches stopped at a recursion, so what that recursion constructs is"
-                        + " attributed to nobody");
+                "a body was handed a recursion its own tree does not call, so an edit to that one"
+                        + " is an edit to this body");
+    }
+
+    /**
+     * And the recursion it does call is handed the one it calls in turn, and itself.
+     *
+     * <p>Its own call among them because that is what is standing there: a recursion's method holds
+     * the call it recurses by, and typing that call wants this recursion's own signature.
+     */
+    @Test
+    void andTheRecursionItCallsIsHandedTheOneItCallsInTurn() {
+        assertEquals(Set.of("deeper", "spin"),
+                relation(new Bodies.StandingRecursionsOfBody("shop.values", "spin",
+                        InliningPolicy.FULL)),
+                "the method a recursion is lowered to was not handed the recursions standing in"
+                        + " it");
     }
 
     /** What the compiler says about {@code source}, by code. */
