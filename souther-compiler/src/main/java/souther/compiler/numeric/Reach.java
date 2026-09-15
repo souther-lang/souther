@@ -90,7 +90,9 @@ public record Reach(RationalCut least, RationalCut most) {
      * second from the first is the one holding the state.
      *
      * <p>An end nobody found leaves the form running that way without stopping, which is the
-     * opposite of empty, so both ends have to be there before this can be true.
+     * opposite of empty, so both ends have to be there before this can be true. Which is the
+     * distance between this and {@link #saysNothing}: that one is about what was found out, this one
+     * about what was found out leaving room for a value.
      */
     public boolean isEmpty() {
         if (least == null || most == null) {

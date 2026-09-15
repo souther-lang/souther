@@ -23,10 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * heavily a position happens to be weighed, and not how wide a range the positions were taken in
  * over either.
  *
- * <p>The last two say where this stops. A contradiction is found between two rules, so one that
- * needs a third is not proven here — while the same three written as differences are closed over
- * each other and found. That is the contract: where this says the rules leave nothing, nothing is;
- * where it does not say so, it has not said there is a value.
+ * <p>Every one of these is a proof owed. Nothing here asks for the answer where the rules leave
+ * something, nor for one where they leave nothing and this has not shown it: the contract is that
+ * where this says the rules leave nothing, nothing is, and a case it does not settle today is one
+ * it may settle tomorrow without anything having gone wrong.
  */
 class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
@@ -119,20 +119,7 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
     }
 
     @Test
-    void doesNotProveBottomWhereTheContradictionNeedsThreeRulesThatAreNotDifferences() {
-        // y <= 2x, x <= z, z <= y - 1. The three together leave nothing — the second has to be
-        // doubled before they sum — and no two of them do, so the reading that takes one rule as a
-        // premise does not reach it.
-        NumericDomain<String> three = NumericDomain.<String>top()
-                .assume(form(0, "y", 1, "x", -2), Rel.LE, WHOLE)
-                .assume(form(0, "x", 1, "z", -1), Rel.LE, WHOLE)
-                .assume(form(1, "z", 1, "y", -1), Rel.LE, WHOLE);
-        assertFalse(three.isBottom(),
-                "not proven, which is not the same statement as there being a value");
-    }
-
-    @Test
-    void whileTheSameThreeAsDifferencesAreClosedOverEachOther() {
+    void andACycleOfDifferencesIsClosedOverItselfHowever() {
         NumericDomain<String> three = NumericDomain.<String>top()
                 .assume(form(0, "y", 1, "x", -1), Rel.LE, WHOLE)
                 .assume(form(0, "x", 1, "z", -1), Rel.LE, WHOLE)

@@ -29,8 +29,9 @@ import java.util.function.Function;
  * <p><b>And the rules are asked what their own forms come to</b>, which is a third question and not
  * a step of either of those. Where the two ends of a form have crossed nothing satisfies the rules
  * together, and a pair weighted so that neither of them is a difference meets nowhere else — see
- * {@link #theRulesLeaveAFormNothing}. Two rules to a contradiction and no more, outside the
- * difference-bound shape.
+ * {@link #theRulesLeaveAFormNothing}. What a query may take as a premise is one rule and is
+ * {@link FormReach}'s to say; what reaches that query besides is whatever the rounds have already
+ * put in the ends, so nothing here is a count of how many rules a proof may come from.
  *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
@@ -54,8 +55,9 @@ import java.util.function.Function;
  * rules, so a box that has closed on itself is a proof; and a form the rules leave no value is a
  * proof of the same thing about the whole state, reached without narrowing anything. The other way
  * round does not hold for either: the rounds can stop early, a general sum is reasoned about
- * approximately, and a contradiction needing more rules than a query may take is not found — so a
- * state that has not shown emptiness is not a state with a value in it.
+ * approximately, and a query takes one rule as a premise — so a state that has not shown emptiness
+ * is not a state with a value in it. Which contradictions fall outside is not written down anywhere,
+ * and could not be: it moves with what the ends happen to carry by the round that asks.
  */
 public final class ClosedState<A> {
 
@@ -159,9 +161,11 @@ public final class ClosedState<A> {
      * answered by the ends and never reaches the premise. Nothing handed it a rule's own form, which
      * is where two rules over one form meet.
      *
-     * <p>One premise to a query, so this finds a contradiction two rules state between them and not
-     * one that needs a third. Over the difference-bound shape that is not the limit — those are
-     * closed over each other exactly, so a cycle of any length is found there.
+     * <p>One premise to a query, which is the unit {@link FormReach} states and not a limit on how
+     * many rules a proof here comes from: what a round derives becomes the ends the next round
+     * reads, and the difference-bound rules are closed over each other before any of this is asked.
+     * So a pair that meets nowhere else is found by this, and what else is depends on what those
+     * two have carried by then.
      *
      * <p>A form named by one position is left out: the ends are that question, run every round
      * until they stop moving, and a position whose ends have crossed is what
