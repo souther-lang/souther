@@ -3342,6 +3342,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
                         "how many paths through one body a decision is read for";
+                case NUMBERS_OF_A_SET_TRIED ->
+                        "how many of the numbers a class admits are tried";
             });
         }
         return String.join(", ", out);

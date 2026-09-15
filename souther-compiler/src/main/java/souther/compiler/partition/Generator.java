@@ -646,7 +646,12 @@ public final class Generator {
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
-                             LEVELS_A_SIDE_IS_ASKED_AT -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                             LEVELS_A_SIDE_IS_ASKED_AT,
+                             // The numbers past this one were never asked for, so what the search
+                             // came to is about the numbers it tried and about nothing else. The
+                             // word says that, where the word for a set walked to its end says the
+                             // set has no value in it.
+                             NUMBERS_OF_A_SET_TRIED -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.

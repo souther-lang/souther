@@ -198,6 +198,29 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 
+            // The numbers of a set an account is asked to build at. The figure bounds how many are
+            // handed back, and what is handed over beside them is whether the set held anything
+            // else — which is what the searches below turn into the figure or into an answer about
+            // the model.
+            Map.entry("souther.compiler.partition.TermRealizations#numbersToTry("
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/Carrier;II)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "how many of a set's numbers are handed to an account, and whether they were"
+                            + " all of them"),
+            Map.entry("souther.compiler.partition.TermRealizations#firstThatBuilds("
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;"
+                            + "Ljava/util/function/Function;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "names the figure where nothing was built and the numbers were not all of the"
+                            + " set, which is what keeps that apart from nothing writing one"),
+            Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
+                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/check/RuleReadingSource;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "names the figure where no date was found and the years were not all walked"),
+
             // The readings. Each takes a figure that was handed over and says what it comes to.
             Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
                             + "Ljava/util/Collection;)"

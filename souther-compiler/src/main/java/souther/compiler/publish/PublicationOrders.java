@@ -254,6 +254,10 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    // Beside the one above it, and for the same reason: both bound how many times
+                    // the thing a reader asked about is tried, where the ones before them bound
+                    // what building one value is worth.
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
