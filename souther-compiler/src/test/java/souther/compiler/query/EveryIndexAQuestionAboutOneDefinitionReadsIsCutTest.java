@@ -5,11 +5,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,11 +38,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * here is a shape the fixture has to go on reaching, so a fixture that stopped reaching one fails
  * rather than quietly checking less.
  *
- * <p><b>The classification is not the graph's.</b> Which of the two sound forms an edge is takes the
- * graph, what equality says about the answers, and an edit — so the edit is here, and it is a
- * behavior declared beside the ones the module already had. A behavior is the one thing a module
- * gathers every kind of index over, and declaring one says nothing about any definition already
- * written — so an answer about one of those that moves under it moved for the module's sake.
+ * <p><b>An edit that leaves the index where it was asks the edge nothing.</b> Every index is
+ * gathered over a different kind of thing, and one edit moves some of them: a behavior declared
+ * beside adds an entry to what the module declares and none to what its behaviors require. So the
+ * edits are {@link Edit}, each additive and each about nothing already written, and every edge is
+ * held to having been met under one that moved the index it reads. An edge no edit here moves is an
+ * edge nobody has put a question to, and it fails as one.
  */
 class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
 
@@ -55,7 +56,8 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      * write is a column of the census that is never read.
      */
     private static final String MODULE = """
-            module shop.orders exposing ( Code, Amount, Line, priceOf, twiceOf, codeOf, labelOf )
+            module shop.orders exposing
+                ( Code, Amount, Line, priceOf, twiceOf, codeOf, labelOf, totalOf )
 
             data Code = String
                 invariant String.matches("[A-Z]{2}[0-9]{3}", value)
@@ -79,46 +81,143 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
             behavior labelOf : (line: Line) -> String
             let labelOf (line) = codeOf(line).value
 
+            partial let spinDown (n: Int): Amount =
+                if n <= 0 then Amount { value = 0 } else spinDown(n - 1)
+
+            behavior totalOf : (line: Line) -> Amount
+            let totalOf (line) = spinDown(line.amount.value)
+
             example priceOf
                 | "one" : (Line { code = Code { value = "AB123" }, amount = Amount { value = 1 } })
                     -> Amount { value = 1 }
             """;
 
     /**
-     * The same module with one more behavior declared after all of them.
+     * The ways this module is added to, each saying nothing about anything already written in it.
      *
-     * <p>Nothing here names it and it names nothing here, so what every definition the module
-     * already had means is what it meant. What moves is the module: every index it gathers has one
-     * more entry.
+     * <p>Additive, and that is what makes them siblings. Changing a definition that is already here
+     * would be an edit to a definition the census holds edges of, and every reader of that
+     * definition would be recomputed for its own sake — which is a reader doing what it is for, and
+     * nothing this is about. What arrives is a definition nothing here names and which names
+     * nothing here.
      */
-    private static final String AND_ONE_MORE_BEHAVIOR = MODULE + """
+    private enum Edit {
 
-            behavior weigh : (x: Int) -> Int
-            let weigh (x) = x
-            """;
+        /** Which behaviors the module declares, what each takes, and what a body may call. */
+        A_BEHAVIOR_DECLARED_BESIDE("""
+
+                behavior weigh : (x: Int) -> Int
+                let weigh (x) = x
+                """),
+
+        /**
+         * What the behaviors of the module require. A behavior with nothing to inject is in none of
+         * this, so a behavior declared beside leaves it where it was however much else it moves.
+         */
+        A_BEHAVIOR_BESIDE_TAKING_A_REQUIREMENT("""
+
+                behavior fetch : (x: Int) -> Amount
+                    constructs Amount
+
+                behavior order : (x: Int) -> Amount depends on fetch
+                let order (x, fetch) = fetch(x)
+                """),
+
+        /** What each behavior of the module states about its answer. */
+        A_BEHAVIOR_BESIDE_STATING_A_RULE("""
+
+                behavior atLeast : (x: Int) -> Int
+                    ensures value >= x
+                let atLeast (x) = x
+                """),
+
+        /** What the module declares, resolves, normalizes and derives. */
+        A_DATA_DECLARED_BESIDE("""
+
+                data Spare = Int
+                    invariant value >= 1
+                """),
+
+        /** The definitions a module writes to run its rows. */
+        A_ROW_WRITTEN_BESIDE("""
+
+                behavior half : (x: Int) -> Int
+                let half (x) = x / 2
+
+                example half
+                    | "two" : (2) -> 1
+                """),
+
+        /** What the module has to emit because an expansion could not remove it, and what those
+         *  recursions are typed as. */
+        A_RECURSIVE_HELPER_BESIDE("""
+
+                partial let countDown (n: Int): Int = if n <= 0 then 0 else countDown(n - 1)
+
+                behavior down : (x: Int) -> Int
+                let down (x) = countDown(x)
+                """),
+
+        /**
+         * Which of the module's declarations have no meaning to give.
+         *
+         * <p>The one edit the compiler has something to say about, and it has to be: what this index
+         * holds is the declarations that did not come out, so nothing that compiles moves it. What is
+         * said is said about the declaration added here and about nothing that was already written.
+         */
+        A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT("""
+
+                data Broken = { missing: NoSuchType }
+                """, true);
+
+        private final String added;
+        private final boolean saysSomething;
+
+        Edit(String added) {
+            this(added, false);
+        }
+
+        Edit(String added, boolean saysSomething) {
+            this.added = added;
+            this.saysSomething = saysSomething;
+        }
+
+        String source() {
+            return MODULE + added;
+        }
+
+        /** Whether the compiler is expected to speak about what this adds. */
+        boolean saysSomething() {
+            return saysSomething;
+        }
+    }
 
     private static final String ID = "orders.sou";
 
-    /** What the store held before the edit and after it, worked out once for the class that asks. */
-    private static final IndexEdges.Census CENSUS = census();
+    /** What each edit made of the graph, worked out once for the class that asks. */
+    private static final Map<Edit, IndexEdges.Census> CENSUS = census();
 
-    private static IndexEdges.Census census() {
-        Map<String, String> byId = new LinkedHashMap<>();
-        byId.put(ID, MODULE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
-        assertTrue(c.db().allReports().isEmpty(),
-                () -> "the module compiles to begin with: " + said(c));
-        IndexEdges.Snapshot before = IndexEdges.Snapshot.of(c.db());
+    private static Map<Edit, IndexEdges.Census> census() {
+        Map<Edit, IndexEdges.Census> out = new LinkedHashMap<>();
+        for (Edit edit : Edit.values()) {
+            Map<String, String> byId = new LinkedHashMap<>();
+            byId.put(ID, MODULE);
+            Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+            c.measure(Adequacy.Asked.fullReport());
+            c.answerEverything();
+            assertTrue(c.db().allReports().isEmpty(),
+                    () -> "the module compiles to begin with: " + said(c));
+            IndexEdges.Snapshot before = IndexEdges.Snapshot.of(c.db());
 
-        c.update(Map.of(ID, AND_ONE_MORE_BEHAVIOR), Set.of());
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
-        assertTrue(c.db().allReports().isEmpty(),
-                () -> "and after the behavior beside it: " + said(c));
+            c.update(Map.of(ID, edit.source()), Set.of());
+            c.measure(Adequacy.Asked.fullReport());
+            c.answerEverything();
+            assertEquals(edit.saysSomething(), !c.db().allReports().isEmpty(),
+                    () -> "after " + edit + " the compiler said " + said(c));
 
-        return IndexEdges.taken(before, IndexEdges.Snapshot.of(c.db()));
+            out.put(edit, IndexEdges.taken(before, IndexEdges.Snapshot.of(c.db())));
+        }
+        return out;
     }
 
     /** What the compiler said about the fixture, as a reader of a failure can read it. */
@@ -130,33 +229,44 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 .toList();
     }
 
-    /** A set of types as a failure reads them. */
-    private static Set<String> named(Set<Class<?>> types) {
-        Set<String> out = new TreeSet<>();
-        types.forEach(each -> out.add(each.getName()));
+    /**
+     * What an edge was found to be, and under the edit that found it.
+     *
+     * <p>The edit is kept beside the verdict rather than folded away. An edit that stopped moving an
+     * index leaves every edge under it exactly as they were, so a register of verdicts alone cannot
+     * tell an edge that is still held from one nothing is asking any more.
+     */
+    private record Witness(IndexEdges.WhatItIs is, Edit under) implements Comparable<Witness> {
+
+        @Override
+        public String toString() {
+            return is + " under " + under;
+        }
+
+        @Override
+        public int compareTo(Witness other) {
+            return toString().compareTo(other.toString());
+        }
+    }
+
+    /** What each edge of the graph was met as. */
+    private static Map<IndexEdges.Edge, Set<Witness>> met() {
+        Map<IndexEdges.Edge, Set<Witness>> out = new TreeMap<>();
+        CENSUS.forEach((edit, census) -> census.whereTheIndexMoved().forEach((edge, was) ->
+                was.forEach(is -> out.computeIfAbsent(edge, _ -> new TreeSet<>())
+                        .add(new Witness(is, edit)))));
         return out;
     }
 
-    /**
-     * What two accounts differ over, in an order a reader can follow.
-     *
-     * <p>Built from the comparison rather than compared. Two edges that read alike are one line of
-     * anything rendered, so comparing the text is a comparison that cannot see one of them going
-     * missing — and an edge is told from an edge by the classes it holds, which is what a rendering
-     * drops. What reads well is what a failure is written with, and nothing else.
-     */
-    private static List<String> differencesBetween(Map<IndexEdges.Edge, Set<IndexEdges.WhatItIs>>
-                                                           written,
-                                                   Map<IndexEdges.Edge, Set<IndexEdges.WhatItIs>>
-                                                           met) {
+    /** What two accounts differ over, in an order a reader can follow. */
+    private static List<String> differencesBetween(Map<IndexEdges.Edge, Set<Witness>> written,
+                                                   Map<IndexEdges.Edge, Set<Witness>> met) {
         Set<IndexEdges.Edge> every = new TreeSet<>(written.keySet());
         every.addAll(met.keySet());
         List<String> out = new ArrayList<>();
         every.forEach(edge -> {
-            Set<IndexEdges.WhatItIs> theirs = written.get(edge);
-            Set<IndexEdges.WhatItIs> ours = met.get(edge);
-            if (!Objects.equals(theirs, ours)) {
-                out.add(edge + ": written down " + theirs + ", met as " + ours);
+            if (!Objects.equals(written.get(edge), met.get(edge))) {
+                out.add(edge + ": written down " + written.get(edge) + ", met as " + met.get(edge));
             }
         });
         return out;
@@ -171,28 +281,124 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      */
     @Test
     void theCensusReachesTheEdgesThisIsAbout() {
-        IndexEdges.Census census = CENSUS;
+        IndexEdges.Census first = CENSUS.get(Edit.A_BEHAVIOR_DECLARED_BESIDE);
 
-        assertTrue(census.instances() > 20,
-                () -> "a census of " + census.instances() + " edges is not this compiler's graph");
-        assertTrue(census.whatEachEdgeIs().size() > 8,
-                () -> "a census of " + census.whatEachEdgeIs().size() + " shapes is not this"
-                        + " compiler's graph");
+        assertTrue(first.instances() > 20,
+                () -> "a census of " + first.instances() + " edges is not this compiler's graph");
+        assertTrue(first.everyEdge().size() > 8,
+                () -> "a census of " + first.everyEdge().size() + " shapes is not this compiler's"
+                        + " graph");
     }
 
-    /** And every edge in it is one of the two, at every definition it stands at. */
+    /** And every edge an edit moved the index of is one of the two, at every definition it stands
+     *  at. */
     @Test
     void noEdgeIsNeitherAProjectionNorEqualUnderASiblingEdit() {
-        assertEquals(List.of(), CENSUS.neither(),
-                "a question about one definition took its module's index whole, so a behavior"
-                        + " declared beside it is an edit to this definition");
+        List<String> neither = new ArrayList<>();
+        CENSUS.forEach((edit, census) ->
+                census.neither().forEach(each -> neither.add(each + ", under " + edit)));
+
+        assertEquals(List.of(), neither,
+                "a question about one definition took its module's index whole, so an edit to a"
+                        + " definition it says nothing about is an edit to this one");
+    }
+
+    /**
+     * And every edge in the graph was met under an edit that moved the index it reads.
+     *
+     * <p>Its own sentence because the other half of each verdict can be had for nothing. An index
+     * that stays where it was leaves every reader of it alone whether the reader means one entry or
+     * the module, so a verdict read off an edit that moved nothing is a verdict about the edit. An
+     * edge here that no edit moves is one nobody has put a question to, and what it wants is an edit
+     * that moves its index rather than a word in the register.
+     */
+    @Test
+    void everyEdgeWasMetUnderAnEditThatMovedItsIndex() {
+        Set<IndexEdges.Edge> everyEdge = new TreeSet<>();
+        Set<IndexEdges.Edge> exercised = new TreeSet<>();
+        CENSUS.values().forEach(census -> {
+            everyEdge.addAll(census.everyEdge());
+            exercised.addAll(census.exercised());
+        });
+        Set<IndexEdges.Edge> untouched = new TreeSet<>(everyEdge);
+        untouched.removeAll(exercised);
+
+        assertEquals(Set.of(), untouched,
+                "an edge no edit here moves the index of, so what it is was never asked");
+    }
+
+    /**
+     * What each edge of this compiler's graph is, said once so that this can read it.
+     *
+     * <p>Written down rather than worked out, for the reason the classification cannot be read off
+     * the graph at all. An edge read as sound because it came out sound is an edge nobody has
+     * judged, and the day it stops being a projection the census would follow it into whatever it
+     * became.
+     */
+    private static Map<IndexEdges.Edge, Set<Witness>> written() {
+        Map<IndexEdges.Edge, Set<Witness>> out = new TreeMap<>();
+        projection(out, Bodies.BehaviorAritiesForBody.class, Bodies.NamedBehaviorArity.class,
+                Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
+                Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
+        projection(out, Bodies.CalleeSigsForBody.class, Bodies.CalleeSigs.class,
+                Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
+                Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
+        projection(out, Bodies.DeclaredSignature.class, Bodies.DeclaredSignatures.class,
+                Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE,
+                Edit.A_BEHAVIOR_BESIDE_TAKING_A_REQUIREMENT, Edit.A_BEHAVIOR_DECLARED_BESIDE,
+                Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
+        projection(out, Bodies.RecursiveCallSigsForBody.class, Bodies.RecursiveCallSigs.class,
+                Edit.A_RECURSIVE_HELPER_BESIDE);
+        projection(out, Bodies.RecursiveHelperConstructsForBody.class,
+                Bodies.RecursiveHelperConstructs.class, Edit.A_RECURSIVE_HELPER_BESIDE);
+        projection(out, Bodies.SettledFn.class, Bodies.RowFixtureDefs.class,
+                Edit.A_ROW_WRITTEN_BESIDE);
+        projection(out, Bodies.Stated.class, Bodies.StatedContracts.class,
+                Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);
+        projection(out, Names.Declaration.class, Names.Declarations.class,
+                Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        projection(out, Names.ResolvedDeclaration.class, Names.ResolvedDeclarations.class,
+                Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        projection(out, Shapes.DerivedDef.class, Shapes.DerivedDeclarations.class,
+                Edit.A_DATA_DECLARED_BESIDE);
+        projection(out, Shapes.NormalizedDef.class, Shapes.NormalizedDeclarations.class,
+                Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        equalUnderASiblingEdit(out, Bodies.Assumptions.class, Bodies.StatedContracts.class,
+                Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);
+        equalUnderASiblingEdit(out, Bodies.CheckedBehavior.class, Bodies.ReqSigs.class,
+                Edit.A_BEHAVIOR_BESIDE_TAKING_A_REQUIREMENT);
+        equalUnderASiblingEdit(out, Names.Definition.class, Names.Unbuilt.class,
+                Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        equalUnderASiblingEdit(out, Shapes.ClausesExpandedFor.class,
+                Shapes.ExpandedDeclarationClauses.class, Edit.A_DATA_DECLARED_BESIDE,
+                Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        return out;
+    }
+
+    private static void projection(Map<IndexEdges.Edge, Set<Witness>> out, Class<?> reader,
+                                   Class<?> index, Edit... under) {
+        out.put(new IndexEdges.Edge(reader, index), witnesses(IndexEdges.WhatItIs.A_PROJECTION,
+                under));
+    }
+
+    private static void equalUnderASiblingEdit(Map<IndexEdges.Edge, Set<Witness>> out,
+                                               Class<?> reader, Class<?> index, Edit... under) {
+        out.put(new IndexEdges.Edge(reader, index),
+                witnesses(IndexEdges.WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
+    }
+
+    private static Set<Witness> witnesses(IndexEdges.WhatItIs is, Edit... under) {
+        Set<Witness> out = new TreeSet<>();
+        for (Edit each : under) {
+            out.add(new Witness(is, each));
+        }
+        return out;
     }
 
     /** And each is what is written down beside it. */
     @Test
     void everyEdgeIsWhatIsWrittenDownBesideIt() {
-        assertEquals(List.of(),
-                differencesBetween(IndexEdges.written(), CENSUS.whatEachEdgeIs()),
+        assertEquals(List.of(), differencesBetween(written(), met()),
                 "an edge of the store's graph that nobody has said what it is");
     }
 
@@ -206,39 +412,33 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     @Test
     void everyProjectionWrittenDownWasSeenProjectingSomething() {
         Set<IndexEdges.Edge> written = new TreeSet<>();
-        IndexEdges.written().forEach((edge, is) -> {
-            if (is.contains(IndexEdges.WhatItIs.A_PROJECTION)) {
+        written().forEach((edge, was) -> {
+            if (was.stream().anyMatch(each -> each.is() == IndexEdges.WhatItIs.A_PROJECTION)) {
                 written.add(edge);
             }
         });
+        Set<IndexEdges.Edge> witnessed = new TreeSet<>();
+        CENSUS.values().forEach(census -> witnessed.addAll(census.witnessed()));
 
-        assertEquals(written, new TreeSet<>(CENSUS.witnessed()),
+        assertEquals(written, witnessed,
                 "a projection nothing was ever seen to project, which is what an answer holding"
                         + " nothing reads as");
     }
 
     /**
-     * And somebody has said what every type a question holds at a component is.
+     * And every component excused from naming something is one a question still holds.
      *
-     * <p>Quantified over what this compiler declares rather than over what the fixture reached,
-     * because this is the reading the census rests on and both ways of getting it wrong are silent:
-     * a policy read as a name makes every question about a module read as a question about one of
-     * its definitions, and a name of a kind nothing here knows takes every index its question folds
-     * in out of the census.
+     * <p>The register's only obligation, because its default is the strict half: a component nobody
+     * has judged puts its key among the readers of an index, which asks more rather than less. What
+     * would go quiet is a line left behind by a key that has moved on, and that is what this reads.
      */
     @Test
-    void somebodyHasSaidWhatEveryTypeAQuestionHoldsIs() throws Exception {
+    void everyComponentExcusedIsOneAQuestionStillHolds() throws Exception {
         List<Class<?>> questions = DeclaredQuestions.found(DeclaredQuestions.scan());
 
         assertTrue(questions.size() > 100,
                 () -> "a vocabulary of " + questions.size() + " is not this compiler's");
-        Set<Class<?>> written = IndexEdges.whatAComponentHolds().keySet();
-        Set<Class<?>> held = IndexEdges.componentTypes(questions);
-        Set<Class<?>> unsaid = new LinkedHashSet<>(held);
-        unsaid.removeAll(written);
-
-        assertEquals(written, held,
-                () -> "a question holds something at a component that nobody has said whether it"
-                        + " names something the module holds: " + named(unsaid));
+        assertEquals(Set.of(), IndexEdges.staleIn(questions),
+                "a component written down as saying which module, which no question holds");
     }
 }

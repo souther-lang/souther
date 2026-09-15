@@ -1208,6 +1208,75 @@ public final class Bodies {
     }
 
     /**
+     * The declarations one body's expansion writes into it, and the ones those write into
+     * themselves.
+     *
+     * <p>What a body reaches, asked once. Three answers a body is checked against are the module's
+     * index narrowed to what this body reaches — what the behaviors it names take, what the
+     * recursions it calls are typed as, what those construct — and each narrowing is the same
+     * question about the same body. Worked out where each is wanted, it is the same walk written
+     * three times, and three walks that have to agree about what a body reaches are three chances
+     * for one of them to be narrower than what the expansion actually writes in.
+     *
+     * <p>Over every name that reaches a declaration rather than over what is applied. A value is
+     * handed over by writing its name and is substituted there, so a walk that followed only calls
+     * would miss the definition that carries something in — and the closure, because what is
+     * substituted may itself name something that is.
+     *
+     * <p>Which definitions a body reaches is what the policy decides, so the policy is part of the
+     * question: the discharge representation leaves the language's own operations standing where the
+     * emitted one expands them.
+     */
+    public record ReachedByBody(String module, String fn, InliningPolicy policy)
+            implements Key<Set<ReachName.Declaration>> {
+
+        @Override
+        public Answer<Set<ReachName.Declaration>> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
+            if (!def.present() || !against.present()) {
+                return Answer.absent();
+            }
+            HelperTable table = against.value().table();
+            Set<ReachName.Declaration> reached = new LinkedHashSet<>();
+            Deque<Hir.FnDef> todo = new ArrayDeque<>();
+            todo.add(def.value());
+            while (!todo.isEmpty()) {
+                for (ReachName.Declaration each : writtenInto(todo.poll(), table)) {
+                    Hir.FnDef written = reached.add(each) ? table.reached(each) : null;
+                    if (written != null) {
+                        todo.add(written);
+                    }
+                }
+            }
+            return Answer.of(Ordered.set(reached));
+        }
+    }
+
+    /**
+     * The declarations one step of an expansion writes into {@code def}.
+     *
+     * <p>Two relations and both of them. A call is written out where it is called, and which calls
+     * those are is {@link HelperInliner#helperCallsIn} — the same walk the graph of a module's
+     * helpers is built from, so what is counted here is what the expansion counts and not a second
+     * reading of it. A name that is not applied is the other: a value is substituted where it is
+     * written, and nothing in the graph of calls says so.
+     */
+    private static Set<ReachName.Declaration> writtenInto(Hir.FnDef def, HelperTable table) {
+        Set<ReachName.Declaration> out = new LinkedHashSet<>();
+        if (!(def.body() instanceof Hir.FnBody.Written written)) {
+            return out;
+        }
+        HelperInliner.helperCallsIn(table.library(), written.expr(), table.reachable(), out);
+        for (ReachName.Declaration each : namesIn(def, new LinkedHashSet<>())) {
+            if (table.reached(each) != null) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
      * How many inputs each behavior one body names takes, by the name it names each under.
      *
      * <p>{@link NamedBehaviorArity} is the module's index of what every behavior in it takes, and an
@@ -1216,14 +1285,10 @@ public final class Bodies {
      * of the module is expanded again against arities none of them wrote differently.
      *
      * <p>Over the tree the expansion walks and not over the one the author wrote. A definition this
-     * body names is written into it — a helper is expanded where it is called, a value is
-     * substituted where it is named — so a behavior named in one of those is a behavior this body's
-     * expansion asks the arity of. Taken from the body alone, a value written {@code let f = twice}
+     * body names is written into it, so a behavior named in one of those is a behavior this body's
+     * expansion asks the arity of: taken from the body alone, a value written {@code let f = twice}
      * and handed on would be left standing as a name where it has to become the behavior it denotes.
-     *
-     * <p>Which definitions those are is what the policy decides, so it is part of the question. The
-     * table {@link Expanding} holds is what a body may reach, and this walks the ones it does reach:
-     * a behavior a definition elsewhere in the module names is not one this body asks about.
+     * {@link ReachedByBody} is what those definitions are.
      */
     public record BehaviorAritiesForBody(String module, String fn, InliningPolicy policy)
             implements Key<Map<ValueName.Behavior, Integer>> {
@@ -1232,14 +1297,24 @@ public final class Bodies {
         public Answer<Map<ValueName.Behavior, Integer>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
+            Answer<Set<ReachName.Declaration>> reached =
+                    db.ask(new ReachedByBody(module, fn, policy));
             Answer<Map<ValueName.Behavior, Integer>> arities =
                     db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !against.present() || !arities.present()) {
+            if (!def.present() || !against.present() || !reached.present()
+                    || !arities.present()) {
                 return Answer.absent();
             }
+            Set<ValueName.Behavior> named = new LinkedHashSet<>();
+            namesIn(def.value(), named);
+            for (ReachName.Declaration each : reached.value()) {
+                Hir.FnDef written = against.value().table().reached(each);
+                if (written != null) {
+                    namesIn(written, named);
+                }
+            }
             Map<ValueName.Behavior, Integer> out = new LinkedHashMap<>();
-            for (ValueName.Behavior each
-                    : behaviorsThisBodyExpandsTo(def.value(), against.value().table())) {
+            for (ValueName.Behavior each : named) {
                 Integer takes = arities.value().get(each);
                 if (takes != null) {
                     out.put(each, takes);
@@ -1250,33 +1325,71 @@ public final class Bodies {
     }
 
     /**
-     * Every behavior named in {@code def} or in anything {@code table} would write into it.
+     * What each recursion one body calls is typed as, by the name it is held under.
      *
-     * <p>The closure and not one step of it: a value substituted into this body may name a value
-     * that names a behavior, and what arrives in the tree is the end of that chain.
-     *
-     * <p>Over every name that reaches a declaration rather than over calls alone. A value is handed
-     * over by writing its name and is substituted there, so a walk that followed only what is
-     * applied would miss the definition that carries the behavior in.
+     * <p>{@link RecursiveCallSigs} is the module's index of every recursion in it, and a body wants
+     * the entries for the ones its own expansion left standing. Read whole, a recursive helper
+     * declared anywhere in the module checks every behavior of it again.
      */
-    private static Set<ValueName.Behavior> behaviorsThisBodyExpandsTo(Hir.FnDef def,
-                                                                     HelperTable table) {
-        Set<ValueName.Behavior> named = new LinkedHashSet<>();
-        Set<ReachName.Declaration> walked = new LinkedHashSet<>();
-        Deque<Hir.FnDef> todo = new ArrayDeque<>();
-        todo.add(def);
-        while (!todo.isEmpty()) {
-            for (ReachName.Declaration reaches : namesIn(todo.poll(), named)) {
-                if (!walked.add(reaches)) {
-                    continue;
-                }
-                Hir.FnDef written = table.reached(reaches);
-                if (written != null) {
-                    todo.add(written);
+    public record RecursiveCallSigsForBody(String module, String behavior)
+            implements Key<Map<String, Type>> {
+
+        @Override
+        public Answer<Map<String, Type>> compute(Db db) {
+            Answer<Map<String, Type>> sigs =
+                    db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
+            Answer<Set<ReachName.Declaration>> reached =
+                    db.ask(new ReachedByBody(module, behavior, InliningPolicy.FULL));
+            if (!sigs.present() || !reached.present()) {
+                return Answer.absent();
+            }
+            Map<String, Type> out = new LinkedHashMap<>();
+            for (String each : heldAt(reached.value())) {
+                Type sig = sigs.value().get(each);
+                if (sig != null) {
+                    out.put(each, sig);
                 }
             }
+            return Answer.of(Ordered.map(out));
         }
-        return named;
+    }
+
+    /**
+     * What the recursions one body calls construct, by the name each is held under.
+     *
+     * <p>A recursion is not inlined, so what it constructs is attributed to the behavior that calls
+     * it (spec §blocks) — which is this body, for the ones this body reaches. {@link
+     * RecursiveHelperConstructs} is the module's index of all of them.
+     */
+    public record RecursiveHelperConstructsForBody(String module, String behavior)
+            implements Key<Map<String, DataChecker.Constructs>> {
+
+        @Override
+        public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
+            Answer<Map<String, DataChecker.Constructs>> constructs =
+                    db.ask(new RecursiveHelperConstructs(module));
+            Answer<Set<ReachName.Declaration>> reached =
+                    db.ask(new ReachedByBody(module, behavior, InliningPolicy.FULL));
+            if (!constructs.present() || !reached.present()) {
+                return Answer.absent();
+            }
+            Map<String, DataChecker.Constructs> out = new LinkedHashMap<>();
+            for (String each : heldAt(reached.value())) {
+                DataChecker.Constructs built = constructs.value().get(each);
+                if (built != null) {
+                    out.put(each, built);
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /** The addresses {@code reached} is held at, which is what both indexes of recursions are keyed
+     *  by. */
+    private static Set<String> heldAt(Set<ReachName.Declaration> reached) {
+        Set<String> out = new LinkedHashSet<>();
+        reached.forEach(each -> out.add(DefinitionName.of(each).text()));
+        return out;
     }
 
     /**
@@ -2232,9 +2345,13 @@ public final class Bodies {
                     db.ask(new CalleeSigsForBody(module, behavior));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
+            // The recursions this body's expansion left standing, and not the module's index of all
+            // of them: a recursive helper this body never calls is no part of what it is checked
+            // against, and depending on the index would check this body again whenever one was
+            // declared anywhere in the module.
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigsForBody(module, behavior));
             Answer<Map<String, DataChecker.Constructs>> constructs =
-                    db.ask(new RecursiveHelperConstructs(module));
+                    db.ask(new RecursiveHelperConstructsForBody(module, behavior));
             Answer<Expansion<Hir.FnDef>> discharge =
                     db.ask(new BodyForInvariantDischarge(module, behavior));
             // What the behaviors this body reaches state about their answers, and only those: a
