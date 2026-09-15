@@ -22,6 +22,7 @@ import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.Cardinality;
 import souther.compiler.check.CardinalityPremise;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.UninhabitableTypes;
@@ -43,6 +44,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -882,6 +884,93 @@ public final class Shapes {
     }
 
     /**
+     * The declarations answered together with this one, which is one of them.
+     *
+     * <p>An answer of its own because it is what says where a count is cut, and because it is
+     * settled by the shapes alone: what a declaration reads is written in its fields and in the
+     * names those are written in terms of, so an author changing what a rule allows leaves this
+     * where it was and every count built on it stands.
+     */
+    public record CardinalityComponentOf(TypeKey named) implements Key<List<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<List<TypeSymbol>> compute(Db db) {
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            if (!reading.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(TypeCardinality.componentOf(
+                        TypeSymbols.declared(named), reading.value()));
+            } catch (CompileException e) {
+                return Answer.of(List.of(), Report.of(e));
+            }
+        }
+    }
+
+    /**
+     * How many values every declaration answered together with this one has at most.
+     *
+     * <p>One answer per component and not per declaration, because a component is what a count
+     * answers at once: declarations written in terms of each other are risen through together, and
+     * an answer for one of them alone would be an answer resting on an assumption about the others.
+     * A count of anything that reads this component is handed what this came to rather than reading
+     * these declarations again, so an edit to a declaration reaches the counts that read it and
+     * stops.
+     *
+     * <p>Under the declarations' own module. What a count of a component comes to is settled by the
+     * component's rules and by what it reads, and asking it under the scope of whoever reached it
+     * would make two readers of one component hold two answers.
+     */
+    public record CardinalityOf(TypeKey named) implements Key<Map<TypeSymbol, Cardinality>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+            Answer<List<TypeSymbol>> component = db.ask(new CardinalityComponentOf(named));
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!component.present() || !reading.present() || !policy.present()) {
+                return Answer.absent();
+            }
+            List<TypeSymbol> members = component.value();
+            if (members.isEmpty()) {
+                return Answer.of(Map.of());
+            }
+            // Asked where the component is named and not wherever a member of it was reached, so
+            // that the declarations are risen through once however many of them a reader asks about.
+            if (members.get(0) instanceof TypeSymbol.AtModule first
+                    && !first.key().equals(named)) {
+                return db.ask(new CardinalityOf(first.key()));
+            }
+            try {
+                return Answer.of(TypeCardinality.ofComponent(members, reading.value(), policy.value(),
+                        db.readings(), cardinalityPremises(db, reading.value(), policy.value()),
+                        name -> countOf(db, name)));
+            } catch (CompileException e) {
+                return Answer.absent(Report.of(e));
+            }
+        }
+    }
+
+    /** What a count of one component is handed about a declaration outside it: the answer for the
+     *  component that one is a member of, which is a reading of its own. */
+    private static Cardinality countOf(Db db, TypeSymbol name) {
+        if (!(name instanceof TypeSymbol.AtModule at)) {
+            return null;
+        }
+        Answer<Map<TypeSymbol, Cardinality>> counted = db.ask(new CardinalityOf(at.key()));
+        return counted.present() ? counted.value().get(name) : null;
+    }
+
+    /**
      * Which of this module's declarations no value satisfies, and what shows it.
      *
      * <p>An answer of its own so that what a body's check depends on is this and not the clauses it
@@ -916,9 +1005,14 @@ public final class Shapes {
             }
             List<TypeSymbol.AtModule> declarations = written.value();
             try {
-                TypeCardinality.Cardinalities counted = TypeCardinality.solve(
+                // The counts are read from the answer each component has and not worked out here.
+                // What is left to do is what a count is beside the counts: which declarations had to
+                // be answered together, what each reads, and what their rules ask a collection to
+                // hold, which is what the question about who is at fault for a lack is asked of.
+                TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
                         declarations, reading.value(), policy.value(), db.readings(),
-                        cardinalityPremises(db, reading.value(), policy.value()));
+                        cardinalityPremises(db, reading.value(), policy.value()),
+                        name -> countOf(db, name));
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may
                 // have missed the rule that empties a type — and would report it as inhabited.

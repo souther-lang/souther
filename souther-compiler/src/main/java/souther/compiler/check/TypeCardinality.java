@@ -76,6 +76,24 @@ public final class TypeCardinality {
         }
     }
 
+    /**
+     * Where a count gets what a declaration outside the ones it is answering came to.
+     *
+     * <p>Asked as the reading reaches a name rather than gathered before it starts. What a
+     * declaration reads is not the names written in its own types alone — a name worn over a value
+     * is opened and the reading goes on into what it wraps — so a caller that gathered the counts
+     * first would gather everything the declarations reach to hand over the few that are read.
+     */
+    @FunctionalInterface
+    public interface Counts {
+
+        /** What {@code name} came to, nothing being known of a name nobody answers for. */
+        Cardinality of(TypeSymbol name);
+
+        /** Nowhere to ask, for a count that holds every declaration it reads. */
+        Counts NONE = _ -> null;
+    }
+
     /** How many values each declaration {@code declarations} reaches has at most, read for
      *  itself. */
     public static Cardinalities solve(List<Hir.Def> declarations, RuleReadingSource source,
@@ -123,6 +141,104 @@ public final class TypeCardinality {
                         machines)),
                 components, declared, edges, cuts, source, policy, machines,
                 read.everyRuleReached());
+    }
+
+    /**
+     * The declarations that have to be answered together with {@code named}, in the order two
+     * readers of them would both write.
+     *
+     * <p>Canonical and not the order the walk found them in: this says which declarations are one
+     * answer, and a set said twice has to be said the same way both times. Where the declarations
+     * are reported is another question and is asked of what a module declares.
+     *
+     * <p>Read off the shapes and not off the rules. What reads what is written in the fields and in
+     * the names they are written in terms of, so an author changing what a rule allows leaves this
+     * where it was.
+     */
+    public static List<TypeSymbol> componentOf(TypeSymbol named, RuleReadingSource source) {
+        Symbols symbols = source.symbols();
+        Map<TypeSymbol, Hir.Def> declared = reached(List.of(named), symbols);
+        if (!declared.containsKey(named)) {
+            return List.of();
+        }
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
+        declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
+        for (List<TypeSymbol> component : TypeComponents.of(edges)) {
+            if (component.contains(named)) {
+                return component.stream().sorted().toList();
+            }
+        }
+        return List.of(named);
+    }
+
+    /**
+     * What the declarations of one component come to, with what they read outside themselves asked
+     * of {@code outside}.
+     *
+     * <p>Asked of somebody rather than worked out here, and that is the whole of what separates this
+     * from a count of a module. A component is answered from its own declarations' rules and from
+     * what the declarations it reads came to; where those answers come from somebody holding one per
+     * component, a component whose neighbours have not moved is not worked out again.
+     *
+     * <p>The cuts are the component's own and are gathered only where there is a rising to stop.
+     * Nothing is rounded where a component is read once, so a component that reads no declaration
+     * written in terms of it asks no declaration what counts its rules turn on.
+     */
+    public static Map<TypeSymbol, Cardinality> ofComponent(List<TypeSymbol> component,
+                                                           RuleReadingSource source,
+                                                           ReadingPolicy policy,
+                                                           DeclarationReadings machines,
+                                                           Premises premises,
+                                                           Counts outside) {
+        Symbols symbols = source.symbols();
+        Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
+        for (TypeSymbol each : component) {
+            if (symbols.declaredNode(each) instanceof Hir.Def def) {
+                declared.put(each, def);
+            }
+        }
+        if (declared.isEmpty()) {
+            return Map.of();
+        }
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
+        declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
+        List<TypeSymbol> members = List.copyOf(declared.keySet());
+        CardinalityCuts cuts = TypeComponents.recurses(members, edges)
+                ? CardinalityCuts.keeping(
+                        ofTheDeclarations(reached(members, symbols).keySet(), premises).counts())
+                : CardinalityCuts.keeping(Set.of());
+        Answers answers = Answers.over(outside);
+        settle(members, declared, edges, cuts, source, policy, Set.of(), machines, answers);
+        return answers.everySettled();
+    }
+
+    /**
+     * The same reading as a count of {@code roots} would be, with what every declaration came to
+     * taken from {@code counted} rather than worked out.
+     *
+     * <p>What is left to do here is everything a count is beside the counts. Which declarations had
+     * to be answered together, what each of them reads, and what their rules ask a collection to
+     * hold are read off the declarations; they are what the question about which declarations are at
+     * fault for a lack is asked of, and none of them is a count.
+     */
+    public static Cardinalities assembled(List<? extends TypeSymbol> roots, RuleReadingSource source,
+                                          ReadingPolicy policy, DeclarationReadings machines,
+                                          Premises premises, Counts counted) {
+        Symbols symbols = source.symbols();
+        Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
+        declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
+        OfTheDeclarations read = ofTheDeclarations(declared.keySet(), premises);
+        CardinalityCuts cuts = CardinalityCuts.keeping(read.counts());
+        Map<TypeSymbol, Cardinality> upper = new LinkedHashMap<>();
+        boolean everyCountArrived = true;
+        for (TypeSymbol each : declared.keySet()) {
+            Cardinality count = counted.of(each);
+            everyCountArrived &= count != null;
+            upper.put(each, count == null ? Cardinality.UNKNOWN : count);
+        }
+        return new Cardinalities(Map.copyOf(upper), TypeComponents.of(edges), declared, edges, cuts,
+                source, policy, machines, read.everyRuleReached() && everyCountArrived);
     }
 
     /**
@@ -274,27 +390,42 @@ public final class TypeCardinality {
                                                    DeclarationReadings machines) {
         Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
-            List<TypeSymbol> asked = new ArrayList<>();
-            for (TypeSymbol each : component) {
-                if (granted.contains(each)) {
-                    answers.settle(each, Cardinality.UNKNOWN);
-                } else {
-                    asked.add(each);
-                }
-            }
-            if (asked.isEmpty()) {
-                continue;
-            }
-            if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
-                TypeSymbol one = asked.get(0);
-                answers.settle(one, transfer(
-                        one, declared.get(one), source, policy, answers, granted,
-                        machines));
-                continue;
-            }
-            rise(asked, declared, policy, source, cuts, answers, granted, machines);
+            settle(component, declared, edges, cuts, source, policy, granted, machines, answers);
         }
         return answers.everySettled();
+    }
+
+    /**
+     * One component answered into {@code answers}, everything it reads outside itself being
+     * answered there already.
+     *
+     * <p>The two kinds of place are told apart here. A declaration that reads nothing written in
+     * terms of it is settled from what is already known and nothing is rounded; the rest are
+     * answered together by rising, which is what the rounding is for.
+     */
+    private static void settle(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
+                               Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
+                               RuleReadingSource source, ReadingPolicy policy,
+                               Set<TypeSymbol> granted, DeclarationReadings machines,
+                               Answers answers) {
+        List<TypeSymbol> asked = new ArrayList<>();
+        for (TypeSymbol each : component) {
+            if (granted.contains(each)) {
+                answers.settle(each, Cardinality.UNKNOWN);
+            } else {
+                asked.add(each);
+            }
+        }
+        if (asked.isEmpty()) {
+            return;
+        }
+        if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
+            TypeSymbol one = asked.get(0);
+            answers.settle(one, transfer(
+                    one, declared.get(one), source, policy, answers, granted, machines));
+            return;
+        }
+        rise(asked, declared, policy, source, cuts, answers, granted, machines);
     }
 
     /**
