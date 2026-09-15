@@ -10,9 +10,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
@@ -20,6 +18,8 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -607,7 +607,7 @@ public final class DeclarationAgreement {
      */
     static void refuseWhatThisComparisonAnswersDifferently(Set<?> held) {
         for (Object one : held) {
-            if (one != null && !comparedTheSameByItsOwnEquality(one.getClass())) {
+            if (!comparedTheSameByItsOwnEquality(one)) {
                 throw new IllegalStateException(one.getClass().getName()
                         + " is held in a set or used as a map key, and a collection compares what it"
                         + " holds by its own equality — which answers differently from this"
@@ -618,84 +618,97 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * Whether two of these are one value by their own equality wherever this comparison would ask.
+     * Whether this comparison answers about {@code value} what that value's own equality does.
      *
-     * <p>Not a kind a value belongs to. Where a value's own equality and this comparison part is
-     * decided by this comparison, and the places it answers by something other than what an
-     * equality reads are the arms of {@link #sameShape} that do anything but walk parts: a part
-     * passed over as erased, a binding held by what it stands for rather than by which one it is, a
-     * form read by the answer settled beside its spelling, a written number held by what it counts
-     * rather than by how it was written. A value whose equality cannot reach one of those is one a
-     * collection may hold.
+     * <p>A reading of {@link #sameShape} and not a second account of it. Every arm there is one of
+     * these, in the order that one takes them: an erased part is passed over here and read by an
+     * equality; a binding is held by what it stands for across the two builds; a form carrying an
+     * answer beside a spelling is read by the answer; a container is read through, so it answers
+     * whatever what it holds answers; anything the walk does not take apart is handed to
+     * {@code ConstEval.equal}, which <em>is</em> that value's own equality but for a written number.
+     * A walk that takes a value apart answers whatever its parts answer.
      *
-     * <p>Read off the parts, and so held to what {@link StructuralParts} hands over. What a form
-     * keeps that it hands to nobody would be read by its equality and not by this, and that is
-     * refused where the parts are read rather than guessed at here.
+     * <p>Asked of a value and not of a type, because that is what the arms dispatch on and what a
+     * collection holds. A container says nothing about what it will hold, and a part declared as
+     * something a reader here cannot name says nothing at all; asked of the value, there is no such
+     * gap to answer across — what is in hand is what this comparison will meet.
      */
-    static boolean comparedTheSameByItsOwnEquality(Class<?> type) {
-        return comparedTheSame(type, new LinkedHashSet<>());
+    static boolean comparedTheSameByItsOwnEquality(Object value) {
+        return comparedTheSame(value, Collections.newSetFromMap(new IdentityHashMap<>()));
     }
 
-    private static boolean comparedTheSame(Class<?> type, Set<Class<?>> asking) {
-        if (!asking.add(type)) {
+    private static boolean comparedTheSame(Object value, Set<Object> asking) {
+        if (value == null) {
+            return true;   // held against null and nothing else, whoever is asking
+        }
+        if (!asking.add(value)) {
             return true;   // already being answered above, and a cycle reaches nothing new
         }
-        if (answeredBySomethingOtherThanEquality(type)) {
+        if (erases(value.getClass()) || value instanceof BindingId
+                || value instanceof BigDecimal
+                || readByTheAnswerBesideItsSpelling(value.getClass())) {
             return false;
         }
-        if (type.isSealed()) {
-            for (Class<?> arm : type.getPermittedSubclasses()) {
-                if (!comparedTheSame(arm, asking)) {
+        if (value instanceof Optional<?> maybe) {
+            return comparedTheSame(maybe.orElse(null), asking);
+        }
+        if (value instanceof Collection<?> many) {
+            for (Object one : many) {
+                if (!comparedTheSame(one, asking)) {
                     return false;
                 }
             }
             return true;
         }
-        if (isAWrittenValue(type)) {
-            return true;   // held by what it says, which is what this compares it by
-        }
-        if (!StructuralParts.handsOverEverythingItKeeps(type)) {
-            // What it keeps and hands to nobody is read by its equality and by nothing here, so
-            // whether the two agree is a question this cannot reach the parts to answer. A value
-            // nobody can see inside is not one anybody can say that of.
-            return false;
-        }
-        for (StructuralParts.Part part : StructuralParts.of(type)) {
-            for (Class<?> held : StructuralParts.held(part.held())) {
-                if (!comparedTheSame(held, asking)) {
+        if (value instanceof Map<?, ?> keyed) {
+            for (Map.Entry<?, ?> each : keyed.entrySet()) {
+                if (!comparedTheSame(each.getKey(), asking)
+                        || !comparedTheSame(each.getValue(), asking)) {
                     return false;
                 }
+            }
+            return true;
+        }
+        if (!StructuralParts.areHandedOver(value.getClass())) {
+            // What the walk does not take apart it hands to its own equality, which is the answer
+            // a collection would have reached by itself.
+            return true;
+        }
+        for (StructuralParts.Part part : StructuralParts.of(value.getClass())) {
+            if (!comparedTheSame(part.of(value), asking)) {
+                return false;
             }
         }
         return true;
     }
 
     /**
-     * A value written down rather than built out of parts: a word, a number, one of a fixed set of
-     * cases. What this comparison holds two of these by is what they say, which is what an equality
-     * of them reads.
+     * Whether this comparison reads it by the answer the front end settled beside its spelling.
+     *
+     * <p>The forms {@link #sameShape} has an arm for, named because that is what they are:
+     * what makes a form one of these is that the comparison reads it that way, and a form that grew
+     * an answer and has no arm is read by how it was written whatever its shape suggests. That a
+     * form with the shape has an arm is held beside the comparison rather than assumed here.
      */
-    private static boolean isAWrittenValue(Class<?> type) {
-        return type.isPrimitive() || type.isEnum() || type.getPackageName().startsWith("java.");
+    static boolean readByTheAnswerBesideItsSpelling(Class<?> type) {
+        for (Class<?> arm : READ_BY_THE_ANSWER) {
+            if (arm.isAssignableFrom(type)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Whether this comparison answers about a value of this type by something other than what its
-     * own equality reads.
+     * The forms {@link #sameShape} reads by the answer. One arm each, and this says which.
      *
-     * <p>Each of these is an arm of {@link #sameShape}, and the list is that and not a second
-     * account of it. A part this passes over is read by an equality; a binding is held here by what
-     * it stands for across the two builds and by which one it is everywhere else; a form carrying an
-     * answer beside a spelling is read here by the answer; and a written number is one number here
-     * however many places it was written to.
+     * <p>A local is among them. What stands beside its spelling is which binding it is, and the arm
+     * that reads it holds two of those to standing for each other rather than to being the same one
+     * — a second thing an equality of it does not do, and the same passing over of the spelling.
      */
-    private static boolean answeredBySomethingOtherThanEquality(Class<?> type) {
-        return erases(type)
-                || BindingId.class.isAssignableFrom(type)
-                || ValueName.Local.class.isAssignableFrom(type)
-                || carriesItsAnswerBesideItsSpelling(type)
-                || BigDecimal.class.isAssignableFrom(type);
-    }
+    private static final Set<Class<?>> READ_BY_THE_ANSWER = Set.of(
+            Hir.Var.Denoting.class, Hir.Name.Denoting.class, Hir.Binder.class,
+            Hir.TypeRef.class, ValueName.OfType.class, ValueName.Local.class);
 
     /**
      * The parts of a settled declaration a value crossing cannot see.
@@ -822,39 +835,6 @@ public final class DeclarationAgreement {
      */
     static boolean isASettledAnswer(Class<?> type) {
         return type.isRecord() && type.getPackageName().equals(TypeSymbol.class.getPackageName());
-    }
-
-    /** The forms this comparison pairs by name before comparing anything of them. */
-    private static final Set<Class<?>> PAIRED_BY_NAME =
-            Set.of(Hir.Data.class, Hir.SumData.class, Hir.UnitData.class);
-
-    /**
-     * Whether it holds a spelling and, beside it, what the front end settled that spelling to be —
-     * which is what this comparison reads one of by, passing the other over.
-     *
-     * <p>Read off the parts rather than listed, so a form the language gains is measured rather than
-     * remembered. What counts as a spelling is a word an author wrote; what counts as an answer is
-     * what the front end put beside it, which is a name reached, a binding, or a type.
-     *
-     * <p>A declaration's own name is not a spelling passed over. The three declaration forms are
-     * paired by name before anything of them is compared, so the name is the key and there is no
-     * answer standing in for it.
-     */
-    static boolean carriesItsAnswerBesideItsSpelling(Class<?> type) {
-        if (!StructuralParts.areHandedOver(type) || PAIRED_BY_NAME.contains(type)) {
-            return false;
-        }
-        boolean spelling = false;
-        boolean answer = false;
-        for (StructuralParts.Part part : StructuralParts.of(type)) {
-            Class<?> held = part.held() instanceof Class<?> plain ? plain : null;
-            spelling |= held == WrittenName.class || held == String.class;
-            answer |= held == TypeSymbol.class || held == ValueName.class
-                    || held == BindingId.class || held == Type.class
-                    // A use is settled to a reference, which carries the declaration it reaches.
-                    || held == ReachName.class;
-        }
-        return spelling && answer;
     }
 
     /**

@@ -60,29 +60,6 @@ final class StructuralParts {
     }
 
     /**
-     * Whether everything a value of this type keeps can be read off it.
-     *
-     * <p>A different question from {@link #areHandedOver}, which says whether this comparison takes
-     * a value apart. This one says whether a reader could — what a value keeps and hands to nobody
-     * is read by that value's own equality and by nothing here, so a reader asking what a value
-     * depends on has to know when its answer is short rather than answer anyway.
-     *
-     * <p>Answered rather than thrown, because a caller asking this is asking to find out. The same
-     * shape refused where the parts are read is the shape answered no here.
-     */
-    static boolean handsOverEverythingItKeeps(Class<?> type) {
-        if (type.isRecord()) {
-            return true;
-        }
-        for (Field field : kept(type)) {
-            if (handedOver(type, field).whyNot() != null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * The parts, in an order that does not change between runs.
      *
      * <p>A record's own order, which is the one it was written in. A form read off its fields is put
@@ -117,9 +94,6 @@ final class StructuralParts {
         return kept;
     }
 
-    /** The method a part is read off by, or why there is none. One of the two is null. */
-    private record HandedOver(Method by, String whyNot) {}
-
     /**
      * The method a form hands one of its parts over by.
      *
@@ -131,42 +105,26 @@ final class StructuralParts {
      * asked about for what it can ever say.
      */
     private static Method handsOver(Class<?> type, Field field) {
-        HandedOver read = handedOver(type, field);
-        if (read.whyNot() != null) {
-            throw new IllegalStateException(read.whyNot());
-        }
-        return read.by();
-    }
-
-    /**
-     * Whether a part can be read off a form, and what is wrong where it cannot.
-     *
-     * <p>One reading, asked by the two callers that want different things of it: one reads the
-     * parts and refuses a form that does not hand them all over, and one asks whether it would. Two
-     * readings would let a form be refused by one and vouched for by the other.
-     */
-    private static HandedOver handedOver(Class<?> type, Field field) {
         String part = field.getName();
         if (!Modifier.isFinal(field.getModifiers())) {
-            return new HandedOver(null, type.getName() + " can write `" + part + "` again, so what"
-                    + " it is made of is not what it was made of. Hold it as written once, or hold"
-                    + " it somewhere this does not read.");
+            throw new IllegalStateException(type.getName() + " can write `" + part + "` again, so"
+                    + " what it is made of is not what it was made of. Hold it as written once, or"
+                    + " hold it somewhere this does not read.");
         }
         Method handedOver;
         try {
             handedOver = type.getMethod(part);
-        } catch (NoSuchMethodException _) {
-            return new HandedOver(null, type.getName() + " holds `" + part + "` and hands it to"
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(type.getName() + " holds `" + part + "` and hands it to"
                     + " nobody, so a comparison over what it is made of would pass it over without"
-                    + " saying so. Hand it over, or hold it somewhere this does not read.");
+                    + " saying so. Hand it over, or hold it somewhere this does not read.", e);
         }
         if (!handedOver.getGenericReturnType().equals(field.getGenericType())) {
-            return new HandedOver(null, type.getName() + " hands `" + part + "` over as "
-                    + handedOver.getGenericReturnType() + " and holds it as "
-                    + field.getGenericType()
+            throw new IllegalStateException(type.getName() + " hands `" + part + "` over as "
+                    + handedOver.getGenericReturnType() + " and holds it as " + field.getGenericType()
                     + ", so what this walks and what it reads off the class are two things.");
         }
-        return new HandedOver(handedOver, null);
+        return handedOver;
     }
 
     /**

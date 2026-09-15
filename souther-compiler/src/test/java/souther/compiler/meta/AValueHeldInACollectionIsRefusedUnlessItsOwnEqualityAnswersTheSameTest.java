@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -87,6 +88,8 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
 
         assertFalse(DeclarationAgreement.erases(ValueName.OfType.class),
                 "nothing of it is passed over, so erasure is not what refuses it");
+        assertTrue(DeclarationAgreement.readByTheAnswerBesideItsSpelling(ValueName.OfType.class),
+                "what refuses it is the arm the comparison reads it by");
         assertThrows(IllegalStateException.class,
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
                         Set.of(usedAsAValue)),
@@ -171,6 +174,113 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
                 "a word is compared by being that word, whoever holds it");
     }
 
+    /**
+     * A container is read through, so it answers whatever what it holds answers.
+     *
+     * <p>Not a value of its own. The comparison unwraps an optional and walks a list, so two of
+     * either are one wherever what they hold is one — and a collection asked the same question
+     * calls the equality of what they hold. So the question passes through, and asking it of the
+     * container as a kind would answer for every element it might ever hold at once.
+     */
+    @Test
+    void aContainerAnswersWhateverWhatItHoldsAnswers() {
+        ValueName.Local aBinding =
+                new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0));
+
+        assertThrows(IllegalStateException.class,
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(Optional.of(aBinding))),
+                "an optional of a binding is a binding as far as this reads it");
+        assertThrows(IllegalStateException.class,
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(List.of(aBinding))),
+                "and so is a list of them");
+
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(Optional.of("a word"), List.of("a word"))),
+                "while a container of words holds what a collection may hold, which is why this is"
+                        + " asked of what is in hand and not of the container");
+    }
+
+    /**
+     * What a value holds is read off the value, so a part whose type says nothing is no gap.
+     *
+     * <p>A form written to hold anything says only that, and a reading that answered off the
+     * declared part would have nothing there to be refused by — it would call every one of them
+     * safe. What arrives is what this comparison will meet, and that is what is asked.
+     */
+    @Test
+    void andWhatAPartSaysNothingAboutIsStillAskedOfWhatArrived() {
+        ValueName.Local aBinding =
+                new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0));
+
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(new Holds<>("a word"))),
+                "one holding a word holds what a collection may hold");
+        assertThrows(IllegalStateException.class,
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(new Holds<>(aBinding))),
+                "and one holding a binding is refused, though the two are one type");
+    }
+
+    /** A form written to hold anything, which is what its part says about what it holds. */
+    private record Holds<T>(T value) {}
+
+    /**
+     * A value the walk does not take apart is handed to its own equality, so a set of them is held
+     * the way this comparison holds them.
+     *
+     * <p>Where the walk stops, {@code ConstEval.equal} answers, and that is the value's own
+     * equality. What such a value keeps inside is read by that equality on both sides — by the
+     * collection and by this comparison alike — so keeping something this would have read its own
+     * way is not a reason to refuse one. An expansion keeps a name the comparison would have held
+     * by what it stands for, and it is still held the same either way, because neither side ever
+     * looks.
+     */
+    @Test
+    void aValueTheWalkDoesNotTakeApartIsHeldByTheEqualityBothSidesUse() {
+        ValueName.Local aBinding =
+                new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0));
+
+        assertFalse(StructuralParts.areHandedOver(KeepsABinding.class),
+                "the walk stops at it, which is what hands it to its own equality");
+        assertThrows(IllegalStateException.class,
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(aBinding)),
+                "the binding it keeps is one this comparison holds by what it stands for");
+
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(new KeepsABinding(aBinding))),
+                "and keeping one is still held the same either way, because neither side looks");
+
+        assertFalse(StructuralParts.areHandedOver(BindingOwner.Expansion.class),
+                "an expansion is such a value, which is why keeping a name inside one is no reason"
+                        + " to refuse it");
+    }
+
+    /** Stands for a value the walk stops at, keeping something it would have read its own way. */
+    private static final class KeepsABinding {
+
+        private final ValueName.Local binding;
+
+        private KeepsABinding(ValueName.Local binding) {
+            this.binding = binding;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof KeepsABinding kept && binding.equals(kept.binding);
+        }
+
+        @Override
+        public int hashCode() {
+            return binding.hashCode();
+        }
+    }
+
     /** A map's keys are asked the same question, a key being held by its own equality the way a
      *  set's element is. */
     @Test
@@ -202,7 +312,7 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
 
         assertFalse(DeclarationAgreement.erases(WrittenName.class),
                 "a name is not passed over — which of them a value is read under is that word");
-        assertFalse(DeclarationAgreement.carriesItsAnswerBesideItsSpelling(WrittenName.class),
+        assertFalse(DeclarationAgreement.readByTheAnswerBesideItsSpelling(WrittenName.class),
                 "and nothing stands beside the word to be read in its place");
 
         assertThrows(IllegalStateException.class,
