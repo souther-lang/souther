@@ -110,7 +110,7 @@ final class SignatureBoundary {
         return switch (t) {
             case Type.Prim p -> new BoundaryOutput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryOutput.Nominal(nominal(r.name(), where, symbols));
-            case Type.Union u -> new BoundaryOutput.Cases(members(u, where, symbols));
+            case Type.Union u -> new BoundaryOutput.Cases(admittedCases(u, where, symbols));
             case Type.ListOf l ->
                     new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols, kinds, published));
             case Type.SetOf s ->
@@ -149,21 +149,26 @@ final class SignatureBoundary {
     }
 
     /**
-     * The members of the union a behavior answers with, each a name in what crosses.
+     * The union a behavior answers with, once every member is a name in what crosses.
      *
      * <p>The one position where a name may be a scalar's. {@code Int | DivisionByZero} answers a
      * primitive beside a case, and a union holds its members as names, so the primitive arrives
      * spelled like a declaration. Which of the two a member is decides which rule it is held to —
      * a scalar the boundary writes, or a name a model declares — and neither answers for the other.
+     *
+     * <p>The union goes on as it arrived. Each member is admitted or the walk refuses, and what
+     * admission settles is that the member may cross rather than anything about the type, so the
+     * shape below is handed the union that was asked about.
      */
-    private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
-        List<TypeSymbol> members = new ArrayList<>(union.members().size());
+    private static Type.Union admittedCases(Type.Union union, Where where, Symbols symbols) {
         for (TypeSymbol member : union.members()) {
-            members.add(member.isPrimitive()
-                    ? scalarMember(member, where)
-                    : nominal(member, where, symbols).name());
+            if (member.isPrimitive()) {
+                scalarMember(member, where);
+            } else {
+                nominal(member, where, symbols);
+            }
         }
-        return members;
+        return union;
     }
 
     /**

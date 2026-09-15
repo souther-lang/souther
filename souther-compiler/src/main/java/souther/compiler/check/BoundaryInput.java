@@ -30,8 +30,13 @@ import java.util.Objects;
  */
 public sealed interface BoundaryInput {
 
-    /** The type in the language this shape stands for. Answered per case rather than by switching, so
-     *  a case added here cannot forget it. */
+    /**
+     * The type in the language this shape stands for. Answered per case rather than by switching, so
+     * a case added here cannot forget it.
+     *
+     * <p>Settled where the shape is made, as it is for what leaves — see
+     * {@link BoundaryOutput#type()} for what admission settles and what decides which cases hold it.
+     */
     Type type();
 
     /** A scalar the boundary writes as itself. */
@@ -50,13 +55,19 @@ public sealed interface BoundaryInput {
      * the witness says the name may cross, and being made here says this position asked. A record's
      * canonical constructor is as accessible as the record, and one place raising a signature is what
      * makes two walks over one tree impossible (ADR-0100).
+     *
+     * <p>What it holds is the witness and not the reference it was admitted from, so the reference it
+     * answers with is made from the witness where the shape is made. The union a behavior answers
+     * with is the other way about — see {@link BoundaryOutput.Cases}, which keeps what it was given.
      */
     final class Nominal implements BoundaryInput {
 
         private final CrossingNominal admitted;
+        private final Type type;
 
         Nominal(CrossingNominal admitted) {
             this.admitted = admitted;
+            this.type = Type.ref(admitted.name());
         }
 
         public TypeSymbol name() {
@@ -65,7 +76,7 @@ public sealed interface BoundaryInput {
 
         @Override
         public Type type() {
-            return Type.ref(name());
+            return type;
         }
 
         @Override

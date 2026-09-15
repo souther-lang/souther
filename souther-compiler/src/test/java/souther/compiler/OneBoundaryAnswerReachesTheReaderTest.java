@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -92,6 +93,60 @@ class OneBoundaryAnswerReachesTheReaderTest {
                 """, "classify");
 
         assertEquals(List.of("Adult", "Minor"), memberNames(sig.out()));
+    }
+
+    /**
+     * A shape answers with one type however often it is asked.
+     *
+     * <p>Asked by identity, because equality cannot tell the two apart: a type derived afresh at
+     * every reading equals the one the shape stands for and is not it. What turns on the difference
+     * is the reader that asks in a loop — an emitter walking a behavior's cases, a codec asking what
+     * it encodes — and, for a union, that its members are arranged where the union was built rather
+     * than once per reader.
+     *
+     * <p>What this holds is that the answer is stable, and that is all it holds: a type worked out
+     * at the first asking and kept would pass it too. Where the answer is settled is said by the
+     * shapes and not asked here, there being no way to reach the walk's own argument from outside
+     * the walk.
+     *
+     * <p>Every case closed to the walk is here. The cases anything may construct answer from their
+     * parts, there being nowhere for them to hold a type a caller could not have contradicted.
+     */
+    @Test
+    void aShapeAnswersWithOneTypeHoweverOftenItIsAsked() {
+        String source = """
+                module demo
+
+                data Age = { years: Int }
+                data Adult = { name: String }
+                data Minor = { age: Int }
+
+                behavior classify : (a: Age) -> Adult | Minor
+                    constructs Adult, Minor
+                let classify (a) = {
+                    guard a.years >= 18 else Minor { age = a.years }
+                    Adult { name = "adult" }
+                }
+
+                behavior grown : (a: Age) -> Adult
+                    constructs Adult
+                let grown (a) = Adult { name = "adult" }
+                """;
+
+        BoundaryInput arrives = sigOf(source, "classify").ins().get(0);
+        assertInstanceOf(BoundaryInput.Nominal.class, arrives);
+        assertSame(arrives.type(), arrives.type(),
+                "a name that arrives answers the type it was admitted as");
+
+        BoundaryOutput cases = sigOf(source, "classify").out();
+        assertInstanceOf(BoundaryOutput.Cases.class, cases);
+        assertSame(cases.type(), cases.type(),
+                "a union a behavior answers with is the one the walk admitted");
+
+        BoundaryOutput leaves = sigOf(source, "grown").out();
+        assertInstanceOf(BoundaryOutput.Nominal.class, leaves);
+        assertSame(leaves.type(), leaves.type(),
+                "a name that leaves answers the type it was admitted as");
     }
 
     /**
