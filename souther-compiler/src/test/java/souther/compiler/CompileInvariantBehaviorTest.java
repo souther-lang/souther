@@ -125,6 +125,40 @@ class CompileInvariantBehaviorTest {
     }
 
     /**
+     * A construction over a quotient of written numbers is judged where a construction over a
+     * written number is judged, which is at compile time (spec §invariant-discharge).
+     *
+     * <p>What decides it is whether the argument is a constant, and a quotient of two written
+     * numbers is one. So the first is the error a written {@code -5} would be, and the second —
+     * whose divisor is nought, which nothing divides by — is a construction over a value only the
+     * run time has, left to abort there as any other computed argument is.
+     */
+    @Test
+    void aConstructionOverAConstantQuotientIsDecidedAtCompileTime() throws Exception {
+        String breaks = """
+                module demo
+                data Amount = Int invariant value >= 0
+                behavior make : (x: Int) -> Amount constructs Amount
+
+                let make (x) = Amount(0 - 5 / 1)
+                """;
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(breaks));
+        assertEquals("E2010", refused.code());
+
+        // And the divisor of nought, which is no constant, so the construction is what it always
+        // was: a value only the run time has, aborting there on the divide itself.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+                data Amount = Int invariant value >= 0
+                behavior make : (x: Int) -> Amount constructs Amount
+
+                let make (x) = Amount(0 - 5 / 0)
+                """), getClass().getClassLoader());
+        Object make = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
+        assertThrows(ConstraintViolation.class, () -> Codecs.apply(make, 1L));
+    }
+
+    /**
      * Constructing invariant-bearing data no longer requires a 制約違反 output case — the declaration below
      * compiles, and a violation would abort at run time (spec §algebraic-types, §violation-destination).
      */
