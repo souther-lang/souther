@@ -714,7 +714,21 @@ final class TermRealizations {
             return new Tried(named == null ? List.of() : List.of(named),
                     new Remainder.SomeOf(ofTheRun));
         }
-        NumericDomain.Bounds leaves = within == null ? null : within.runsBetween(orders.term());
+        // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
+        // over what the region answers, because one of its answers is not a range: a region that
+        // admits no assignment leaves the number nowhere, and read back as a pair of open ends it
+        // would be the widest answer there is out of the narrowest region there is.
+        NumericDomain.Bounds leaves;
+        switch (within == null ? null : within.projectionOf(orders.term())) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> leaves = held;
+            // The rules leave nowhere to write, which is a thing they say and not a walk of this
+            // compiler's giving up. So the candidates are none and the reason is that there were
+            // none — the same reading every other search of a region takes.
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Tried(List.of(), new Remainder.Exhausted());
+            }
+            case null -> leaves = null;
+        }
         Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
                 orders.answered(),
                 leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
