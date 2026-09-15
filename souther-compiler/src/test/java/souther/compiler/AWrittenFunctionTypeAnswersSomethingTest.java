@@ -4,9 +4,11 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.ParseMessage;
+import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -37,6 +39,21 @@ class AWrittenFunctionTypeAnswersSomethingTest {
                 () -> new Hir.FnType(List.of(), null, POS),
                 "a function type with no result is a shape every reader below would have to ask"
                         + " about, so the tree does not hold one");
+    }
+
+    /** What it takes is walked the way what it answers is, so the rule is the same rule. */
+    @Test
+    void norOneThatTakesSomethingUnwritten() {
+        List<Hir.RetType> unwritten = new ArrayList<>();
+        unwritten.add(null);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new Hir.FnType(unwritten, answering(), POS),
+                "a parameter that says nothing is the same absence a missing result is");
+    }
+
+    private static Hir.RetType answering() {
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(Type.BOOL, POS)), POS);
     }
 
     @Test

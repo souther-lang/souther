@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -63,6 +64,7 @@ public sealed interface BoundaryInput {
     final class Nominal implements BoundaryInput {
 
         private final CrossingNominal admitted;
+        @DecidedByTheRest
         private final Type type;
 
         Nominal(CrossingNominal admitted) {

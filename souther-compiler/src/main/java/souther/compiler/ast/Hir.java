@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
@@ -948,6 +949,15 @@ public interface Hir {
             if (result == null) {
                 throw new IllegalArgumentException("a function type answers something: " + pos);
             }
+            // The same of what it takes, and for the same reason: a reading of this walks the
+            // parameters as it walks the result, and a parameter that says nothing is an absence
+            // every walk of them would have to carry a question about.
+            for (RetType takes : params) {
+                if (takes == null) {
+                    throw new IllegalArgumentException(
+                            "a function type takes written types: " + pos);
+                }
+            }
         }
     }
 
@@ -966,6 +976,7 @@ public interface Hir {
     final class RetType implements Hir {
 
         private final List<TypeTerm> cases;
+        @DecidedByTheRest
         private final WrittenTypeMeaning meaning;
         private final SourcePos pos;
 
