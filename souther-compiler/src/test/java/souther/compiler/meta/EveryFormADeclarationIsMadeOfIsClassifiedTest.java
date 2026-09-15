@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -114,13 +113,13 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 }
                 continue;   // the interface itself holds nothing; its forms do
             }
-            if (type.isInterface() || !type.isRecord()) {
+            if (type.isInterface() || !StructuralParts.areHandedOver(type)) {
                 reached.add(type);
                 continue;   // a leaf as far as this walk is concerned
             }
             reached.add(type);
-            for (RecordComponent part : type.getRecordComponents()) {
-                for (Class<?> held : held(part.getGenericType())) {
+            for (StructuralParts.Part part : StructuralParts.of(type)) {
+                for (Class<?> held : held(part.held())) {
                     todo.addLast(held);
                 }
             }

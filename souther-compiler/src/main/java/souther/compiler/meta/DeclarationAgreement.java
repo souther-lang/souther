@@ -15,7 +15,6 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -573,15 +572,15 @@ public final class DeclarationAgreement {
         if (ours.getClass() != theirs.getClass()) {
             return false;
         }
-        if (!ours.getClass().isRecord()) {
+        if (!StructuralParts.areHandedOver(ours.getClass())) {
             // Whether two written values are one value is the language's answer, not this walk's:
             // `1.0m` and `1.00m` are one number wherever else two of them meet, and a comparison
             // deciding otherwise here would report a stale build over a difference the model does
             // not have.
             return souther.compiler.check.ConstEval.equal(ours, theirs);
         }
-        for (RecordComponent part : ours.getClass().getRecordComponents()) {
-            if (!sameShape(read(part, ours), read(part, theirs), bound)) {
+        for (StructuralParts.Part part : StructuralParts.of(ours.getClass())) {
+            if (!sameShape(part.of(ours), part.of(theirs), bound)) {
                 return false;
             }
         }
@@ -686,18 +685,27 @@ public final class DeclarationAgreement {
      * Whether it is a form of the grammar — something a declaration is written as, whose parts are
      * held one by one.
      *
-     * <p>Asked of where the type is declared rather than of a list. A form of the grammar is a
-     * record of {@link Hir}, and a record that is not one arriving in a declaration is something the
-     * compiler put there about itself: reading its components would make a crossing depend on which
-     * pass wrote a node, which is not something a value can be read differently by.
+     * <p>Asked of where the type is declared rather than of a list. A form of the grammar is
+     * declared inside {@link Hir}, and something declared elsewhere that arrives in a declaration is
+     * something the compiler put there about itself: reading its parts would make a crossing depend
+     * on which pass wrote a node, which is not something a value can be read differently by.
+     *
+     * <p>Which of them is a form, and not which of them is a record. A record is how most are
+     * written and a node whose own subsystem settled on writing it by hand is a form all the same —
+     * so what is asked is whether it is one of the tree's nodes or one of the shapes a node holds,
+     * and an enum or an interface nested there is neither.
      */
     static boolean isAFormOfTheGrammar(Class<?> type) {
-        if (!type.isRecord()) {
+        if (!isDeclaredInsideHir(type)) {
             return false;
         }
-        // Where it is written, not what it implements. A form of the grammar is declared inside
-        // `Hir`, and several of them stand for a part of one rather than for a form in their own
-        // right, so they are nested there without implementing it.
+        return type.isRecord()
+                || (!type.isInterface() && !type.isEnum() && Hir.class.isAssignableFrom(type));
+    }
+
+    /** Where it is written, not what it implements. Several forms stand for a part of one rather
+     *  than for a form in their own right, so they are nested there without implementing it. */
+    private static boolean isDeclaredInsideHir(Class<?> type) {
         for (Class<?> enclosing = type; enclosing != null;
                 enclosing = enclosing.getEnclosingClass()) {
             if (enclosing == Hir.class) {
@@ -778,19 +786,11 @@ public final class DeclarationAgreement {
             }
             return;
         }
-        if (!form.getClass().isRecord()) {
+        if (!StructuralParts.areHandedOver(form.getClass())) {
             return;
         }
-        for (RecordComponent part : form.getClass().getRecordComponents()) {
-            walk(read(part, form), seen, each);
-        }
-    }
-
-    private static Object read(RecordComponent part, Object of) {
-        try {
-            return part.getAccessor().invoke(of);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("a record component that cannot be read: " + part, e);
+        for (StructuralParts.Part part : StructuralParts.of(form.getClass())) {
+            walk(part.of(form), seen, each);
         }
     }
 
