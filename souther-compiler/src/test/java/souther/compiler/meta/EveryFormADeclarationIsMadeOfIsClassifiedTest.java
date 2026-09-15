@@ -8,6 +8,7 @@ import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.RuleOrigin;
@@ -131,7 +132,6 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             "souther.compiler.types.ApplicationOrigin$ComposedFixture",
             "souther.compiler.types.ApplicationOrigin$Derived",
             "souther.compiler.types.ApplicationOrigin$Eta",
-            "souther.compiler.types.ApplicationOrigin$Written",
             "souther.compiler.types.BindingOwner$OfData",
             "souther.compiler.types.BindingOwner$OfFields",
             "souther.compiler.types.BindingOwner$OfSignature",
@@ -282,6 +282,32 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertNotSame(DeclarationAgreement.erasedAs(RuleOrigin.class),
                 DeclarationAgreement.erasedAs(SourcePos.class),
                 "and two erased kinds stay two, so a rule is not held against a position");
+    }
+
+    /**
+     * Where an author put a call is not compared, and the other reasons an application is there
+     * still are.
+     *
+     * <p>Erased one arm at a time, which is what the answers are. An application the author wrote
+     * carries the construct it was written as, and that construct is answered where it is answered;
+     * the arms beside it say a pass put the application there and name what it was following, which
+     * is a question of its own and open.
+     *
+     * <p>So the arm and never what it is an arm of. Erased at the interface, a call the author wrote
+     * and one a pass derived would be one thing not compared — two applications that are there for
+     * different reasons, arriving as the same.
+     */
+    @Test
+    void whereAnAuthorPutACallIsNotComparedAndTheOtherReasonsAreLeftOpen() {
+        assertTrue(DeclarationAgreement.erases(ApplicationOrigin.Written.class),
+                "what an application is is what it applies and what it is handed, and where it was"
+                        + " written is not one of those");
+        assertFalse(DeclarationAgreement.erases(ApplicationOrigin.Derived.class),
+                "an application a pass wrote is there for a reason nobody has answered about yet,"
+                        + " and it goes on being asked");
+        assertNotSame(DeclarationAgreement.erasedAs(ApplicationOrigin.Written.class),
+                DeclarationAgreement.erasedAs(RuleOrigin.class),
+                "and two erased kinds stay two, so a call is not held against a rule");
     }
 
     /**

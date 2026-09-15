@@ -10,6 +10,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
@@ -770,7 +771,17 @@ public final class DeclarationAgreement {
             // applies, and where it stands among the parts holding it — so a block added, removed,
             // moved or rewritten is reported by the structure that holds it, which is what a row
             // meeting that rule would meet differently.
-            RuleOrigin.class);
+            RuleOrigin.class,
+            // Which construct of a source an application was written as. What the comparison holds
+            // of an application is what it applies and what it is handed; where the author put it
+            // is this compile's record of reading them, and is answered here the way the construct
+            // it names is answered.
+            //
+            // This arm and not what it is an arm of. The others say an application is there because
+            // a pass put it there, and what a pass was following is a question with answers of its
+            // own; erased with this one, a call the author wrote and a call derived from one would
+            // arrive as a single thing not compared.
+            ApplicationOrigin.Written.class);
 
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */
