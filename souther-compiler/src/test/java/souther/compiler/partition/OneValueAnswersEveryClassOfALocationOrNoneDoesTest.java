@@ -249,6 +249,23 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             return out;
         }
 
+        /** The number the first axis of this model measures, as something to ask for. */
+        private RealizationTarget firstTarget() {
+            return RealizationTarget.of(partitioning.axes().get(0).term());
+        }
+
+        private TermRealizations.Realization satisfying(RealizationTarget target, NumericSet of) {
+            return satisfying(target, of, null);
+        }
+
+        private TermRealizations.Realization satisfying(RealizationTarget target, NumericSet of,
+                                                        Place named) {
+            return TermRealizations.satisfying(
+                    subject.inputs().typeAtWrittenPath(target.writeRoot()),
+                    subject.quantities().ordersOf(target.term()), of, named,
+                    subject.quantities().region(), subject.ruleReading());
+        }
+
         private TermRealizations.Realization answering(
                 SequencedMap<RealizationTarget, NumericSet> demands) {
             return TermRealizations.allSatisfying(

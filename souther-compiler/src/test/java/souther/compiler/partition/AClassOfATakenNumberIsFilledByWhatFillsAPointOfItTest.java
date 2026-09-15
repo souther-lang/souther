@@ -171,11 +171,15 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      * beside a second number of the same location. A rule that names a number instead of drawing a
      * line leaves that number and everything else, and a value standing in either is built by what
      * builds a value at a number — the ninth hour is a time, and the number nine is not one.
+     *
+     * <p>The hour offered for everything but nine is the first hour a day has, because the part
+     * walks the hours it runs between and asks the class which of them it admits. A number named
+     * beside the class would have been one candidate; the account has the whole of its own kind.
      */
     @Test
     void aClassOfAPartOfATimeSingledOutIsOfferedATime() {
         assertEquals(Map.of("t== 9", "Time(\"09:00:00\")",
-                        "t=/= 9", "Time(\"10:00:00\")"),
+                        "t=/= 9", "Time(\"00:00:00\")"),
                 offeredForEachClass(AN_HOUR_SINGLED_OUT, "k"));
     }
 

@@ -357,6 +357,26 @@ final class TermRealizations {
     static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
                                   souther.compiler.inputs.SearchRegion within,
                                   RuleReadingContext reading) {
+        return satisfying(sourceType, orders, wanted, null, within, reading);
+    }
+
+    /**
+     * The same, with a number of the set a caller has already named.
+     *
+     * <p><b>A candidate, and never the question.</b> What the search is asked for stays the set:
+     * a number picked out of it is one this may try first, and its failing says nothing about the
+     * numbers beside it. Handed in as the set instead — as the one number the set holds — a class
+     * whose first candidate nothing builds at comes back as a class nothing writes a value in,
+     * which is the quantifier this file exists to keep where it belongs.
+     *
+     * <p>For the sets this cannot walk: the numbers a rule leaves when it singles one out are every
+     * number but those, and which of them to try is a witness somebody pays for. So the reader that
+     * pays names one, and what comes of it is an answer about that one.
+     */
+    static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
+                                  Place named,
+                                  souther.compiler.inputs.SearchRegion within,
+                                  RuleReadingContext reading) {
         if (sourceType == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -372,11 +392,11 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ ->
-                    standing(sourceType, orders, wanted, within, reading);
+                    standing(sourceType, orders, wanted, named, within, reading);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
-                    orders, wanted, within, reading);
+                    orders, wanted, named, within, reading);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    wanted, within, reading);
+                    wanted, named, within, reading);
         };
     }
 
@@ -389,11 +409,12 @@ final class TermRealizations {
      * from the type instead, this would answer about wherever that type came from.
      */
     private static Realization standing(Type sourceType, TermOrders orders, NumericSet wanted,
+                                        Place named,
                                         souther.compiler.inputs.SearchRegion within,
                                         RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         Carrier carrier = orders.answered();
-        return firstThatBuilds(onTheOrder(wanted, orders, within),
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
                 chosen -> oneValue(
                         FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
                         sourceType, ruleSource));
@@ -409,7 +430,7 @@ final class TermRealizations {
      * would have said only that every value tried was refused.
      */
     private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
-                                     TermOrders orders, NumericSet wanted,
+                                     TermOrders orders, NumericSet wanted, Place named,
                                      souther.compiler.inputs.SearchRegion within,
                                      RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
@@ -421,8 +442,8 @@ final class TermRealizations {
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, within,
-                    reading);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+                    within, reading);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
@@ -434,8 +455,8 @@ final class TermRealizations {
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
-                    atThatQuotient(taken.read(arguments), sourceType, orders, wanted, within,
-                            ruleSource);
+                    atThatQuotient(taken.read(arguments), sourceType, orders, wanted, named,
+                            within, ruleSource);
         };
     }
 
@@ -495,6 +516,7 @@ final class TermRealizations {
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
      *  this number to be there. */
     private static Realization addingUp(NumericSet wanted, Type sourceType, TermOrders orders,
+                                        Place named,
                                         souther.compiler.inputs.SearchRegion within,
                                         RuleReadingContext reading) {
         if (orders.answered() == null) {
@@ -508,7 +530,7 @@ final class TermRealizations {
         // Asked on the order the total is measured on, which a run of values answers a number over
         // and stands at no place of. Read on the order the values are written on instead, a total
         // taken over a run would be asked about a carrier the run has and the number does not.
-        return firstThatBuilds(onTheOrder(wanted, orders, within),
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
                 total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
     }
 
@@ -527,7 +549,7 @@ final class TermRealizations {
      * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
      */
     private static Realization atThatQuotient(BigDecimal by, Type sourceType, TermOrders orders,
-                                              NumericSet wanted,
+                                              NumericSet wanted, Place named,
                                               souther.compiler.inputs.SearchRegion within,
                                               RuleReadingSource ruleSource) {
         Carrier observed = orders.observed();
@@ -541,21 +563,20 @@ final class TermRealizations {
         // A quotient is a place on the order it is answered on, and how far that order runs is the
         // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
         // the position holds and an int does not was a number nothing offered.
-        return firstThatBuilds(onTheOrder(wanted, orders, within),
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
     }
 
     /**
-     * The numbers a search was handed, and whether they are all its account can be asked for.
+     * The numbers a search was handed, and why there are no others.
      *
-     * <p>{@code everyOne} is the producer's answer and never read off how many came back. A walk
-     * that filled what it was allowed and a walk that ran out of numbers hand back the same list,
-     * and only the walk knows which it was — inferred from the size, a set of exactly as many
-     * numbers as the figure allows is reported as a search that stopped.
+     * <p>Both from whoever handed them over. A walk that filled what it was allowed and a walk that
+     * ran out of numbers hand back the same list, and only the walk knows which it was — so the
+     * reason travels beside them rather than being read off how many there are.
      *
-     * @param numbers  what to try, in the order to try them
-     * @param everyOne whether there is nothing else to try, which is what tells a set with no value
-     *                 in it from a search that stopped short of one
+     * @param numbers what to try, in the order to try them
+     * @param rest    why there are no more, which is what tells a set with no value in it from a
+     *                search that stopped short of one
      */
     private record Tried(List<Place> numbers, Remainder rest) {
 
@@ -677,7 +698,7 @@ final class TermRealizations {
      * that built nothing at the one place has not walked the run, and what it may say is that, and
      * not that the run holds nothing.
      */
-    private static Tried onTheOrder(NumericSet wanted, TermOrders orders,
+    private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
                                     souther.compiler.inputs.SearchRegion within) {
         if (wanted instanceof NumericSet.At one) {
             // A set of one number is that number, and there is nothing else it could have been.
@@ -688,8 +709,10 @@ final class TermRealizations {
         if (!(wanted instanceof NumericSet.InARun run)) {
             // Anything but the values a rule singled out. Which place beside them to try is a
             // witness somebody pays for, and what a witness may cost is named where witnesses are
-            // paid for — so the number arrives here already chosen, as the one it is.
-            return new Tried(List.of(), new Remainder.SomeOf(ofTheRun));
+            // paid for — so a caller that paid names one and this tries it. Nothing built at it is
+            // an answer about that number: the set holds every other one, and none was looked at.
+            return new Tried(named == null ? List.of() : List.of(named),
+                    new Remainder.SomeOf(ofTheRun));
         }
         NumericDomain.Bounds leaves = within == null ? null : within.runsBetween(orders.term());
         Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
@@ -730,12 +753,12 @@ final class TermRealizations {
      * number nothing reads.
      */
     private static Realization overARun(TakenAs how, Type sourceType,
-                                        TermOrders orders, NumericSet wanted,
+                                        TermOrders orders, NumericSet wanted, Place named,
                                         souther.compiler.inputs.SearchRegion within,
                                         RuleReadingContext reading) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, within,
-                    reading);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+                    within, reading);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _ -> new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

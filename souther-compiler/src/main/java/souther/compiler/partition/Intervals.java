@@ -213,7 +213,7 @@ final class Intervals {
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
             classes.add(PartitionClass.of(id, label, is,
-                    standingFor(orders, admits, type, reading, ruleReading,
+                    standingFor(orders, admits, null, type, reading, ruleReading,
                             "a value whose " + measureOf(of) + " is in this range")));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
@@ -267,11 +267,11 @@ final class Intervals {
      * compiler did not walk to — which is the shortfall reported as a fact about the model that
      * this file exists to have stopped doing.
      */
-    static RepresentativeSource standingFor(TermOrders orders, NumericSet admits, Type type,
-                                            Quantities reading,
+    static RepresentativeSource standingFor(TermOrders orders, NumericSet admits, Place named,
+                                            Type type, Quantities reading,
                                             RuleReadingContext ruleReading, String what) {
         TermRealizations.Realization made = TermRealizations.satisfying(type, orders, admits,
-                reading.region(), ruleReading);
+                named, reading.region(), ruleReading);
         return switch (made) {
             case TermRealizations.Realization.Built built ->
                     RepresentativeSource.of(built.values());

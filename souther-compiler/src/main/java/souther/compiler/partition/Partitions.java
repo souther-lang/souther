@@ -1246,12 +1246,16 @@ public final class Partitions {
                             "nothing here composed " + what
                                     + ", which does not make one unwritable"));
         }
-        // The number, and what stands at it asked of what writes a value for a number. Written
-        // here out of the carrier instead, a number taken of the position went into the row where
-        // the value it was taken of belongs — a count where a time was owed.
+        // The number this reader named, and what stands at it asked of what writes a value for a
+        // number. Written here out of the carrier instead, a number taken of the position went into
+        // the row where the value it was taken of belongs — a count where a time was owed.
+        //
+        // The class stays what it is. Asked as the one number named, a class holding every number
+        // but the ones a rule singled out would be answered by whichever of them this reader
+        // reached for first — and nothing built at that one would be told as a class with no value
+        // in it, which is every other number it holds going unlooked at.
         return PartitionClass.of(id, label, holding(orders, is),
-                Intervals.standingFor(orders, new NumericSet.At(at), type, reading, ruleReading,
-                        what));
+                Intervals.standingFor(orders, is, at, type, reading, ruleReading, what));
     }
 
     /** A class that reads the count of the number {@code on} is of out of a row, and answers about
