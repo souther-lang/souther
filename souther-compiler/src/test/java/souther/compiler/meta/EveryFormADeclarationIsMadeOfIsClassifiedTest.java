@@ -9,6 +9,8 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.RecordOfTheBuilding;
+import souther.compiler.SettledAnswer;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ExpansionLineage;
@@ -82,32 +84,44 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         Set<Class<?>> reached = walkOfDeclarations().reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
-        List<String> undecided = new ArrayList<>(new TreeSet<>(reached.stream()
+        List<String> answeredOtherThanOnce = new ArrayList<>(new TreeSet<>(reached.stream()
                 .filter(StructuralParts::areHandedOver)
-                .filter(t -> !decided(t)).map(Class::getName).toList()));
+                .filter(type -> accountsGiven(type) != 1)
+                .map(type -> type.getName() + " says " + accountsGiven(type) + " of them")
+                .toList()));
 
-        assertEquals(List.of(), undecided,
-                "a declaration is made of these and nobody has said what they are. Each says it is"
-                        + " a form of the grammar, or one of the front end's settled answers, or a"
-                        + " record this compile keeps about reading a source and building what it"
-                        + " built. Whether the comparison reads it is the other question and is no"
-                        + " answer to this one");
+        assertEquals(List.of(), answeredOtherThanOnce,
+                "a declaration is made of these and each is to say which of three things it is: a"
+                        + " form of the grammar, one of the front end's settled answers, or a record"
+                        + " this compile keeps about reading a source and building what it built."
+                        + " Saying none leaves the comparison walking into something nobody decided"
+                        + " about, and saying two is two answers with nothing to say which governs."
+                        + " Whether the comparison reads it is the other question and is no answer"
+                        + " to this one");
     }
 
     /**
-     * The control: the walk can tell an undecided record from a decided one.
+     * The control: the sweep can tell a form that says none of the three from one that says one,
+     * and a form that says two from both.
      *
-     * <p>Without it, a walk that reached nothing but forms of the grammar — or one whose predicate
-     * answered yes to everything — would pass while saying nothing.
+     * <p>Without the first, a walk that reached nothing but forms of the grammar — or one whose
+     * predicate answered yes to everything — would pass while saying nothing. Without the second,
+     * the sweep would be asking whether a form has been accounted for rather than what it is, and a
+     * form carrying two accounts is what that difference is worth: it reads as decided, and which
+     * of the two governs is what nobody said.
      */
     @Test
-    void andTheWalkWouldSeeAnUndecidedRecordIfThereWereOne() {
-        assertFalse(decided(Undecided.class),
+    void andTheSweepWouldSeeAFormThatSaysNoneOfThemOrTwo() {
+        assertEquals(0, accountsGiven(Undecided.class),
                 "a record nothing here classifies is not passed over");
+        assertEquals(2, accountsGiven(Ambiguous.class),
+                "and one written as both is not passed over either, which is what asking how many"
+                        + " rather than whether is for");
+
         assertFalse(DeclarationAgreement.isAFormOfTheGrammar(ValueName.Behavior.class),
                 "a record the front end settled an answer as is not a form of the grammar");
-        assertTrue(DeclarationAgreement.isASettledAnswer(ValueName.Behavior.class),
-                "it is decided by being one of those, which is another way of deciding");
+        assertEquals(1, accountsGiven(ValueName.Behavior.class),
+                "it says one of them, which is the whole of what is asked");
     }
 
     /**
@@ -134,9 +148,46 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                         + " written there");
         assertFalse(DeclarationAgreement.isARecordOfTheBuilding(ConstructOccurrence.class),
                 "by either of them, whatever it is made of");
-        assertFalse(decided(ConstructOccurrence.class),
+        assertEquals(0, accountsGiven(ConstructOccurrence.class),
                 "so a declaration reaching one would be reaching a form nobody has said what it is,"
                         + " which is the finding this makes");
+    }
+
+    /**
+     * And what the comparison passes over is one erased thing, not the first of several.
+     *
+     * <p>The same question one door along. Which erased kind a form is decides what it is held
+     * equal to — two erased forms match when they are the same kind — so a form answering to two of
+     * them is a form whose answer is whichever was looked at first, and what is looked at first is
+     * the iteration of a set, which is not written down anywhere and need not be the same twice.
+     *
+     * <p>Asked of what a declaration reaches, like the rest of this. A form that answered to two
+     * would be compared one way in one run and another way in the next, and a comparison reporting
+     * a build that has not moved is the thing this whole file exists to keep from happening
+     * quietly.
+     */
+    @Test
+    void andWhatIsPassedOverAnswersToOneErasedKind() {
+        List<String> answeringToSeveral = new ArrayList<>(new TreeSet<>(
+                walkOfDeclarations().reached().stream()
+                        .filter(type -> erasedKindsOf(type).size() > 1)
+                        .map(type -> type.getName() + " answers to " + erasedKindsOf(type))
+                        .toList()));
+
+        assertEquals(List.of(), answeringToSeveral,
+                "these are held equal to whichever of their erased kinds was reached first, and"
+                        + " nothing says which that is");
+    }
+
+    /** Every erased kind {@code type} answers to. */
+    private static List<String> erasedKindsOf(Class<?> type) {
+        List<String> kinds = new ArrayList<>();
+        for (Class<?> erased : DeclarationAgreement.erasedKinds()) {
+            if (erased.isAssignableFrom(type)) {
+                kinds.add(erased.getSimpleName());
+            }
+        }
+        return kinds;
     }
 
     /**
@@ -333,11 +384,28 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     /** Stands for a record someone adds to a declaration without saying what it is. */
     private record Undecided(String what) {}
 
-    /** Whether {@code type} is one somebody has said what it is. */
-    private static boolean decided(Class<?> type) {
-        return DeclarationAgreement.isAFormOfTheGrammar(type)
-                || DeclarationAgreement.isASettledAnswer(type)
-                || DeclarationAgreement.isARecordOfTheBuilding(type);
+    /** Stands for one that says it is two of them, which answers the question no better. */
+    private record Ambiguous(String what) implements SettledAnswer, RecordOfTheBuilding {}
+
+    /**
+     * How many of the three {@code type} says it is.
+     *
+     * <p>Counted rather than asked whether any of them holds. What is wanted is which of the three
+     * a form is, and a form saying two has not answered that — it has been given two answers with
+     * nothing to say which governs, which is the shape this whole check is against.
+     */
+    private static int accountsGiven(Class<?> type) {
+        int given = 0;
+        if (DeclarationAgreement.isAFormOfTheGrammar(type)) {
+            given++;
+        }
+        if (DeclarationAgreement.isASettledAnswer(type)) {
+            given++;
+        }
+        if (DeclarationAgreement.isARecordOfTheBuilding(type)) {
+            given++;
+        }
+        return given;
     }
 
     /**

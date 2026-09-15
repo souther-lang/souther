@@ -785,6 +785,11 @@ public final class DeclarationAgreement {
             // arrive as a single thing not compared.
             ApplicationOrigin.Written.class);
 
+    /** The kinds a form can be erased as, for whoever holds each form to answering to one. */
+    static Set<Class<?>> erasedKinds() {
+        return ERASED;
+    }
+
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */
     static boolean erases(Class<?> type) {
@@ -797,6 +802,10 @@ public final class DeclarationAgreement {
      * <p>The kind and not the class. Two of one kind are one thing not compared, so which arm of it
      * each side has is not compared either; two of different kinds are two things, and answering
      * that they match because neither is compared would hold a position against a coverage number.
+     *
+     * <p>One of them and not the first of several. A form answering to two would be held equal by
+     * whichever was reached first, which is an iteration order nothing writes down; that no form
+     * does is held to by {@link #erasedKinds()} being asked of what a declaration reaches.
      */
     static Class<?> erasedAs(Class<?> type) {
         for (Class<?> erased : ERASED) {
