@@ -15,9 +15,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A search handed a region the rules were already shown to leave nothing in comes back with the
@@ -67,12 +66,9 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     /** The condition on the way is answered by the rules, and no value is tried for it. */
     @Test
     void theWitnessComesBackWithTheProofAndSpendsNothing() {
-        NumericWitness.Standing standing = witnessIn(NothingTheRulesLeave.REGION);
-
-        assertTrue(standing.provedEmpty(), "the rules were shown to leave the region nothing");
-        assertNull(standing.at(), "so no pair stands anywhere in it");
-        assertEquals(Set.of(), standing.stoppedBy(),
-                "and no figure of this compiler's was spent finding that out");
+        assertInstanceOf(NumericWitness.Standing.ProvedImpossible.class,
+                witnessIn(NothingTheRulesLeave.REGION),
+                "the rules were shown to leave the region nothing, so nothing was walked in it");
     }
 
     /**
@@ -84,13 +80,27 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
      */
     @Test
     void theSameQuestionOfARegionThatNarrowsNothingStopsAtAFigure() {
-        NumericWitness.Standing standing = witnessIn(NothingTheRulesSay.REGION);
-
-        assertEquals(false, standing.provedEmpty(),
-                "nothing was shown empty, so nothing is proved about the pair");
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
-                standing.stoppedBy(),
+                assertInstanceOf(NumericWitness.Standing.NotFound.class,
+                        witnessIn(NothingTheRulesSay.REGION),
+                        "nothing was shown empty, so nothing is proved about the pair").stoppedBy(),
                 "and what it came back with is the figure it stopped at");
+    }
+
+    /**
+     * A position the rules leave nothing is the model's answer as much as a region that holds
+     * nothing is.
+     *
+     * <p>The pair the region above cannot tell apart, because it answers both questions the same
+     * way. Here the region stands and one position of it has nowhere to be — an input holding an
+     * empty collection against a position inside that collection — and what a reader is owed is
+     * still the proof rather than a figure to raise.
+     */
+    @Test
+    void aPositionWithNowhereToStandIsTheProofTooEvenWhereTheRegionStands() {
+        assertInstanceOf(NumericWitness.Standing.ProvedImpossible.class,
+                witnessIn(OnePositionTheRulesLeaveNothing.leaving(WIDE)),
+                "the region admits an assignment and this position is at no value in it");
     }
 
     /** A point of a border is settled by the rules too, before a level of it is asked for. */
@@ -105,5 +115,41 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     void theSameItemInARegionThatNarrowsNothingIsSearchedFor() {
         assertNotEquals(new Realization.Impossible(), realizedIn(NothingTheRulesSay.REGION),
                 "nothing was shown empty, so nothing about the item is settled by the rules");
+    }
+
+    /** And a position of the item with nowhere to stand settles it as surely. */
+    @Test
+    void aPositionOfTheItemWithNowhereToStandSettlesItToo() {
+        assertEquals(new Realization.Impossible(),
+                realizedIn(OnePositionTheRulesLeaveNothing.leaving(WIDE)),
+                "the region admits an assignment and the item's position is at no value in it");
+    }
+
+    /**
+     * A position left nothing by the value the walk fixed above it ends that branch, and does not
+     * end the search.
+     *
+     * <p>The case an entry check cannot reach. Nothing here is empty when the search is handed it:
+     * the walk makes it so by choosing a value, and what the rules then leave is a fact about that
+     * choice. So the branch is exhausted — a proof of its own, and the walk goes on to the values
+     * beside it.
+     *
+     * <p>What this pins first is that it comes back at all. Read for a range, a position at no value
+     * is an answer that is not one, and the reader that met it had nowhere to put it.
+     */
+    @Test
+    void aPositionLeftNothingByAFixingEndsThatBranchAndNotTheSearch() {
+        Standing standing = new BorderQuantity.OverAForm("decide",
+                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                Map.of(WIDE, WHOLE, NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
+                .standingAt(new Criterion.AtTheLevel(new Level.ACount(Count.of(4))));
+
+        Realization made = new LevelRealizer().realize(standing,
+                APositionLeftNothingOnlyOnceAnotherIsFixed.of(WIDE, NOWHERE),
+                NothingTheDeclarationsRefuse.at());
+
+        assertEquals(new Realization.Impossible(), made,
+                "every value of the first leaves the second nothing, so every branch is a proof and"
+                        + " the walk of a point that reached none of them is one too");
     }
 }

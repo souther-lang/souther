@@ -3248,10 +3248,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ReachabilityGap.Unstated(var condition) ->
                     whyDeclined(condition.why());
             // The model's word and not this compiler's. Every other sentence here says what was not
-            // managed and leaves the condition owed; this one says the rules leave nothing once it
-            // is taken in, which is what an author can act on.
+            // managed and leaves the condition owed; this one says the rules leave nothing, which is
+            // what an author can act on.
+            //
+            // Said of the way and not of the condition the place names. What was proved empty is
+            // the conditions on the way taken together, and which of them a reader is standing at
+            // when they are told is where the proof was met rather than what it is about — so a
+            // sentence naming this one as the impossible condition would say more than was shown.
             case ReachabilityGap.ProvedImpossible _ ->
-                    "a condition the rules leave nothing under";
+                    "a condition on a way whose conditions leave nothing standing together";
             case ReachabilityGap.Uncomposed(var _, var why) ->
                     switch (why) {
                         case ReachabilityGap.Why

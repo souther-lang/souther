@@ -84,52 +84,57 @@ public final class LevelRealizer {
                             + " the reading already has: a search that may be handed none is one"
                             + " that composes without asking");
         }
-        // Whether there is anything here to look in, asked before anything is looked for. The region
-        // is what the rules a row passes on the way to this item leave, and two of those can close
-        // it between them — at which point no place any walk of it reaches is a row, and the walk
-        // ends at a figure of this compiler's with nothing to show. Which is a proof about the model
-        // reported as this compiler falling short, and the one thing a reader may act on reported as
-        // the one thing they may not (ADR-0091).
-        if (within.emptiness().isPresent() || leavesNothing(standing, within)) {
+        // Where every position the item names runs in this region, read once and here.
+        //
+        // <p>Two ways for the rules to settle the item before anything is looked for, and this is
+        // both of them. The region may admit no assignment — the rules a row passes on the way can
+        // close it between them — and it may admit one while leaving a position the item names
+        // nowhere to stand, which an input holding an empty collection does to every position
+        // inside it. Either way no place a walk of it reaches is a row, and a walk would end at a
+        // figure of this compiler's with nothing to show: a proof about the model reported as this
+        // compiler falling short, which is the one thing a reader may act on arriving as one of the
+        // things they may not (ADR-0091).
+        //
+        // <p>Read here rather than where each search wants it, so that there is one reader of it and
+        // the searches below are handed ranges. Asked again down there, the answer that is not a
+        // range would have to be turned into something a range-shaped reader could hold — which is
+        // the collapse this whole class of defect is.
+        Map<NumericTerm, NumericDomain.Bounds> runs = new LinkedHashMap<>();
+        if (within.emptiness().isPresent()) {
             return new Realization.Impossible();
         }
+        for (NumericTerm term : termsOf(standing)) {
+            switch (within.projectionOf(term)) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        runs.put(term, held == null ? NumericDomain.Bounds.OPEN : held);
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return new Realization.Impossible();
+                }
+                case null -> runs.put(term, NumericDomain.Bounds.OPEN);
+            }
+        }
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> ofOne(one, within, looking, tried);
-            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking, tried);
-            case Standing.OfAForm over -> ofAForm(over, within, tried);
+            case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
+            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
+            case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
         };
     }
 
-    /**
-     * Whether the rules leave one of the item's positions nowhere to stand.
-     *
-     * <p>Beside the region holding nothing and not the same question. A region is about the whole
-     * assignment, and it may admit one while a position of it admits none — a position inside a
-     * collection the rules cap at none is the ordinary case, and the input holding an empty
-     * collection is a value. So both are asked, and either of them settles the item the same way:
-     * what the model leaves is nothing, which is a proof and not a search that came back empty.
-     */
-    private static boolean leavesNothing(Standing standing,
-                                         souther.compiler.inputs.SearchRegion within) {
-        return termsOf(standing).anyMatch(term ->
-                within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
-    }
-
-    /** Every position the item asks a value at. */
-    private static java.util.stream.Stream<NumericTerm> termsOf(Standing standing) {
+    /** Every position the item asks a value at, in the order the item names them. */
+    private static List<NumericTerm> termsOf(Standing standing) {
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> java.util.stream.Stream.of(one.term());
-            case Standing.OfTwoOnOneCarrier two ->
-                    java.util.stream.Stream.of(two.on(), two.against());
-            case Standing.OfAForm over -> over.form().coefs().keySet().stream();
+            case Standing.OfOneCoordinate one -> List.of(one.term());
+            case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
+            case Standing.OfAForm over -> List.copyOf(over.form().coefs().keySet());
         };
     }
 
     /** One position at a place of its own carrier that the item accepts. */
     private Realization ofOne(Standing.OfOneCoordinate one,
                               souther.compiler.inputs.SearchRegion within,
+                              Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        Place at = placeMeeting(one.where(), one.term(), one.of(), bounds(within, one.term()),
+        Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
                 looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
                 : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
@@ -156,6 +161,7 @@ public final class LevelRealizer {
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
                               souther.compiler.inputs.SearchRegion within,
+                              Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
         // What each reading left behind, in the two vocabularies there are for it. Kept apart all
         // the way here: how a walk ended says which of them it is, and a reader told the wrong one
@@ -166,9 +172,9 @@ public final class LevelRealizer {
         java.util.Set<CompositionRepertoire> notAllOf =
                 java.util.EnumSet.noneOf(CompositionRepertoire.class);
         for (Reading reading : readings(two)) {
-            NumericDomain.Bounds settled = bounds(within, reading.settles());
+            NumericDomain.Bounds settled = runs.get(reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
-                    bounds(within, reading.anchors()), two.of(),
+                    runs.get(reading.anchors()), two.of(),
                     reading.where().anchor().asACount());
             Outwards.Walked walked = alongTheLine(together, two.of());
             if (walked == null) {
@@ -336,7 +342,8 @@ public final class LevelRealizer {
      * apart so that how long this is willing to look does not read as a fact about the order.
      */
     private Realization ofAForm(Standing.OfAForm over,
-                                souther.compiler.inputs.SearchRegion within, ValuesTried tried) {
+                                souther.compiler.inputs.SearchRegion within,
+                                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
@@ -365,7 +372,7 @@ public final class LevelRealizer {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            Search search = new Search(terms, over.on(), within, tried);
+            Search search = new Search(terms, over.on(), within, runs, tried);
             Reached reached = search.solve(level.asACount());
             stoppedBy.addAll(search.stoppedBy());
             if (reached == Reached.FOUND) {
@@ -539,7 +546,7 @@ public final class LevelRealizer {
 
         Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
                Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within,
-               ValuesTried tried) {
+               Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
@@ -550,7 +557,7 @@ public final class LevelRealizer {
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                runsBetween[i] = bounds(within, terms.get(i).getKey().term());
+                runsBetween[i] = runs.get(terms.get(i).getKey().term());
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
@@ -605,11 +612,25 @@ public final class LevelRealizer {
                 return Reached.INCOMPLETE;
             }
             java.math.BigDecimal coef = terms.get(i).getValue();
+            // Where this position runs under what the walk has fixed above it, which is not what it
+            // runs in the region the search was handed. The rules leaving it nothing here is a proof
+            // about this branch and about no other: the values fixed above took it away, and the
+            // walk is standing where it can try a different one. So the branch is exhausted — which
+            // is what {@link Reached#EXHAUSTED} says and what a value the rules refuse gets — rather
+            // than the item being settled, which would say of every branch what holds of this one.
+            NumericDomain.Bounds runs;
+            switch (here.projectionOf(terms.get(i).getKey().term())) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        runs = held == null ? NumericDomain.Bounds.OPEN : held;
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return Reached.EXHAUSTED;
+                }
+                case null -> runs = NumericDomain.Bounds.OPEN;
+            }
             // Narrowed by what the positions after this one can add up to. Left at the position's own
             // ends, a box a million wide is walked a million times and the budget runs out on
             // `a + b <= 2000000` — an equation with one answer.
-            NumericDomain.Bounds left =
-                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey().term()));
+            NumericDomain.Bounds left = leaving(i + 1, owed, coef, runs);
             if (i == terms.size() - 1) {
                 return solving(i, owed, coef, left);
             }
@@ -1209,26 +1230,6 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         fixing.forEach((target, at) -> standing.put(target.term(), at));
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
-    }
-
-    /**
-     * The same, of the rules as some of the positions have been fixed.
-     *
-     * <p>Open where the rules bound neither end, and refused where they leave the term nowhere at
-     * all. A region proved empty is turned away at {@link #realize} before any of this runs, so
-     * reaching here with one is a region that was narrowed to nothing between the two — and read
-     * back as open, it would be the widest answer there is taken out of the narrowest region there
-     * is.
-     */
-    private static NumericDomain.Bounds bounds(souther.compiler.inputs.SearchRegion rules,
-                                               NumericTerm term) {
-        return switch (rules.projectionOf(term)) {
-            case null -> new NumericDomain.Bounds(null, null);
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? new NumericDomain.Bounds(null, null) : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> throw new IllegalStateException(
-                    "a search of a region that holds nothing: " + term);
-        };
     }
 
     private static Place placeOf(Level level) {

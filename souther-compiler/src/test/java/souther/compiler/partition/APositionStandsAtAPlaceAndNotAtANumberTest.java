@@ -122,7 +122,7 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         Quantities quantities = quantities();
         NumericWitness.Standing stood = NumericWitness.of(quantities.region(), List.of(term),
                 each -> quantities.ordersOf(each).answered());
-        return stood.at() == null ? null : stood.at().get(term);
+        return stood instanceof NumericWitness.Standing.Found found ? found.at().get(term) : null;
     }
 
     private static SearchRegion region() {

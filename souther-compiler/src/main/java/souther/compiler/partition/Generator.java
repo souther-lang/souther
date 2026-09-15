@@ -3474,22 +3474,29 @@ public final class Generator {
             NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
                             term -> subject.quantities().ordersOf(term).answered());
-            Map<NumericTerm.FromOnePosition, Place> standing =
-                    found == null ? null : found.at();
+            // What the rules settle before what this compiler managed, because a reader may act on
+            // the first and on none of the rest.
+            //
+            // And where a budget of this compiler's is why the walk found nothing, that rather than
+            // the word for a walk that had everything and reached none of it.
+            Map<NumericTerm.FromOnePosition, Place> standing = switch (found) {
+                case null -> null;
+                case NumericWitness.Standing.Found it -> it.at();
+                case NumericWitness.Standing.ProvedImpossible _, NumericWitness.Standing.NotFound _
+                        -> null;
+            };
             if (standing == null) {
-                // What the rules settle before what this compiler managed, because only the first
-                // is something a reader can act on.
-                //
-                // And where a budget of this compiler's is why the walk found nothing, that rather
-                // than the word for a walk that had everything and reached none of it.
-                unrepresented.add(found != null && found.provedEmpty()
-                        ? new ReachabilityGap.ProvedImpossible(cut)
-                        : new ReachabilityGap.Uncomposed(cut, shared
-                                ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
-                                : found != null && !found.stoppedBy().isEmpty()
-                                        ? ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                                                found.stoppedBy())
-                                        : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                unrepresented.add(switch (found) {
+                    case NumericWitness.Standing.ProvedImpossible _ ->
+                            new ReachabilityGap.ProvedImpossible(cut);
+                    case NumericWitness.Standing.NotFound it when !it.stoppedBy().isEmpty() ->
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
+                                            it.stoppedBy()));
+                    case null, default -> new ReachabilityGap.Uncomposed(cut, shared
+                            ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
+                            : new ReachabilityGap.Why.NoValueComposedForItsPositions());
+                });
                 continue;
             }
             for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {

@@ -6,7 +6,6 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
@@ -100,11 +99,15 @@ final class ContainersAddingUp {
             // value of whatever shape is there.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
+        // Where the rules leave nothing there is no run to spread a total over, and no element of one
+        // to place. Both numbers are asked — how many the container holds and where its occurrences
+        // run — because either of them left nothing settles the item, and said as a range either
+        // would be the widest answer there is out of rules that admit none.
         DeclaredBounds.CountRange howMany = howMany(view, target.writeRoot(), within, reading);
-        // Where the rules leave nothing there is no run to spread a total over, and no element of
-        // one to place. Said as the model settling it, which is what it is.
-        if (!(within.projectionOf(new NumericTerm.ValueOf(occurrences(target)))
-                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
+        if (howMany == null
+                || !(within.projectionOf(new NumericTerm.ValueOf(occurrences(target)))
+                        instanceof NumericDomain.FormProjection.Within(
+                                NumericDomain.Bounds runs))) {
             return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
         }
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
@@ -448,26 +451,34 @@ final class ContainersAddingUp {
     private static DeclaredBounds.CountRange howMany(TypeView container, TermPath root,
                                                      SearchRegion within,
                                                      RuleReadingContext reading) {
-        Symbols symbols = reading.source().symbols();
         DeclaredBounds.CountRange declared =
                 DeclaredBounds.countsHeld(container, reading, null);
-        ValueName.Stdlib counts =
-                NumericMeasures.takenOf(container.declared(), reading.source().inners());
-        NumericTerm.FromOnePosition term = counts == null ? null
-                : NumericTerm.TakenOf.of(counts, root, container.declared(),
-                        reading.source().inners(), symbols);
-        // What the rules leave on top of what the declarations do. A region that leaves nothing
-        // narrows no count: what it settles is the whole item and is answered where the item is,
-        // and read as a range here it would be the widest one there is.
-        NumericDomain.Bounds runs = term != null && within.projectionOf(term)
-                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
-                ? held : null;
-        if (runs == null) {
+        NumericTerm.FromOnePosition term = countTaken(container, root, reading);
+        if (term == null) {
             return declared;
         }
-        int least = Math.max(declared.least(), CountDomain.leastFrom(runs.min()));
-        int most = Math.min(declared.most(), CountDomain.mostFrom(runs.max()));
-        return new DeclaredBounds.CountRange(least, most);
+        // What the rules leave on top of what the declarations do, and null where they leave it
+        // nothing at all. Answered as a range there, what the rules settle would come back as the
+        // declarations' own range — which is wider than what holds, and the widening is what sends a
+        // search off to fill a container the model admits none of.
+        return switch (within.projectionOf(term)) {
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> declared;
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) ->
+                    runs == null ? declared : new DeclaredBounds.CountRange(
+                            Math.max(declared.least(), CountDomain.leastFrom(runs.min())),
+                            Math.min(declared.most(), CountDomain.mostFrom(runs.max())));
+        };
+    }
+
+    /** The number the rules count this container by, or null where nothing counts it. */
+    private static NumericTerm.FromOnePosition countTaken(TypeView container, TermPath root,
+                                                          RuleReadingContext reading) {
+        ValueName.Stdlib counts =
+                NumericMeasures.takenOf(container.declared(), reading.source().inners());
+        return counts == null ? null
+                : NumericTerm.TakenOf.of(counts, root, container.declared(),
+                        reading.source().inners(), reading.source().symbols());
     }
 
     /**
