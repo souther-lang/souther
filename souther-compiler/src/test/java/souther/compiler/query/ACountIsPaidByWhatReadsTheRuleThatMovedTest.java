@@ -31,6 +31,16 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
     private static final String MODULE = "chain.links";
     private static final String ID = "links.sou";
 
+    /**
+     * How long the chain below the rule is, where the claim is that it makes no difference.
+     *
+     * <p>Kept short because a chain is what a compile is slowest at: a field read through one is
+     * read at every depth it reaches, and what that costs rises with the depth far faster than with
+     * the declarations. Long enough that a count paying by the module rather than by what reads the
+     * rule is told apart several times over, and no longer.
+     */
+    private static final int LONG = 10;
+
     /** Declarations the edits below say nothing about, each with rules of its own to be read. */
     private static String spares(int howMany) {
         StringBuilder source = new StringBuilder();
@@ -113,31 +123,25 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
     }
 
     /**
-     * And the same held of a chain: a rule nothing but the top of it reads costs what reads it,
-     * however long the chain below is.
-     */
-    @Test
-    void aRuleOnlyOneDeclarationReadsIsPaidForByThatOne() {
-        assertEquals(askingsFor(chain(2, 99, 99), chain(2, 99, 98)),
-                askingsFor(chain(32, 99, 99), chain(32, 99, 98)),
-                "a rule read by one declaration was paid for by the length of a chain beside it");
-    }
-
-    /**
-     * And the fixture can tell that from a rule every link does read, which every one of them is
-     * answered again for.
+     * And the same over a chain, where which rule moved is what decides who pays.
      *
-     * <p>The control. Without it the two above are held by a count that answers nothing at all,
-     * which is not what is wanted of them: what a count owes is the declarations that read what
-     * moved, and a chain every link of which reads the rule owes all of them.
+     * <p>Both rules in one test because neither says anything alone. That the rule only the top of
+     * the chain reads costs the same however long the chain is, is the claim; that the rule every
+     * link reads costs more as the chain grows is what says the fixture can tell a declaration the
+     * edit reached from one it did not. Held apart from a count that answers nothing at all only by
+     * the second.
      */
     @Test
-    void aRuleEveryLinkReadsIsPaidForByEveryLink() {
-        assertTrue(askingsFor(chain(32, 99, 99), chain(32, 98, 99))
-                        > askingsFor(chain(2, 99, 99), chain(2, 98, 99)),
-                "a rule every link of the chain reads was answered again for the links that read"
-                        + " it, so the fixture cannot tell a declaration an edit reached from one it"
-                        + " did not");
+    void whichRuleMovedIsWhatDecidesWhoPaysForIt() {
+        long shortChain = askingsFor(chain(2, 99, 99), chain(2, 99, 98));
+        long longChain = askingsFor(chain(LONG, 99, 99), chain(LONG, 99, 98));
+
+        assertEquals(shortChain, longChain,
+                "a rule read by one declaration was paid for by the length of a chain beside it");
+        assertTrue(askingsFor(chain(LONG, 99, 99), chain(LONG, 98, 99)) > longChain,
+                "a rule every link of the chain reads cost no more than one only the top reads, so"
+                        + " the fixture cannot tell a declaration an edit reached from one it did"
+                        + " not");
     }
 
 }
