@@ -167,7 +167,7 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 continue;
             }
             for (StructuralParts.Part part : StructuralParts.of(type)) {
-                todo.addAll(StructuralParts.held(part.held()));
+                todo.addAll(TypesAPartIsDeclaredToHold.named(part.held()));
             }
         }
         return seen;

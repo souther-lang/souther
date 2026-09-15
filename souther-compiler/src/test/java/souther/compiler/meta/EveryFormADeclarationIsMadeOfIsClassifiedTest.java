@@ -4,15 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -146,29 +142,11 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             }
             reached.add(type);
             for (StructuralParts.Part part : StructuralParts.of(type)) {
-                for (Class<?> held : held(part.held())) {
+                for (Class<?> held : TypesAPartIsDeclaredToHold.named(part.held())) {
                     todo.addLast(held);
                 }
             }
         }
         return reached;
-    }
-
-    /** The types a component holds: itself, or what its container is of. */
-    private static List<Class<?>> held(Type type) {
-        if (type instanceof Class<?> plain) {
-            return plain.isArray() ? List.of(plain.getComponentType()) : List.of(plain);
-        }
-        if (type instanceof ParameterizedType parameterized
-                && parameterized.getRawType() instanceof Class<?> raw
-                && (raw == List.class || raw == Set.class || raw == Optional.class
-                        || raw == Map.class)) {
-            List<Class<?>> of = new ArrayList<>();
-            for (Type argument : parameterized.getActualTypeArguments()) {
-                of.addAll(held(argument));
-            }
-            return of;
-        }
-        return List.of();   // a wildcard or a type variable holds nothing this walk can name
     }
 }

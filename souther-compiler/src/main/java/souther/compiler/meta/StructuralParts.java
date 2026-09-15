@@ -3,27 +3,21 @@ package souther.compiler.meta;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * What a form is made of, read one way wherever this comparison asks.
  *
- * <p>Every reader that goes inside a form asks here: the comparison that holds two builds'
- * declarations to each other, the reading of whether a value's own equality is that comparison, the
- * walk that follows what a declaration reaches, and the check that every type it can reach has been
- * classified. Each of them used to ask a record for its components, which made "a form of the
- * grammar" and "a Java record" one thing — and they are not. A form whose representation its own
- * subsystem settled for its own reasons is still a form, and a reader that cannot see inside one
- * does not say so: the comparison falls to comparing written values, the walk stops, and the check
- * reaches less and stays green. Asked here, they see the same parts or none of them do.
+ * <p>A reader that goes inside a form asks here rather than working out for itself what one is made
+ * of. Readers used to ask a record for its components, which made "a form of the grammar" and "a
+ * Java record" one thing — and they are not. A form whose representation its own subsystem settled
+ * for its own reasons is still a form, and a reader that cannot see inside one does not say so: a
+ * comparison falls to comparing written values, a walk stops, a check reaches less and stays green.
+ * Asked here, readers see the same parts or none of them do.
  *
  * <p>A record hands over its components. Anything else hands over what it declares and lets be read
  * — a final instance field with a no-argument method of the same name answering the type the field
@@ -120,33 +114,4 @@ final class StructuralParts {
         return handedOver;
     }
 
-    /**
-     * The types a part is declared to hold: itself, or what its container is of.
-     *
-     * <p>A container is read through rather than treated as a leaf, because what a reader of these
-     * parts asks is about the values that arrive and a list of them is not one of those.
-     *
-     * <p>What a part is declared as does not always name a type. A part written to hold whatever its
-     * form was made with — a type variable, a wildcard — names none, and none is what is answered:
-     * not that it holds nothing, but that nothing here can say what. A reader that has to be right
-     * about what arrives asks the value instead, which is what the reading of equality does; this is
-     * for readers sweeping what a declaration can reach, where a type nothing names is a type
-     * nothing declares a part of either.
-     */
-    static List<Class<?>> held(Type part) {
-        if (part instanceof Class<?> plain) {
-            return plain.isArray() ? List.of(plain.getComponentType()) : List.of(plain);
-        }
-        if (part instanceof ParameterizedType parameterized
-                && parameterized.getRawType() instanceof Class<?> raw
-                && (raw == List.class || raw == Set.class || raw == Optional.class
-                        || raw == Map.class)) {
-            List<Class<?>> of = new ArrayList<>();
-            for (Type argument : parameterized.getActualTypeArguments()) {
-                of.addAll(held(argument));
-            }
-            return of;
-        }
-        return List.of();
-    }
 }

@@ -110,7 +110,7 @@ class AFormTheWalkGoesInsideHandsOverEverythingItKeepsTest {
             }
             through.add(type);
             for (StructuralParts.Part part : StructuralParts.of(type)) {
-                todo.addAll(StructuralParts.held(part.held()));
+                todo.addAll(TypesAPartIsDeclaredToHold.named(part.held()));
             }
         }
         return through;
