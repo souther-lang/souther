@@ -114,10 +114,15 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * class over a run holds many and one of them was asked for; a reader that has to compose one
      * value for several classes of a location asks each of them for the number it was built at, and
      * a class that kept only the value leaves that reader choosing again.
+     *
+     * <p>Said the one way a place is said ({@link souther.compiler.numeric.Place#canonical()}). A
+     * count's own equality is its decimal's and counts the places it was written to, so a class
+     * holding one as it arrived would be equal to a class of the same line only where both were
+     * spelled alike — and what holds a class compares by what the class holds.
      */
     public PartitionClass standingAt(souther.compiler.numeric.Place number) {
         return new PartitionClass(id, label, recognises, representatives, denotes, selects, of,
-                number);
+                number == null ? null : number.canonical());
     }
 
     /**

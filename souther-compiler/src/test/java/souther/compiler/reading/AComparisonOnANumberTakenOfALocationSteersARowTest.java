@@ -238,8 +238,8 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         List<Generator.GeneratedRow> cells = filling.composed().rows().stream()
                 .filter(row -> row.purposes().stream().anyMatch(purpose ->
                         purpose instanceof Generator.Purpose.ForACombinationOfDecisions settled
-                                && settles(settled, "Time.minute(slot.at)")
-                                && settles(settled, "a=")))
+                                && settlesTheNumber(settled, "Time.minute(slot.at)")
+                                && settlesTheCaseAt(settled, "a")))
                 .toList();
 
         assertFalse(cells.isEmpty(),
@@ -249,9 +249,18 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                 () -> "and the row stands at that number: " + cells);
     }
 
-    /** Whether one of the conditions a cell settles is said with {@code what} in it. */
-    private static boolean settles(Generator.Purpose.ForACombinationOfDecisions cell, String what) {
-        return cell.settled().stream().anyMatch(each -> each.toString().contains(what));
+    /** Whether the cell settles a way a comparison about {@code term} comes out. */
+    private static boolean settlesTheNumber(Generator.Purpose.ForACombinationOfDecisions cell,
+                                            String term) {
+        return cell.settled().stream().anyMatch(each -> each instanceof Condition.Side side
+                && side.at().toString().equals(term));
+    }
+
+    /** Whether the cell settles which case stands at {@code path}. */
+    private static boolean settlesTheCaseAt(Generator.Purpose.ForACombinationOfDecisions cell,
+                                            String path) {
+        return cell.settled().stream().anyMatch(each -> each instanceof Condition.Case one
+                && one.at().toString().equals(path));
     }
 
     /**

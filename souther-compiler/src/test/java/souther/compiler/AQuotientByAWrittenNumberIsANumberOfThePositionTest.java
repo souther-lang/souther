@@ -128,9 +128,8 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
     @Test
     void theRowOfferedAtAPointOnTheQuotientStandsAtIt() {
         String block = block(measured(ON_THE_QUOTIENT));
-        // The value and not the whole line. A row is written for whatever it was composed for, and
-        // one composed for a class carries the class's name beside it — so a line matched from its
-        // opening is a line that says nothing was.
+        // The value, wherever in its line it sits. A row composed for a class as well carries the
+        // class's name between the bar and the value, so what this is about is the value.
         assertTrue(block.contains("(20)"), () -> "a value whose quotient is ten: " + block);
 
         assertEquals(new ItemAssessment.Coverage.Hit(),

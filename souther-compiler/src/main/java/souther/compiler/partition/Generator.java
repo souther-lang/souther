@@ -4415,8 +4415,11 @@ public final class Generator {
         Map<TermPath, List<FixtureTemplate>> together = new LinkedHashMap<>();
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
                 : byTheLocationTheyWrite(numbersTheClassesStandAt(axes, where)).entrySet()) {
-            // One number, which the class that stands at it already holds a value for. Composed
-            // again here it would be the same question asked twice, and the two could part.
+            // A location asked for one number, which the class standing at it holds a value for
+            // already — composed by this same owner, for this same number, when the class was made.
+            // So what is composed here is what more than one of them takes: one value answering
+            // every number of the location at once, which no class holds because no class is asked
+            // about the numbers beside its own.
             if (group.getValue().size() < 2) {
                 continue;
             }
