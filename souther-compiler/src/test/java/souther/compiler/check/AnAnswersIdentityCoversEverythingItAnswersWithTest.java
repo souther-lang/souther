@@ -62,7 +62,14 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
                     + " second thing to tell two arguments apart by: two readings of one declaration"
                     + " that disagreed about it would be a binding that has come apart, not two"
                     + " arguments — the same reason a declared operation's arity is outside its"
-                    + " identity");
+                    + " identity",
+            "souther.compiler.check.BoundaryInput.Nominal.type",
+            "a reference made from the admitted name, which the identity already compares",
+            "souther.compiler.check.BoundaryOutput.Nominal.type",
+            "the same, for a name that leaves",
+            "souther.compiler.check.BoundaryOutput.Cases.type",
+            "the union the walk admitted, and the members the identity compares are read off it, so"
+                    + " there is no pair of them that could disagree");
 
     @Test
     void everyHandWrittenIdentityReadsEveryFieldItsStateHolds() {

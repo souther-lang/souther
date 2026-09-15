@@ -72,8 +72,7 @@ class AUnionHoldsItsMembersInTheOrderTheyAreShownTest {
      * is made through {@code Type.union}, which has to make a sequenced set of what it was handed
      * and could arrange the members while it does — and were the arranging to move there, each of
      * them would go on passing while {@code new Type.Union(...)} built a union in whatever order it
-     * was given. Something does build one that way: the cases of a boundary output answer their
-     * type by calling the constructor.
+     * was given.
      */
     @Test
     void theConstructorIsWhatPutsTheMembersInThatOrder() {

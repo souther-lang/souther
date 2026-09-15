@@ -4,7 +4,6 @@ import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -18,8 +17,17 @@ import java.util.Objects;
  */
 public sealed interface BoundaryOutput {
 
-    /** The type in the language this shape stands for. Answered per case rather than by switching, so
-     *  a case added here cannot forget it. */
+    /**
+     * The type in the language this shape stands for. Answered per case rather than by switching, so
+     * a case added here cannot forget it.
+     *
+     * <p>Settled where the shape is made, not where it is asked. The type is worked out before the
+     * walk and handed to it, and what admission settles is that it may cross — a shape being the
+     * witness of that rather than of the type. So a case whose construction is closed to the walk
+     * answers with the type it was admitted from, and a reader asking in a loop meets one value. A
+     * case anything may construct answers from its parts instead, there being nowhere for it to hold
+     * a type a caller could not have made disagree with them.
+     */
     Type type();
 
     /** A scalar the boundary writes as itself. */
@@ -35,9 +43,11 @@ public sealed interface BoundaryOutput {
     final class Nominal implements BoundaryOutput {
 
         private final CrossingNominal admitted;
+        private final Type type;
 
         Nominal(CrossingNominal admitted) {
             this.admitted = admitted;
+            this.type = Type.ref(admitted.name());
         }
 
         public TypeSymbol name() {
@@ -46,7 +56,7 @@ public sealed interface BoundaryOutput {
 
         @Override
         public Type type() {
-            return Type.ref(name());
+            return type;
         }
 
         @Override
@@ -100,16 +110,21 @@ public sealed interface BoundaryOutput {
      *
      * <p>Names and not {@link CrossingNominal}s, though each member went through that admission.
      * What a witness is carried for is a reader that acts on the proposition being true; a reader
-     * here asks which cases the answer has, and builds a type or a class name out of them. Carrying
-     * the admission on into that would say a reader below still needs it, which is a claim about
-     * them that is not so. If one comes to need it, this is where it changes.
+     * here asks which cases the answer has, and builds a class name out of them. Carrying the
+     * admission on into that would say a reader below still needs it, which is a claim about them
+     * that is not so. If one comes to need it, this is where it changes.
+     *
+     * <p>The union it answers with is the one admission was handed, and the members are read off
+     * that union rather than given beside it, so there is no pair for the walk to keep in agreement.
      */
     final class Cases implements BoundaryOutput {
 
+        private final Type.Union type;
         private final List<TypeSymbol> members;
 
-        Cases(List<TypeSymbol> members) {
-            this.members = List.copyOf(members);
+        Cases(Type.Union type) {
+            this.type = type;
+            this.members = List.copyOf(type.members());
         }
 
         public List<TypeSymbol> members() {
@@ -118,7 +133,7 @@ public sealed interface BoundaryOutput {
 
         @Override
         public Type type() {
-            return new Type.Union(new LinkedHashSet<>(members));
+            return type;
         }
 
         @Override
