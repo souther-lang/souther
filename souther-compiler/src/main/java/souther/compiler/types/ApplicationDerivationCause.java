@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Why a pass wrote an application of its own.
  *
@@ -17,7 +19,7 @@ package souther.compiler.types;
  * being no application to make it out of. What every one of them does hold is something that can be
  * told from every other of its kind, which is what a thing derived from it is derived from.
  */
-public sealed interface ApplicationDerivationCause {
+public sealed interface ApplicationDerivationCause extends RecordOfTheBuilding {
 
     /**
      * A collection the author wrote in brackets — {@code [a, b]}, and the empty {@code []}.

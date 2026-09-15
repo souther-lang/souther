@@ -11,6 +11,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.RecordOfTheBuilding;
+import souther.compiler.SettledAnswer;
 import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
@@ -783,6 +785,11 @@ public final class DeclarationAgreement {
             // arrive as a single thing not compared.
             ApplicationOrigin.Written.class);
 
+    /** The kinds a form can be erased as, for whoever holds each form to answering to one. */
+    static Set<Class<?>> erasedKinds() {
+        return ERASED;
+    }
+
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */
     static boolean erases(Class<?> type) {
@@ -795,6 +802,10 @@ public final class DeclarationAgreement {
      * <p>The kind and not the class. Two of one kind are one thing not compared, so which arm of it
      * each side has is not compared either; two of different kinds are two things, and answering
      * that they match because neither is compared would hold a position against a coverage number.
+     *
+     * <p>One of them and not the first of several. A form answering to two would be held equal by
+     * whichever was reached first, which is an iteration order nothing writes down; that no form
+     * does is held to by {@link #erasedKinds()} being asked of what a declaration reaches.
      */
     static Class<?> erasedAs(Class<?> type) {
         for (Class<?> erased : ERASED) {
@@ -870,13 +881,27 @@ public final class DeclarationAgreement {
      * Whether it is one of the front end's settled answers, whose parts are what a crossing depends
      * on.
      *
-     * <p>Where it is declared, again. What the front end settles about a declaration lives in
-     * {@code souther.compiler.types} — what a type is, what a name reaches, how a map key crosses —
-     * and a crossing depends on all of it: a field whose type moved is the plainest disagreement
-     * there is.
+     * <p>Asked of the type, which says so. What the front end settles about a declaration — what a
+     * type is, what a name reaches, how a map key crosses — is what a crossing depends on: a field
+     * whose type moved is the plainest disagreement there is. And what this compile keeps about how
+     * it built what it built is written beside it, so a rule reading where the file sits would hand
+     * one answer to both.
      */
     static boolean isASettledAnswer(Class<?> type) {
-        return type.isRecord() && type.getPackageName().equals(TypeSymbol.class.getPackageName());
+        return SettledAnswer.class.isAssignableFrom(type);
+    }
+
+    /**
+     * Whether it is one of the records this compile keeps about how it built what it built.
+     *
+     * <p>The third thing a form reachable from a declaration can be, beside a form of the grammar
+     * and a settled answer. It says what the type is and not what this reads of one: which of them
+     * a crossing passes over is said by {@link #ERASED}, and a type is often both — an application
+     * the author wrote is a record of the building that a crossing is also blind to, and neither of
+     * those is said by the other.
+     */
+    static boolean isARecordOfTheBuilding(Class<?> type) {
+        return RecordOfTheBuilding.class.isAssignableFrom(type);
     }
 
     /**

@@ -1,5 +1,7 @@
 package souther.compiler.ast;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * What a definition of a module was made as, which is what decides the rules it is held to.
  *
@@ -22,7 +24,7 @@ package souther.compiler.ast;
  * that ({@link Hir.FnDef#declaredIn}); the other two are there so that rows can be written, and
  * {@link #isTheModels} is what a rule about the difference asks.
  */
-public sealed interface DefinitionRole {
+public sealed interface DefinitionRole extends RecordOfTheBuilding {
 
     /**
      * Whether the definition is the model's: what the module's own source declares, what a jar of

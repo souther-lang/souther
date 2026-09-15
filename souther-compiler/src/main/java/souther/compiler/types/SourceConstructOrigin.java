@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Which construct the source wrote, said in a way that copying cannot change.
  *
@@ -63,7 +65,8 @@ package souther.compiler.types;
  *                two values name. It is the answer a report needs and the tree that runs no longer
  *                holds
  */
-public record SourceConstructOrigin(WrittenOwner owner, int ordinal, int lowered, SourceConstruct kind) {
+public record SourceConstructOrigin(WrittenOwner owner, int ordinal, int lowered,
+                                    SourceConstruct kind) implements RecordOfTheBuilding {
 
     /**
      * Where this stands among these, for a reader putting some of them in a steady order.

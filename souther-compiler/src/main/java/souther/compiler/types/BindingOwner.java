@@ -1,5 +1,6 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
 import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
 import souther.compiler.hash.ValueHash;
 
@@ -15,7 +16,7 @@ import souther.compiler.hash.ValueHash;
  * <p>The interface is sealed and the switches over it carry no {@code default}, so a case added here
  * is a compile error at every place that reads one.
  */
-public sealed interface BindingOwner {
+public sealed interface BindingOwner extends SettledAnswer {
 
     /** The module that declares what this belongs to. A copy is owned where it was placed, so it
      * answers with the module that reads it rather than the one the body was written in. */

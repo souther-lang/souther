@@ -1,6 +1,7 @@
 package souther.compiler.types;
 
 import souther.compiler.Reserved;
+import souther.compiler.SettledAnswer;
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.hash.ValueHash;
 
@@ -23,7 +24,7 @@ import souther.compiler.hash.ValueHash;
  * <p>Nothing here says what any of this is called on a machine. {@code jvm.SoutherJvmAbi} is where
  * that is asked and answered, and it is the only place that may.
  */
-public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
+public sealed interface TypeSymbol extends SettledAnswer, Comparable<TypeSymbol> {
 
     /** The name this is written under. */
     String name();

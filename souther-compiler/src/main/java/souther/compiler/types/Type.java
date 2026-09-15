@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.SequencedSet;
@@ -9,7 +11,7 @@ import java.util.Set;
  * The Souther value types. Either a primitive ({@code Int}/{@code String}/{@code Bool})
  * or a reference to a named data type. {@code Type.INT} etc. remain usable as constants.
  */
-public sealed interface Type permits Type.Leaf, Type.Compound {
+public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compound {
 
     /**
      * A type that holds no type inside it, where a walk over the tree of types ends. A {@link Ref}

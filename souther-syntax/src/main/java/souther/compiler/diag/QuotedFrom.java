@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.RecordOfTheBuilding;
 import souther.compiler.source.SourceId;
 
 import java.util.Objects;
@@ -30,7 +31,7 @@ import java.util.Objects;
  * has no name yet" under one empty — which is the drop {@link DiagnosticPlace.Unavailable} exists to
  * stop, one layer up.
  */
-public sealed interface QuotedFrom {
+public sealed interface QuotedFrom extends RecordOfTheBuilding {
 
     /** A source this compilation holds and can quote from. */
     record ASourceThisCompileHolds(SourceId source) implements QuotedFrom {
