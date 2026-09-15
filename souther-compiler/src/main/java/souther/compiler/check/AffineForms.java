@@ -239,15 +239,6 @@ public final class AffineForms {
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
                                            java.util.Set<BindingId> following) {
         Core e = Terms.asOperator(raw);
-        if (e instanceof Core.PreservedCall || e instanceof Core.Call) {
-            // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
-            // about it is decided rather than owed — the run-time check is not what should answer a
-            // question the compiler has already computed.
-            BigDecimal folded = Terms.constantNumber(e, reading.symbols());
-            if (folded != null) {
-                return new Outcome.Composed<>(LinearForm.constant(folded));
-            }
-        }
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
         // may have an atom for, and taking the stop as the answer here would put the leaf question
@@ -256,6 +247,20 @@ public final class AffineForms {
         LinearForm<A> composed = composed(e, at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
+        }
+        // An expression this composes nothing out of is still the number it folds to, where it
+        // folds to one. `7 / 2` is 3 and `String.length("1A")` is 2, and a clause about either is
+        // decided rather than owed — the run-time check is not what should answer a question the
+        // compiler has already computed. So a divide of two written numbers is read without a
+        // divide being arithmetic this composes over positions, which it is not.
+        //
+        // Asked after the grammar rather than before it. The two orders answer alike, and this one
+        // asks nothing of the expressions the grammar does read: a fold rebuilds the tree it is
+        // handed, so asked first it rebuilds every written sub-expression of a sum over positions
+        // on the way to a form the arms below compose without it.
+        BigDecimal folded = Terms.constantNumber(e, reading.symbols());
+        if (folded != null) {
+            return new Outcome.Composed<>(LinearForm.constant(folded));
         }
         Outcome<A, E> denoted = read(e, at, reading, following);
         if (denoted instanceof Outcome.Composed<A, E> composedName) {
