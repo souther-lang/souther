@@ -1200,7 +1200,7 @@ public final class Partitions {
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(orders, new Recognition.CountIs.At(value)),
+                    holding(orders, new NumericSet.At(value)),
                     standing(view, carrier, value, ruleSource)));
         }
         // Out of what writing one value costs, as every witness for a row is.
@@ -1209,7 +1209,7 @@ public final class Partitions {
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
         Recognition away = holding(orders,
-                new Recognition.CountIs.AwayFrom(values));
+                new NumericSet.AwayFrom(values));
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label, away,
                         "nothing here composed a value of this position other than the ones"
@@ -1241,7 +1241,7 @@ public final class Partitions {
     /** A class that reads the count of the number {@code on} is of out of a row, and answers about
      *  it. The number comes from the orders rather than beside them: a class of one number built on
      *  another's order is what the pair naming its own number is here to stop. */
-    private static Recognition holding(TermOrders on, Recognition.CountIs is) {
+    private static Recognition holding(TermOrders on, NumericSet is) {
         return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 

@@ -97,20 +97,20 @@ public final class Recognitions {
      */
     public static boolean holdsTheNumberAt(Recognition what, Place place) {
         return switch (what) {
-            case Recognition.OfACount count -> holds(count.is(), place, count.carrier());
+            case Recognition.OfACount count -> count.is().holds(place, count.carrier());
             // The names a value is written under are how a row spells it, and a place wears none.
             case Recognition.Under under -> holdsTheNumberAt(under.inner(), place);
             case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
-            case Recognition.Truth ignored -> false;
-            case Recognition.Held ignored -> false;
+            case Recognition.Truth _ -> false;
+            case Recognition.Held _ -> false;
             // A set of the position's values is no run of them, so nothing here is either side of
             // a line. An axis carrying lines refuses such a class before this is ever asked
             // ({@link Recognition#answersAboutAPlace}).
-            case Recognition.OfASet ignored -> false;
+            case Recognition.OfASet _ -> false;
             // A case of an ordered enumeration sits at a place on that order, written down when the
             // class was built; a case of a sum with no order sits nowhere and is asked nothing.
             case Recognition.OfCase one -> one.at() != null && one.at().sameAs(place);
-            case Recognition.Nothing ignored -> false;
+            case Recognition.Nothing _ -> false;
         };
     }
 
@@ -129,20 +129,9 @@ public final class Recognitions {
         // on. One carrier for both was right while the two could not differ (#1027).
         return switch (count.orders().read(value)) {
             case NumericTerm.Reading.Number number -> Membership.of(
-                    holds(count.is(), number.value(), count.carrier()));
+                    count.is().holds(number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
-        };
-    }
-
-    private static boolean holds(Recognition.CountIs is, souther.compiler.numeric.Place at,
-                                 souther.compiler.check.Carrier carrier) {
-        return switch (is) {
-            case Recognition.CountIs.At one -> at.sameAs(one.value());
-            case Recognition.CountIs.AwayFrom others ->
-                    others.values().stream().noneMatch(at::sameAs);
-            case Recognition.CountIs.InARun run ->
-                    run.run().holds(new Level.OnACarrier(carrier, at));
         };
     }
 

@@ -205,7 +205,7 @@ final class Intervals {
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
             Recognition is = new Recognition.OfACount(of, orders,
-                    new Recognition.CountIs.InARun(run));
+                    new NumericSet.InARun(run));
             // Nothing composed here says what this compiler did not manage, and says nothing about
             // what the run holds. Above a string a rule stops short of, the order declines to name
             // a value on purpose — every string with that one as a prefix is greater, and choosing
