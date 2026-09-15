@@ -81,10 +81,15 @@ import java.util.function.Supplier;
  * <p>An edge is what its consumer means. A collection gathered per module is an index, and a
  * question asked per definition depends on the entries it reaches rather than on the index. Read
  * whole, an index hands the finer question the coarser one's identity: an edit anywhere in the
- * module — or in a module it imports — arrives as an edit to every definition in it, and again no
- * test of what the compiler answers can see the difference. Keeping the index is fine, and so is
+ * module — or in a module it imports — arrives as an edit to every definition in it, and nothing a
+ * test of what the compiler answers reads is any different. Keeping the index is fine, and so is
  * reading one to answer a question about a single entry — {@link Bodies.Stated} does exactly that.
  * What a per-definition question may not do is take the index as its own dependency.
+ *
+ * <p>{@code EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest} is what says which edges are here
+ * and what each of them is. It reads them off this graph rather than off the sources that built it,
+ * and holds each to being one of the two things a sound one is: a projection of the index, or an
+ * answer the index leaves alone when a definition it says nothing about is edited.
  *
  * <p>Which does not mean every producer has to be split. What the consumer reads has to stop where
  * its meaning stops, and a key between the two is where that happens: the broad answer is

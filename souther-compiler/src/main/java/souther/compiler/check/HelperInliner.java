@@ -2752,9 +2752,9 @@ public final class HelperInliner {
      * inliner exists. One walk either way: an edge of this graph is what it is, and a reader that
      * counted a different set of them would be reading a different graph.
      */
-    static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
-                              Map<ReachName.Declaration, HelperEntry> table,
-                              Set<ReachName.Declaration> out) {
+    public static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
+                                     Map<ReachName.Declaration, HelperEntry> table,
+                                     Set<ReachName.Declaration> out) {
         // Applying a function-typed parameter, or a binding holding a function, is not a call to
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
