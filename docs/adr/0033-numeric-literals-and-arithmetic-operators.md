@@ -52,9 +52,11 @@ function form; the operator trades that for convenience).
   default rounding, abort on zero), alongside `BigDecimal` `add`/`subtract`/`multiply` for the
   Decimal operators.
 - Existing source that wrote a bare `Decimal` literal must add `m` (`0.08` → `0.08m`).
-- Compile-time constant folding (ADR-0032 CTFE) does not fold `/`; a constant division in an
-  invariant is checked at run time, avoiding a second definition of the rounding and
-  zero-divisor semantics.
+- Compile-time constant folding (ADR-0032 CTFE) folds an `Int` `/` over written numbers to the
+  truncating quotient the operator computes, and folds no other divide: a `Decimal` `/`, a zero
+  divisor and the one quotient outside the `Int` range are left to the run time, so the rounding
+  and the aborts keep their single definition. What is folded is what `IntMath.divideExact`
+  returns rather than aborts on.
 
 ## References
 

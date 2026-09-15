@@ -229,25 +229,24 @@ public final class AffineForms {
     /**
      * The same, through the names already being read through on the way here.
      *
-     * <p>Three stages, in this order. What the language composes is read first; then what a name
-     * denotes, which the environment answers and this reads; then what the caller calls the value.
-     * The middle one is not composition — whether a name may be read through is the environment's
-     * answer and not a rule of the grammar — and it is not a leaf either, since a leaf is what is
-     * left when nothing can be read. Folded into either neighbour, the boundary between what the
-     * language says and what a caller says stops being one a reader can see.
+     * <p>Four stages, in this order. What the language composes is read first; then what the whole
+     * expression comes to, where every part of it is written down; then what a name denotes, which
+     * the environment answers and this reads; then what the caller calls the value. The third is
+     * not composition — whether a name may be read through is the environment's answer and not a
+     * rule of the grammar — and it is not a leaf either, since a leaf is what is left when nothing
+     * can be read. Folded into either neighbour, the boundary between what the language says and
+     * what a caller says stops being one a reader can see.
+     *
+     * <p>The second stands where it does because what an expression comes to is a question about
+     * neither. It is not the grammar's, which reads arithmetic over positions and has no position
+     * here to read; and it is not the caller's, since a number every part of which is written down
+     * is that number whatever the caller would name. Asked before the grammar it would answer the
+     * same and re-read every written sub-expression the arms compose without it; asked after the
+     * environment it would be asked of expressions a name already answered for.
      */
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
                                            java.util.Set<BindingId> following) {
         Core e = Terms.asOperator(raw);
-        if (e instanceof Core.PreservedCall || e instanceof Core.Call) {
-            // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
-            // about it is decided rather than owed — the run-time check is not what should answer a
-            // question the compiler has already computed.
-            BigDecimal folded = Terms.constantNumber(e, reading.symbols());
-            if (folded != null) {
-                return new Outcome.Composed<>(LinearForm.constant(folded));
-            }
-        }
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
         // may have an atom for, and taking the stop as the answer here would put the leaf question
@@ -256,6 +255,15 @@ public final class AffineForms {
         LinearForm<A> composed = composed(e, at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
+        }
+        // An expression this composes nothing out of is still the number it folds to, where it
+        // folds to one. `7 / 2` is 3 and `String.length("1A")` is 2, and a clause about either is
+        // decided rather than owed — the run-time check is not what should answer a question the
+        // compiler has already computed. So a divide of two written numbers is read here without a
+        // divide being arithmetic this composes over positions, which it is not.
+        BigDecimal folded = Terms.constantNumber(e, reading.symbols());
+        if (folded != null) {
+            return new Outcome.Composed<>(LinearForm.constant(folded));
         }
         Outcome<A, E> denoted = read(e, at, reading, following);
         if (denoted instanceof Outcome.Composed<A, E> composedName) {
