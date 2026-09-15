@@ -34,13 +34,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
 
     private static final String MODULE = """
-            module shop.orders exposing ( Code, Amount, Line, priceOf, codeOf )
+            module shop.orders exposing ( Code, Amount, Line, Spare, Crate, priceOf, codeOf )
 
             data Code = String
                 invariant String.matches("[A-Z]{2}[0-9]{3}", value)
             data Amount = Int
                 invariant value >= 0 && value <= 1000
             data Line = { code: Code, amount: Amount }
+
+            data Spare = Int
+                invariant value >= 1 && value <= SPARE
+            data Crate = { held: Spare }
 
             behavior priceOf : (line: Line) -> Amount
             PRICE_STATES
@@ -53,21 +57,29 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
 
     private static String with(String price, String code) {
         return MODULE.replace("PRICE_STATES\n", "").replace("CODE_STATES\n", "")
-                .replace("PRICE", price).replace("CODE", code);
+                .replace("PRICE", price).replace("CODE", code).replace("SPARE", "99");
     }
 
     /** The same file, with the behavior beside this one stating a rule about its own answer. */
     private static String withTheOtherStating(String states) {
         return MODULE.replace("PRICE_STATES\n", "")
                 .replace("CODE_STATES", "    ensures " + states)
-                .replace("PRICE", "line.amount").replace("CODE", "line.code");
+                .replace("PRICE", "line.amount").replace("CODE", "line.code")
+                .replace("SPARE", "99");
     }
 
     /** And the same with this behavior stating one. */
     private static String withThisStating(String states) {
         return MODULE.replace("CODE_STATES\n", "")
                 .replace("PRICE_STATES", "    ensures " + states)
-                .replace("PRICE", "line.amount").replace("CODE", "line.code");
+                .replace("PRICE", "line.amount").replace("CODE", "line.code")
+                .replace("SPARE", "99");
+    }
+
+    /** The same file, with the rule of a declaration no behavior here reaches saying something
+     *  else. */
+    private static String withTheSpareUnder(int most) {
+        return with("line.amount", "line.code").replace("value <= 99", "value <= " + most);
     }
 
     /** The same file, with one more behavior declared after both of them. */
@@ -129,6 +141,27 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
 
         assertSame(before, domainOf(c, "priceOf"),
                 "a rule another behavior states walked this behavior's input domain again");
+    }
+
+    /**
+     * And the other side of the boundary the first sentence draws: a declaration of the module that
+     * this input never reaches.
+     *
+     * <p>Which is what says the reading is rooted in the declarations the input reaches and not in
+     * the module's declarations. The rules of a module are read against one scope and one set of
+     * clauses, both of which are the module's; a reading that took either as a table would be
+     * walked again for a rule about a type no position of this input can hold.
+     */
+    @Test
+    void aRuleThisInputNeverReachesLeavesItAlone() {
+        Compilation c = started(with("line.amount", "line.code"));
+        Answer<?> before = domainOf(c, "priceOf");
+
+        edited(c, withTheSpareUnder(98));
+
+        assertSame(before, domainOf(c, "priceOf"),
+                "a declaration this input never reaches stated something else and the reading was"
+                        + " walked again");
     }
 
     /** And neither is a behavior declared beside it, which moves the module's index of what each
