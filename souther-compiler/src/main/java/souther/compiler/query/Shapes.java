@@ -22,7 +22,8 @@ import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
-import souther.compiler.check.Lower;
+import souther.compiler.check.CardinalityPremise;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
@@ -821,6 +822,66 @@ public final class Shapes {
     }
 
     /**
+     * What one declaration settles before a count of the types around it begins.
+     *
+     * <p>An answer of its own because it is where a count pays. Reading a declaration's rules is
+     * the whole of what a count costs per declaration, and the counts a count has to tell apart
+     * have to be in hand before it starts — so gathered while it walks, every count taken anywhere
+     * in the module read every declaration of it, whatever the edit that led to the count.
+     * Answered here, a declaration is read again when its own rules move and not otherwise.
+     *
+     * <p>Under the declaration's own module, which is what makes the reading it is made by the
+     * declaration's canonical one: a count of a module that reaches a type of another is handed
+     * what that module's own reading came to, rather than reading the type again under the scope of
+     * whoever reached it.
+     *
+     * <p>What it says and not what it is for. Two counts over different sets of declarations ask
+     * this the same way, and the answer is the same both times — which is what a set of counts and
+     * a yes-or-no can be compared as, and what a reading could not.
+     */
+    public record CardinalityPremiseOf(TypeKey named) implements Key<CardinalityPremise> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<CardinalityPremise> compute(Db db) {
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!reading.present() || !policy.present()) {
+                return Answer.absent();
+            }
+            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(named));
+            return Answer.of(declared.present()
+                    ? CardinalityPremise.of(declared.value().declares(), declared.value(),
+                            reading.value(), policy.value(), db.readings())
+                    : CardinalityPremise.NOTHING);
+        }
+    }
+
+    /**
+     * Where a count gets those: from this store for every declaration it reads, and for itself for
+     * a declaration of a module this compilation does not read.
+     *
+     * <p>The second is not a fallback to a lesser answer. A module this compilation has no scope
+     * for has nothing to be edited either, so what is read there is read once and asked for
+     * afterwards; what the store answers is every declaration an author is typing in.
+     */
+    public static TypeCardinality.Premises cardinalityPremises(
+            Db db, RuleReadingSource source, souther.compiler.check.ReadingPolicy policy) {
+        TypeCardinality.Premises here =
+                TypeCardinality.Premises.read(source, policy, db.readings());
+        return named -> {
+            if (!(named instanceof TypeSymbol.AtModule at)) {
+                return CardinalityPremise.NOTHING;
+            }
+            Answer<CardinalityPremise> answer = db.ask(new CardinalityPremiseOf(at.key()));
+            return answer.present() ? answer.value() : here.of(named);
+        };
+    }
+
+    /**
      * Which of this module's declarations no value satisfies, and what shows it.
      *
      * <p>An answer of its own so that what a body's check depends on is this and not the clauses it
@@ -841,10 +902,10 @@ public final class Shapes {
 
         @Override
         public Answer<UninhabitableTypes.WithNoValue> compute(Db db) {
-            Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
+            Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
-            if (!lowering.present() || !policy.present()) {
+            if (!written.present() || !policy.present()) {
                 return Answer.absent();
             }
             // Answered either way, because what a reader of this does about a count it has not been
@@ -853,11 +914,11 @@ public final class Shapes {
             if (!reading.present()) {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
-            List<Hir.Def> declarations = lowering.value().settled().defs();
+            List<TypeSymbol.AtModule> declarations = written.value();
             try {
-                souther.compiler.check.TypeCardinality.Cardinalities counted =
-                        souther.compiler.check.TypeCardinality.solve(
-                                declarations, reading.value(), policy.value(), db.readings());
+                TypeCardinality.Cardinalities counted = TypeCardinality.solve(
+                        declarations, reading.value(), policy.value(), db.readings(),
+                        cardinalityPremises(db, reading.value(), policy.value()));
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may
                 // have missed the rule that empties a type — and would report it as inhabited.

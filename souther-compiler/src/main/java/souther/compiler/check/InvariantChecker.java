@@ -500,6 +500,19 @@ public final class InvariantChecker {
         }
 
         /**
+         * The same for one name, or null where nothing counts what is there.
+         *
+         * <p>Beside the projection and not through it, because of how a count asks. Settling the
+         * size at a number and seeing whether anything is left is one question per number, and a
+         * reader answering each of them out of {@link #heldAtoms()} builds the whole projection
+         * once per size it asks about.
+         */
+        FactSubject heldAtomAt(RuleKey path) {
+            FieldDomains.Counted counted = held.get(path);
+            return counted == null ? null : counted.atom();
+        }
+
+        /**
          * Both subjects the name {@code path} answers to.
          *
          * <p>A number has one of each and everything else has the second, and a clause is filed
@@ -4762,13 +4775,13 @@ public final class InvariantChecker {
                     predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there));
             case Choice.Decides.ACase c -> new Opened(c.scrutinee(), (within, there) ->
                     engine.enteringArm(c.arm(), c.scrutinee(), within, there));
-            case Choice.Decides.ItWasBuilt ignored -> throw notOpened(split,
+            case Choice.Decides.ItWasBuilt _ -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ItDeparted ignored -> throw notOpened(split,
+            case Choice.Decides.ItDeparted _ -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ByArgumentRelations ignored -> throw notOpened(split,
+            case Choice.Decides.ByArgumentRelations _ -> throw notOpened(split,
                     "an operation the library defines by cases", "there is no node to ask — what"
                             + " decides it is how its arguments stand, and the value is bounded by"
                             + " what its cases answer");
@@ -4840,7 +4853,7 @@ public final class InvariantChecker {
      */
     private static Core.LetIn bindingIn(Core e) {
         return switch (e) {
-            case Core.Block b -> null;
+            case Core.Block _ -> null;
             case Core.LetIn li -> li;
             case Core.If iff -> bindingIn(iff.cond());
             case Core.IfConstructed ic -> bindingIn(ic.construct());

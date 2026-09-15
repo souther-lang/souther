@@ -44,10 +44,10 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * one place a name is made out of another name.
      */
     private static final List<String> THE_MAKERS = List.of(
+            "souther.compiler.check.CardinalityPremise",
             "souther.compiler.check.CardinalityTransfer",
             "souther.compiler.check.GuaranteeWalk",
             "souther.compiler.check.InvariantChecker",
-            "souther.compiler.check.TypeCardinality",
             "souther.compiler.check.UniversalElementFacts",
             "souther.compiler.inputs.TermPath",
             "souther.compiler.partition.Partitions");
