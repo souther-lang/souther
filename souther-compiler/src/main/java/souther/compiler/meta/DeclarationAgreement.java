@@ -712,6 +712,10 @@ public final class DeclarationAgreement {
      * <p>A local is among them. What stands beside its spelling is which binding it is, and the arm
      * that reads it holds two of those to standing for each other rather than to being the same one
      * — a second thing an equality of it does not do, and the same passing over of the spelling.
+     *
+     * <p>Not {@link #NAMED}. This is the arms and only the arms: a form here is one {@link
+     * #sameShape} reads by the answer instead of by the spelling. What is named there is named for
+     * a different question, and the two neither contain nor exclude each other.
      */
     private static final Set<Class<?>> READ_BY_THE_ANSWER = Set.of(
             Hir.Var.Denoting.class, Hir.Name.Denoting.class, Hir.Binder.class,
