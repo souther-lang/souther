@@ -17,11 +17,11 @@ import java.util.Set;
  * number taken of one wherever it is written.
  *
  * <p><b>Two questions and two sets, since #1027.</b> Counting what it is given is one account of
- * what an operation takes of the one value it is given, and {@link #calls()} and {@link #isMeasure}
+ * what an operation takes of a value it is given, and {@link #calls()} and {@link #isMeasure}
  * hold that narrow set: what an emptiness check means, what bounds how many a generated container
  * holds, what a clause of a value has a word for. {@link #takenIn} asks the wider question — is this
- * call a number taken of one location at all — and answers for every operation that declares an
- * account of any kind. Asked the narrow question where the wide one was meant, a guard on anything
+ * call a number taken of one location at all — and answers wherever there is an account of any
+ * kind, declared of the operation or derived for the call from what is. Asked the narrow question where the wide one was meant, a guard on anything
  * but a size drew no line and nothing said so.
  *
  * <p>Neither set is enumerated here, and neither was. Both are read off the declarations, which is
@@ -77,10 +77,13 @@ public final class NumericMeasures {
      * puts on the same length — the same drift the list above exists to stop, one representation
      * down.
      *
-     * <p>The number is taken of the first argument. What stands at the others decides which number
-     * of it this is — a divisor says which quotient — so each of them has to read as a constant, and
-     * a taking given a value nothing here reads is a taking this names no number for. A measure of
-     * several values is not one of these either, and what it would be counted at is not a place.
+     * <p>The number is taken of the first argument. What stands at the others may decide which
+     * number of it this is — a divisor says which quotient — so what they read as is handed to the
+     * account, and the account says which of them name the number and whether they settle it
+     * ({@link TakenAs#naming}). An argument no account reads is an argument whose value this does
+     * not need, so a call given one it cannot read is a call this names a number for all the same.
+     * A measure of several values is not one of these, and what it would be counted at is not a
+     * place.
      */
     public static Measured takenIn(Core e, Symbols symbols) {
         ValueName operation = Terms.operationOf(e);

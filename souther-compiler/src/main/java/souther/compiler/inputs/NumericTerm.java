@@ -101,13 +101,21 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * the length of a string and the hour of a time are. What those arguments read as is what is
      * carried, so a constant written out and a name given one are one term.
      *
-     * <p><b>Only for an operation that has declared how its number is taken.</b> Checked here and
-     * not at whichever factory happened to be reached: a record is constructible by anyone who can
-     * name it, so a rule kept at the call sites is a rule until the next call site. What the
-     * declaration settles is every other answer about the term, so a term without one is a term that
-     * would be read as whatever the reader's default happened to be — which for a carrier is an end
-     * moved onto a value the term never takes, and for a reading is a row classified against a
-     * number the model never named, with nothing about either looking like a failure (#1027).
+     * <p><b>Only where there is an account of how its number is taken.</b> Checked here and not at
+     * whichever factory happened to be reached: a record is constructible by anyone who can name
+     * it, so a rule kept at the call sites is a rule until the next call site. What the account
+     * settles is every other answer about the term, so a term without one is a term that would be
+     * read as whatever the reader's default happened to be — which for a carrier is an end moved
+     * onto a value the term never takes, and for a reading is a row classified against a number the
+     * model never named, with nothing about either looking like a failure (#1027).
+     *
+     * <p>Declared of the operation, or derived for this call from a representation the operation
+     * already has. A length is the first: what {@code String.length} takes is declared of it and is
+     * the account of every call there is. A quotient is the second: what {@code Int.divide}
+     * computes is the arithmetic, and a call of it whose divisor the reading has as a number is a
+     * number taken of what it divides, while the calls beside it are not. Which of the two it is
+     * does not reach this far — the account is asked for with the arguments in hand
+     * ({@code check.BoundOperationFacts}) and what comes back is the account or nothing.
      *
      * <p><b>The operation and the location go together, and {@link #of} is what says so.</b> That
      * was a premise the two call sites carried between them, which is a claim about who builds one
@@ -154,8 +162,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * the two do not go together.
          *
          * <p><b>The one way one of these is made.</b> Four things have to hold and each of them is
-         * a proposition somebody already owns: the operation declares an account of what it takes
-         * ({@code semantics.OperationFacts}), it answers a number ({@link NumericAnswers}), what
+         * a proposition somebody already owns: there is an account of what such a call takes, from
+         * the declarations or from what they already say of the operation
+         * ({@code check.BoundOperationFacts}), it answers a number ({@link NumericAnswers}), what
          * stands at the location is what that account is taken of ({@link TakenAs#takenOf}), and
          * what it was given beside that value settles which number is taken
          * ({@link TakenAs#settledBy}). The third was a premise the call sites carried — "the

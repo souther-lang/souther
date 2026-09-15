@@ -5,7 +5,12 @@ import souther.compiler.types.Type;
 import java.math.BigDecimal;
 
 /**
- * How the number an operation answers is taken of the one value it is given.
+ * How the number an operation answers is taken of a value it is given.
+ *
+ * <p>One of these is declared of an operation ({@code OperationFacts}) or derived for a call from
+ * what the declarations already say of it ({@code check.BoundOperationFacts}). Which it was does not
+ * travel: what a reader holds is the account, and every answer it gives is the same answer whichever
+ * way it was reached.
  *
  * <p>A strategy identity and nothing more. What such a number is measured by, where it runs, and
  * whether every number it could give is one some value gives are three other propositions, each
@@ -142,8 +147,12 @@ public sealed interface TakenAs {
      * reading has as a constant. Declared beside the arithmetic, it would be a second
      * representation of one operation's number, which is what the library may not have
      * ({@code check.NumericReadings}) — and rightly, since which of the two a report showed would
-     * be whichever reader arrived. A call where the divisor is a name, or is nought, has no account
-     * here and is a rule nothing draws a line for.
+     * be whichever reader arrived.
+     *
+     * <p>A call whose divisor the reading cannot resolve to a number has no account here and is a
+     * rule nothing draws a line for, and so has one dividing by nought. How the divisor was spelled
+     * is not what settles it: a name given a number is that number, so {@code x / TWO} over a
+     * {@code TWO} that is one is the account {@code x / 2} is.
      *
      * <p>Which argument the divisor is, is the arithmetic's own answer
      * ({@link Arithmetic.ATruncatingQuotient#divisor}) and is carried here as a position. A word
