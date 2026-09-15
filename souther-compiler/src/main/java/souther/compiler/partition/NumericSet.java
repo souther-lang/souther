@@ -84,12 +84,19 @@ public sealed interface NumericSet {
         }
 
         /**
-         * The same, begun at the run's own lower end rather than at the bottom of the window.
+         * The numbers of the run inside the window, begun at the end a line was drawn at.
          *
-         * <p>What the window says a number of this kind can be at all is the account's, and it is as
-         * wide as the kind allows — the years a date can fall in, every count a container might
-         * hold. Stepped through from there, a run that starts high is reached one number at a time,
-         * and what is a choice between a few candidates becomes a walk over the whole kind.
+         * <p>What the window says a number of this kind can be at all is the account's, and it is
+         * as wide as the kind allows — the years a date can fall in, every count a container might
+         * hold. So the run's own ends narrow it first: stepped through from the window's, a run
+         * that starts high is reached one number at a time, and what is a choice between a few
+         * candidates becomes a walk over the whole kind.
+         *
+         * <p>Upward from there, whichever end the run's own line is at. Which of a class's numbers
+         * a value is written at is a choice about the value, and the smallest is the one every
+         * account here can be asked for — a container holding none, a part at the first it runs
+         * from. Walked down from the top instead, the classes a run reaches the end of the kind at
+         * are offered numbers chosen from how far the kind happens to go.
          */
         @Override
         public List<Place> within(Carrier carrier, BigDecimal from, BigDecimal to, int many) {

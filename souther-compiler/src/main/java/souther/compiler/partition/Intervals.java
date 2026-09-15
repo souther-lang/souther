@@ -200,12 +200,11 @@ final class Intervals {
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
             String id = of + "/" + label;
-            Place inside = representative(run, carrier, min, max);
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Recognition is = new Recognition.OfACount(of, orders,
-                    new NumericSet.InARun(run));
+            NumericSet admits = new NumericSet.InARun(run);
+            Recognition is = new Recognition.OfACount(of, orders, admits);
             // Nothing composed here says what this compiler did not manage, and says nothing about
             // what the run holds. Above a string a rule stops short of, the order declines to name
             // a value on purpose — every string with that one as a prefix is greater, and choosing
@@ -213,17 +212,12 @@ final class Intervals {
             // both empty answers carry is about composing: it is true of a run that holds nothing
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
-            List<FixtureTemplate> values = inside == null ? List.of()
-                    : standingIn(orders, inside, type, reading, ruleReading);
+            List<FixtureTemplate> values = standingIn(orders, admits, type, reading, ruleReading);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
-                    // And the number they were composed for, so that a location several of these
-                    // stand on is asked for one value answering all of them rather than for one
-                    // value per class.
                     : PartitionClass.of(id, label, is,
-                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0])))
-                            .standingAt(inside));
+                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
         return classes.stream().map(each -> each.ofTheNumber(of)).toList();
@@ -248,40 +242,22 @@ final class Intervals {
     }
 
     /**
-     * A value inside a range, or null where nothing composed one. Asked of the ends, which is where
-     * whether the range holds the value it stops at is written down.
+     * Values of the position whose number on this term is one the class admits, or none where
+     * nothing here writes one.
      *
-     * <p>Null says what came back and not what the range holds. Which values are in it is
-     * {@link LevelSpace#inspect}'s answer; this asks the other question, and a caller that read the
-     * two as one would put the order's own restraint into a sentence about the model.
-     *
-     * <p>Nothing on this path asks the first question of a run that gets here. So an empty answer
-     * is a run the order would not choose in, and a run it has nothing in at all, and the caller is
-     * owed a sentence true of both.
-     *
-     * <p>How the values step is the carrier's to say and is asked of it. Carried as "is it a decimal"
-     * it was a second spelling of the same fact, and a carrier that is dense without being the
-     * decimal — a date-time — answered no to it: the range between two moments a nanosecond apart
-     * came back as one holding no value, which is what a whole step would leave and not what the
-     * values do.
-     */
-    private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
-        // A class is the run itself and is named for no line, so it is read from its lower end the
-        // way a range of counts is.
-        return new Criterion.Within(run, null, Towards.ABOVE).somewhereInside(carrier, min, max);
-    }
-
-    /**
-     * Values of the position that read as {@code inside} on this term, or none where nothing here
-     * writes one.
-     *
-     * <p><b>Asked of what writes a value at a point, rather than answered beside it.</b> What a
+     * <p><b>Asked of what writes a value at a number, rather than answered beside it.</b> What a
      * value reading as a number looks like is a construction per account of what the number is
      * taken as, and {@link TermRealizations} holds one arm per account with no default — so an
      * account the language gains is one a class of it is filled for by the same act that gives a
      * point of it a value. Answered here as well, the two switches did not have to agree, and this
      * one closed over the kinds of term instead: every number taken of a value went to the one
      * construction a count wants, so an hour of nine asked for a value holding nine of something.
+     *
+     * <p><b>The run, and not a number picked out of it.</b> A class holds every number between its
+     * lines, and which of them a value is written at is a choice about the value. Made here, the
+     * answer about the number this happened to pick was the answer about the class — so a class
+     * holding a number nothing builds at beside numbers that build perfectly well came back as one
+     * nothing writes a value in.
      *
      * <p>Where a row for one of these may be written is the reading's to say. It is asked for it
      * rather than handed a region a caller built, since a region worked out beside the reading is a
@@ -292,10 +268,10 @@ final class Intervals {
      * compiler's having stopped, a walk that saw some of what there is — are distinctions a reader
      * of a class has no place to put yet, and they are lost here.
      */
-    private static List<FixtureTemplate> standingIn(TermOrders orders, Place inside, Type type,
+    private static List<FixtureTemplate> standingIn(TermOrders orders, NumericSet admits, Type type,
                                                     Quantities reading,
                                                     RuleReadingContext ruleReading) {
-        return TermRealizations.at(type, orders, inside, reading.region(), ruleReading)
+        return TermRealizations.satisfying(type, orders, admits, reading.region(), ruleReading)
                 instanceof TermRealizations.Realization.Built built
                 ? built.values()
                 : List.of();

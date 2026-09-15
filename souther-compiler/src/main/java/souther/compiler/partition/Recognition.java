@@ -182,6 +182,26 @@ public sealed interface Recognition {
     }
 
     /**
+     * The numbers this class is about, or null where it is not about a number.
+     *
+     * <p>What a value standing in this class has to read as, which is the same set the class reads
+     * a row against. Asked of the meaning because that is where it is written down: a reader that
+     * chose a number of the set and carried that instead would be deciding which value stands for
+     * the class, and the answer about the number it chose would be all a search ever saw of it.
+     *
+     * <p>Exhaustive with no {@code default}. A meaning about what stands at the position is about a
+     * value rather than a number, and says so by having none — which is a different answer from a
+     * set that holds nothing, and is why this is asked before a search is.
+     */
+    default NumericSet numbers() {
+        return switch (this) {
+            case OfACount count -> count.is();
+            case Under under -> under.inner().numbers();
+            case Truth _, Held _, OfCase _, AtAValue _, OfASet _, Nothing _ -> null;
+        };
+    }
+
+    /**
      * Whether a class meaning this can be a class of {@code number}.
      *
      * <p>Not which measure a class of this divides — that is said where the class is built and is

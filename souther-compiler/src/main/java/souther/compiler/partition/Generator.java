@@ -3293,8 +3293,8 @@ public final class Generator {
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
-        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
-                : byTheLocationTheyWrite(standing).entrySet()) {
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
+                : byTheLocationTheyWrite(atThoseNumbers(standing)).entrySet()) {
             Edge edge = edgeAt(subject, group.getValue(), reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
@@ -3816,7 +3816,8 @@ public final class Generator {
      * fixed beside this one says nothing about that promise, so a row is composed here for a number
      * many values answer exactly as it is for a number one does.
      */
-    private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
+    private static Edge edgeAt(MeasuredInput subject,
+                               SequencedMap<RealizationTarget, NumericSet> group,
                                souther.compiler.inputs.SearchRegion within) {
         RealizationTarget target = group.firstEntry().getKey();
         // Which value answers the number is `TermRealizations`' one answer — asked of it whatever
@@ -3840,43 +3841,8 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part. Handed over as the question rather than as an answer, since a
         // group is over several terms and each of them is measured where this reading says.
-        return edgeFrom(TermRealizations.together(writtenAt, group,
+        return edgeFrom(TermRealizations.allSatisfying(writtenAt, group,
                 subject.quantities(), within, subject.ruleReading()), group);
-    }
-
-    /**
-     * The numbers this row's classes were each composed at.
-     *
-     * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
-     * model divides and says nothing about which of its classes this row is being built for.
-     *
-     * <p>A class that narrows the position is left out. What such a class offers is the narrowing
-     * and not a value of the unnarrowed position, and what stands there is composed out of the
-     * narrowed type by the walk below — so a number to compose for is what the class beside it has.
-     */
-    private static SequencedMap<RealizationTarget, Place> numbersTheClassesStandAt(
-            MeasuredInput.MeasuredAxes axes, int[] where) {
-        SequencedMap<RealizationTarget, Place> out = new LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            if (where[i] == NOT_HERE) {
-                continue;
-            }
-            PartitionClass cls = axes.get(i).classes().get(where[i]);
-            if (cls.standsAt() == null || cls.of() == null || cls.selects() != null) {
-                continue;
-            }
-            out.put(RealizationTarget.of(cls.of()), cls.standsAt());
-        }
-        return out;
-    }
-
-    /** The value composed for every number of this class's location, or null where this class is
-     *  the only one of the row standing on it. */
-    private static List<FixtureTemplate> answeringAllOfThem(
-            Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
-        return cls.standsAt() == null || cls.of() == null
-                ? null
-                : together.get(RealizationTarget.of(cls.of()).writeRoot());
     }
 
     /**
@@ -3889,15 +3855,76 @@ public final class Generator {
      * <p>By the path each number is written at and not by which paths reach one value. A container
      * and a position inside it are one location and are two entries here, which leaves them where
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
+     *
+     * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
+     * both are: the arrangement is the same either way, and reading it twice would be two answers
+     * to which location a number is written at.
      */
-    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>>
-            byTheLocationTheyWrite(Map<RealizationTarget, Place> standing) {
-        SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>> out = new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>>
+            byTheLocationTheyWrite(Map<RealizationTarget, NumericSet> standing) {
+        SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>> out =
+                new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, NumericSet> each : standing.entrySet()) {
             out.computeIfAbsent(each.getKey().writeRoot(), _ -> new LinkedHashMap<>())
                     .put(each.getKey(), each.getValue());
         }
         return out;
+    }
+
+    /**
+     * The numbers this row's classes admit, by the number each is a class of.
+     *
+     * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
+     * model divides and says nothing about which of its classes this row is being built for.
+     *
+     * <p>The sets themselves, which is what the classes mean. A number chosen out of one and
+     * carried here instead would be asking whether one value answers the numbers that were picked,
+     * and a no to that is no answer about the classes.
+     *
+     * <p>A class that narrows the position is left out. What such a class offers is the narrowing
+     * and not a value of the unnarrowed position, and what stands there is composed out of the
+     * narrowed type by the walk below — so a number to compose for is what the class beside it has.
+     */
+    private static SequencedMap<RealizationTarget, NumericSet> numbersTheClassesAdmit(
+            MeasuredInput.MeasuredAxes axes, int[] where) {
+        SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (where[i] == NOT_HERE) {
+                continue;
+            }
+            PartitionClass cls = axes.get(i).classes().get(where[i]);
+            NumericSet admits = admitted(cls);
+            if (admits != null) {
+                out.put(RealizationTarget.of(cls.of()), admits);
+            }
+        }
+        return out;
+    }
+
+    /** Each of those numbers as the set holding it alone, which is what a point of a border asks
+     *  for: the one number the row has to stand at. */
+    private static Map<RealizationTarget, NumericSet> atThoseNumbers(
+            Map<RealizationTarget, Place> standing) {
+        Map<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+            out.put(each.getKey(), new NumericSet.At(each.getValue()));
+        }
+        return out;
+    }
+
+    /** The numbers a class admits of the number it is a class of, or null where it is about
+     *  something a value is composed for another way. */
+    private static NumericSet admitted(PartitionClass cls) {
+        return cls.of() == null || cls.selects() != null ? null : cls.recognises().numbers();
+    }
+
+    /** The value composed for every number of this class's location, or null where this class is
+     *  the only one of the row standing on it. */
+    private static List<FixtureTemplate> answeringAllOfThem(
+            Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
+        return admitted(cls) == null
+                ? null
+                : together.get(RealizationTarget.of(cls.of()).writeRoot());
     }
 
     /**
@@ -4418,8 +4445,8 @@ public final class Generator {
         // while being offered as covering both. Composed here instead, before anything is written,
         // by the reader that answers this for the points of a border ({@link #edgeAt}).
         Map<TermPath, List<FixtureTemplate>> together = new LinkedHashMap<>();
-        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
-                : byTheLocationTheyWrite(numbersTheClassesStandAt(axes, where)).entrySet()) {
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
+                : byTheLocationTheyWrite(numbersTheClassesAdmit(axes, where)).entrySet()) {
             // A location asked for one number, which the class standing at it holds a value for
             // already — composed by this same owner, for this same number, when the class was made.
             // So what is composed here is what more than one of them takes: one value answering
@@ -5846,12 +5873,16 @@ public final class Generator {
      * is not among the ones it puts together.
      */
     private static Edge edgeFrom(TermRealizations.Realization made,
-                                 SequencedMap<RealizationTarget, Place> group) {
+                                 SequencedMap<RealizationTarget, NumericSet> group) {
         if (group.size() != 1) {
             return new Edge(made, null);
         }
         Place settled = switch (group.firstEntry().getKey().term()) {
-            case NumericTerm.ValueOf _ -> group.firstEntry().getValue();
+            // And only where the set asked for is one number. A class admits a run of them, so what
+            // a row written for one stands at is whichever of them the value was built at — which
+            // is the composer's answer and not something this could read off the question.
+            case NumericTerm.ValueOf _ ->
+                    group.firstEntry().getValue() instanceof NumericSet.At one ? one.value() : null;
             // What an operation answered is not what its root holds — three characters is not the
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
