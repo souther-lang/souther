@@ -685,6 +685,23 @@ final class AnswerClosure {
                         arm("souther.compiler.inputs.ReadPosition")));
     }
 
+    /** Every place under a reading of an input that says nothing of itself, by each way the reading
+     *  holds a position. */
+    private static void everyReadingOfAnInput(List<KnownDeclared> into, String question,
+                                              List<TypePath.Step[]> everyPosition) {
+        for (TypePath.Step[] positions : everyPosition) {
+            bothEndsOfARange(into, question,
+                    then(positions, part("souther.compiler.inputs.ReadPosition", "bounds"), HELD,
+                            part("souther.compiler.inputs.PositionBounds", "narrowedEnds")));
+            whatATermHolds(into, question, positions);
+            // What the position's own rules leave it, which travels with the position because it is
+            // what a behavior's rules have left to divide.
+            theMachineUnderALanguage(into, question,
+                    then(positions, part("souther.compiler.inputs.ReadPosition", "admitted"),
+                            part("souther.compiler.values.AdmissibleSet", "approximation")));
+        }
+    }
+
     /**
      * Every place a question's own declaration puts something that cannot be compared as a value.
      *
@@ -831,28 +848,11 @@ final class AnswerClosure {
                     part(Q + "Names$Cycles$Of", "reported"), MAP_VALUE,
                     part(Q + "Report", "diagnostic")), A_REPORT,
                     Traversal.Why.SAYS_NOTHING_OF_ITSELF)));
-        // A reading of an input holds its positions twice — in the order they were read, and under
-        // the paths they were read at — so everything under a position is two places the answer
-        // exposes it.
-        // One for the behavior whose reading it is, and one for the module that hands that same
-        // reading out under the behavior's name.
-        Map<String, List<TypePath.Step[]>> readings = new LinkedHashMap<>();
-        readings.put(Q + "Adequacy$InputsOf", everyPosition());
-        readings.put(Q + "Adequacy$Inputs", everyPosition(MAP_VALUE));
-        readings.forEach((question, everyPosition) -> {
-            for (TypePath.Step[] positions : everyPosition) {
-                bothEndsOfARange(out, question,
-                        then(positions, part("souther.compiler.inputs.ReadPosition", "bounds"),
-                                HELD,
-                                part("souther.compiler.inputs.PositionBounds", "narrowedEnds")));
-                whatATermHolds(out, question, positions);
-                // What the position's own rules leave it, which travels with the position because
-                // it is what a behavior's rules have left to divide.
-                theMachineUnderALanguage(out, question,
-                        then(positions, part("souther.compiler.inputs.ReadPosition", "admitted"),
-                                part("souther.compiler.values.AdmissibleSet", "approximation")));
-            }
-        });
+        // Twice over, because two questions answer with the reading: the behavior whose reading it
+        // is, and the module that hands that same reading out under the behavior's name. One step
+        // apart and the same places under it.
+        everyReadingOfAnInput(out, Q + "Adequacy$InputsOf", everyPosition());
+        everyReadingOfAnInput(out, Q + "Adequacy$Inputs", everyPosition(MAP_VALUE));
         // The machine a class denotes where what it denotes is a pattern's strings, reached at each
         // of the two places an axis is carried from.
         theMachineUnderALanguage(out, Q + "Adequacy$Divided",
