@@ -75,7 +75,30 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
     }
 
     @Test
+    void andWhereBothPositionsAreWeighedRatherThanOne() {
+        // 3x + 2y <= 1 beside 3x + 2y >= 2. Neither rule is a bound on a position or a difference
+        // of two, and the pair is a contradiction that needs no third rule.
+        assertTrue(NumericDomain.<String>top()
+                .assume(form(-1, "x", 3, "y", 2), Rel.LE, WHOLE)
+                .assume(form(-2, "x", 3, "y", 2), Rel.GE, WHOLE)
+                .isBottom(), "a form bounded above below where it is bounded below");
+    }
+
+    @Test
+    void andWhereTheTwoRulesAreWrittenAtDifferentScales() {
+        // y - 2x >= 1 beside 6x - 3y >= 0, which is the second of the pair above written three times
+        // over. What decides it is the form the two come to and not the numbers written.
+        assertTrue(NumericDomain.<String>top()
+                .assume(form(-1, "y", 1, "x", -2), Rel.GE, WHOLE)
+                .assume(form(0, "x", 6, "y", -3), Rel.GE, WHOLE)
+                .isBottom(), "one rule scaled is the same rule");
+    }
+
+    @Test
     void andHoweverWideTheRangeThePositionsWereTakenInOver() {
+        // The narrow one is reached without any of this — the rules are read against the ends round
+        // after round, and over a short run the ends cross before the rounds are spent. It is the
+        // wide ones that say the answer does not turn on how far the rounds get.
         for (long upTo : List.of(10L, 1_000L, 1_000_000_000L)) {
             assertTrue(takenInOver(theCrossedPair(2), upTo, "x", "y").isBottom(),
                     "the same pair over positions taken in up to " + upTo);

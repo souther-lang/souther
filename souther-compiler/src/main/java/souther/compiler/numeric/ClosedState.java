@@ -26,11 +26,11 @@ import java.util.function.Function;
  * finds goes back through the differences, and round again. A round reads only what the round before
  * it produced, so no rule's answer depends on which rule ran first.
  *
- * <p><b>And the rules are asked what their own forms come to.</b> A reading may take one rule as a
- * premise, so a form two rules bound from opposite sides is answered by both of them at once, and
- * where those two answers have crossed nothing satisfies the rules together — see
- * {@link #aRuleRunsNowhere}. Two rules to a contradiction and no more, outside the difference-bound
- * shape.
+ * <p><b>And the rules are asked what their own forms come to</b>, which is a third question and not
+ * a step of either of those. Where the two ends of a form have crossed nothing satisfies the rules
+ * together, and a pair weighted so that neither of them is a difference meets nowhere else — see
+ * {@link #theRulesLeaveAFormNothing}. Two rules to a contradiction and no more, outside the
+ * difference-bound shape.
  *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
@@ -49,10 +49,13 @@ import java.util.function.Function;
  * one position at a time rests on. Asserted where the state is made and held to as a property
  * elsewhere.
  *
- * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is
- * — every step that narrows is implied by the rules, so a box that has closed on itself is a proof.
- * The other way round does not hold: the rounds can stop early, and a general sum is reasoned about
- * approximately, so a state that has not shown emptiness is not a state with a value in it.
+ * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is.
+ * Two routes reach that word and each is sound on its own: every step that narrows is implied by the
+ * rules, so a box that has closed on itself is a proof; and a form the rules leave no value is a
+ * proof of the same thing about the whole state, reached without narrowing anything. The other way
+ * round does not hold for either: the rounds can stop early, a general sum is reasoned about
+ * approximately, and a contradiction needing more rules than a query may take is not found — so a
+ * state that has not shown emptiness is not a state with a value in it.
  */
 public final class ClosedState<A> {
 
@@ -119,7 +122,7 @@ public final class ClosedState<A> {
             // answer a rule differently depending on which rules had been read before it, which is
             // the order deciding the result — the thing the rounds exist to be rid of.
             FormReach<A> reading = FormReach.over(constraints, box, differences);
-            if (aRuleRunsNowhere(reading, constraints)) {
+            if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
             AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing);
@@ -145,15 +148,16 @@ public final class ClosedState<A> {
      * Whether the rules leave one of the forms they are about no value at all.
      *
      * <p>A rule bounds its own form one way, and another rule over the same form bounds it the
-     * other, and where the two have crossed nothing satisfies both. The reading already derives
-     * both ends — it may take one rule as a premise, and where that premise's form is the one being
-     * asked about, what is left to bound is the constants ({@link FormReach}). So the two rules are
-     * added together there and the sum is a statement about nothing but numbers.
+     * other, and where the two have crossed nothing satisfies both. Both ends come from one reading:
+     * a query takes one rule as a premise ({@link FormReach}), and handing it the other rule's form
+     * leaves nothing to bound once that premise is off, so what comes back is what the two say about
+     * a number. The sum of two rules is taken by what is asked and what is handed in, and not by the
+     * reading taking two of them.
      *
      * <p>What was missing is the question. The reading is asked what a goal comes to and what the
      * rest of a rule comes to, and the rest of a two-position rule names one position, which is
-     * answered by the ends and never reaches the premise. Nothing asked it what the rules' own
-     * forms come to, which is where two rules over one form meet.
+     * answered by the ends and never reaches the premise. Nothing handed it a rule's own form, which
+     * is where two rules over one form meet.
      *
      * <p>One premise to a query, so this finds a contradiction two rules state between them and not
      * one that needs a third. Over the difference-bound shape that is not the limit — those are
@@ -163,8 +167,8 @@ public final class ClosedState<A> {
      * until they stop moving, and a position whose ends have crossed is what
      * {@link Box#holdsAValue} already answers.
      */
-    private static <A> boolean aRuleRunsNowhere(FormReach<A> reading,
-                                                List<AffineConstraint<A>> constraints) {
+    private static <A> boolean theRulesLeaveAFormNothing(FormReach<A> reading,
+                                                         List<AffineConstraint<A>> constraints) {
         Set<Map<A, Rational>> asked = new LinkedHashSet<>();
         for (AffineConstraint<A> each : constraints) {
             Map<A, Rational> form = each.form().coefs();
