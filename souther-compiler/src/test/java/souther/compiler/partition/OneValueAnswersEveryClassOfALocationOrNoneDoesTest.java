@@ -57,6 +57,16 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             .replace("Date.month(slot.on) >= 2 &&",
                     "Date.month(slot.on) >= 2 && Date.month(slot.on) <= 2 &&");
 
+    /**
+     * The same, where the months are the ones a rule singled a value out of.
+     *
+     * <p>A set held as what it excludes rather than as a run, which is the other shape a class of a
+     * number comes in. The first month it admits is February, so the pair of first numbers is the
+     * thirtieth of February again — and what the sets admit is every other month.
+     */
+    private static final String ANY_MONTH_BUT_JANUARY = A_MONTH_AND_A_DAY
+            .replace("Date.month(slot.on) >= 2", "Date.month(slot.on) /= 1");
+
     /** Parts that do not constrain each other, which is the pair that worked before. */
     private static final String AN_HOUR_AND_A_MINUTE = """
             module example.dated
@@ -126,6 +136,31 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         TermRealizations.Realization made = model.answering(february);
         assertInstanceOf(TermRealizations.Realization.None.class, made,
                 () -> "no day from the thirtieth on falls in February: " + made);
+    }
+
+    /**
+     * And a class held as the values it excludes is asked the same way.
+     *
+     * <p>The other shape a set of numbers comes in, and the reason it is here: such a class carried
+     * no number at all, so a location holding one beside another measure was left out of the
+     * asking entirely and the two classes went back to offering a value apiece.
+     */
+    @Test
+    void aClassOfEverythingButOneValueIsAskedForTheRestOfThem() {
+        Model model = new Model(ANY_MONTH_BUT_JANUARY);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
+
+        assertEquals(List.of("/= 1", "30 <= x <= 31"), model.labelsAt(1, 1),
+                "every month but January, and the days from the thirtieth on");
+        TermRealizations.Realization made = model.answering(asked);
+        List<FixtureTemplate> built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, made,
+                () -> "a date stands at a month that is not January and a day from the thirtieth"
+                        + " on: " + made).values();
+        model.readsBackIntoEveryClass(built, asked);
+
+        assertInstanceOf(TermRealizations.Realization.None.class, model.answering(model.at(2, 30)),
+                "while the first number each of those admits is the thirtieth of February");
     }
 
     /**
