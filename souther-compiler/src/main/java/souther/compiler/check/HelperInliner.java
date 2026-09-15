@@ -834,7 +834,7 @@ public final class HelperInliner {
             }
             params.add(p.type());
         }
-        return new Hir.RetType(
+        return Hir.RetType.of(
                 List.of(new Hir.FnType(params, is.declaredReturn(), is.pos())), is.pos());
     }
 
@@ -856,7 +856,7 @@ public final class HelperInliner {
     /** {@code t} as a written type with no surface text: what it denotes is decided, and no source
      * stands for it. */
     private static Hir.RetType stating(Type t, SourcePos pos) {
-        return new Hir.RetType(List.of(Hir.TypeRef.of(t, pos)), pos);
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(t, pos)), pos);
     }
 
     /** {@code declared} with what this application decided written into it, or as it stands where it
@@ -867,7 +867,7 @@ public final class HelperInliner {
             return declared;
         }
         Type at = TypeOps.substitute(TypeOps.resolveParamType(declared), applied);
-        return new Hir.RetType(List.of(Hir.TypeRef.of(at, declared.pos())), declared.pos());
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(at, declared.pos())), declared.pos());
     }
 
     /** Whether a declared type has a type variable inside it. A generic declared return ({@code

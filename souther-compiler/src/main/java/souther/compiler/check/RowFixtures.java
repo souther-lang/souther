@@ -208,7 +208,7 @@ public final class RowFixtures {
     }
 
     private static Hir.RetType retTypeOf(Type type, souther.compiler.diag.SourcePos pos) {
-        return new Hir.RetType(List.of(Hir.TypeRef.of(type, pos)), pos);
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(type, pos)), pos);
     }
 
     /** Whether an expression is a bare name standing for a declared type — the form an expectation

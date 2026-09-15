@@ -211,7 +211,7 @@ final class HelperParams {
             Type t = found.get(i);
             params.add(t == null ? p
                     : new Hir.FnParam(p.binder(),
-                            new Hir.RetType(
+                            Hir.RetType.of(
                                     List.of(Hir.TypeRef.of(generalize(t, generalized), p.pos())),
                                     p.pos()),
                             p.typeFromPattern()));

@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
@@ -17,13 +18,17 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.types.UnionMember;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenTypeMeaning;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /**
@@ -927,17 +932,160 @@ public interface Hir {
      */
     sealed interface TypeTerm extends Hir permits TypeRef, FnType {}
 
-    /** A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
-     * function may take one and may return one. */
-    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {}
+    /**
+     * A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
+     * function may take one and may return one.
+     *
+     * <p>It answers something. A function type whose result was not written is a state of
+     * {@link Ast.FnType} — what the parser recovers to where the arrow or what follows it is
+     * missing — and a source that reads that way is refused where it is written, so it is not a
+     * state this tree is reached with. Refused here too, the way a {@link TypeRef} that denotes
+     * nothing is: what a reader below has to take apart is a written type and never an absence, and
+     * a tree that arrived holding one says the reading above it let something through.
+     */
+    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {
 
-    /** A written type: one term, or the unmarked sum of several (spec §unmarked-output). */
-    record RetType(List<TypeTerm> cases, SourcePos pos) implements Hir {
+        public FnType {
+            if (result == null) {
+                throw new IllegalArgumentException("a function type answers something: " + pos);
+            }
+            // The same of what it takes, and for the same reason: a reading of this walks the
+            // parameters as it walks the result, and a parameter that says nothing is an absence
+            // every walk of them would have to carry a question about.
+            for (RetType takes : params) {
+                if (takes == null) {
+                    throw new IllegalArgumentException(
+                            "a function type takes written types: " + pos);
+                }
+            }
+        }
+    }
+
+    /**
+     * A written type: one term, or the unmarked sum of several (spec §unmarked-output).
+     *
+     * <p>What it comes to is settled here, once, out of the terms — each of which already carries
+     * what it denotes, resolution having happened before any check runs. A reader below asks rather
+     * than works it out, which is what {@link TypeRef} says of one term and this says of the type
+     * the terms add up to.
+     *
+     * <p>Not a record, so that the terms and what they come to cannot be handed in separately: one
+     * is worked out from the other, and a caller that could pass both could pass two that disagree.
+     * {@link #of} is the only way to make one, and it is where the reading happens.
+     */
+    final class RetType implements Hir {
+
+        private final List<TypeTerm> cases;
+        @DecidedByTheRest
+        private final WrittenTypeMeaning meaning;
+        private final SourcePos pos;
+
+        private RetType(List<TypeTerm> cases, SourcePos pos) {
+            this.cases = List.copyOf(cases);
+            this.pos = pos;
+            this.meaning = meaningOf(this.cases, pos);
+        }
+
+        /** The written type these terms make. */
+        public static RetType of(List<TypeTerm> cases, SourcePos pos) {
+            return new RetType(cases, pos);
+        }
+
+        /** The terms as they were written. */
+        public List<TypeTerm> cases() {
+            return cases;
+        }
+
+        /** What they come to. */
+        public WrittenTypeMeaning meaning() {
+            return meaning;
+        }
+
+        @Override
+        public SourcePos pos() {
+            return pos;
+        }
 
         /** The function type this stands for, or null when it is not a lone function type. A sum of
          * a function with anything else is not one, and has no case to be told apart by. */
         public FnType asFn() {
             return cases.size() == 1 && cases.get(0) instanceof FnType fn ? fn : null;
+        }
+
+        /**
+         * The reading: one term is what that term stands for, and several are the union of the names
+         * they go by.
+         *
+         * <p>A lone term is not asked whether it could be a union member, because it is not one. A
+         * sum is, and the two ways a member can fail to be one are different mistakes, of which the
+         * author owns one. A member resting on a name that denotes nothing was reported where that
+         * name was written, and finding one here says only that the sum has no case set at all, so
+         * it takes the type that absorbs. Finding one does not end the reading, because a member the
+         * author does own may be written after it.
+         */
+        private static WrittenTypeMeaning meaningOf(List<TypeTerm> cases, SourcePos pos) {
+            List<Type> members = new ArrayList<>(cases.size());
+            for (TypeTerm t : cases) {
+                WrittenTypeMeaning stands = stands(t);
+                if (!(stands instanceof WrittenTypeMeaning.Settled term)) {
+                    return stands;
+                }
+                members.add(term.type());
+            }
+            if (members.size() == 1) {
+                return new WrittenTypeMeaning.Settled(members.get(0));
+            }
+            Set<TypeSymbol> names = new LinkedHashSet<>();
+            boolean unknown = false;
+            for (Type m : members) {
+                switch (UnionMember.of(m)) {
+                    case UnionMember.Named named -> names.add(named.name());
+                    case UnionMember.NoType _ -> unknown = true;
+                    case UnionMember.NotAMember _ -> {
+                        return new WrittenTypeMeaning.NotAMember(m, pos);
+                    }
+                }
+            }
+            return new WrittenTypeMeaning.Settled(
+                    unknown ? Type.ERRONEOUS : Type.union(names));
+        }
+
+        /** What one term stands for, or the failure a type written inside it carries out. */
+        private static WrittenTypeMeaning stands(TypeTerm t) {
+            return switch (t) {
+                case TypeRef ref -> new WrittenTypeMeaning.Settled(ref.denotes());
+                case FnType ft -> standsFor(ft);
+            };
+        }
+
+        private static WrittenTypeMeaning standsFor(FnType ft) {
+            List<Type> params = new ArrayList<>(ft.params().size());
+            for (RetType p : ft.params()) {
+                if (!(p.meaning() instanceof WrittenTypeMeaning.Settled takes)) {
+                    return p.meaning();
+                }
+                params.add(takes.type());
+            }
+            if (!(ft.result().meaning() instanceof WrittenTypeMeaning.Settled answers)) {
+                return ft.result().meaning();
+            }
+            return new WrittenTypeMeaning.Settled(Type.fn(params, answers.type()));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof RetType ret
+                    && cases.equals(ret.cases) && Objects.equals(pos, ret.pos);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cases, pos);
+        }
+
+        @Override
+        public String toString() {
+            return "RetType[cases=" + cases + ", pos=" + pos + "]";
         }
     }
 
