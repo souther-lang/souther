@@ -49,9 +49,16 @@ final class StructuralParts {
         }
     }
 
-    /** Whether a form of this shape hands its parts over. */
+    /**
+     * Whether a form of this shape hands its parts over.
+     *
+     * <p>How it is written and not what a crossing makes of it. A form the comparison passes over
+     * is read through all the same — the walk that goes looking for the declarations a crossing
+     * reaches has to go inside one to find what it holds — so what is asked here is whether there
+     * are parts to read.
+     */
     static boolean areHandedOver(Class<?> type) {
-        return type.isRecord() || DeclarationAgreement.isAFormOfTheGrammar(type);
+        return type.isRecord() || DeclarationAgreement.isANodeWrittenByHand(type);
     }
 
     /**

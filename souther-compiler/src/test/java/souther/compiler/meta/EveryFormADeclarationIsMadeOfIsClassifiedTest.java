@@ -2,7 +2,15 @@ package souther.compiler.meta;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.RowPosition;
+import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -14,6 +22,8 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -27,9 +37,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * same thing start disagreeing over it. Nothing says so: the language still compiles, every test
  * still passes, and what changed is what two builds are held to.
  *
- * <p>So the walk is required to be a decision. A record reachable from a declaration is a form of
- * the grammar, or it is one the comparison names and says how to hold, or it is erased because a
- * value cannot be read differently by it. There is no fourth, and this is what refuses one.
+ * <p>So the walk is required to be a decision. A form reachable from a declaration that hands its
+ * parts over is a form of the grammar, or one of the front end's settled answers, or it is erased
+ * because a value cannot be read differently by it. There is no fourth, and this is what refuses
+ * one.
+ *
+ * <p>Those and not the records. What the comparison walks with nobody having said so is what this
+ * is about, and a record is how most of them are written rather than what makes one of them one: a
+ * node written by hand is walked the same way, and something the comparison has an arm for is not
+ * walked at all whatever it is written as. Asked of the records, a node written by hand joins the
+ * comparison unanswered about.
  *
  * <p>Static, over what a declaration can reach rather than over what some fixture happened to build.
  * A form in a corner of the grammar no test writes would otherwise sit there until an author used
@@ -44,18 +61,19 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             Hir.SpecBehavior.class, Hir.PipeBehavior.class, Hir.FnDef.class);
 
     @Test
-    void everyRecordADeclarationReachesIsAFormOrNamedOrErased() {
-        Set<Class<?>> reached = reachableFromDeclarations();
+    void everyFormADeclarationReachesIsAFormOrASettledAnswerOrErased() {
+        Set<Class<?>> reached = walkOfDeclarations().reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
         List<String> undecided = new ArrayList<>(new TreeSet<>(reached.stream()
-                .filter(Class::isRecord).filter(t -> !decided(t)).map(Class::getName).toList()));
+                .filter(StructuralParts::areHandedOver)
+                .filter(t -> !decided(t)).map(Class::getName).toList()));
 
         assertEquals(List.of(), undecided,
                 "a declaration is made of these and the comparison has not decided about them."
-                        + " Each is a form of the grammar, or one the comparison names, or erased"
-                        + " because a value crossing between two builds cannot be read differently"
-                        + " by it");
+                        + " Each is a form of the grammar, or one of the front end's settled"
+                        + " answers, or erased because a value crossing between two builds cannot"
+                        + " be read differently by it");
     }
 
     /**
@@ -68,12 +86,70 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     void andTheWalkWouldSeeAnUndecidedRecordIfThereWereOne() {
         assertFalse(decided(Undecided.class),
                 "a record nothing here classifies is not passed over");
-        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(
-                        souther.compiler.types.BindingId.class),
-                "a record from outside the grammar is not a form of a declaration by being one");
-        assertTrue(DeclarationAgreement.namedByTheComparison(
-                        souther.compiler.types.BindingId.class),
-                "it is decided by being named, which is the other way of deciding");
+        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(ValueName.Behavior.class),
+                "a record the front end settled an answer as is not a form of the grammar");
+        assertTrue(DeclarationAgreement.isASettledAnswer(ValueName.Behavior.class),
+                "it is decided by being one of those, which is another way of deciding");
+    }
+
+    /**
+     * What the comparison has an arm for is outside this, and says so itself.
+     *
+     * <p>A binding is the plainest one: the comparison holds two of them to standing for each other
+     * across the two builds, so nothing of what one is made of is ever walked and there is no
+     * account for this to want. Which is a fact about the comparison and is read off it — asked of
+     * how a binding happens to be written, the day one is written as a record it would arrive here
+     * demanding an account for an identity nobody compares.
+     */
+    @Test
+    void whatTheComparisonHasAnArmForIsNotAskedForAnAccount() {
+        assertFalse(StructuralParts.areHandedOver(BindingId.class),
+                "the comparison does not walk a binding, so it is not one of these");
+        assertFalse(DeclarationAgreement.comparedTheSameByItsOwnEquality(
+                        new BindingId(new BindingOwner.OfValue("demo", "f"), 0)),
+                "and what it does instead is the arm: this comparison answers about a binding what"
+                        + " its own equality does not");
+    }
+
+    /**
+     * A shape the nodes hold is a form of the grammar because it says it is one.
+     *
+     * <p>The three answers a type written beside the tree can have, and each comes from something
+     * that was decided rather than from where the file sits. A shape says it is syntax; a record
+     * this compile keeps about its own building is erased, and that is said of it once; and a
+     * record that is neither gets no account by being written next door.
+     */
+    @Test
+    void aShapeIsAFormBecauseItSaysSoAndNotBecauseOfWhereItIsWritten() {
+        assertTrue(DeclarationAgreement.isAFormOfTheGrammar(WrittenName.class),
+                "a name as written is held by node after node and says it is syntax");
+        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(DefinitionName.class),
+                "and what a definition is filed under is written beside the tree and says nothing,"
+                        + " so it is a form of the grammar by nobody's decision");
+        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(RowPosition.Supplies.class),
+                "nor is what this compile numbered a row as, which is written there too");
+        assertTrue(StructuralParts.areHandedOver(RowPosition.Supplies.class),
+                "which is not the walk refusing to read it. Parts can be read off one, and the walk"
+                        + " that looks for the declarations a crossing reaches reads them");
+    }
+
+    /**
+     * Two texts a rule was quoted from are one thing not compared.
+     *
+     * <p>The kind and not the arm, which is what a crossing needs it to be: one build reads a
+     * module from the source it holds and another reads the text a published module was put back
+     * together as, so one rule arrives with a different arm on each side as a matter of course.
+     * Compared by which arm it is, every crossing of a rule written in a module read back would
+     * report a build that has not moved.
+     */
+    @Test
+    void whichTextARuleWasQuotedFromIsNotComparedByWhichKindOfTextItIs() {
+        assertSame(DeclarationAgreement.erasedAs(QuotedFrom.ASourceThisCompileHolds.class),
+                DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotShow.class),
+                "a source this compile holds and a text it cannot show are one erased thing");
+        assertNotSame(DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotName.class),
+                DeclarationAgreement.erasedAs(SourcePos.class),
+                "and two erased kinds stay two, so a text is not held against a position");
     }
 
     /**
@@ -103,6 +179,36 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                         + " all three are what this walk goes on to decide about");
     }
 
+    /**
+     * And this walk stops only where the comparison stops.
+     *
+     * <p>What it is for a walk to say something is that it arrives where the comparison arrives. A
+     * type this stops at and the comparison goes inside is a part of a crossing that no account was
+     * ever asked for: the comparison reads it, this test reaches nothing under it, and both go on
+     * quietly. Which is not a wrong answer anywhere — it is a question nobody is asked.
+     *
+     * <p>The other direction is left open on purpose. The comparison stops early at a form it reads
+     * by the answer, and this walk goes through such a form and into parts the comparison never
+     * reads; reaching more than is read costs an account for something a crossing does not depend
+     * on, and reaching less costs the account for something it does.
+     */
+    @Test
+    void andTheWalkStopsOnlyWhereTheComparisonStops() {
+        List<String> readInsideAllTheSame = new ArrayList<>(new TreeSet<>(
+                walkOfDeclarations().stoppedAt().stream()
+                        .filter(EveryFormADeclarationIsMadeOfIsClassifiedTest::comparisonGoesInside)
+                        .map(Class::getName).toList()));
+
+        assertEquals(List.of(), readInsideAllTheSame,
+                "this walk stops at these and the comparison reads what is inside them, so what a"
+                        + " crossing depends on there is decided by nobody and nothing says so");
+    }
+
+    /** Whether {@link DeclarationAgreement} holds two of them by walking their parts. */
+    private static boolean comparisonGoesInside(Class<?> type) {
+        return !DeclarationAgreement.erases(type) && StructuralParts.areHandedOver(type);
+    }
+
     /** Stands for a record someone adds to a declaration without saying what it is. */
     private record Undecided(String what) {}
 
@@ -110,24 +216,41 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     private static boolean decided(Class<?> type) {
         return DeclarationAgreement.isAFormOfTheGrammar(type)
                 || DeclarationAgreement.isASettledAnswer(type)
-                || DeclarationAgreement.namedByTheComparison(type)
                 || DeclarationAgreement.erases(type);
     }
 
-    /** Every type reachable from a published declaration, through record components and the
-     *  containers they are held in. A sealed type stands for its permitted forms. */
-    private static Set<Class<?>> reachableFromDeclarations() {
+    /**
+     * What the walk found: every type a published declaration reaches, and the ones it stopped at.
+     *
+     * @param reached   every type reachable from a declaration, the leaves among them
+     * @param stoppedAt the ones whose parts this walk did not go on to
+     */
+    private record Walked(Set<Class<?>> reached, Set<Class<?>> stoppedAt) {}
+
+    /**
+     * Every type reachable from a published declaration, through record components and the
+     * containers they are held in. A sealed type stands for its permitted forms.
+     *
+     * <p>Where it stops is read off the structure and off what the comparison passes over, and
+     * never off how a type was classified. Those are two questions: whether something has been
+     * decided about is one, and whether there is anything further in it to decide about is the
+     * other, and one does not follow from the other. A walk steered by the classification stops
+     * wherever an answer has been written down, so a form under one is reached by nobody and
+     * decided by nobody, and this test goes on passing over a smaller world.
+     */
+    private static Walked walkOfDeclarations() {
         Set<Class<?>> seen = new LinkedHashSet<>();
         Deque<Class<?>> todo = new ArrayDeque<>(ROOTS);
         Set<Class<?>> reached = new LinkedHashSet<>();
+        Set<Class<?>> stoppedAt = new LinkedHashSet<>();
         while (!todo.isEmpty()) {
             Class<?> type = todo.removeFirst();
             if (!seen.add(type) || type.isPrimitive()) {
                 continue;
             }
-            if (DeclarationAgreement.erases(type)
-                    || DeclarationAgreement.namedByTheComparison(type)) {
+            if (DeclarationAgreement.erases(type)) {
                 reached.add(type);
+                stoppedAt.add(type);
                 continue;   // the comparison does not go inside one, so neither does this
             }
             if (type.isSealed()) {
@@ -136,17 +259,17 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 }
                 continue;   // the interface itself holds nothing; its forms do
             }
+            reached.add(type);
             if (type.isInterface() || !StructuralParts.areHandedOver(type)) {
-                reached.add(type);
+                stoppedAt.add(type);
                 continue;   // a leaf as far as this walk is concerned
             }
-            reached.add(type);
             for (StructuralParts.Part part : StructuralParts.of(type)) {
                 for (Class<?> held : TypesAPartIsDeclaredToHold.named(part.held())) {
                     todo.addLast(held);
                 }
             }
         }
-        return reached;
+        return new Walked(reached, stoppedAt);
     }
 }
