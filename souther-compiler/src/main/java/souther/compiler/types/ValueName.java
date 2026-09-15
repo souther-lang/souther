@@ -1,6 +1,7 @@
 package souther.compiler.types;
 
 import souther.compiler.Reserved;
+import souther.compiler.SettledAnswer;
 
 /**
  * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the

@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * What caused a function reference to be expanded into the block that applies it.
  *

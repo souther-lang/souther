@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.SequencedSet;

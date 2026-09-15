@@ -10,6 +10,8 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.ValueName;
@@ -45,11 +47,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * refuses one.
  *
  * <p>Three things it is, and not three things done with it. Whether the comparison passes over a
- * form is the other question and has its own answer, which is why a form can have both: an
- * application the author wrote is a record of the building and is also erased, and neither of those
- * is said by the other. Erased is enough on its own here — something the comparison never reads is
- * something nobody has to say what it is — so it is one of the ways a form is accounted for, and
- * the only one that is about the reading rather than about the form.
+ * form is the other question, answered where that reading is written, and it is no answer to this
+ * one: a form says what it is whether or not anything looks at it. Most of them have both answers —
+ * an application the author wrote is a record of the building and is also erased — and taking the
+ * second for the first is how a form comes to be accounted for by what somebody does with it, which
+ * is the same thing as being accounted for by what it is written next to.
  *
  * <p>Those and not the records. What the comparison walks with nobody having said so is what this
  * is about, and a record is how most of them are written rather than what makes one of them one: a
@@ -76,7 +78,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             Hir.SpecBehavior.class, Hir.PipeBehavior.class, Hir.FnDef.class);
 
     @Test
-    void everyFormADeclarationReachesIsAFormOrASettledAnswerOrErased() {
+    void everyFormADeclarationReachesSaysWhichOfTheThreeItIs() {
         Set<Class<?>> reached = walkOfDeclarations().reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
@@ -87,9 +89,9 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertEquals(List.of(), undecided,
                 "a declaration is made of these and nobody has said what they are. Each says it is"
                         + " a form of the grammar, or one of the front end's settled answers, or a"
-                        + " record this compile keeps about how it built what it built — or else it"
-                        + " is erased, because a value crossing between two builds cannot be read"
-                        + " differently by it");
+                        + " record this compile keeps about reading a source and building what it"
+                        + " built. Whether the comparison reads it is the other question and is no"
+                        + " answer to this one");
     }
 
     /**
@@ -127,12 +129,40 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 "a record of the building is not an answer about a declaration, and the package"
                         + " they share says neither");
 
-        assertFalse(DeclarationAgreement.isASettledAnswer(RuleOrigin.class),
-                "a record written there that says nothing is told nothing by being written there");
-        assertFalse(DeclarationAgreement.isARecordOfTheBuilding(RuleOrigin.class),
-                "by either of them");
-        assertTrue(decided(RuleOrigin.class),
-                "which leaves the answer it does have, which is that the comparison passes over it");
+        assertFalse(DeclarationAgreement.isASettledAnswer(ConstructOccurrence.class),
+                "and a record written beside them that says neither is told neither by being"
+                        + " written there");
+        assertFalse(DeclarationAgreement.isARecordOfTheBuilding(ConstructOccurrence.class),
+                "by either of them, whatever it is made of");
+        assertFalse(decided(ConstructOccurrence.class),
+                "so a declaration reaching one would be reaching a form nobody has said what it is,"
+                        + " which is the finding this makes");
+    }
+
+    /**
+     * A copy of a body is a record of the building, and the place the copy was made at is not.
+     *
+     * <p>The two halves of it come apart, which is what makes it worth saying. A step is a call
+     * written in a body, named in what the source settles and settled before either tree exists; a
+     * lineage is the chain of them one reader walked, and the two representations of a body expand
+     * different calls — so a construct inside a language operation has a chain in the tree where
+     * that operation stands expanded and none in the tree where it stands. What the two trees agree
+     * about is said elsewhere ({@link souther.compiler.types.ConstructOccurrence}), and it is not
+     * this.
+     *
+     * <p>So the chain being built out of settled parts does not make the chain settled. Read the
+     * other way, every materialisation naming itself in the source's own words would pass for
+     * something the source said.
+     */
+    @Test
+    void whichCopyOfABodyAConstructStandsInIsARecordOfTheBuilding() {
+        assertTrue(DeclarationAgreement.isARecordOfTheBuilding(ExpansionLineage.Expansion.class),
+                "a chain of copies is the one a reader walked, and another reading of the same"
+                        + " source walks another");
+        assertTrue(DeclarationAgreement.isASettledAnswer(ExpansionLineage.Step.class),
+                "a step of it is a call the source wrote, which both readings meet the same");
+        assertFalse(DeclarationAgreement.isASettledAnswer(ExpansionLineage.Expansion.class),
+                "and being made of those does not make the chain one of them");
     }
 
     /**
@@ -307,8 +337,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     private static boolean decided(Class<?> type) {
         return DeclarationAgreement.isAFormOfTheGrammar(type)
                 || DeclarationAgreement.isASettledAnswer(type)
-                || DeclarationAgreement.isARecordOfTheBuilding(type)
-                || DeclarationAgreement.erases(type);
+                || DeclarationAgreement.isARecordOfTheBuilding(type);
     }
 
     /**

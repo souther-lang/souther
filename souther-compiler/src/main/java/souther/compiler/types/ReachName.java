@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * A resolved reference: the route a module reaches a definition by, and what it reaches.
  *

@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Why a pass wrote an application of its own.
  *

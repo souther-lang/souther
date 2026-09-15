@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * Which declaration, written down: the module that declares it and the name written there.
  *

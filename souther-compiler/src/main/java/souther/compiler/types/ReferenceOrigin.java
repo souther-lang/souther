@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Which reference a name used as a value is, whoever wrote it.
  *

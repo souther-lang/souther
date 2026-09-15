@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Which rule a source wrote — a block, told from every other block that source wrote.
  *
@@ -24,7 +26,7 @@ package souther.compiler.types;
  * @param owner   what wrote the block. Null exactly for {@link #unwritten}
  * @param ordinal which block of that owner, by the builder's own count over it
  */
-public record RuleOrigin(WrittenOwner owner, int ordinal) {
+public record RuleOrigin(WrittenOwner owner, int ordinal) implements RecordOfTheBuilding {
 
     public RuleOrigin {
         if ((owner == null) != (ordinal < 0)) {

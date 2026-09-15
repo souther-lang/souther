@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * Where a copy of a body was made, said in words the source settles.
  *

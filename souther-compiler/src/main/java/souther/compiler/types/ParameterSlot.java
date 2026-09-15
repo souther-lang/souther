@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * Which parameter of a declaration, counted along the parameters it declares.
  *
