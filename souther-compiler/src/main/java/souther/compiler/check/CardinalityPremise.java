@@ -53,7 +53,7 @@ public record CardinalityPremise(Set<Long> counts, boolean everyRuleReached) {
         InvariantChecker.Seeded read = InvariantChecker.seedFields(at, source, policy, machines);
         OccurrenceCounts held = OccurrenceCounts.of(read);
         Set<Long> counts = new HashSet<>();
-        for (RuleKey path : paths(data, source.symbols())) {
+        for (RuleKey path : paths(data, at, source)) {
             long least = held.leastHeldAt(path);
             if (least > 0) {
                 counts.add(least);
@@ -62,14 +62,22 @@ public record CardinalityPremise(Set<Long> counts, boolean everyRuleReached) {
         return new CardinalityPremise(counts, !read.clausesNotExpanded());
     }
 
-    /** Where a rule of {@code data} can ask a collection to hold anything: the value of a newtype,
-     *  which is at no name of its own, and every field of anything else. */
-    private static Set<RuleKey> paths(Hir.Data data, Symbols symbols) {
+    /**
+     * Where a rule of {@code data} can ask a collection to hold anything: the value of a newtype,
+     * which is at no name of its own, and every field of anything else.
+     *
+     * <p>The fields asked of the source rather than walked here. What a declaration reaches through
+     * its spreads is what the reading below is about to be given, so walking them again is the same
+     * walk made twice — and where a compilation answers for the walk, the second one is made past
+     * the answer.
+     */
+    private static Set<RuleKey> paths(Hir.Data data, TypeSymbol.AtModule at,
+                                      RuleReadingSource source) {
         if (data.newtype()) {
             return Set.of(RuleKey.THE_VALUE);
         }
         Set<RuleKey> paths = new HashSet<>();
-        for (String field : TypeOps.fieldTypes(data, symbols).keySet()) {
+        for (String field : source.fieldTypes().of(at).keySet()) {
             paths.add(RuleKey.of(field));
         }
         return paths;

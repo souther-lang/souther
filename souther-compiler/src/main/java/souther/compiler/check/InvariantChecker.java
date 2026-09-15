@@ -500,6 +500,19 @@ public final class InvariantChecker {
         }
 
         /**
+         * The same for one name, or null where nothing counts what is there.
+         *
+         * <p>Beside the projection and not through it, because of how a count asks. Settling the
+         * size at a number and seeing whether anything is left is one question per number, and a
+         * reader answering each of them out of {@link #heldAtoms()} builds the whole projection
+         * once per size it asks about.
+         */
+        FactSubject heldAtomAt(RuleKey path) {
+            FieldDomains.Counted counted = held.get(path);
+            return counted == null ? null : counted.atom();
+        }
+
+        /**
          * Both subjects the name {@code path} answers to.
          *
          * <p>A number has one of each and everything else has the second, and a clause is filed
