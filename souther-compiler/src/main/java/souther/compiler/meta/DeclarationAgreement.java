@@ -754,6 +754,11 @@ public final class DeclarationAgreement {
             // behavior wrote a rule, and two builds that disagree about that disagree about which
             // rule it is; the text it was read out of is the file it sits in, which a build may
             // rename without moving anything a value crossing meets.
+            //
+            // The kind and not the arm, which is what it has to be here: one build reads a module
+            // from the source it holds and another reads the text a published module was put back
+            // together as, so one rule has a different arm on each side as a matter of course. Two
+            // builds being two builds is the difference this comparison exists not to report.
             QuotedFrom.class);
 
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
@@ -769,7 +774,7 @@ public final class DeclarationAgreement {
      * each side has is not compared either; two of different kinds are two things, and answering
      * that they match because neither is compared would hold a position against a coverage number.
      */
-    private static Class<?> erasedAs(Class<?> type) {
+    static Class<?> erasedAs(Class<?> type) {
         for (Class<?> erased : ERASED) {
             if (erased.isAssignableFrom(type)) {
                 return erased;
@@ -798,17 +803,39 @@ public final class DeclarationAgreement {
      * own building are said once. They are written in the same package, and being written there is
      * what they have in common with a form rather than anything a crossing can see.
      *
+     * <p>This is the account and not the reading. Whether parts can be read off something is what
+     * {@code StructuralParts.areHandedOver} asks and is a fact about how the type is written;
+     * whether a crossing depends on them is this, and the walk that goes looking for declarations
+     * has to go inside an erased form all the same to find what it holds. Asked as one question,
+     * the erasing would reach that walk and a declaration held inside a record this compile keeps
+     * about itself would stop being found.
+     *
      * <p>Which of them is a form, and not which of them is a record. A record is how most are
      * written and a node whose own subsystem settled on writing it by hand is a form all the same —
      * so what is asked is whether it is one of the tree's nodes or one of the shapes a node holds,
      * and an enum or an interface there is neither.
      */
     static boolean isAFormOfTheGrammar(Class<?> type) {
-        if (!type.getPackageName().equals(Hir.class.getPackageName()) || erases(type)) {
-            return false;
-        }
-        return type.isRecord()
-                || (!type.isInterface() && !type.isEnum() && Hir.class.isAssignableFrom(type));
+        return isWrittenWhereTheTreeIs(type) && !erases(type)
+                && (type.isRecord() || isANodeWrittenByHand(type));
+    }
+
+    /**
+     * Whether it is one of the tree's nodes written by hand rather than as a record.
+     *
+     * <p>What {@code StructuralParts} asks to know whether it can read parts off one. A node whose
+     * own subsystem settled on writing it out keeps the shape a record has, and a reader that took
+     * it for something with no parts would hold two of them by an equality and see none of what
+     * they are made of.
+     */
+    static boolean isANodeWrittenByHand(Class<?> type) {
+        return isWrittenWhereTheTreeIs(type) && !type.isRecord() && !type.isInterface()
+                && !type.isEnum() && Hir.class.isAssignableFrom(type);
+    }
+
+    /** Where the tree is written: the package {@link Hir} is in, and not {@link Hir} itself. */
+    private static boolean isWrittenWhereTheTreeIs(Class<?> type) {
+        return type.getPackageName().equals(Hir.class.getPackageName());
     }
 
     /**

@@ -5,6 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -17,6 +21,8 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -30,9 +36,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * same thing start disagreeing over it. Nothing says so: the language still compiles, every test
  * still passes, and what changed is what two builds are held to.
  *
- * <p>So the walk is required to be a decision. A record reachable from a declaration is a form of
- * the grammar, or one of the front end's settled answers, or it is erased because a value cannot be
- * read differently by it. There is no fourth, and this is what refuses one.
+ * <p>So the walk is required to be a decision. A form reachable from a declaration that hands its
+ * parts over is a form of the grammar, or one of the front end's settled answers, or it is erased
+ * because a value cannot be read differently by it. There is no fourth, and this is what refuses
+ * one.
+ *
+ * <p>Those and not the records. What the comparison walks with nobody having said so is what this
+ * is about, and a record is how most of them are written rather than what makes one of them one: a
+ * node written by hand is walked the same way, and something the comparison has an arm for is not
+ * walked at all whatever it is written as. Asked of the records, a node written by hand joins the
+ * comparison unanswered about.
  *
  * <p>Static, over what a declaration can reach rather than over what some fixture happened to build.
  * A form in a corner of the grammar no test writes would otherwise sit there until an author used
@@ -47,12 +60,13 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             Hir.SpecBehavior.class, Hir.PipeBehavior.class, Hir.FnDef.class);
 
     @Test
-    void everyRecordADeclarationReachesIsAFormOrASettledAnswerOrErased() {
+    void everyFormADeclarationReachesIsAFormOrASettledAnswerOrErased() {
         Set<Class<?>> reached = walkOfDeclarations().reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
         List<String> undecided = new ArrayList<>(new TreeSet<>(reached.stream()
-                .filter(Class::isRecord).filter(t -> !decided(t)).map(Class::getName).toList()));
+                .filter(StructuralParts::areHandedOver)
+                .filter(t -> !decided(t)).map(Class::getName).toList()));
 
         assertEquals(List.of(), undecided,
                 "a declaration is made of these and the comparison has not decided about them."
@@ -78,6 +92,25 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     }
 
     /**
+     * What the comparison has an arm for is outside this, and says so itself.
+     *
+     * <p>A binding is the plainest one: the comparison holds two of them to standing for each other
+     * across the two builds, so nothing of what one is made of is ever walked and there is no
+     * account for this to want. Which is a fact about the comparison and is read off it — asked of
+     * how a binding happens to be written, the day one is written as a record it would arrive here
+     * demanding an account for an identity nobody compares.
+     */
+    @Test
+    void whatTheComparisonHasAnArmForIsNotAskedForAnAccount() {
+        assertFalse(StructuralParts.areHandedOver(BindingId.class),
+                "the comparison does not walk a binding, so it is not one of these");
+        assertFalse(DeclarationAgreement.comparedTheSameByItsOwnEquality(
+                        new BindingId(new BindingOwner.OfValue("demo", "f"), 0)),
+                "and what it does instead is the arm: this comparison answers about a binding what"
+                        + " its own equality does not");
+    }
+
+    /**
      * A shape a node holds is a form of the grammar wherever it is written down.
      *
      * <p>Held here because the other way round is the one that says nothing: a form the tree is
@@ -92,6 +125,55 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertFalse(DeclarationAgreement.isAFormOfTheGrammar(RowPosition.Supplies.class),
                 "and what this compile numbered a row as is written in the same place and is not a"
                         + " form: the comparison erases it, which is where it is said");
+        assertTrue(StructuralParts.areHandedOver(RowPosition.Supplies.class),
+                "which is not the walk refusing to read it. Parts can be read off one, and the walk"
+                        + " that looks for the declarations a crossing reaches reads them");
+    }
+
+    /**
+     * A form of the grammar is one the tree holds, and the tree is not everything written beside it.
+     *
+     * <p>Where a type is written answers which of the tree's own shapes it is, and answers it for
+     * everything else in the same package too. So what the sweep reaches from there is pinned: a
+     * type joining this list is one somebody put in a declaration's reach, and what it is is a
+     * decision — a form the tree holds, or a record this compile keeps about itself and erases.
+     */
+    @Test
+    void theOnlyShapeTheTreeHoldsFromOutsideItsOwnFileIsAName() {
+        List<String> beside = new ArrayList<>(new TreeSet<>(walkOfDeclarations().reached().stream()
+                .filter(t -> t.getPackageName().equals(Hir.class.getPackageName()))
+                .filter(t -> !t.getName().startsWith(Hir.class.getName() + "$"))
+                .map(Class::getName).toList()));
+
+        assertEquals(List.of(
+                        // What a construct was made from, and what a definition was made as: both
+                        // this compile's record of how it built its own tree, and both erased.
+                        "souther.compiler.ast.ConstructionOrigin",
+                        "souther.compiler.ast.DefinitionRole",
+                        // And the one shape the tree holds that is written in its own file.
+                        "souther.compiler.ast.WrittenName"),
+                beside,
+                "a declaration reaches these from where the tree is written, and each is answered"
+                        + " about by where it is rather than by what it is");
+    }
+
+    /**
+     * Two texts a rule was quoted from are one thing not compared.
+     *
+     * <p>The kind and not the arm, which is what a crossing needs it to be: one build reads a
+     * module from the source it holds and another reads the text a published module was put back
+     * together as, so one rule arrives with a different arm on each side as a matter of course.
+     * Compared by which arm it is, every crossing of a rule written in a module read back would
+     * report a build that has not moved.
+     */
+    @Test
+    void whichTextARuleWasQuotedFromIsNotComparedByWhichKindOfTextItIs() {
+        assertSame(DeclarationAgreement.erasedAs(QuotedFrom.ASourceThisCompileHolds.class),
+                DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotShow.class),
+                "a source this compile holds and a text it cannot show are one erased thing");
+        assertNotSame(DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotName.class),
+                DeclarationAgreement.erasedAs(SourcePos.class),
+                "and two erased kinds stay two, so a text is not held against a position");
     }
 
     /**
