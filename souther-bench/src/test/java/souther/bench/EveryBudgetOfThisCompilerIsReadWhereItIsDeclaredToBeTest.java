@@ -198,16 +198,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 
-            // The numbers of a set an account is asked to build at. The figure bounds how many are
-            // handed back, and what is handed over beside them is whether the set held anything
-            // else — which is what the searches below turn into the figure or into an answer about
-            // the model.
-            Map.entry("souther.compiler.partition.TermRealizations#numbersToTry("
+            // The numbers of a set an account walks. Each of these is an account whose numbers are
+            // whole and whose window is wider than the figure, so the figure bounds how many it
+            // tries and what it hands over beside them is whether it ran out of numbers first.
+            Map.entry("souther.compiler.partition.TermRealizations#holding("
+                            + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/partition/NumericSet;"
-                            + "Lsouther/compiler/check/Carrier;II)"
-                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
-                    "how many of a set's numbers are handed to an account, and whether they were"
-                            + " all of them"),
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts a container is asked to hold, and whether they were all the"
+                            + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#dateOn("
+                            + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Search;",
+                    "how many years a date is looked for in, and whether they were all of them"),
             Map.entry("souther.compiler.partition.TermRealizations#firstThatBuilds("
                             + "Lsouther/compiler/partition/TermRealizations$Tried;"
                             + "Ljava/util/function/Function;)"

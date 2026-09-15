@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
@@ -391,30 +392,10 @@ final class TermRealizations {
                                         RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         Carrier carrier = orders.answered();
-        Place chosen = placeIn(wanted, orders, within);
-        return chosen == null
-                ? new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : oneValue(FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
-                        sourceType, ruleSource);
-    }
-
-    /** One of those numbers on the carrier, or null where the search named none. Which number it
-     *  is of is the orders', which is where the pair says so. */
-    private static Place placeIn(NumericSet wanted, TermOrders orders,
-                                 souther.compiler.inputs.SearchRegion within) {
-        if (wanted instanceof NumericSet.At one) {
-            return one.value();
-        }
-        if (!(wanted instanceof NumericSet.InARun run)) {
-            // The values a rule singled out leave a set with no run to search, and what stands at
-            // the position is chosen against the carrier by the reader that holds those values.
-            return null;
-        }
-        NumericDomain.Bounds leaves = within == null ? null : within.runsBetween(orders.term());
-        return new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
-                orders.answered(),
-                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
+        return firstThatBuilds(onTheOrder(wanted, orders, within),
+                chosen -> oneValue(
+                        FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
+                        sourceType, ruleSource));
     }
 
     /**
@@ -452,7 +433,7 @@ final class TermRealizations {
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
-                    atThatQuotient(taken.read(arguments), sourceType, orders.observed(), wanted,
+                    atThatQuotient(taken.read(arguments), sourceType, orders, wanted, within,
                             ruleSource);
         };
     }
@@ -512,15 +493,18 @@ final class TermRealizations {
     private static Realization addingUp(NumericSet wanted, Type sourceType, TermOrders orders,
                                         souther.compiler.inputs.SearchRegion within,
                                         RuleReadingContext reading) {
-        // From nought upward first, which is the order a reader would write them, and below nought
-        // only where the rules leave nothing above it. A total is what its elements come to and may
-        // be either side of nought, and a search that looked only upward would say a set of
-        // negative totals holds nothing.
+        if (orders.answered() == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // A total is a place on the order it is measured on and not a count of anything, so what
+        // there is to try is what that order has in the run — which is the carrier's answer and
+        // covers the totals a decimal reaches between two whole numbers.
         //
         // Asked on the order the total is measured on, which a run of values answers a number over
         // and stands at no place of. Read on the order the values are written on instead, a total
         // taken over a run would be asked about a carrier the run has and the number does not.
-        return firstThatBuilds(numbersToTry(wanted, orders.answered()),
+        return firstThatBuilds(onTheOrder(wanted, orders, within),
                 total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
     }
 
@@ -538,9 +522,11 @@ final class TermRealizations {
      * composed. Asked of the carrier and not worked out here: what a whole number stops at is the
      * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
      */
-    private static Realization atThatQuotient(BigDecimal by, Type sourceType,
-                                              Carrier observed, NumericSet wanted,
+    private static Realization atThatQuotient(BigDecimal by, Type sourceType, TermOrders orders,
+                                              NumericSet wanted,
+                                              souther.compiler.inputs.SearchRegion within,
                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
         // A divisor that is not there, or is nought, is a term nothing built — what quotients there
         // are is settled where the account is asked for. Answered here as a place nothing composes
         // a value for, which is what a reader that got this far has somewhere to put.
@@ -548,43 +534,116 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        // From nought outward on the side the set is on. A quotient whose product runs past what
-        // the position's order holds is one nothing composes a value at, and the quotient next to
-        // it may not be — so the set is walked rather than read at one of its numbers.
-        return firstThatBuilds(numbersToTry(wanted, observed),
+        // A quotient is a place on the order it is answered on, and how far that order runs is the
+        // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
+        // the position holds and an int does not was a number nothing offered.
+        return firstThatBuilds(onTheOrder(wanted, orders, within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
     }
 
-    /** The numbers a search was handed, and whether they are all the set has.
-     *
-     *  @param numbers  what to try, in the order to try them
-     *  @param everyOne whether the set held nothing else, which is what tells a set with no value
-     *                  in it from a search that stopped short of one */
-    private record Tried(List<Place> numbers, boolean everyOne) {}
-
     /**
-     * The numbers of a set to try, nearest nought first on whichever side of it the set is.
+     * The numbers a search was handed, and whether they are all its account can be asked for.
      *
-     * <p>A number of either sign is one an account here can be asked for, and a search that looked
-     * one way would call a set of the other sign empty. Above nought first because that is the
-     * order a reader would write them in, and the far side only where the near one holds none.
+     * <p>{@code everyOne} is the producer's answer and never read off how many came back. A walk
+     * that filled what it was allowed and a walk that ran out of numbers hand back the same list,
+     * and only the walk knows which it was — inferred from the size, a set of exactly as many
+     * numbers as the figure allows is reported as a search that stopped.
      *
-     * <p>The figure is read once, here, and travels as whether the set was exhausted. Read again by
-     * each account, the number a search was given and the number it reports against could part.
+     * @param numbers  what to try, in the order to try them
+     * @param everyOne whether there is nothing else to try, which is what tells a set with no value
+     *                 in it from a search that stopped short of one
      */
-    private static Tried numbersToTry(NumericSet wanted, Carrier on) {
-        Tried above = numbersToTry(wanted, on, 0, Integer.MAX_VALUE);
-        return above.numbers().isEmpty()
-                ? numbersToTry(wanted, on, -Integer.MAX_VALUE, -1)
-                : above;
+    private record Tried(List<Place> numbers, boolean everyOne) {
+
+        static Tried allOf(List<Place> numbers) {
+            return new Tried(numbers, true);
+        }
+
+        /** The one number a set of one is, handed over without a window: what an account can be
+         *  asked for is the account's to judge, and a demand for one number names it outright. */
+        static Tried theOne(Place number) {
+            return new Tried(List.of(number), true);
+        }
     }
 
-    /** The same over a window the caller's own kind of number runs between. */
-    private static Tried numbersToTry(NumericSet wanted, Carrier on, int from, int to) {
-        int many = CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum();
-        List<Place> numbers = wanted.within(on, BigDecimal.valueOf(from),
-                BigDecimal.valueOf(to), many);
-        return new Tried(numbers, wanted.allOfThem(numbers, many));
+    /**
+     * The whole numbers of a set between two of them, in the order to try them.
+     *
+     * <p>For the accounts whose numbers are whole and whose window is their own: how many a
+     * container holds, a part of a time, a part of a date. The window is the caller's because what
+     * a number of that kind can be at all is what the caller knows, and what comes back says
+     * whether the window ran out or the figure did.
+     */
+    private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
+                                      int many) {
+        // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
+        // of number goes, and stepping through the part of it the set is nowhere near is a walk
+        // over the kind rather than a choice between the numbers the rules admit.
+        NumericDomain.Bounds lies = wanted.extent();
+        BigDecimal first = startOf(lies.min(), BigDecimal.valueOf(from));
+        BigDecimal last = endOf(lies.max(), BigDecimal.valueOf(to));
+        List<Place> out = new ArrayList<>();
+        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() < many;
+                at = at.add(BigDecimal.ONE)) {
+            Count place = new Count(at);
+            if (wanted.holds(place, on)) {
+                out.add(place);
+            }
+        }
+        return new Tried(List.copyOf(out), out.size() < many);
+    }
+
+    /** The first whole number at or above an end, or the window's own start where the set runs
+     *  past it. */
+    private static BigDecimal startOf(Endpoint end, BigDecimal from) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return from;
+        }
+        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.CEILING);
+        return from.max(!end.inclusive() && edge.compareTo(count.at()) == 0
+                ? edge.add(BigDecimal.ONE) : edge);
+    }
+
+    /** The last whole number at or below an end, or the window's own end where the set runs past
+     *  it. */
+    private static BigDecimal endOf(Endpoint end, BigDecimal to) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return to;
+        }
+        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.FLOOR);
+        return to.min(!end.inclusive() && edge.compareTo(count.at()) == 0
+                ? edge.subtract(BigDecimal.ONE) : edge);
+    }
+
+    /**
+     * A number of a set on the order its values are counted on, asked of the carrier.
+     *
+     * <p>For the accounts whose numbers are a place on an order rather than a count of something:
+     * what a position itself stands at, what a run of values comes to, what a division answers. How
+     * those values step is the carrier's one answer and covers the orders that are dense as well as
+     * the ones that are not — worked out here as whole numbers, a run between a tenth and nine
+     * tenths would hold none, and a number past what an int holds would be one nothing offers.
+     *
+     * <p>One of them, and what comes back says so. Which of a run this compiler would offer second
+     * is a question nothing here asks, so a caller that built nothing at this one has not walked
+     * the run — and says that rather than that the run holds no value.
+     */
+    private static Tried onTheOrder(NumericSet wanted, TermOrders orders,
+                                    souther.compiler.inputs.SearchRegion within) {
+        if (wanted instanceof NumericSet.At one) {
+            return Tried.theOne(one.value());
+        }
+        if (!(wanted instanceof NumericSet.InARun run)) {
+            // The values a rule singled out leave a set with no run to search. What lies outside
+            // them is chosen against the carrier by the reader that holds those values, and this
+            // has not looked at any of it.
+            return new Tried(List.of(), false);
+        }
+        NumericDomain.Bounds leaves = within == null ? null : within.runsBetween(orders.term());
+        Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
+                orders.answered(),
+                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
+        return found == null ? new Tried(List.of(), true) : new Tried(List.of(found), false);
     }
 
     /** The one value whose quotient by that divisor is exactly that number. */
@@ -641,7 +700,12 @@ final class TermRealizations {
      */
     private static Realization holding(Type sourceType, NumericSet wanted, TermOrders orders,
                                        RuleReadingContext reading) {
-        return firstThatBuilds(numbersToTry(wanted, orders.answered()),
+        // From none upward, which is as far as a count runs and as many of them as the figure
+        // allows. A count is the one account whose numbers are whole and whose window is the whole
+        // of what it can be asked for, so a walk that reaches the end of it has walked the set.
+        return firstThatBuilds(
+                wholeNumbers(wanted, orders.answered(), 0, Integer.MAX_VALUE,
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
                 count -> holdingExactly(sourceType, count, reading));
     }
 
@@ -719,8 +783,8 @@ final class TermRealizations {
             // the first of them the rules admit. Walked to the end, because a part is a handful of
             // numbers: a set that holds none of them is a set no time answers, which is a thing
             // this may say having looked at every one.
-            List<Place> admitted = each.getValue().within(observed, BigDecimal.ZERO,
-                    BigDecimal.valueOf(each.getKey().many() - 1L), 1);
+            List<Place> admitted = wholeNumbers(each.getValue(), observed,
+                    0, each.getKey().many() - 1L, 1).numbers();
             if (admitted.isEmpty()) {
                 // Outside the parts a day has. Not this reader's to report as a refusal: what a
                 // part runs between is the operation's declared bound, and a number outside it is a
@@ -832,9 +896,10 @@ final class TermRealizations {
         // of them; the months and the days are as many as the calendar has, so walking their window
         // is walking them.
         Tried years = parts.containsKey(TakenAs.DatePart.YEAR)
-                ? numbersToTry(parts.get(TakenAs.DatePart.YEAR), observed,
-                        java.time.LocalDate.MIN.getYear(), java.time.LocalDate.MAX.getYear())
-                : new Tried(List.of(Count.of(BigDecimal.valueOf(A_LEAP_YEAR))), true);
+                ? wholeNumbers(parts.get(TakenAs.DatePart.YEAR), observed,
+                        java.time.LocalDate.MIN.getYear(), java.time.LocalDate.MAX.getYear(),
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum())
+                : Tried.allOf(List.of(Count.of(BigDecimal.valueOf(A_LEAP_YEAR))));
         List<Place> months = numbersOf(parts, TakenAs.DatePart.MONTH, observed,
                 MONTHS_A_YEAR_HAS, A_LONGEST_MONTH);
         List<Place> days = numbersOf(parts, TakenAs.DatePart.DAY, observed,
@@ -875,7 +940,7 @@ final class TermRealizations {
         NumericSet wanted = parts.get(part);
         return wanted == null
                 ? List.of(Count.of(BigDecimal.valueOf(whenUnasked)))
-                : wanted.within(observed, BigDecimal.ONE, BigDecimal.valueOf(asFarAs), asFarAs);
+                : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
     }
 
     private static int whole(Place at) {
@@ -905,16 +970,6 @@ final class TermRealizations {
     /** How far the days run in the longest month there is, which is as far as a day of any date
      *  runs. How far they run in the month a date is actually built in is asked of that month. */
     private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
-
-    private static boolean within(java.math.BigDecimal answer,
-                                  java.time.temporal.ChronoField field) {
-        return within(answer, field.range().getMinimum(), field.range().getMaximum());
-    }
-
-    private static boolean within(java.math.BigDecimal answer, long from, long to) {
-        return answer.compareTo(java.math.BigDecimal.valueOf(from)) >= 0
-                && answer.compareTo(java.math.BigDecimal.valueOf(to)) <= 0;
-    }
 
     /** One value, wearing every name the position declares, or the reason there is none. */
     private static Realization oneValue(FixtureTemplate bare, Type sourceType, RuleReadingSource ruleSource) {

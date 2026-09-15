@@ -99,9 +99,7 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      */
     @Test
     void aClassOfATotalIsOfferedAListWhoseElementsComeToIt() {
-        // The smallest total each class admits, which for the one below the line is none at all:
-        // a list holding nothing comes to nought, and nought is under nine.
-        assertEquals(Map.of("ns=x < 9", "[]", "ns=9 <= x", "[9]"),
+        assertEquals(Map.of("ns=x < 9", "[8]", "ns=9 <= x", "[9]"),
                 offeredForEachClass(A_TOTAL, "g"));
 
         String report = report(A_TOTAL + A_TOTAL_ANSWERED);
