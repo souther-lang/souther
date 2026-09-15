@@ -342,13 +342,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BoundOperationFacts.writtenAs",
                     "indexes the operations by the operator each of their arithmetics is written"
                             + " as, once, where the facts are gathered"),
-            new Held("souther.compiler.check.BoundOperationFacts.computingWhat",
+            new Held("souther.compiler.check.BoundOperationFacts.computing",
                     "looks an operator up in that index, for a reader holding an operator and"
-                            + " wanting the operation whose account says how such a number is read"),
-            new Held("souther.compiler.check.NumericMeasures.takenIn",
-                    "asks which operation computes what an operator written in a body computes, so"
-                            + " that a number reached through the operator and one reached through"
-                            + " the call are one number"),
+                            + " wanting the operations whose accounts say how such a number is"
+                            + " read"),
+            new Held("souther.compiler.check.NumericMeasures.writing",
+                    "asks which operations compute what that operator computes, and tells them"
+                            + " apart by the number this call answered"),
 
             // Naming a constant, which is the other way to come by one.
             new Held("souther.compiler.check.Resolve.binOp",

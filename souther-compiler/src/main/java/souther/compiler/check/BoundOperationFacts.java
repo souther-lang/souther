@@ -323,21 +323,22 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The one operation computing what {@code op} computes, or null where none does or more than
-     * one does.
+     * The operations computing what {@code op} computes, in the order the facts were declared.
      *
-     * <p>The question a reader has when it holds an operator and wants the operation whose account
-     * says how such a number is read and built. What an operator computes is declared with the
-     * arithmetic ({@link Arithmetic#writtenAs}), so this is an index over the declarations and not a
-     * second list of which operation an operator reaches.
+     * <p>What a reader has when it holds an operator and wants the operation whose account says how
+     * such a number is read and built. What an operator computes is declared with the arithmetic
+     * ({@link Arithmetic#writtenAs}), so this is an index over the declarations and not a second
+     * list of which operation an operator reaches.
      *
-     * <p>None where two operations declare one operator's arithmetic. Which of them the operator
-     * reached would then be the reader's guess, and the guess names the operation every rule about
-     * such a number would be read under.
+     * <p><b>All of them, because which one a call reached is the call's to settle.</b> An operator
+     * is written over whatever numbers the language has — the same {@code +} adds two whole numbers
+     * and two decimals — so the operations computing one arithmetic are as many as there are kinds
+     * of number, and a reader holding a call knows which kind it answered. Answered here as "one,
+     * or none where there are two", the first pair to arrive for an operator would take the answer
+     * away from every call of it, including the calls that were never ambiguous.
      */
-    public ValueName computingWhat(BinOp op) {
-        List<ValueName> found = writtenAs.getOrDefault(op, List.of());
-        return found.size() == 1 ? found.getFirst() : null;
+    public List<ValueName> computing(BinOp op) {
+        return writtenAs.getOrDefault(op, List.of());
     }
 
     /** The cases {@code operation}'s definition is written in, in the order declared, or an empty

@@ -36,7 +36,6 @@ enum TypeRequirement {
     /** A kind of number the domain relates arithmetically ({@link NumericAnswers#isANumber}). */
     NUMBER("a number"),
 
-
     /** A type whose values count to a number, which is wider than being one ({@link Carrier}). */
     COUNTED("something that counts to a number"),
 

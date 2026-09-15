@@ -50,6 +50,15 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
                 | (20) -> true
             """;
 
+    /** The rows the block offers at the four points of that line, answered. */
+    private static final String AT_THE_SLOPED_LINE = """
+            example f
+                | (0, 29) -> true
+                | (0, 30) -> false
+                | (0, 28) -> true
+                | (0, 31) -> false
+            """;
+
     /** A region bounded by a line with a fractional slope, which is how a model states one. */
     private static final String A_SLOPED_LINE = """
             module example.quotient
@@ -77,17 +86,34 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
     }
 
     /**
-     * A line the quotient stands on one side of is a line as much as one on a bare position.
+     * A line the quotient stands on one side of is a line as much as one on a bare position, and
+     * the rows owed at it are offered and answer it.
      *
      * <p>The comparison relates the position's own number to the quotient of another, so it divides
      * neither and draws a line between them — the answer a comparison of two positions gets, which
      * is now the answer this one gets too.
+     *
+     * <p><b>The whole way round, because drawing the line is not what the author asked for.</b> A
+     * border with points nothing can be written at is where the rule stood before, one word better
+     * off: the report would name a boundary and go on saying every point of it was undecided. So
+     * what is asked here is that the block offers a row for each point and that writing them takes
+     * the obligations away.
      */
     @Test
-    void aLineWithAFractionalSlopeIsALine() {
+    void aLineWithAFractionalSlopeIsOfferedRowsThatAnswerIt() {
         String report = report(measured(A_SLOPED_LINE));
         assertFalse(report.contains("written in a form this compiler does not read"), report);
         assertTrue(report.contains("borders 1"), report);
+        assertTrue(report.contains("obligations 0/4"), report);
+
+        String block = block(measured(A_SLOPED_LINE));
+        for (String row : List.of("| (0, 29)", "| (0, 30)", "| (0, 28)", "| (0, 31)")) {
+            assertTrue(block.contains(row), () -> "a row at each point: " + block);
+        }
+
+        String answered = report(measured(A_SLOPED_LINE + AT_THE_SLOPED_LINE));
+        assertTrue(answered.contains("obligations 4/4"),
+                () -> "and the rows offered answer every one of them: " + answered);
     }
 
     /**
@@ -133,6 +159,40 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
         assertEquals(List.of("f/Int.divide(x, 2)", "f/Int.divide(x, 3)"),
                 axesOf(measured(model)).stream().sorted().toList(), () -> report(measured(model)));
 
+    }
+
+    /**
+     * Two numbers of one place are recognised, and no row is composed where a rule relates them.
+     *
+     * <p><b>A limitation, said out loud.</b> {@code x / 2 < x / 3} draws its line between two
+     * numbers of one position, and values that stand on it exist — every negative multiple of six
+     * is one. What cannot be done is composing the value: what writes a value for one number of a
+     * place is chosen per account, and two accounts at one place have no way to say what they admit
+     * between them, so the pair is refused whatever the accounts are.
+     *
+     * <p>Held here so the state is a decision and not a surprise. What the report says about such a
+     * point is that nothing here could build a representative for it — which is about this compiler
+     * — and not that no row can stand there. A change that moved either half, by composing the
+     * value or by reporting the point as unreachable, is a change this has to be looked at with.
+     */
+    @Test
+    void twoNumbersOfOnePlaceAreRecognisedAndNoRowIsComposedForTheirLine() {
+        String model = """
+                module example.quotient
+
+                behavior f : (x: Int) -> Bool
+                let f (x) = {
+                    guard x / 2 < x / 3 else false
+
+                    true
+                }
+                """;
+        String report = report(measured(model));
+        assertTrue(report.contains("borders 1"), report);
+        assertTrue(report.contains("nothing here could build a representative"), report);
+        assertFalse(report.contains("no value can be written"), report);
+        assertFalse(block(measured(model)).contains("| ("),
+                () -> "and no row is offered at it: " + block(measured(model)));
     }
 
     /**

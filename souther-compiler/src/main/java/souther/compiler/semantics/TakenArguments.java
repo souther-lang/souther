@@ -1,6 +1,8 @@
 package souther.compiler.semantics;
 
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -39,7 +41,18 @@ public record TakenArguments(Map<Integer, BigDecimal> byPosition) {
             }
             normalized.put(position, read.stripTrailingZeros());
         });
-        byPosition = Map.copyOf(normalized);
+        // Kept in the order the arguments stand in, because one of these is written out wherever
+        // such a number is named and a name a reader looks up has to be the same name twice.
+        // `Map.copyOf` promises no order, so what it hands back would spell a taking of two
+        // arguments one way today and the other way after a rebuild.
+        byPosition = Collections.unmodifiableMap(new LinkedHashMap<>(normalized));
+    }
+
+    /** The one argument at {@code position}, read as {@code constant}. */
+    public static TakenArguments at(int position, BigDecimal constant) {
+        Map<Integer, BigDecimal> one = new LinkedHashMap<>();
+        one.put(position, constant);
+        return new TakenArguments(one);
     }
 
     /** What the argument at {@code position} reads as, or null where nothing here says. */

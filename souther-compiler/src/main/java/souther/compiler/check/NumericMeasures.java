@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -85,15 +86,8 @@ public final class NumericMeasures {
         ValueName operation = Terms.operationOf(e);
         List<Core> args = Terms.argsOf(e);
         if (operation == null && e instanceof Core.Binary written) {
-            // The operator spelling of a number the library also answers as a call. Which operation
-            // computes what an operator computes is declared with the arithmetic, so the two
-            // spellings reach one operation and one term. Held to the number that operation answers,
-            // which is what leaves a name wrapped round a whole number out: what such a scaling
-            // answers is the name, and the account declared here is of the number.
-            ValueName computing = DefaultBoundOperationFacts.get().computingWhat(written.op());
-            if (computing != null
-                    && written.type() != null
-                    && written.type().equals(NumericAnswers.typeOf(computing, symbols))) {
+            ValueName computing = writing(written, symbols);
+            if (computing != null) {
                 operation = computing;
                 args = List.of(written.left(), written.right());
             }
@@ -106,18 +100,56 @@ public final class NumericMeasures {
             return null;
         }
         // What the call was given beside the value comes first, because for some operations it is
-        // what decides whether this call is a number taken of one place at all.
-        TakenArguments beside = besideTheValue(args, symbols);
-        return beside != null && DefaultBoundOperationFacts.get().takenAs(named, beside) != null
-                ? new Measured(named, args.getFirst(), beside) : null;
+        // what decides whether this call is a number taken of one place at all. What is handed over
+        // is everything this could read of them; which of those name the number is the account's
+        // (spec §boundary-coordinates), and a call given something for another reason is a call
+        // taking the same number as one that was not.
+        TakenArguments gave = besideTheValue(args, symbols);
+        TakenAs how = DefaultBoundOperationFacts.get().takenAs(named, gave);
+        return how == null ? null : new Measured(named, args.getFirst(), how.naming(gave));
     }
 
     /**
-     * What the arguments after the first read as, or null where any of them reads as no constant.
+     * The operation {@code written} calls by writing an operator, or null where the operator
+     * reaches none this can name.
      *
-     * <p>Null and not an entry left out. What is missing is which number of the place this is, and
-     * a term built without it would be the quotient by whatever the next reader assumed — so the
-     * taking is one nothing here names, which is the answer every caller already has a place for.
+     * <p>Which operations compute what an operator computes is declared with the arithmetic, and
+     * which of them <em>this</em> call reached is settled by what it answered. An operator is
+     * written over every kind of number the language has, so the declarations name as many
+     * operations as there are kinds and the number in hand is what tells them apart — asked as
+     * "which one operation computes this", a second kind of number gaining the operator would take
+     * the answer away from calls that were never in doubt.
+     *
+     * <p>Held to the number the operation answers and not to any type the operand wears. A name
+     * wrapped round a whole number is scaled and stays that name, so what such a call answers is
+     * the name rather than the number, and the account declared of the operation is of the number.
+     */
+    private static ValueName writing(Core.Binary written, Symbols symbols) {
+        if (written.type() == null) {
+            return null;
+        }
+        ValueName found = null;
+        for (ValueName operation : DefaultBoundOperationFacts.get().computing(written.op())) {
+            if (written.type().equals(NumericAnswers.typeOf(operation, symbols))) {
+                // Two operations answering one number by one operator would leave which of them
+                // this call reached to whoever asked first, and what is read under an operation is
+                // its account of how such a number is taken.
+                if (found != null) {
+                    return null;
+                }
+                found = operation;
+            }
+        }
+        return found;
+    }
+
+    /**
+     * What the arguments after the first read as, leaving out the ones that read as no constant.
+     *
+     * <p>A reading and not a judgement. Whether a missing one matters is the account's question —
+     * a divisor it does not have leaves it no number to name, and an argument it never reads was
+     * never going to be part of one — so what is handed over is what this managed to read, and the
+     * account is asked afterwards.
      */
     private static TakenArguments besideTheValue(List<Core> args, Symbols symbols) {
         if (args.size() == 1) {
@@ -126,10 +158,9 @@ public final class NumericMeasures {
         Map<Integer, BigDecimal> read = new LinkedHashMap<>();
         for (int position = 1; position < args.size(); position++) {
             BigDecimal constant = Terms.constantNumber(args.get(position), symbols);
-            if (constant == null) {
-                return null;
+            if (constant != null) {
+                read.put(position, constant);
             }
-            read.put(position, constant);
         }
         return new TakenArguments(read);
     }

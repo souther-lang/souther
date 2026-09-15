@@ -56,6 +56,24 @@ public sealed interface TakenAs {
     }
 
     /**
+     * Which of what a call {@code gave} beside the value name the number it takes.
+     *
+     * <p><b>The account's and not the call's.</b> An operation may be handed values for reasons
+     * that have nothing to do with which number it takes — how to render an answer, what to do at
+     * an edge — and two calls differing only in one of those take the same number of the same
+     * place. Taken as "everything the call gave", such a call would be a second subject for one
+     * number: a line drawn on either would fall on neither, and a row composed for one would be
+     * offered at the other.
+     *
+     * <p>So what a reading of a call hands over is what it managed to read, and this is where that
+     * is narrowed to what names the number. An account that reads none of them names none, however
+     * many the call was given.
+     */
+    default TakenArguments naming(TakenArguments gave) {
+        return TakenArguments.NONE;
+    }
+
+    /**
      * How many a container holds: a string's length, a list's, the size of a set or a map.
      *
      * <p>Counted in what the library counts in — a string in code points, as {@code String.length}
@@ -162,6 +180,14 @@ public sealed interface TakenAs {
         public boolean settledBy(TakenArguments arguments) {
             BigDecimal by = read(arguments);
             return by != null && by.signum() != 0;
+        }
+
+        /** The divisor and nothing else: a quotient is the number its divisor says, and what a call
+         *  was given for any other reason names no number of the place. */
+        @Override
+        public TakenArguments naming(TakenArguments gave) {
+            BigDecimal by = read(gave);
+            return by == null ? TakenArguments.NONE : TakenArguments.at(divisor, by);
         }
 
         /** What the divisor reads as, or null where these arguments do not say. */
