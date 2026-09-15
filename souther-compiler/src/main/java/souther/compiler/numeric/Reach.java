@@ -75,4 +75,30 @@ public record Reach(RationalCut least, RationalCut most) {
     public boolean saysNothing() {
         return least == null && most == null;
     }
+
+    /**
+     * Whether there is no value between the ends, so the form comes to nothing at all.
+     *
+     * <p>What this record means is the values a form is proven to run between, and a least above a
+     * most names none of them. Said here because it is this type's own meaning rather than any one
+     * reader's question — a reader working the answer out beside itself would be restating what
+     * these two fields already say, and the two would agree only for as long as somebody kept them
+     * so.
+     *
+     * <p>Not called bottom. That word belongs to a whole state over every position; this is one
+     * form, and where a form is empty the state is empty too — but the reader that concludes the
+     * second from the first is the one holding the state.
+     *
+     * <p>An end nobody found leaves the form running that way without stopping, which is the
+     * opposite of empty, so both ends have to be there before this can be true.
+     */
+    public boolean isEmpty() {
+        if (least == null || most == null) {
+            return false;
+        }
+        int order = least.at().compareTo(most.at());
+        // At one value the form is empty unless that value is reached from both sides: a form above
+        // five and at most five runs nowhere, while one at least five and at most five runs at five.
+        return order > 0 || (order == 0 && !(least.inclusive() && most.inclusive()));
+    }
 }

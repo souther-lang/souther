@@ -26,6 +26,12 @@ import java.util.function.Function;
  * finds goes back through the differences, and round again. A round reads only what the round before
  * it produced, so no rule's answer depends on which rule ran first.
  *
+ * <p><b>And the rules are asked what their own forms come to.</b> A reading may take one rule as a
+ * premise, so a form two rules bound from opposite sides is answered by both of them at once, and
+ * where those two answers have crossed nothing satisfies the rules together — see
+ * {@link #aRuleRunsNowhere}. Two rules to a contradiction and no more, outside the difference-bound
+ * shape.
+ *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
  * hands the next one.
@@ -112,8 +118,11 @@ public final class ClosedState<A> {
             // against that one. A reading that carried the box along as the rules narrowed it would
             // answer a rule differently depending on which rules had been read before it, which is
             // the order deciding the result — the thing the rounds exist to be rid of.
-            AffineReduction.Reduction<A> found = AffineReduction.over(
-                    FormReach.over(constraints, box, differences), spacing);
+            FormReach<A> reading = FormReach.over(constraints, box, differences);
+            if (aRuleRunsNowhere(reading, constraints)) {
+                return empty(differences);
+            }
+            AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing);
             if (found instanceof AffineReduction.Reduction.NothingIsLeft) {
                 return empty(differences);
             }
@@ -130,6 +139,41 @@ public final class ClosedState<A> {
             box = next;
         }
         return settled(box, differences, Status.BUDGET_EXHAUSTED);
+    }
+
+    /**
+     * Whether the rules leave one of the forms they are about no value at all.
+     *
+     * <p>A rule bounds its own form one way, and another rule over the same form bounds it the
+     * other, and where the two have crossed nothing satisfies both. The reading already derives
+     * both ends — it may take one rule as a premise, and where that premise's form is the one being
+     * asked about, what is left to bound is the constants ({@link FormReach}). So the two rules are
+     * added together there and the sum is a statement about nothing but numbers.
+     *
+     * <p>What was missing is the question. The reading is asked what a goal comes to and what the
+     * rest of a rule comes to, and the rest of a two-position rule names one position, which is
+     * answered by the ends and never reaches the premise. Nothing asked it what the rules' own
+     * forms come to, which is where two rules over one form meet.
+     *
+     * <p>One premise to a query, so this finds a contradiction two rules state between them and not
+     * one that needs a third. Over the difference-bound shape that is not the limit — those are
+     * closed over each other exactly, so a cycle of any length is found there.
+     *
+     * <p>A form named by one position is left out: the ends are that question, run every round
+     * until they stop moving, and a position whose ends have crossed is what
+     * {@link Box#holdsAValue} already answers.
+     */
+    private static <A> boolean aRuleRunsNowhere(FormReach<A> reading,
+                                                List<AffineConstraint<A>> constraints) {
+        Set<Map<A, Rational>> asked = new LinkedHashSet<>();
+        for (AffineConstraint<A> each : constraints) {
+            Map<A, Rational> form = each.form().coefs();
+            if (form.size() > 1 && asked.add(form)
+                    && reading.of(form, Rational.ZERO).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
