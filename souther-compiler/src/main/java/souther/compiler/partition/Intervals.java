@@ -2,20 +2,16 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Turning the lines a model draws through one numeric position into the ranges between them.
@@ -218,12 +214,16 @@ final class Intervals {
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
             List<FixtureTemplate> values = inside == null ? List.of()
-                    : standingIn(of, inside, type, carrier, ruleReading);
+                    : standingIn(orders, inside, type, reading, ruleReading);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
+                    // And the number they were composed for, so that a location several of these
+                    // stand on is asked for one value answering all of them rather than for one
+                    // value per class.
                     : PartitionClass.of(id, label, is,
-                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
+                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0])))
+                            .standingAt(inside));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
         return classes.stream().map(each -> each.ofTheNumber(of)).toList();
@@ -272,47 +272,33 @@ final class Intervals {
     }
 
     /**
-     * Values of the position that read as {@code inside} on this term, or none where the term is one
-     * nothing here can put a value on.
+     * Values of the position that read as {@code inside} on this term, or none where nothing here
+     * writes one.
      *
-     * <p>A number the term reads out of the value is written into it; a number the term counts of the
-     * value is a value carrying that many, which is {@link Witnesses}'s question rather than this
-     * one's. Asked of it rather than answered here, so that this says a range has no representative
-     * only when the thing that builds them has none to give.
+     * <p><b>Asked of what writes a value at a point, rather than answered beside it.</b> What a
+     * value reading as a number looks like is a construction per account of what the number is
+     * taken as, and {@link TermRealizations} holds one arm per account with no default — so an
+     * account the language gains is one a class of it is filled for by the same act that gives a
+     * point of it a value. Answered here as well, the two switches did not have to agree, and this
+     * one closed over the kinds of term instead: every number taken of a value went to the one
+     * construction a count wants, so an hour of nine asked for a value holding nine of something.
+     *
+     * <p>Where a row for one of these may be written is the reading's to say. It is asked for it
+     * rather than handed a region a caller built, since a region worked out beside the reading is a
+     * second answer to where the declarations leave room.
+     *
+     * <p>What comes back short of values built is a class with no representative, which is as much
+     * as the class a report names can hold. The reasons that answer parts under — a budget of this
+     * compiler's having stopped, a walk that saw some of what there is — are distinctions a reader
+     * of a class has no place to put yet, and they are lost here.
      */
-    private static List<FixtureTemplate> standingIn(NumericTerm.FromOnePosition of, Place inside,
-                                                    Type type, Carrier carrier,
-                                                    RuleReadingContext reading) {
-        // Exhaustive, with no `default`. What a value reading as this number looks like is a
-        // different construction per kind of number, so a kind added is one this has to be told
-        // how to build for rather than one that falls to whichever branch it was not named in.
-        RuleReadingSource ruleSource = reading.source();
-        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published());
-        // A name this module cannot write leaves no value to write, whichever number the value is
-        // asked to read as. Asked of the position, once, before anything is built for it.
-        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
-            return List.of();
-        }
-        switch (of) {
-            case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing =
-                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach);
-                return standing == null ? List.of()
-                        : List.of(RepresentativeSource.under(worn.names(), standing));
-            }
-            case NumericTerm.TakenOf _ -> { }
-        }
-        int size = CountDomain.asCount(inside);
-        if (size < 0) {
-            return List.of();
-        }
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each
-                : Witnesses.ofSize(view, size, reading, Set.of()).values()) {
-            out.add(RepresentativeSource.under(worn.names(), each));
-        }
-        return List.copyOf(out);
+    private static List<FixtureTemplate> standingIn(TermOrders orders, Place inside, Type type,
+                                                    Quantities reading,
+                                                    RuleReadingContext ruleReading) {
+        return TermRealizations.at(type, orders, inside, reading.region(), ruleReading)
+                instanceof TermRealizations.Realization.Built built
+                ? built.values()
+                : List.of();
     }
 
     private Intervals() {}

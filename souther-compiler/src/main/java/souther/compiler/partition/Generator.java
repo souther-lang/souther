@@ -3840,6 +3840,41 @@ public final class Generator {
     }
 
     /**
+     * The numbers this row's classes were each composed at.
+     *
+     * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
+     * model divides and says nothing about which of its classes this row is being built for.
+     *
+     * <p>A class that narrows the position is left out. What such a class offers is the narrowing
+     * and not a value of the unnarrowed position, and what stands there is composed out of the
+     * narrowed type by the walk below — so a number to compose for is what the class beside it has.
+     */
+    private static SequencedMap<RealizationTarget, Place> numbersTheClassesStandAt(
+            MeasuredInput.MeasuredAxes axes, int[] where) {
+        SequencedMap<RealizationTarget, Place> out = new LinkedHashMap<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (where[i] == NOT_HERE) {
+                continue;
+            }
+            PartitionClass cls = axes.get(i).classes().get(where[i]);
+            if (cls.standsAt() == null || cls.of() == null || cls.selects() != null) {
+                continue;
+            }
+            out.put(RealizationTarget.of(cls.of()), cls.standsAt());
+        }
+        return out;
+    }
+
+    /** The value composed for every number of this class's location, or null where this class is
+     *  the only one of the row standing on it. */
+    private static List<FixtureTemplate> answeringAllOfThem(
+            Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
+        return cls.standsAt() == null || cls.of() == null
+                ? null
+                : together.get(RealizationTarget.of(cls.of()).writeRoot());
+    }
+
+    /**
      * The row's positions gathered under the location each of them is written at.
      *
      * <p>Which is what a row is: one value per location, whatever number of the model that value
@@ -4372,6 +4407,29 @@ public final class Generator {
                                  List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
         LocationWrites decided = new LocationWrites();
+        // One value per location, for as many of its numbers as this row's classes stand on. Each
+        // class composed a value for the number it was built at, so two classes of one location
+        // arrive holding two values — and a row that wrote either of them would decide one class
+        // while being offered as covering both. Composed here instead, before anything is written,
+        // by the reader that answers this for the points of a border ({@link #edgeAt}).
+        Map<TermPath, List<FixtureTemplate>> together = new LinkedHashMap<>();
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
+                : byTheLocationTheyWrite(numbersTheClassesStandAt(axes, where)).entrySet()) {
+            // One number, which the class that stands at it already holds a value for. Composed
+            // again here it would be the same question asked twice, and the two could part.
+            if (group.getValue().size() < 2) {
+                continue;
+            }
+            Edge composed = edgeAt(subject, group.getValue(), subject.quantities().region());
+            if (composed.values().isEmpty()) {
+                // What the composing said, and not a sentence about the location holding two
+                // values: a location asked for numbers no one value answers is what that reader
+                // reports, in the words it reports it in.
+                return new Attempt(null, composed.reason(), group.getKey().toString(),
+                        Optional.ofNullable(composed.detail()));
+            }
+            together.put(group.getKey(), composed.values());
+        }
         // What every position of this row has to be for the classes it sits in to exist. Read off
         // the paths and off the classes together, because both state one: a position under a
         // refinement requires it by being there at all, and a class of the position above states
@@ -4412,8 +4470,11 @@ public final class Generator {
                 // location decided twice, under two names. The plan reads the first of them and the
                 // class fixed at the narrowed position is never looked at.
                 case RepresentativeSource.Evaluation.Values values -> {
+                    // The one composed for every number of this location where there was more than
+                    // one, and the class's own where this class is the only one standing on it.
+                    List<FixtureTemplate> write = answeringAllOfThem(together, cls);
                     if (cls.selects() == null
-                            && decided.write(path, values.written())
+                            && decided.write(path, write == null ? values.written() : write)
                                     == LocationWrites.Written.CONFLICTING) {
                         // Two of this row's classes are of one location and offer different values
                         // for it. Taking either leaves the other's class unanswered while the row

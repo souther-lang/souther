@@ -42,11 +42,21 @@ import java.util.List;
  *                        is what decides whether two classes can be in one row, and reading that
  *                        off a name is the same position answering differently depending on how it
  *                        was spelled
+ * @param standsAt        the number {@link #representatives} were composed for, and null where they
+ *                        were not composed for a number. A class over a range holds many, and which
+ *                        of them a value was written at is a choice — so it is kept rather than
+ *                        worked out again, and a reader asking a location's several classes for one
+ *                        value asks for the numbers they were each built at.
+ *
+ *                        <p>Deriving it a second time from {@link #recognises} would be that choice
+ *                        taken twice, which is how a value composed for one class came to stand at a
+ *                        number another class of the same location was not built at
  */
 public record PartitionClass(String id, String label, Recognition recognises,
                              RepresentativeSource representatives, ValueSet denotes,
                              Refinement selects,
-                             souther.compiler.inputs.NumericTerm.FromOnePosition of) {
+                             souther.compiler.inputs.NumericTerm.FromOnePosition of,
+                             souther.compiler.numeric.Place standsAt) {
 
     public PartitionClass {
         // The meaning and the number it is said to be of are in one vocabulary. A meaning about a
@@ -62,14 +72,14 @@ public record PartitionClass(String id, String label, Recognition recognises,
 
     public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
-        return new PartitionClass(id, label, recognises, representatives, null, null, null);
+        return new PartitionClass(id, label, recognises, representatives, null, null, null, null);
     }
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label,
                                                Recognition recognises, String why) {
         return new PartitionClass(id, label, recognises,
-                new RepresentativeSource.Ungeneratable(why), null, null, null);
+                new RepresentativeSource.Ungeneratable(why), null, null, null, null);
     }
 
     /**
@@ -93,7 +103,21 @@ public record PartitionClass(String id, String label, Recognition recognises,
             throw new IllegalArgumentException("`" + id + "` is a class of " + of
                     + " and cannot be made a class of " + number);
         }
-        return new PartitionClass(id, label, recognises, representatives, denotes, selects, number);
+        return new PartitionClass(id, label, recognises, representatives, denotes, selects, number,
+                standsAt);
+    }
+
+    /**
+     * The same class, saying which number its representatives were composed for.
+     *
+     * <p>Written by whoever composed them, because composing is where the number was chosen. A
+     * class over a run holds many and one of them was asked for; a reader that has to compose one
+     * value for several classes of a location asks each of them for the number it was built at, and
+     * a class that kept only the value leaves that reader choosing again.
+     */
+    public PartitionClass standingAt(souther.compiler.numeric.Place number) {
+        return new PartitionClass(id, label, recognises, representatives, denotes, selects, of,
+                number);
     }
 
     /**
@@ -109,7 +133,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
      */
     public PartitionClass under(List<TypeSymbol> worn) {
         return new PartitionClass(id, label, Recognition.Under.of(worn, recognises),
-                representatives, denotes, selects, of);
+                representatives, denotes, selects, of, standsAt);
     }
 
     /**
@@ -145,7 +169,8 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * whole, which is the safe direction — the class stays.
      */
     public PartitionClass holding(ValueSet values) {
-        return new PartitionClass(id, label, recognises, representatives, values, selects, of);
+        return new PartitionClass(id, label, recognises, representatives, values, selects, of,
+                standsAt);
     }
 
     /**
@@ -156,7 +181,8 @@ public record PartitionClass(String id, String label, Recognition recognises,
      * requirements of its position and no more.
      */
     public PartitionClass selecting(Refinement refinement) {
-        return new PartitionClass(id, label, recognises, representatives, denotes, refinement, of);
+        return new PartitionClass(id, label, recognises, representatives, denotes, refinement, of,
+                standsAt);
     }
 
     /**

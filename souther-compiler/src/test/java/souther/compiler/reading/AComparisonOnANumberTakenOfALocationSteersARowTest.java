@@ -35,10 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * named, and the arm behind the guard was left with no row and nothing saying why.
  *
  * <p>What a row for such an arm needs beside the decision is a value to write, and that is a separate
- * capability with a separate answer. The last case below is the one where the decision is settled and
- * the value cannot be written: the combination is asked for and comes back as one nothing composes,
- * which is what an author can act on. Run together, the way to get there would be to leave the
- * decision unnamed, which is where this started.
+ * capability with a separate answer. The last case below is where the two meet: the combination
+ * settles the guard's number beside the flags, which the reading answers, and a value standing at
+ * that number is written into it, which the composing answers. Run together, the way to a row would
+ * be through leaving the decision unnamed, which is where this started.
  */
 class AComparisonOnANumberTakenOfALocationSteersARowTest {
 
@@ -218,30 +218,40 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
     }
 
     /**
-     * A number nothing writes a value for is narrowed all the same, and what is missing is said.
+     * A number taken of a location is narrowed beside the flags, and a value standing at it is
+     * written into the row.
      *
-     * <p>Both halves. The combination asked for settles the guard's number together with the flags
-     * the second guard reads, which is a cell and so a decision the reading named; and what comes
-     * back is that nothing composes a value for it, which is the generator's answer about writing a
-     * time by its minute. Asked of the minute's class alone, this would pass on the class search,
-     * which reaches that class whether or not the comparison was ever a decision.
+     * <p>Both halves, because either alone would pass over a compiler that did one and not the
+     * other. That a cell settles the guard's number together with the flags the second guard reads
+     * is the reading's answer, and it is what would be missing if the comparison were read off its
+     * operands' shapes; that the row carries a time whose minute is at or above thirty is the
+     * composing's, and it is what would be missing if writing a time by its minute were left to a
+     * reader that took every number of a location for a count of what it holds.
+     *
+     * <p>Asked of the minute's class alone, this would pass on the class search, which reaches that
+     * class whether or not the comparison was ever a decision.
      */
     @Test
-    void aNumberNothingComposesAValueForIsStillNarrowed() {
+    void aNumberTakenOfALocationIsNarrowedAndWrittenBesideTheFlags() {
         Adequacy.Filling filling = generated(MINUTE);
 
-        List<Generator.UnresolvedCombination> cells = filling.composed().unresolved().stream()
-                .filter(each -> each.classes().stream()
-                                .anyMatch(cls -> cls.contains("30 <= x <= 59"))
-                        && each.classes().stream().anyMatch(cls -> cls.startsWith("a=")))
+        List<Generator.GeneratedRow> cells = filling.composed().rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForACombinationOfDecisions settled
+                                && settles(settled, "Time.minute(slot.at)")
+                                && settles(settled, "a=")))
                 .toList();
 
         assertFalse(cells.isEmpty(),
                 () -> "the guard's number is settled beside the flags: "
-                        + filling.composed().unresolved());
-        assertTrue(cells.stream().allMatch(each -> each.reason()
-                        == Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                () -> "and what is short is the value, not the decision: " + cells);
+                        + filling.composed().rows());
+        assertTrue(cells.stream().allMatch(row -> row.inputs().get(0).text().contains("00:30:00")),
+                () -> "and the row stands at that number: " + cells);
+    }
+
+    /** Whether one of the conditions a cell settles is said with {@code what} in it. */
+    private static boolean settles(Generator.Purpose.ForACombinationOfDecisions cell, String what) {
+        return cell.settled().stream().anyMatch(each -> each.toString().contains(what));
     }
 
     /**

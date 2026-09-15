@@ -128,7 +128,10 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
     @Test
     void theRowOfferedAtAPointOnTheQuotientStandsAtIt() {
         String block = block(measured(ON_THE_QUOTIENT));
-        assertTrue(block.contains("| (20)"), () -> "a value whose quotient is ten: " + block);
+        // The value and not the whole line. A row is written for whatever it was composed for, and
+        // one composed for a class carries the class's name beside it — so a line matched from its
+        // opening is a line that says nothing was.
+        assertTrue(block.contains("(20)"), () -> "a value whose quotient is ten: " + block);
 
         assertEquals(new ItemAssessment.Coverage.Hit(),
                 coverageAt(measured(ON_THE_QUOTIENT + ANSWERED), "f/Int.divide(x, 2)", "10"),
