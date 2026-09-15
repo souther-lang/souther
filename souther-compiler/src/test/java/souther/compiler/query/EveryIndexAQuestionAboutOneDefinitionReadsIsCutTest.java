@@ -290,12 +290,14 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     @Test
     void theCensusReachesTheEdgesThisIsAbout() {
         IndexEdges.Census first = CENSUS.get(Edit.A_BEHAVIOR_DECLARED_BESIDE);
+        Set<IndexEdges.Edge> shapes = new TreeSet<>();
+        first.everyEdge().forEach(at -> shapes.add(at.shape()));
 
-        assertTrue(first.instances() > 20,
-                () -> "a census of " + first.instances() + " edges is not this compiler's graph");
-        assertTrue(first.everyEdge().size() > 8,
-                () -> "a census of " + first.everyEdge().size() + " shapes is not this compiler's"
+        assertTrue(first.everyEdge().size() > 20,
+                () -> "a census of " + first.everyEdge().size() + " edges is not this compiler's"
                         + " graph");
+        assertTrue(shapes.size() > 8,
+                () -> "a census of " + shapes.size() + " shapes is not this compiler's graph");
     }
 
     /** And every edge an edit moved the index of is one of the two, at every definition it stands
@@ -319,16 +321,23 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      * the module, so a verdict read off an edit that moved nothing is a verdict about the edit. An
      * edge here that no edit moves is one nobody has put a question to, and what it wants is an edit
      * that moves its index rather than a word in the register.
+     *
+     * <p><b>Edge by edge and not shape by shape.</b> Two edges of one shape are two edges, and an
+     * edit may move the index of one and leave the other's — a question asked under one policy and
+     * an index gathered under another are exactly that. Folded to the shape before the difference is
+     * taken, the one that was asked stands as the other's witness, which is the reading this whole
+     * check exists to refuse. The register is by shape because a judgement is about a question; what
+     * an edit did is about these.
      */
     @Test
     void everyEdgeWasMetUnderAnEditThatMovedItsIndex() {
-        Set<IndexEdges.Edge> everyEdge = new TreeSet<>();
-        Set<IndexEdges.Edge> exercised = new TreeSet<>();
+        Set<IndexEdges.At> everyEdge = new TreeSet<>();
+        Set<IndexEdges.At> exercised = new TreeSet<>();
         CENSUS.values().forEach(census -> {
             everyEdge.addAll(census.everyEdge());
             exercised.addAll(census.exercised());
         });
-        Set<IndexEdges.Edge> untouched = new TreeSet<>(everyEdge);
+        Set<IndexEdges.At> untouched = new TreeSet<>(everyEdge);
         untouched.removeAll(exercised);
 
         assertEquals(Set.of(), untouched,

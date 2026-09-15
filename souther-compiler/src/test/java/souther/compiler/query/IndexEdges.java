@@ -42,11 +42,39 @@ import java.util.TreeSet;
 final class IndexEdges {
 
     /**
-     * One edge as a shape: the question about one definition, and the index it read.
+     * One edge of the graph: this question about this definition, and the index it read.
      *
-     * <p>The classes and not the keys. What is written down is a judgement about a question, and a
-     * module with two behaviors in it holds the same edge twice; keyed by the key, the register
-     * would be a register of a fixture.
+     * <p>What a census observes. An edit moves one index and leaves another, and a question about
+     * one definition is answered again or is not — both of which are about the keys and not about
+     * the classes they are of, so anything said about what an edit did is said about these.
+     */
+    record At(Key<?> reader, Key<?> index) implements Comparable<At> {
+
+        Edge shape() {
+            return new Edge(reader.getClass(), index.getClass());
+        }
+
+        @Override
+        public String toString() {
+            return shape() + ", at " + reader + ", reading " + index;
+        }
+
+        @Override
+        public int compareTo(At other) {
+            return toString().compareTo(other.toString());
+        }
+    }
+
+    /**
+     * One edge as a shape: the kind of question, and the kind of index it read.
+     *
+     * <p>What is written down. A judgement is about a question and not about a fixture's behaviors,
+     * and a module with two behaviors in it holds the same edge twice; keyed by the key, the
+     * register would be a register of a fixture.
+     *
+     * <p>Which is why it is not what a census counts. Two edges of one shape are two edges: an edit
+     * that moves the index of one of them has put no question to the other, and folding the two
+     * together before asking what an edit did lets the one stand as the other's witness.
      */
     record Edge(Class<?> reader, Class<?> index) implements Comparable<Edge> {
 
@@ -110,16 +138,13 @@ final class IndexEdges {
      *                follow
      * @param exercised every edge this edit moved the index of, whatever came of it — so an edge
      *                  nothing here asks is told from one that was asked and answered badly
-     * @param everyEdge every edge shape in the graph, moved or not, which is what says an edge no
-     *                  edit reaches is an edge nothing here has judged
+     * @param everyEdge every edge in the graph, moved or not, which is what says an edge no edit
+     *                  reaches is an edge nothing here has judged
      * @param unread every component of every question this walk met that nobody has read, which is
      *               what the census rests on and cannot be defaulted either way
-     * @param instances how many edges were read, which says a census of nothing is a census of
-     *                  nothing rather than a clean one
      */
     record Census(Map<Edge, Set<WhyItHeld>> whereTheIndexMoved, List<String> neither,
-                  Set<Edge> exercised, Set<Edge> everyEdge, Set<Part> unread,
-                  int instances) {}
+                  Set<At> exercised, Set<At> everyEdge, Set<Part> unread) {}
 
     /**
      * What the graph held before the edit, read against what it held after.
@@ -130,10 +155,9 @@ final class IndexEdges {
      */
     static Census taken(Snapshot before, Snapshot after) {
         Map<Edge, Set<WhyItHeld>> moved = new LinkedHashMap<>();
-        Set<Edge> exercised = new TreeSet<>();
+        Set<At> exercised = new TreeSet<>();
         List<String> neither = new ArrayList<>();
-        Set<Edge> everyEdge = new TreeSet<>();
-        int instances = 0;
+        Set<At> everyEdge = new TreeSet<>();
         Set<Part> unread = new TreeSet<>();
         for (Map.Entry<Key<?>, Answer<?>> each : before.answers().entrySet()) {
             Key<?> reader = each.getKey();
@@ -146,30 +170,29 @@ final class IndexEdges {
                 if (!anIndex(read, index)) {
                     continue;
                 }
-                instances++;
-                Edge edge = new Edge(reader.getClass(), read.getClass());
-                everyEdge.add(edge);
+                At at = new At(reader, read);
+                everyEdge.add(at);
                 if (Objects.equals(index, after.answers().get(read))) {
                     // This edit put no question to this edge. Saying what the reader is over an
                     // index that stayed where it was is saying what any reader of it is.
                     continue;
                 }
-                exercised.add(edge);
+                exercised.add(at);
                 // The one thing that is asked. The index moved, so what the reader means is
                 // whether it moved with it — and what stops an edit is what an answer's equality
                 // says, whatever shape the answer has.
                 if (!Objects.equals(each.getValue(), after.answers().get(reader))) {
-                    neither.add(edge + ", at " + reader + ", reading " + read);
+                    neither.add(at.toString());
                     continue;
                 }
-                moved.computeIfAbsent(edge, _ -> new TreeSet<>())
+                moved.computeIfAbsent(at.shape(), _ -> new TreeSet<>())
                         .add(projectsSomething(each.getValue(), index)
                                 ? WhyItHeld.A_PROJECTION
                                 : WhyItHeld.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT);
             }
         }
         Collections.sort(neither);
-        return new Census(moved, neither, exercised, everyEdge, unread, instances);
+        return new Census(moved, neither, exercised, everyEdge, unread);
     }
 
     /**
