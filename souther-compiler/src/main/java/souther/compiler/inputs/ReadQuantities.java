@@ -136,6 +136,12 @@ final class ReadQuantities implements Quantities {
      *  it shows out of the second. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
             new ConcurrentHashMap<>();
+    /** The same, of those rules with this value's fixings standing in them. Beside the one above
+     *  and not in place of it: how a term is spaced is asked of what the declarations say, and a
+     *  reading that asked the conditioned rules for it would be asking about a number a fixing had
+     *  already settled. */
+    private final Map<StructuralContext, ConstraintState<InputAtom>> withTheFixings =
+            new ConcurrentHashMap<>();
 
     /**
      * One thing taken in about this input's values.
@@ -556,6 +562,52 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
+     * The same rules, with what a caller has fixed standing in them.
+     *
+     * <p><b>Which is what fixing a position does.</b> {@code given} moves the space every question
+     * after it is answered against, and is not extra information for whichever term a question
+     * happens to name. A rule relating two positions is in neither of their ranges, so a form asked
+     * about one of a pair runs where the other's value puts it and an assignment the pair's rule
+     * refuses is refused nowhere else — read as a bound of the asked-about term alone, the first
+     * question came back unbounded and the second came back with nothing shown.
+     *
+     * <p>Onto the rules and never met against the answer, which is {@link #holding}'s rule and the
+     * reason it is a rule: what a relation leaves a position is not something a range met afterwards
+     * can say.
+     *
+     * <p>Only what stands under this context, through the same gate the forms taken in go through
+     * ({@link #stands}). A fixing at a position no value under this context has is a rule about a
+     * row other than the one being asked about.
+     *
+     * <p>And what this puts on is only what one value was fixed at. A term fixed at two is a
+     * contradiction and is said as one where the fixings are read ({@link #emptiness}); carried
+     * here as the range between them, it would be a second account of that, and one that reads as a
+     * position with room to move. Which is not a promise about the rules a question is answered
+     * against: a term the question itself names is put on by {@link #runsIn} whatever it was fixed
+     * at, and that is the older reading of the same helper.
+     */
+    private ConstraintState<InputAtom> effectiveConstraints(StructuralContext under) {
+        // Nothing fixed, which is every reading that answers about the declarations rather than
+        // about a row being written. The same rules, and kept as the one answer rather than as a
+        // second entry saying the same thing under a second key.
+        if (fixed.isEmpty()) {
+            return constraints(under);
+        }
+        ConstraintState<InputAtom> had = withTheFixings.get(under);
+        if (had != null) {
+            return had;
+        }
+        ConstraintState<InputAtom> made = constraints(under);
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
+                made = holding(made, each.getKey(), under);
+            }
+        }
+        withTheFixings.put(under, made);
+        return made;
+    }
+
+    /**
      * The same rules, with what one prerequisite of the context says about the values taken in.
      *
      * <p>Exhaustive over {@link StructuralContext.Assumption}, with no {@code default}, and this is
@@ -827,19 +879,18 @@ final class ReadQuantities implements Quantities {
      * and that end survives where a form is one term taken as itself ({@link #runsBetween}), which
      * is the only shape such a position is ever asked in.
      */
-    private souther.compiler.numeric.NumericDomain<InputAtom> holding(
-            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term,
-            StructuralContext under) {
+    private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
+                                               StructuralContext under) {
         NumericDomain.Bounds runs = whereOneTermRuns(term);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
         }
         InputAtom atom = called(term, under);
-        souther.compiler.numeric.Granularity spaced = spacingOf(rules, term, atom);
+        souther.compiler.numeric.Granularity spaced = spacingOf(rules.numbers(), term, atom);
         if (spaced == null) {
             return rules;
         }
-        return rules.assuming(atom, numbersOf(runs), Map.of(atom, spaced));
+        return rules.taking(atom, numbersOf(runs), Map.of(atom, spaced));
     }
 
     /** A range with only the ends the arithmetic has a number for. */
@@ -905,11 +956,11 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.Bounds runsIn(StructuralContext under,
                                         LinearForm<NumericTerm> form) {
-        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints(under).numbers();
+        ConstraintState<InputAtom> rules = effectiveConstraints(under);
         for (NumericTerm term : form.coefs().keySet()) {
             rules = holding(rules, term, under);
         }
-        NumericDomain.Bounds projected = rules.boundsOf(over(form, under));
+        NumericDomain.Bounds projected = rules.numbers().boundsOf(over(form, under));
         // One term taken as itself, which is the arithmetic being the identity rather than a second
         // answer to the same question. It is also the only shape a position the arithmetic cannot
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
@@ -1024,6 +1075,11 @@ final class ReadQuantities implements Quantities {
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
         // declaration and something a caller took in, can be seen nowhere else.
+        //
+        // The fixings are in there too ({@link #effectiveConstraints}), and this is the only place
+        // that can see what they contradict. The sentences above hold a fixing against the position
+        // it is at; what a rule relating two positions refuses is a fact about the assignment, and
+        // neither position's own range holds it.
         return switch (viability(asked(List.of()), null)) {
             case Viability.ProvedImpossible it ->
                     Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
@@ -1058,7 +1114,7 @@ final class ReadQuantities implements Quantities {
      */
     private Viability viability(StructuralContext under, TermPath below) {
         Optional<Emptiness> here =
-                constraints(under).holdsNothing(positions(under));
+                effectiveConstraints(under).holdsNothing(positions(under));
         if (here.isPresent()) {
             return new Viability.ProvedImpossible(here.get());
         }

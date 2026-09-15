@@ -357,6 +357,21 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
     }
 
+    /**
+     * This, with {@code atom} taken to lie between {@code bounds}.
+     *
+     * <p>Beside the form above and for the same reason it is here rather than at its callers: what
+     * a conjunction reaches is this record's answer. A caller holding a range for one atom and
+     * rebuilding the state around a stronger {@link #numbers} would be naming the components a
+     * conjunction preserves, and a fifth of them would be left out of every such caller without a
+     * word.
+     */
+    public ConstraintState<A> taking(A atom, NumericDomain.Bounds bounds,
+                                     Map<A, Granularity> kinds) {
+        return new ConstraintState<>(numbers.assuming(atom, bounds, kinds), facts, confinement,
+                shown);
+    }
+
     /** This, with the predicate {@code key} taken as holding, or as failing. */
     ConstraintState<A> taking(A key, boolean positive) {
         return new ConstraintState<>(numbers, facts.assume(key, positive), confinement, shown);
