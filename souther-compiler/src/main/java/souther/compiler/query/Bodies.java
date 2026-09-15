@@ -1203,6 +1203,68 @@ public final class Bodies {
         }
     }
 
+    /**
+     * How many inputs each behavior one body names takes, by the name it names each under.
+     *
+     * <p>{@link NamedBehaviorArity} is the module's index of what every behavior in it takes, and an
+     * expansion wants the entries for the names its own body wrote. Read whole, it hands this body
+     * the module's identity: declaring a behavior nothing here names moves the index, and every body
+     * of the module is expanded again against arities none of them wrote differently.
+     *
+     * <p>Over the names the body wrote rather than over what it reaches once its helpers are
+     * expanded, which is the same set: a helper may not name a behavior at all (E1818), so expanding
+     * one into a body brings no behavior name the body has not got. A name a helper wrote anyway is
+     * one this body may not name, which is what an arity of none already says of it.
+     *
+     * <p>The body as its module settled it, so the two representations an expansion is asked for
+     * read the same names — what a body writes is what it writes, whichever of its helpers a policy
+     * goes on to expand into it.
+     */
+    public record BehaviorAritiesForBody(String module, String fn)
+            implements Key<Map<ValueName.Behavior, Integer>> {
+
+        @Override
+        public Answer<Map<ValueName.Behavior, Integer>> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Map<ValueName.Behavior, Integer>> arities =
+                    db.ask(new NamedBehaviorArity(module));
+            if (!def.present() || !arities.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, Integer> out = new LinkedHashMap<>();
+            for (ValueName.Behavior each : behaviorsNamedIn(def.value())) {
+                Integer takes = arities.value().get(each);
+                if (takes != null) {
+                    out.put(each, takes);
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /** Every behavior {@code def} writes the name of, in the order the body writes them. A kernel
+     *  the language ships writes no body here and so names none. */
+    private static Set<ValueName.Behavior> behaviorsNamedIn(Hir.FnDef def) {
+        Set<ValueName.Behavior> named = new LinkedHashSet<>();
+        List<Hir.Expr> todo = new ArrayList<>();
+        switch (def.body()) {
+            case Hir.FnBody.Written written -> todo.add(written.expr());
+            case Hir.FnBody.Intrinsic _ -> { }
+        }
+        while (!todo.isEmpty()) {
+            Hir.Expr at = todo.remove(todo.size() - 1);
+            if (at == null) {
+                continue;
+            }
+            if (at instanceof Hir.Var.Denoting name
+                    && name.denotes() instanceof ValueName.Behavior each) {
+                named.add(each);
+            }
+            Hir.forEachChild(at, todo::add);
+        }
+        return named;
+    }
+
     /** A module with every helper parameter the author left unwritten carrying the type its body
      * gives it — the surface tree the check reads its declarations from. */
     public record Settled(String name) implements Key<Hir.Module> {
@@ -1669,8 +1731,8 @@ public final class Bodies {
     /**
      * One body as the backend emits it: its helper calls expanded and its comprehensions desugared.
      *
-     * <p>What it reads is the fn itself and the helpers around it, so editing another body in the same
-     * module does not expand this one again.
+     * <p>What it reads is the fn itself and the helpers around it, so neither editing another body
+     * in the same module nor declaring a behavior beside it expands this one again.
      */
     public record LoweredBody(String module, DefinitionName fn)
             implements Key<Expansion<Hir.FnDef>> {
@@ -1680,7 +1742,7 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn.text()));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
-                    db.ask(new NamedBehaviorArity(module));
+                    db.ask(new BehaviorAritiesForBody(module, fn.text()));
             if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
@@ -1723,7 +1785,7 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
-                    db.ask(new NamedBehaviorArity(module));
+                    db.ask(new BehaviorAritiesForBody(module, fn));
             if (!def.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
