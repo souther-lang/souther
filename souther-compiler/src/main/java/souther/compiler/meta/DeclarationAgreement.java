@@ -5,14 +5,13 @@ import souther.compiler.Reserved;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
-import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -713,9 +712,10 @@ public final class DeclarationAgreement {
      * that reads it holds two of those to standing for each other rather than to being the same one
      * — a second thing an equality of it does not do, and the same passing over of the spelling.
      *
-     * <p>Not {@link #NAMED}. This is the arms and only the arms: a form here is one {@link
-     * #sameShape} reads by the answer instead of by the spelling. What is named there is named for
-     * a different question, and the two neither contain nor exclude each other.
+     * <p>The arms and only the arms. A form here is one {@link #sameShape} reads by the answer
+     * instead of by the spelling, and {@code AFormThatCarriesItsAnswerIsComparedByItTest} holds the
+     * two sides of that together: a reachable form carrying both has an arm, and an arm is for a
+     * form carrying both. So this is a set nothing else may be put in to get an answer out of it.
      */
     private static final Set<Class<?>> READ_BY_THE_ANSWER = Set.of(
             Hir.Var.Denoting.class, Hir.Name.Denoting.class, Hir.Binder.class,
@@ -749,30 +749,12 @@ public final class DeclarationAgreement {
             // reading what is written at it. Both are this compile's record of how it built its own
             // tree: a module publishes its declarations and the helpers they are read through, and
             // neither a row nor the definition a pass mints for one is among them.
-            DefinitionRole.class, RowPosition.class);
-
-    /**
-     * The records this comparison names, and says of each how two of them are held.
-     *
-     * <p>Only the ones that are not forms of the grammar. A form's parts are what a crossing depends
-     * on and are held one by one, which is a decision about forms as such; these are records the
-     * front end puts <em>beside</em> a form to say what it settled, and each is here because
-     * something above says what to do with it rather than because a walk found its components.
-     */
-    private static final Set<Class<?>> NAMED = Set.of(
-            BindingId.class, TypeSymbol.class,
-            ValueName.Local.class, ValueName.Helper.class, ValueName.Behavior.class,
-            ValueName.Stdlib.class, ValueName.OfType.class,
-            // The spelling, where nothing beside it says what it means — which is the rule this
-            // class states about names, and this is the form that carries one on its own. Compared
-            // as the word it is, because that is what it means there.
-            WrittenName.class,
-            // Who wrote a construct, which is half of what tells one rule from another — the other
-            // half being the number counted within it. Compared whole: two rules are one when one
-            // owner counted them the same, and an owner read component by component would put the
-            // text an owner of rows carries in front of a comparison that has no question about it.
-            WrittenOwner.Declaration.class, WrittenOwner.Stated.class, WrittenOwner.Body.class,
-            WrittenOwner.Examples.class, WrittenOwner.Fake.class);
+            DefinitionRole.class, RowPosition.class,
+            // Which text a rule's owner was quoted from. An owner says which module and which
+            // behavior wrote a rule, and two builds that disagree about that disagree about which
+            // rule it is; the text it was read out of is the file it sits in, which a build may
+            // rename without moving anything a value crossing meets.
+            QuotedFrom.class);
 
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */
@@ -800,39 +782,33 @@ public final class DeclarationAgreement {
      * Whether it is a form of the grammar — something a declaration is written as, whose parts are
      * held one by one.
      *
-     * <p>Asked of where the type is declared rather than of a list. A form of the grammar is
-     * declared inside {@link Hir}, and something declared elsewhere that arrives in a declaration is
-     * something the compiler put there about itself: reading its parts would make a crossing depend
-     * on which pass wrote a node, which is not something a value can be read differently by.
+     * <p>Asked of where the type is declared rather than of a list. The tree is written in
+     * {@link Hir}'s package, and something declared elsewhere that arrives in a declaration is one
+     * of the front end's settled answers or a record this compile keeps about itself; reading a
+     * node's provenance as though it were a part would make a crossing depend on which pass wrote
+     * the node, which is not something a value can be read differently by.
+     *
+     * <p>The package and not {@link Hir} itself, because a shape a node holds is a form of the
+     * grammar wherever it is written down. A name as written carries a spelling and where the
+     * author put it, is held by node after node, and is its own file for the readers it answers
+     * rather than for being a different kind of thing. Where a form of the tree falls outside this,
+     * the comparison walks its parts with no account saying that is what to do with it.
+     *
+     * <p>Minus what the comparison erases, which is where the records this compile keeps about its
+     * own building are said once. They are written in the same package, and being written there is
+     * what they have in common with a form rather than anything a crossing can see.
      *
      * <p>Which of them is a form, and not which of them is a record. A record is how most are
      * written and a node whose own subsystem settled on writing it by hand is a form all the same —
      * so what is asked is whether it is one of the tree's nodes or one of the shapes a node holds,
-     * and an enum or an interface nested there is neither.
+     * and an enum or an interface there is neither.
      */
     static boolean isAFormOfTheGrammar(Class<?> type) {
-        if (!isDeclaredInsideHir(type)) {
+        if (!type.getPackageName().equals(Hir.class.getPackageName()) || erases(type)) {
             return false;
         }
         return type.isRecord()
                 || (!type.isInterface() && !type.isEnum() && Hir.class.isAssignableFrom(type));
-    }
-
-    /** Where it is written, not what it implements. Several forms stand for a part of one rather
-     *  than for a form in their own right, so they are nested there without implementing it. */
-    private static boolean isDeclaredInsideHir(Class<?> type) {
-        for (Class<?> enclosing = type; enclosing != null;
-                enclosing = enclosing.getEnclosingClass()) {
-            if (enclosing == Hir.class) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Whether the comparison names it and says how two of them are held, without going inside. */
-    static boolean namedByTheComparison(Class<?> type) {
-        return NAMED.contains(type);
     }
 
     /**
