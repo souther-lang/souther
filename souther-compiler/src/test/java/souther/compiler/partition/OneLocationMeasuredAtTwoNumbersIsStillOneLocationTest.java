@@ -49,6 +49,22 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 if Time.hour(slot.at) >= 9 && Time.minute(slot.at) >= 30 then Late else Early
             """;
 
+    /** Two numbers of one location that nothing composes a value for together, which is what the
+     *  parts of a time are not. */
+    private static final String TWO_QUOTIENTS = """
+            module example.two
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { n: Int }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if slot.n / 2 >= 10 && slot.n / 3 >= 10 then Late else Early
+            """;
+
     /**
      * One position and two measures of it, which is what the rest of this is about.
      *
@@ -123,20 +139,44 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     }
 
     /**
-     * A row is not written for one class of a location while another class of it goes unanswered.
+     * A row for one class of a location stands in every class of it the row is offered as covering.
      *
-     * <p>Two measures of one location want two values there and a row writes one. Whichever was
-     * reached last used to be written, so a row offered as covering both classes stood at one of
-     * them.
+     * <p>Two measures of one location want a value at it and a row writes one. Each class composed
+     * its own, so taking whichever was reached last decided one class while the row was offered as
+     * covering both — and the numbers are asked for together instead, which is what one location
+     * means.
+     *
+     * <p>The parts of a time are numbers one value answers at once, and a value answering them is
+     * what comes back: the hour below nine and the minute at or above thirty are half past
+     * midnight. Where each class was asked on its own, midnight and half past midnight arrived for
+     * one location and neither class could be taken.
      */
     @Test
-    void twoClassesOfOneLocationWantingDifferentValuesComposeNoRow() {
-        Partitions.Partitioning read = partitioningOf();
-        MeasuredInput subject =
-                MeasuredInput.of("gate", readingOf(), read);
+    void twoClassesOfOneLocationAreAnsweredByOneValueStandingInBoth() {
+        FillResult filled = filled(TWO_NUMBERS);
 
-        FillResult filled = Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY,
-                Budgets.generation());
+        assertEquals(List.of("slot.at=0 <= x < 9", "slot.at=9 <= x <= 23",
+                        "slot.at=0 <= x < 30", "slot.at=30 <= x <= 59"),
+                filled.rows().stream().flatMap(row -> row.purposes().stream())
+                        .flatMap(purpose -> purpose.labels().stream()).toList(),
+                "every class of both numbers is answered by a row");
+        assertTrue(filled.rows().stream().map(row -> row.inputs().get(0).text())
+                        .anyMatch(written -> written.contains("00:30:00")),
+                () -> "and the class of the minute is answered by a time whose hour the row's own"
+                        + " class of the hour also holds: " + filled.rows());
+    }
+
+    /**
+     * And where no one value answers both numbers, no row is written for either class.
+     *
+     * <p>Two quotients of one whole number are two numbers of one location that nothing here
+     * composes a value for together: which value answers both is solving for one from two of its
+     * numbers, which is not what putting the parts of a time side by side does. So the answer is
+     * that nothing composed one — and not a row standing at one of the two.
+     */
+    @Test
+    void twoClassesOfOneLocationNoValueAnswersTogetherComposeNoRow() {
+        FillResult filled = filled(TWO_QUOTIENTS);
 
         assertEquals(List.of(), filled.rows(), "neither class is answered by a row");
         assertTrue(filled.unresolved().stream().anyMatch(left -> left.reason()
@@ -144,11 +184,16 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 filled.unresolved().toString());
     }
 
+    /** The rows a fill of that model's classes comes to. */
+    private static FillResult filled(String source) {
+        return Generator.fill(MeasuredInput.of("gate", readingOf(source), partitioningOf(source)),
+                List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
+    }
 
     /** What the reading of that input says about its numbers, which is what a subject is asked
      *  through. */
-    private static souther.compiler.inputs.InputReading readingOf() {
-        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
+    private static souther.compiler.inputs.InputReading readingOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -157,7 +202,11 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     }
 
     private static Partitions.Partitioning partitioningOf() {
-        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
+        return partitioningOf(TWO_NUMBERS);
+    }
+
+    private static Partitions.Partitioning partitioningOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation.db()

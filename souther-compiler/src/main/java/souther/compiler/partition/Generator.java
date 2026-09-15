@@ -646,7 +646,12 @@ public final class Generator {
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
-                             LEVELS_A_SIDE_IS_ASKED_AT -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                             LEVELS_A_SIDE_IS_ASKED_AT,
+                             // The numbers past this one were never asked for, so what the search
+                             // came to is about the numbers it tried and about nothing else. The
+                             // word says that, where the word for a set walked to its end says the
+                             // set has no value in it.
+                             NUMBERS_OF_A_SET_TRIED -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -3288,8 +3293,8 @@ public final class Generator {
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
-        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
-                : byTheLocationTheyWrite(standing).entrySet()) {
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
+                : byTheLocationTheyWrite(atThoseNumbers(standing)).entrySet()) {
             Edge edge = edgeAt(subject, group.getValue(), reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
@@ -3811,7 +3816,8 @@ public final class Generator {
      * fixed beside this one says nothing about that promise, so a row is composed here for a number
      * many values answer exactly as it is for a number one does.
      */
-    private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
+    private static Edge edgeAt(MeasuredInput subject,
+                               SequencedMap<RealizationTarget, NumericSet> group,
                                souther.compiler.inputs.SearchRegion within) {
         RealizationTarget target = group.firstEntry().getKey();
         // Which value answers the number is `TermRealizations`' one answer — asked of it whatever
@@ -3835,7 +3841,7 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part. Handed over as the question rather than as an answer, since a
         // group is over several terms and each of them is measured where this reading says.
-        return edgeFrom(TermRealizations.together(writtenAt, group,
+        return edgeFrom(TermRealizations.allSatisfying(writtenAt, group,
                 subject.quantities(), within, subject.ruleReading()), group);
     }
 
@@ -3849,15 +3855,76 @@ public final class Generator {
      * <p>By the path each number is written at and not by which paths reach one value. A container
      * and a position inside it are one location and are two entries here, which leaves them where
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
+     *
+     * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
+     * both are: the arrangement is the same either way, and reading it twice would be two answers
+     * to which location a number is written at.
      */
-    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>>
-            byTheLocationTheyWrite(Map<RealizationTarget, Place> standing) {
-        SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>> out = new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>>
+            byTheLocationTheyWrite(Map<RealizationTarget, NumericSet> standing) {
+        SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>> out =
+                new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, NumericSet> each : standing.entrySet()) {
             out.computeIfAbsent(each.getKey().writeRoot(), _ -> new LinkedHashMap<>())
                     .put(each.getKey(), each.getValue());
         }
         return out;
+    }
+
+    /**
+     * The numbers this row's classes admit, by the number each is a class of.
+     *
+     * <p>Read off the classes the row sits in and not off the axes, because an axis is a number the
+     * model divides and says nothing about which of its classes this row is being built for.
+     *
+     * <p>The sets themselves, which is what the classes mean. A number chosen out of one and
+     * carried here instead would be asking whether one value answers the numbers that were picked,
+     * and a no to that is no answer about the classes.
+     *
+     * <p>A class that narrows the position is left out. What such a class offers is the narrowing
+     * and not a value of the unnarrowed position, and what stands there is composed out of the
+     * narrowed type by the walk below — so a number to compose for is what the class beside it has.
+     */
+    private static SequencedMap<RealizationTarget, NumericSet> numbersTheClassesAdmit(
+            MeasuredInput.MeasuredAxes axes, int[] where) {
+        SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (where[i] == NOT_HERE) {
+                continue;
+            }
+            PartitionClass cls = axes.get(i).classes().get(where[i]);
+            NumericSet admits = admitted(cls);
+            if (admits != null) {
+                out.put(RealizationTarget.of(cls.of()), admits);
+            }
+        }
+        return out;
+    }
+
+    /** Each of those numbers as the set holding it alone, which is what a point of a border asks
+     *  for: the one number the row has to stand at. */
+    private static Map<RealizationTarget, NumericSet> atThoseNumbers(
+            Map<RealizationTarget, Place> standing) {
+        Map<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+            out.put(each.getKey(), new NumericSet.At(each.getValue()));
+        }
+        return out;
+    }
+
+    /** The numbers a class admits of the number it is a class of, or null where it is about
+     *  something a value is composed for another way. */
+    private static NumericSet admitted(PartitionClass cls) {
+        return cls.of() == null || cls.selects() != null ? null : cls.recognises().numbers();
+    }
+
+    /** The value composed for every number of this class's location, or null where this class is
+     *  the only one of the row standing on it. */
+    private static List<FixtureTemplate> answeringAllOfThem(
+            Map<TermPath, List<FixtureTemplate>> together, PartitionClass cls) {
+        return admitted(cls) == null
+                ? null
+                : together.get(RealizationTarget.of(cls.of()).writeRoot());
     }
 
     /**
@@ -4372,6 +4439,32 @@ public final class Generator {
                                  List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
         LocationWrites decided = new LocationWrites();
+        // One value per location, for as many of its numbers as this row's classes stand on. Each
+        // class composed a value for the number it was built at, so two classes of one location
+        // arrive holding two values — and a row that wrote either of them would decide one class
+        // while being offered as covering both. Composed here instead, before anything is written,
+        // by the reader that answers this for the points of a border ({@link #edgeAt}).
+        Map<TermPath, List<FixtureTemplate>> together = new LinkedHashMap<>();
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
+                : byTheLocationTheyWrite(numbersTheClassesAdmit(axes, where)).entrySet()) {
+            // A location asked for one number, which the class standing at it holds a value for
+            // already — composed by this same owner, for this same number, when the class was made.
+            // So what is composed here is what more than one of them takes: one value answering
+            // every number of the location at once, which no class holds because no class is asked
+            // about the numbers beside its own.
+            if (group.getValue().size() < 2) {
+                continue;
+            }
+            Edge composed = edgeAt(subject, group.getValue(), subject.quantities().region());
+            if (composed.values().isEmpty()) {
+                // What the composing said, and not a sentence about the location holding two
+                // values: a location asked for numbers no one value answers is what that reader
+                // reports, in the words it reports it in.
+                return new Attempt(null, composed.reason(), group.getKey().toString(),
+                        Optional.ofNullable(composed.detail()));
+            }
+            together.put(group.getKey(), composed.values());
+        }
         // What every position of this row has to be for the classes it sits in to exist. Read off
         // the paths and off the classes together, because both state one: a position under a
         // refinement requires it by being there at all, and a class of the position above states
@@ -4412,8 +4505,11 @@ public final class Generator {
                 // location decided twice, under two names. The plan reads the first of them and the
                 // class fixed at the narrowed position is never looked at.
                 case RepresentativeSource.Evaluation.Values values -> {
+                    // The one composed for every number of this location where there was more than
+                    // one, and the class's own where this class is the only one standing on it.
+                    List<FixtureTemplate> write = answeringAllOfThem(together, cls);
                     if (cls.selects() == null
-                            && decided.write(path, values.written())
+                            && decided.write(path, write == null ? values.written() : write)
                                     == LocationWrites.Written.CONFLICTING) {
                         // Two of this row's classes are of one location and offer different values
                         // for it. Taking either leaves the other's class unanswered while the row
@@ -4435,6 +4531,16 @@ public final class Generator {
                 case RepresentativeSource.Evaluation.NothingProducible cannot -> {
                     return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                             Optional.of(cannot.why()));
+                }
+                // And the other of those two answers. Nothing was arrived at and the class says so
+                // as what stopped the arriving, which is a figure somebody can raise or work
+                // nobody has done — never that the class holds no value.
+                case RepresentativeSource.Evaluation.NotArrivedAt stopped -> {
+                    return new Attempt(null,
+                            stopped.heldBack().isEmpty()
+                                    ? UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED
+                                    : UnresolvedCombination.Reason.wordFor(stopped.heldBack()),
+                            at, Optional.of(stopped.why()));
                 }
             }
         }
@@ -5777,12 +5883,16 @@ public final class Generator {
      * is not among the ones it puts together.
      */
     private static Edge edgeFrom(TermRealizations.Realization made,
-                                 SequencedMap<RealizationTarget, Place> group) {
+                                 SequencedMap<RealizationTarget, NumericSet> group) {
         if (group.size() != 1) {
             return new Edge(made, null);
         }
         Place settled = switch (group.firstEntry().getKey().term()) {
-            case NumericTerm.ValueOf _ -> group.firstEntry().getValue();
+            // And only where the set asked for is one number. A class admits a run of them, so what
+            // a row written for one stands at is whichever of them the value was built at — which
+            // is the composer's answer and not something this could read off the question.
+            case NumericTerm.ValueOf _ ->
+                    group.firstEntry().getValue() instanceof NumericSet.At one ? one.value() : null;
             // What an operation answered is not what its root holds — three characters is not the
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;

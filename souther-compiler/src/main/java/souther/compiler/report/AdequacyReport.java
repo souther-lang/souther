@@ -3304,6 +3304,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         "the ways a total may be spread over what adds up to it";
                 case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
                         "the places on a line between two positions a pair is tried at";
+                case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
+                        "the places inside one run a value is named at";
             });
         }
         return String.join(", ", out);
@@ -3342,6 +3344,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
                         "how many paths through one body a decision is read for";
+                case NUMBERS_OF_A_SET_TRIED ->
+                        "how many of the numbers a class admits are tried";
             });
         }
         return String.join(", ", out);

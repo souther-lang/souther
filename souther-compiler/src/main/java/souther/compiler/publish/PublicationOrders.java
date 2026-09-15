@@ -254,6 +254,10 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    // Beside the one above it, and for the same reason: both bound how many times
+                    // the thing a reader asked about is tried, where the ones before them bound
+                    // what building one value is worth.
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
@@ -271,6 +275,10 @@ public final class PublicationOrders {
     public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
             CanonicalSelection.Order.overValues(
                     List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD,
+                            // Nearest the value a reader wanted: how a total is spread is about
+                            // what one value holds, where the two below are about which value out
+                            // of a range or a line this compiler names at all.
+                            CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
     /**

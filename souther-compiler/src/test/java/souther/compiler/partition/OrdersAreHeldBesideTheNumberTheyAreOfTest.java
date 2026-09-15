@@ -42,7 +42,7 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
     void aClassOfACountIsNotBuiltOnAnotherNumbersOrders() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Recognition.OfACount(CHARGE, OF_THE_CEILING,
-                        new Recognition.CountIs.At(Count.of(1))));
+                        new NumericSet.At(Count.of(1))));
 
         assertTrue(refused.getMessage().contains("charge")
                 && refused.getMessage().contains("ceiling"), refused.getMessage());

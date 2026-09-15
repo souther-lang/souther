@@ -46,5 +46,21 @@ public enum CompositionRepertoire {
      * leave a pair for anywhere but at that one place come back with nothing composed, and read as
      * an answer about the rules it says the model refuses a relation it satisfies.
      */
-    PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE
+    PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
+
+    /**
+     * The places inside one run of an order that this compiler names a value at.
+     *
+     * <p>It names one. Where the order has a smallest step there are others to step to and nothing
+     * here steps to them; where it has none — a decimal, a moment — there is no step to take at
+     * all, and the one place the run gives up is the whole of what this compiler can name in it.
+     * Raising anything reaches none of the rest, which is what makes this a population and not a
+     * figure: what would reach them is a way of naming a second place in a run.
+     *
+     * <p>So a class whose one named place builds nothing is not a class with no value in it. Read
+     * as a figure, an author is told to raise a number that changes nothing; read as an answer
+     * about the model, they are told the range holds no value when what happened is that this
+     * compiler tried one of them.
+     */
+    PLACES_IN_A_RUN_THAT_ARE_NAMED
 }

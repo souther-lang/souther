@@ -55,6 +55,14 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations.FIRST_OF_THE_MONTH",
                     "the day a date's other parts are offered at"),
 
+            // How far a part of a date runs, which is the calendar's and not this compiler's. A
+            // walk over every one of them is what makes an answer of nothing a statement about
+            // dates, so raising either would be writing down a month no year has.
+            Map.entry("souther.compiler.partition.TermRealizations.MONTHS_A_YEAR_HAS",
+                    "how many months a year has, which is what a month may stand at"),
+            Map.entry("souther.compiler.partition.TermRealizations.DAYS_THE_LONGEST_MONTH_HAS",
+                    "how far the days run in the longest month, which is as far as a day runs"),
+
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
                     "no position, which is what an index that found none is"),

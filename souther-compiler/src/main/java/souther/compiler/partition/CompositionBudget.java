@@ -166,7 +166,27 @@ public enum CompositionBudget {
      * all: a row composed against such a plan is one the caller's own value is missing from, and
      * the plan says so instead of handing one back.
      */
-    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(8);
+    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(8),
+
+    /**
+     * How many of the numbers a set admits are tried before one of them is built for.
+     *
+     * <p>A set of numbers is what a class of a number asks a value to read as, and one number of it
+     * failing says nothing about the rest: the second of February is a date nothing writes and the
+     * thirtieth of a month is one that is written, and both are in the set a rule about months at
+     * or after February leaves. So an account walks the numbers it can build for and stops at the
+     * first that builds.
+     *
+     * <p><b>This is what it says when it ran out.</b> Raise it and the numbers past it get tried,
+     * which is what makes the word one an author can act on — and what it must never become is the
+     * sentence that nothing writes a value in the set, which is a claim about the model that a walk
+     * stopped short of the set cannot make.
+     *
+     * <p>Not spent where the set was walked to its end. A set whose numbers were all tried is one
+     * this compiler gave nothing up on, and a figure named there is a number an author raises to be
+     * told the same thing.
+     */
+    NUMBERS_OF_A_SET_TRIED(8);
 
     private final int maximum;
 

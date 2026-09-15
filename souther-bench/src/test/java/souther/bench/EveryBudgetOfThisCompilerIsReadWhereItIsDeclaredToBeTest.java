@@ -198,6 +198,34 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 
+            // The numbers of a set an account walks. Each of these is an account whose numbers are
+            // whole and whose window is wider than the figure, so the figure bounds how many it
+            // tries and what it hands over beside them is whether it ran out of numbers first.
+            Map.entry("souther.compiler.partition.TermRealizations#holding("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts a container is asked to hold, and whether they were all the"
+                            + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#dateOn("
+                            + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Search;",
+                    "how many years a date is looked for in, and whether they were all of them"),
+            Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/Carrier;JJI)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "names the figure as what left more of the set untried, where the walk filled"
+                            + " what it was allowed before the window ran out"),
+            Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
+                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/check/RuleReadingSource;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "names the figure where no date was found and the years were not all walked"),
+
             // The readings. Each takes a figure that was handed over and says what it comes to.
             Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
                             + "Ljava/util/Collection;)"

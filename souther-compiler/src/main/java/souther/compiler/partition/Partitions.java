@@ -736,7 +736,7 @@ public final class Partitions {
                     .forEach(each -> account.measured(each, id));
             return made(out, at, behavior, term,
                     made.classesFor(axis, () -> singledClasses(points, term, type, reading,
-                            domain, at.position().admits(), ruleSource)),
+                            domain, at.position().admits(), ruleReading)),
                     made.divides(),
                     // A cut is a place on the order the values are counted on, and a class that is
                     // a set has no answer to where it lies — so where the classes are sets there
@@ -1182,7 +1182,7 @@ public final class Partitions {
                                                        NumericTerm.FromOnePosition term, Type type,
                                                        Quantities reading,
                                                        NumericDomain.Bounds within, ValueSet admits,
-                                                       RuleReadingSource ruleSource) {
+                                                       RuleReadingContext ruleReading) {
         // Asked here rather than handed in beside the term. A term and a pair of orders are two
         // arguments, and two arguments can be about two terms; the reading is one argument that
         // answers about whichever term it is asked.
@@ -1194,40 +1194,24 @@ public final class Partitions {
                 values.add(each.value());
             }
         }
-        // The position, read once: every class below writes its value under the same names.
-        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(), ruleSource.published());
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(orders, new Recognition.CountIs.At(value)),
-                    standing(view, carrier, value, ruleSource)));
+                    orders, new NumericSet.At(value), value, type, reading, ruleReading));
         }
-        // Out of what writing one value costs, as every witness for a row is.
+        // Out of what writing one value costs, as every witness for a row is. Which number beside
+        // the ones singled out to write is chosen here, where what a witness may cost is named;
+        // what a value standing at that number looks like is asked of the one reader that answers
+        // it, so the number and the value it is written into are not two spellings of one thing.
         Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, admits,
                 PatternPlan.Budget.OF_A_WITNESS.meter());
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(orders,
-                new Recognition.CountIs.AwayFrom(values));
-        classes.add(other == null
-                ? PartitionClass.ungeneratable(term + "/" + label, label, away,
-                        "nothing here composed a value of this position other than the ones"
-                                + " singled out")
-                : classAt(term + "/" + label, label, away,
-                        standing(view, carrier, other, ruleSource)));
+        classes.add(classAt(term + "/" + label, label,
+                orders, new NumericSet.AwayFrom(values), other, type, reading, ruleReading));
         // Classes of the number the values were singled out of, said where that is known.
         return classes.stream().map(each -> each.ofTheNumber(term)).toList();
-    }
-
-    /** A class over the one value that stands for it, or one nothing produces where there is no
-     *  such value — which is what a position wearing a name this module cannot write leaves. */
-    private static PartitionClass classAt(String id, String label, Recognition is,
-                                          FixtureTemplate standing) {
-        return standing == null
-                ? PartitionClass.ungeneratable(id, label, is,
-                        "nothing here can write a value of this position")
-                : PartitionClass.of(id, label, is, RepresentativeSource.of(standing));
     }
 
     /** A count written at a position, wearing every name that position declares — which the reading
@@ -1238,10 +1222,46 @@ public final class Partitions {
                 FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
+    /**
+     * A class over the values a rule singled out, standing for whatever writes a value at one of
+     * those numbers.
+     *
+     * <p><b>Asked of the one reader that writes a value for a number.</b> A value singled out of a
+     * number taken of a position is not a value of the position: the ninth hour is a number and a
+     * time is what stands there, and a class that wrote the number itself put a count where the
+     * decoder wanted a time. Which is the same second writer the classes of a range had, in the one
+     * place that still had it.
+     */
+    private static PartitionClass classAt(String id, String label, TermOrders orders,
+                                          NumericSet is, Place at, Type type, Quantities reading,
+                                          RuleReadingContext ruleReading) {
+        String what = "a value whose " + Intervals.measureOf(orders.term().atOnePosition()) + " is "
+                + (is instanceof NumericSet.At ? "the one" : "none of the ones") + " singled out";
+        if (at == null) {
+            // No number was named beside the ones singled out, which is this compiler naming one
+            // place in a run and not the order having none left.
+            return PartitionClass.of(id, label, holding(orders, is),
+                    new RepresentativeSource.NotReached(java.util.Set.of(),
+                            java.util.Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
+                            "nothing here composed " + what
+                                    + ", which does not make one unwritable"));
+        }
+        // The number this reader named, and what stands at it asked of what writes a value for a
+        // number. Written here out of the carrier instead, a number taken of the position went into
+        // the row where the value it was taken of belongs — a count where a time was owed.
+        //
+        // The class stays what it is. Asked as the one number named, a class holding every number
+        // but the ones a rule singled out would be answered by whichever of them this reader
+        // reached for first — and nothing built at that one would be told as a class with no value
+        // in it, which is every other number it holds going unlooked at.
+        return PartitionClass.of(id, label, holding(orders, is),
+                Intervals.standingFor(orders, is, at, type, reading, ruleReading, what));
+    }
+
     /** A class that reads the count of the number {@code on} is of out of a row, and answers about
      *  it. The number comes from the orders rather than beside them: a class of one number built on
      *  another's order is what the pair naming its own number is here to stop. */
-    private static Recognition holding(TermOrders on, Recognition.CountIs is) {
+    private static Recognition holding(TermOrders on, NumericSet is) {
         return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 
@@ -1738,7 +1758,8 @@ public final class Partitions {
             case RepresentativeSource.Evaluation.Compose compose ->
                     composed(compose.through(), reading, expanding).stream()
                             .map(compose::written).toList();
-            case RepresentativeSource.Evaluation.NothingProducible _ -> List.of();
+            case RepresentativeSource.Evaluation.NothingProducible _,
+                 RepresentativeSource.Evaluation.NotArrivedAt _ -> List.of();
         };
     }
 

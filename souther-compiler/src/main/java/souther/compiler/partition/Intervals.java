@@ -2,20 +2,16 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Turning the lines a model draws through one numeric position into the ranges between them.
@@ -204,12 +200,11 @@ final class Intervals {
         for (Band run : runs) {
             String label = rangeOf(run, min, max).label(carrier);
             String id = of + "/" + label;
-            Place inside = representative(run, carrier, min, max);
             // The run's own answer about what is in it. Read off a range of the position's counts,
             // a class whose line falls at a place the position has no value for had no end to state
             // — so it held every value, and two such classes each held everything the other did.
-            Recognition is = new Recognition.OfACount(of, orders,
-                    new Recognition.CountIs.InARun(run));
+            NumericSet admits = new NumericSet.InARun(run);
+            Recognition is = new Recognition.OfACount(of, orders, admits);
             // Nothing composed here says what this compiler did not manage, and says nothing about
             // what the run holds. Above a string a rule stops short of, the order declines to name
             // a value on purpose — every string with that one as a prefix is greater, and choosing
@@ -217,13 +212,9 @@ final class Intervals {
             // both empty answers carry is about composing: it is true of a run that holds nothing
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
-            List<FixtureTemplate> values = inside == null ? List.of()
-                    : standingIn(of, inside, type, carrier, ruleReading);
-            classes.add(values.isEmpty()
-                    ? PartitionClass.ungeneratable(id, label, is,
-                            "nothing here writes a value whose " + measureOf(of) + " is in this range")
-                    : PartitionClass.of(id, label, is,
-                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
+            classes.add(PartitionClass.of(id, label, is,
+                    standingFor(orders, admits, null, type, reading, ruleReading,
+                            "a value whose " + measureOf(of) + " is in this range")));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
         return classes.stream().map(each -> each.ofTheNumber(of)).toList();
@@ -231,7 +222,7 @@ final class Intervals {
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
      *  the number is what one answered, and the position's own value otherwise. */
-    private static String measureOf(NumericTerm.FromOnePosition of) {
+    static String measureOf(NumericTerm.FromOnePosition of) {
         // Exhaustive, with no `default`. What a range is a range of is a word per kind of number,
         // so a kind added is one a reader has to be given a word for rather than one that arrives
         // under whichever word the condition left it on.
@@ -248,71 +239,52 @@ final class Intervals {
     }
 
     /**
-     * A value inside a range, or null where nothing composed one. Asked of the ends, which is where
-     * whether the range holds the value it stops at is written down.
+     * Values of the position whose number on this term is one the class admits, or none where
+     * nothing here writes one.
      *
-     * <p>Null says what came back and not what the range holds. Which values are in it is
-     * {@link LevelSpace#inspect}'s answer; this asks the other question, and a caller that read the
-     * two as one would put the order's own restraint into a sentence about the model.
+     * <p><b>Asked of what writes a value at a number, rather than answered beside it.</b> What a
+     * value reading as a number looks like is a construction per account of what the number is
+     * taken as, and {@link TermRealizations} holds one arm per account with no default — so an
+     * account the language gains is one a class of it is filled for by the same act that gives a
+     * point of it a value. Answered here as well, the two switches did not have to agree, and this
+     * one closed over the kinds of term instead: every number taken of a value went to the one
+     * construction a count wants, so an hour of nine asked for a value holding nine of something.
      *
-     * <p>Nothing on this path asks the first question of a run that gets here. So an empty answer
-     * is a run the order would not choose in, and a run it has nothing in at all, and the caller is
-     * owed a sentence true of both.
+     * <p><b>The run, and not a number picked out of it.</b> A class holds every number between its
+     * lines, and which of them a value is written at is a choice about the value. Made here, the
+     * answer about the number this happened to pick was the answer about the class — so a class
+     * holding a number nothing builds at beside numbers that build perfectly well came back as one
+     * nothing writes a value in.
      *
-     * <p>How the values step is the carrier's to say and is asked of it. Carried as "is it a decimal"
-     * it was a second spelling of the same fact, and a carrier that is dense without being the
-     * decimal — a date-time — answered no to it: the range between two moments a nanosecond apart
-     * came back as one holding no value, which is what a whole step would leave and not what the
-     * values do.
+     * <p>Where a row for one of these may be written is the reading's to say. It is asked for it
+     * rather than handed a region a caller built, since a region worked out beside the reading is a
+     * second answer to where the declarations leave room.
+     *
+     * <p><b>And what comes back short of values built is handed on as what it was.</b> A search
+     * that looked everywhere it was going to look and a search a figure of this compiler's stopped
+     * both leave a class with no value, and only the first is a thing to say about the model. Read
+     * as one, the sentence an author gets says nothing writes a value in a range whose values this
+     * compiler did not walk to — which is the shortfall reported as a fact about the model that
+     * this file exists to have stopped doing.
      */
-    private static Place representative(Band run, Carrier carrier, Endpoint min, Endpoint max) {
-        // A class is the run itself and is named for no line, so it is read from its lower end the
-        // way a range of counts is.
-        return new Criterion.Within(run, null, Towards.ABOVE).somewhereInside(carrier, min, max);
-    }
-
-    /**
-     * Values of the position that read as {@code inside} on this term, or none where the term is one
-     * nothing here can put a value on.
-     *
-     * <p>A number the term reads out of the value is written into it; a number the term counts of the
-     * value is a value carrying that many, which is {@link Witnesses}'s question rather than this
-     * one's. Asked of it rather than answered here, so that this says a range has no representative
-     * only when the thing that builds them has none to give.
-     */
-    private static List<FixtureTemplate> standingIn(NumericTerm.FromOnePosition of, Place inside,
-                                                    Type type, Carrier carrier,
-                                                    RuleReadingContext reading) {
-        // Exhaustive, with no `default`. What a value reading as this number looks like is a
-        // different construction per kind of number, so a kind added is one this has to be told
-        // how to build for rather than one that falls to whichever branch it was not named in.
-        RuleReadingSource ruleSource = reading.source();
-        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published());
-        // A name this module cannot write leaves no value to write, whichever number the value is
-        // asked to read as. Asked of the position, once, before anything is built for it.
-        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
-            return List.of();
-        }
-        switch (of) {
-            case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing =
-                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach);
-                return standing == null ? List.of()
-                        : List.of(RepresentativeSource.under(worn.names(), standing));
-            }
-            case NumericTerm.TakenOf _ -> { }
-        }
-        int size = CountDomain.asCount(inside);
-        if (size < 0) {
-            return List.of();
-        }
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each
-                : Witnesses.ofSize(view, size, reading, Set.of()).values()) {
-            out.add(RepresentativeSource.under(worn.names(), each));
-        }
-        return List.copyOf(out);
+    static RepresentativeSource standingFor(TermOrders orders, NumericSet admits, Place named,
+                                            Type type, Quantities reading,
+                                            RuleReadingContext ruleReading, String what) {
+        TermRealizations.Realization made = TermRealizations.satisfying(type, orders, admits,
+                named, reading.region(), ruleReading);
+        return switch (made) {
+            case TermRealizations.Realization.Built built ->
+                    RepresentativeSource.of(built.values());
+            case TermRealizations.Realization.None _ ->
+                    new RepresentativeSource.Ungeneratable("nothing here writes " + what);
+            case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotReached(
+                    stopped.by(), stopped.notAllOf(),
+                    "nothing here composed " + what + ", which does not make one unwritable");
+            case TermRealizations.Realization.Unexhausted some ->
+                    new RepresentativeSource.NotReached(java.util.Set.of(), some.notAllOf(),
+                            "nothing here composed " + what
+                                    + ", which does not make one unwritable");
+        };
     }
 
     private Intervals() {}

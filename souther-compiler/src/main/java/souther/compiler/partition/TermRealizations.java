@@ -10,7 +10,10 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -251,22 +254,48 @@ final class TermRealizations {
                                 Quantities measuring,
                                 souther.compiler.inputs.SearchRegion within,
                                 RuleReadingContext reading) {
+        SequencedMap<RealizationTarget, NumericSet> asked = new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
+            asked.put(each.getKey(), new NumericSet.At(each.getValue()));
+        }
+        return allSatisfying(sourceType, asked, measuring, within, reading);
+    }
+
+    /**
+     * The values to write at one root so that each of these numbers is one of the set asked for it.
+     *
+     * <p><b>The sets, and never a member of one picked beforehand.</b> A caller that chose a number
+     * out of each set and asked for those would be asking whether one value answers that tuple, and
+     * a no to that is no answer about the sets: the parts of a date are not independent, so the
+     * second of February and the thirtieth of a month are each a date and are not one. Read as an
+     * answer about the sets, a combination the calendar admits comes back as one nothing writes.
+     *
+     * <p>What each account does with a set is its own. Which numbers a value can be built at is
+     * what an account knows — a part of a time runs as far as the part does, a count runs from
+     * none — so the account walks its own numbers and asks the set which of them the rules admit.
+     * Written here instead, this would be the one place that knows what every account's numbers
+     * are, which is the switch below saying it does not.
+     */
+    static Realization allSatisfying(Type sourceType,
+                                     SequencedMap<RealizationTarget, NumericSet> demands,
+                                     Quantities measuring,
+                                     souther.compiler.inputs.SearchRegion within,
+                                     RuleReadingContext reading) {
         if (demands.size() == 1) {
-            Map.Entry<RealizationTarget, Place> one = demands.firstEntry();
-            return at(sourceType, measuring.ordersOf(one.getKey().term()), one.getValue(), within,
-                    reading);
+            Map.Entry<RealizationTarget, NumericSet> one = demands.firstEntry();
+            return satisfying(sourceType, measuring.ordersOf(one.getKey().term()), one.getValue(),
+                    within, reading);
         }
         if (sourceType == null || !oneValueAnswersThemTogether(demands.keySet())) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Map<TakenAs.TimePart, Count> times = new LinkedHashMap<>();
-        Map<TakenAs.DatePart, Count> dates = new LinkedHashMap<>();
+        Map<TakenAs.TimePart, NumericSet> times = new LinkedHashMap<>();
+        Map<TakenAs.DatePart, NumericSet> dates = new LinkedHashMap<>();
         Carrier observed = null;
-        for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
+        for (Map.Entry<RealizationTarget, NumericSet> each : demands.entrySet()) {
             TermOrders orders = measuring.ordersOf(each.getKey().term());
-            if (orders == null || !(each.getValue() instanceof Count count)
-                    || !(each.getKey().term() instanceof NumericTerm.TakenOf taken)) {
+            if (orders == null || !(each.getKey().term() instanceof NumericTerm.TakenOf taken)) {
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             }
@@ -274,8 +303,8 @@ final class TermRealizations {
             // answers it, and the same answer each time round is what being one location means.
             observed = orders.observed();
             switch (taken.takenAs()) {
-                case TakenAs.PartOfTime part -> times.put(part.part(), count);
-                case TakenAs.PartOfDate part -> dates.put(part.part(), count);
+                case TakenAs.PartOfTime part -> times.put(part.part(), each.getValue());
+                case TakenAs.PartOfDate part -> dates.put(part.part(), each.getValue());
                 case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
                         TakenAs.TheTruncatingQuotient _ -> {
                     return new Realization.None(
@@ -307,11 +336,51 @@ final class TermRealizations {
     static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,
                           RuleReadingContext reading) {
+        return satisfying(sourceType, orders, new NumericSet.At(answer), within, reading);
+    }
+
+    /**
+     * The values to write at {@code orders}' root so that its number is one of {@code wanted}.
+     *
+     * <p>The one owner of what puts a number where a search asked for it, and {@link #at} is the
+     * case where the set asked for is one number. Exhaustive over the kinds of term and, below,
+     * over the accounts, with no {@code default} — so a term of a new kind and an account added to
+     * the language are each questions this file has to answer rather than conditions falling to
+     * whichever arm was written last.
+     *
+     * <p><b>Nothing built is not nothing to build.</b> An account walks the numbers of the set it
+     * can build for, in the order it would offer them, and stops at the first one that builds. What
+     * it says when none of them did turns on whether it walked all of them: a set it exhausted is a
+     * {@link Realization.None}, and one it stopped short of is a {@link Realization.Unexhausted},
+     * which no reader may take for a statement about the model.
+     */
+    static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
+                                  souther.compiler.inputs.SearchRegion within,
+                                  RuleReadingContext reading) {
+        return satisfying(sourceType, orders, wanted, null, within, reading);
+    }
+
+    /**
+     * The same, with a number of the set a caller has already named.
+     *
+     * <p><b>A candidate, and never the question.</b> What the search is asked for stays the set:
+     * a number picked out of it is one this may try first, and its failing says nothing about the
+     * numbers beside it. Handed in as the set instead — as the one number the set holds — a class
+     * whose first candidate nothing builds at comes back as a class nothing writes a value in,
+     * which is the quantifier this file exists to keep where it belongs.
+     *
+     * <p>For the sets this cannot walk: the numbers a rule leaves when it singles one out are every
+     * number but those, and which of them to try is a witness somebody pays for. So the reader that
+     * pays names one, and what comes of it is an answer about that one.
+     */
+    static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
+                                  Place named,
+                                  souther.compiler.inputs.SearchRegion within,
+                                  RuleReadingContext reading) {
         if (sourceType == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        RuleReadingSource ruleSource = reading.source();
         // Which number is being written for, read off the answer that says which number it is of.
         // Handed in beside it, it was a second name for the same thing and a caller could give two
         // — and this would then write a value for one number on the order of another.
@@ -323,13 +392,32 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ ->
-                    oneValue(FixtureTemplate.on(orders.answered(), answer, ruleSource.symbols().scope()::reach),
-                            sourceType, ruleSource);
+                    standing(sourceType, orders, wanted, named, within, reading);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
-                    orders, answer, within, reading);
+                    orders, wanted, named, within, reading);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    answer, within, reading);
+                    wanted, named, within, reading);
         };
+    }
+
+    /**
+     * A value of the position itself standing at one of those numbers.
+     *
+     * <p>Chosen against the carrier and inside what the rules leave, which is the search a class of
+     * such a position is cut by and is asked here the same way. The order's own ends come from the
+     * region, since where a row may be written is what says how far the values run — worked out
+     * from the type instead, this would answer about wherever that type came from.
+     */
+    private static Realization standing(Type sourceType, TermOrders orders, NumericSet wanted,
+                                        Place named,
+                                        souther.compiler.inputs.SearchRegion within,
+                                        RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        Carrier carrier = orders.answered();
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+                chosen -> oneValue(
+                        FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
+                        sourceType, ruleSource));
     }
 
     /**
@@ -342,34 +430,108 @@ final class TermRealizations {
      * would have said only that every value tried was refused.
      */
     private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
-                                     TermOrders orders, Place answer,
+                                     TermOrders orders, NumericSet wanted, Place named,
                                      souther.compiler.inputs.SearchRegion within,
                                      RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
-            case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, reading);
+            case TakenAs.HowManyItHolds _ -> holding(sourceType, wanted, orders, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
-                    orders, within, reading);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+                    within, reading);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
             // travels this far and the arm takes the end (#1027).
-            case TakenAs.PartOfTime taken ->
-                    atThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
-            case TakenAs.PartOfDate taken ->
-                    onThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
+            case TakenAs.PartOfTime taken -> atThoseParts(Map.of(taken.part(), wanted), sourceType,
+                    orders.observed(), ruleSource);
+            case TakenAs.PartOfDate taken -> onThoseParts(Map.of(taken.part(), wanted), sourceType,
+                    orders.observed(), ruleSource);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
-                    atThatQuotient(taken.read(arguments), sourceType, orders.observed(), answer,
-                            ruleSource);
+                    atThatQuotient(taken.read(arguments), sourceType, orders, wanted, named,
+                            within, ruleSource);
         };
+    }
+
+    /**
+     * The first of {@code numbers} a value was built for, or what came of trying all of them.
+     *
+     * <p><b>Where the difference between a set and a number of it is kept.</b> Nothing built at one
+     * number says nothing about the next, so what this says when none of them built turns on
+     * whether {@code everyOne} — whether the numbers handed in were all the set had in the window
+     * the account can build over. They were, and nothing writes a value in the set; they were not,
+     * and a figure of this compiler's is why, which is a thing an author can raise.
+     *
+     * <p>The reasons the attempts came back with travel either way. A budget met on the way to one
+     * number is a budget met, whichever number was being tried, and a reader deciding what to do
+     * about the offer reads it the same.
+     */
+    private static Realization firstThatBuilds(Tried tried,
+                                               java.util.function.Function<Place, Realization> of) {
+        Set<CompositionBudget> met = new java.util.LinkedHashSet<>();
+        Set<CompositionRepertoire> some = new java.util.LinkedHashSet<>();
+        Realization last = null;
+        for (Place number : tried.numbers()) {
+            Realization made = of.apply(number);
+            if (made instanceof Realization.Built built) {
+                return built;
+            }
+            last = made;
+            switch (made) {
+                case Realization.Stopped stopped -> {
+                    met.addAll(stopped.by());
+                    some.addAll(stopped.notAllOf());
+                }
+                case Realization.Unexhausted walked -> some.addAll(walked.notAllOf());
+                case Realization.None _, Realization.Built _ -> { }
+            }
+        }
+        // Why there were no more to try, said by whatever handed them over. Worked out here, this
+        // would be the one place that knows what every account's numbers are and how it walks them,
+        // which is what handing the reason over is for.
+        switch (tried.rest()) {
+            case Remainder.Exhausted _ -> { }
+            case Remainder.StoppedAt(CompositionBudget figure) -> met.add(figure);
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) -> some.addAll(written);
+        }
+        if (!met.isEmpty()) {
+            return new Realization.Stopped(met, some);
+        }
+        if (!some.isEmpty()) {
+            return new Realization.Unexhausted(some,
+                    last instanceof Realization.Unexhausted walked ? walked.detail() : null);
+        }
+        return last instanceof Realization.None none ? none
+                : new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    }
+
+    /** A container whose elements come to one of those numbers, which is what a row has to hold for
+     *  this number to be there. */
+    private static Realization addingUp(NumericSet wanted, Type sourceType, TermOrders orders,
+                                        Place named,
+                                        souther.compiler.inputs.SearchRegion within,
+                                        RuleReadingContext reading) {
+        if (orders.answered() == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // A total is a place on the order it is measured on and not a count of anything, so what
+        // there is to try is what that order has in the run — which is the carrier's answer and
+        // covers the totals a decimal reaches between two whole numbers.
+        //
+        // Asked on the order the total is measured on, which a run of values answers a number over
+        // and stands at no place of. Read on the order the values are written on instead, a total
+        // taken over a run would be asked about a carrier the run has and the number does not.
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+                total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
     }
 
     /**
@@ -386,13 +548,198 @@ final class TermRealizations {
      * composed. Asked of the carrier and not worked out here: what a whole number stops at is the
      * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
      */
-    private static Realization atThatQuotient(BigDecimal by, Type sourceType,
-                                              Carrier observed, Place answer,
+    private static Realization atThatQuotient(BigDecimal by, Type sourceType, TermOrders orders,
+                                              NumericSet wanted, Place named,
+                                              souther.compiler.inputs.SearchRegion within,
                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
         // A divisor that is not there, or is nought, is a term nothing built — what quotients there
         // are is settled where the account is asked for. Answered here as a place nothing composes
         // a value for, which is what a reader that got this far has somewhere to put.
-        if (observed == null || by == null || by.signum() == 0 || !(answer instanceof Count wanted)) {
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // A quotient is a place on the order it is answered on, and how far that order runs is the
+        // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
+        // the position holds and an int does not was a number nothing offered.
+        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+                quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
+    }
+
+    /**
+     * The numbers a search was handed, and why there are no others.
+     *
+     * <p>Both from whoever handed them over. A walk that filled what it was allowed and a walk that
+     * ran out of numbers hand back the same list, and only the walk knows which it was — so the
+     * reason travels beside them rather than being read off how many there are.
+     *
+     * @param numbers what to try, in the order to try them
+     * @param rest    why there are no more, which is what tells a set with no value in it from a
+     *                search that stopped short of one
+     */
+    private record Tried(List<Place> numbers, Remainder rest) {
+
+        static Tried allOf(List<Place> numbers) {
+            return new Tried(numbers, new Remainder.Exhausted());
+        }
+
+        /** The one number a set of one is, handed over without a window: what an account can be
+         *  asked for is the account's to judge, and a demand for one number names it outright. */
+        static Tried theOne(Place number) {
+            return allOf(List.of(number));
+        }
+    }
+
+    /**
+     * Why there are no more numbers to try than the ones handed over.
+     *
+     * <p><b>The producer's answer, and the reason a consumer does not have to guess one.</b> Three
+     * things leave a search with numbers it did not try, and they are three different things to
+     * tell an author: the set had no more, a figure of this compiler's stopped the handing over,
+     * or this compiler has one way of naming a number where the set has many. Carried as whether
+     * the set was exhausted, the last two are one bit — and what a reader was told is the figure,
+     * which they may raise to be handed exactly what they were handed before.
+     *
+     * <p>The same three {@link Realization} is told apart by, one step earlier. A search that says
+     * why it stopped and a set of candidates that does not would leave the word a reader gets
+     * standing on a guess.
+     */
+    private sealed interface Remainder {
+
+        /** There are no more: the numbers handed over are every one the set has in the window its
+         *  account can be asked for. */
+        record Exhausted() implements Remainder {}
+
+        /** A figure of this compiler's stopped the handing over, and raising it hands over more. */
+        record StoppedAt(CompositionBudget figure) implements Remainder {}
+
+        /** This compiler writes some of the numbers there are and has no way of writing the rest,
+         *  which no figure reaches. */
+        record SomeOf(Set<CompositionRepertoire> written) implements Remainder {
+
+            public SomeOf {
+                written = Set.copyOf(written);
+                if (written.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk that wrote some of them says some of what");
+                }
+            }
+        }
+    }
+
+    /**
+     * The whole numbers of a set between two of them, in the order to try them.
+     *
+     * <p>For the accounts whose numbers are whole and whose window is their own: how many a
+     * container holds, a part of a time, a part of a date. The window is the caller's because what
+     * a number of that kind can be at all is what the caller knows, and what comes back says
+     * whether the window ran out or the figure did.
+     */
+    private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
+                                      int many) {
+        // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
+        // of number goes, and stepping through the part of it the set is nowhere near is a walk
+        // over the kind rather than a choice between the numbers the rules admit.
+        NumericDomain.Bounds lies = wanted.extent();
+        BigDecimal first = startOf(lies.min(), BigDecimal.valueOf(from));
+        BigDecimal last = endOf(lies.max(), BigDecimal.valueOf(to));
+        List<Place> out = new ArrayList<>();
+        // One past what is handed over, so that a window holding exactly as many as the figure
+        // allows is a window this walked to the end of. Stopped at the figure itself, a set of
+        // exactly that many numbers comes back as a search that gave something up.
+        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() <= many;
+                at = at.add(BigDecimal.ONE)) {
+            Count place = new Count(at);
+            if (wanted.holds(place, on)) {
+                out.add(place);
+            }
+        }
+        return out.size() > many
+                ? new Tried(List.copyOf(out.subList(0, many)),
+                        new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED))
+                : Tried.allOf(List.copyOf(out));
+    }
+
+    /** The first whole number at or above an end, or the window's own start where the set runs
+     *  past it. */
+    private static BigDecimal startOf(Endpoint end, BigDecimal from) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return from;
+        }
+        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.CEILING);
+        return from.max(!end.inclusive() && edge.compareTo(count.at()) == 0
+                ? edge.add(BigDecimal.ONE) : edge);
+    }
+
+    /** The last whole number at or below an end, or the window's own end where the set runs past
+     *  it. */
+    private static BigDecimal endOf(Endpoint end, BigDecimal to) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return to;
+        }
+        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.FLOOR);
+        return to.min(!end.inclusive() && edge.compareTo(count.at()) == 0
+                ? edge.subtract(BigDecimal.ONE) : edge);
+    }
+
+    /**
+     * A number of a set on the order its values are counted on, asked of the carrier.
+     *
+     * <p>For the accounts whose numbers are a place on an order rather than a count of something:
+     * what a position itself stands at, what a run of values comes to, what a division answers. How
+     * those values step is the carrier's one answer and covers the orders that are dense as well as
+     * the ones that are not — worked out here as whole numbers, a run between a tenth and nine
+     * tenths would hold none, and a number past what an int holds would be one nothing offers.
+     *
+     * <p>One of them, and what comes back says so — as a population this compiler writes some of
+     * and never as a figure. Raising a number reaches no second place in a run: where the order has
+     * a smallest step nothing here steps to it, and where it has none there is no step. So a caller
+     * that built nothing at the one place has not walked the run, and what it may say is that, and
+     * not that the run holds nothing.
+     */
+    private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
+                                    souther.compiler.inputs.SearchRegion within) {
+        if (wanted instanceof NumericSet.At one) {
+            // A set of one number is that number, and there is nothing else it could have been.
+            return Tried.theOne(one.value());
+        }
+        Set<CompositionRepertoire> ofTheRun =
+                Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        if (!(wanted instanceof NumericSet.InARun run)) {
+            // Anything but the values a rule singled out. Which place beside them to try is a
+            // witness somebody pays for, and what a witness may cost is named where witnesses are
+            // paid for — so a caller that paid names one and this tries it. Nothing built at it is
+            // an answer about that number: the set holds every other one, and none was looked at.
+            return new Tried(named == null ? List.of() : List.of(named),
+                    new Remainder.SomeOf(ofTheRun));
+        }
+        // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
+        // over what the region answers, because one of its answers is not a range: a region that
+        // admits no assignment leaves the number nowhere, and read back as a pair of open ends it
+        // would be the widest answer there is out of the narrowest region there is.
+        NumericDomain.Bounds leaves;
+        switch (within == null ? null : within.projectionOf(orders.term())) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> leaves = held;
+            // The rules leave nowhere to write, which is a thing they say and not a walk of this
+            // compiler's giving up. So the candidates are none and the reason is that there were
+            // none — the same reading every other search of a region takes.
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Tried(List.of(), new Remainder.Exhausted());
+            }
+            case null -> leaves = null;
+        }
+        Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
+                orders.answered(),
+                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
+        return new Tried(found == null ? List.of() : List.of(found),
+                new Remainder.SomeOf(ofTheRun));
+    }
+
+    /** The one value whose quotient by that divisor is exactly that number. */
+    private static Realization multipliedBack(BigDecimal by, Type sourceType, Carrier observed,
+                                              Place answer, RuleReadingSource ruleSource) {
+        if (!(answer instanceof Count wanted)) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -420,20 +767,41 @@ final class TermRealizations {
      * number nothing reads.
      */
     private static Realization overARun(TakenAs how, Type sourceType,
-                                        TermOrders orders, Place answer,
+                                        TermOrders orders, NumericSet wanted, Place named,
                                         souther.compiler.inputs.SearchRegion within,
                                         RuleReadingContext reading) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
-                    orders, within, reading);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+                    within, reading);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _ -> new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }
 
+    /**
+     * Values of the position holding as many as one of those numbers, which is {@link Witnesses}'
+     * answer.
+     *
+     * <p>From none upward, which is the order the counts are offered in and the order a reader
+     * would write them. A count a type cannot hold that many of is one this builds nothing at, and
+     * the next count of the set is asked after it — so a set holding a count the type has no value
+     * for is not a set nothing writes a value in.
+     */
+    private static Realization holding(Type sourceType, NumericSet wanted, TermOrders orders,
+                                       RuleReadingContext reading) {
+        // From none upward, which is as far as a count runs and as many of them as the figure
+        // allows. A count is the one account whose numbers are whole and whose window is the whole
+        // of what it can be asked for, so a walk that reaches the end of it has walked the set.
+        return firstThatBuilds(
+                wholeNumbers(wanted, orders.answered(), 0, Integer.MAX_VALUE,
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                count -> holdingExactly(sourceType, count, reading));
+    }
+
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
-    private static Realization holding(Type sourceType, Place answer, RuleReadingContext reading) {
+    private static Realization holdingExactly(Type sourceType, Place answer,
+                                              RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
@@ -481,32 +849,41 @@ final class TermRealizations {
      * is: the parts do not overlap, so what each contributes to the count is what it contributes
      * whoever else was asked for.
      *
+     * <p><b>And each part is chosen out of its own set on its own, because they are independent.</b>
+     * Every hour goes with every minute, so a number admitted for one part is admitted whatever the
+     * other parts came to — which is why this needs no search across them and why a part with
+     * nothing admitted is a time nothing answers rather than a combination this did not find. The
+     * parts of a date are not like this, and {@link #onThoseParts} is where that is answered.
+     *
      * <p>The order is handed in and not named here. That what this is taken of is a time is the
      * arm's own condition and the library is held to it, but which carrier a time is written on is
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
      * counts, and the two would part the day the first one moved.
      */
-    private static Realization atThoseParts(Map<TakenAs.TimePart, Count> parts,
+    private static Realization atThoseParts(Map<TakenAs.TimePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
         if (observed == null || parts.isEmpty()) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        java.math.BigDecimal seconds = java.math.BigDecimal.ZERO;
-        for (Map.Entry<TakenAs.TimePart, Count> each : parts.entrySet()) {
-            Count count = each.getValue();
-            if (!count.whole() || count.signum() < 0
-                    || count.at().compareTo(
-                            java.math.BigDecimal.valueOf(each.getKey().many())) >= 0) {
+        BigDecimal seconds = BigDecimal.ZERO;
+        for (Map.Entry<TakenAs.TimePart, NumericSet> each : parts.entrySet()) {
+            // The numbers this part runs between, which is what a value of it can be at all, and
+            // the first of them the rules admit. Walked to the end, because a part is a handful of
+            // numbers: a set that holds none of them is a set no time answers, which is a thing
+            // this may say having looked at every one.
+            List<Place> admitted = wholeNumbers(each.getValue(), observed,
+                    0, each.getKey().many() - 1L, 1).numbers();
+            if (admitted.isEmpty()) {
                 // Outside the parts a day has. Not this reader's to report as a refusal: what a
                 // part runs between is the operation's declared bound, and a number outside it is a
                 // number nothing answers.
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             }
-            seconds = seconds.add(count.at()
-                    .multiply(java.math.BigDecimal.valueOf(each.getKey().seconds())));
+            seconds = seconds.add(((Count) admitted.get(0)).at()
+                    .multiply(BigDecimal.valueOf(each.getKey().seconds())));
         }
         FixtureTemplate standing = WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
@@ -516,17 +893,6 @@ final class TermRealizations {
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                 : Realization.Built.whole(List.of(standing));
-    }
-
-    /** The same for the one part a rule named, which is where the parts beside it are every part
-     *  there is. */
-    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Carrier observed,
-                                          Place answer, RuleReadingSource ruleSource) {
-        if (!(answer instanceof Count count)) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        return atThoseParts(Map.of(part, count), sourceType, observed, ruleSource);
     }
 
     /**
@@ -548,23 +914,28 @@ final class TermRealizations {
      * what a witness can be built from, and reading the second off the first would make a bound
      * loosened by hand into dates that cannot be written.
      */
-    private static Realization onThoseParts(Map<TakenAs.DatePart, Count> parts,
+    private static Realization onThoseParts(Map<TakenAs.DatePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
         if (observed == null || parts.isEmpty()) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        java.time.LocalDate on = dateOn(parts);
-        if (on == null) {
-            // Outside the parts a date has. Not this reader's to report as a refusal: a number no
-            // date answers is a number nothing composes one for.
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        Search found = dateOn(parts, observed);
+        if (found.on() == null) {
+            // No date has parts the rules all admit. Which is a statement about the calendar where
+            // every combination was looked at, and a statement about this compiler where it was
+            // not — and the two are not the same thing to tell an author.
+            return found.everyOne()
+                    ? new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Realization.Stopped(
+                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED));
         }
         FixtureTemplate standing = WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
-                FixtureTemplate.on(observed, Dates.dayOf(on), ruleSource.symbols().scope()::reach),
+                FixtureTemplate.on(observed, Dates.dayOf(found.on()),
+                        ruleSource.symbols().scope()::reach),
                 ruleSource);
         return standing == null
                 ? new Realization.None(
@@ -597,48 +968,73 @@ final class TermRealizations {
      * every day a date can fall on is a day of the one this writes; where one was, the days are
      * that month's and a rule about the thirty-first of a short one has no witness because the
      * calendar has none.
+     *
+     * <p><b>Solved over the sets and not at one number of each.</b> The parts constrain each other,
+     * so a combination the calendar refuses says nothing about the combinations beside it: the
+     * second of February is a date nothing writes and the thirtieth of March is one that is
+     * written, and both stand at a month at or after February and a day at or after the thirtieth.
+     * Read at one number apiece, the first of those would be the answer for the pair of sets, and
+     * a report would say the model asks for a date that does not exist.
+     *
+     * <p>The months and the days are walked to their ends, which is what makes an answer of nothing
+     * a statement about the calendar. The years are not — there are more of them than anything here
+     * will try — so a search that walked some of them says so, and the caller carries that out as a
+     * figure rather than as an answer about the model.
      */
-    private static java.time.LocalDate dateOn(Map<TakenAs.DatePart, Count> parts) {
-        for (Count each : parts.values()) {
-            if (!each.whole()) {
-                return null;
+    private static Search dateOn(Map<TakenAs.DatePart, NumericSet> parts, Carrier observed) {
+        // The years are more than anything here walks, so what comes back says whether it was all
+        // of them; the months and the days are as many as the calendar has, so walking their window
+        // is walking them.
+        Tried years = parts.containsKey(TakenAs.DatePart.YEAR)
+                ? wholeNumbers(parts.get(TakenAs.DatePart.YEAR), observed,
+                        java.time.LocalDate.MIN.getYear(), java.time.LocalDate.MAX.getYear(),
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum())
+                : Tried.allOf(List.of(Count.of(BigDecimal.valueOf(A_LEAP_YEAR))));
+        List<Place> months = numbersOf(parts, TakenAs.DatePart.MONTH, observed,
+                MONTHS_A_YEAR_HAS, A_LONGEST_MONTH);
+        List<Place> days = numbersOf(parts, TakenAs.DatePart.DAY, observed,
+                DAYS_THE_LONGEST_MONTH_HAS, FIRST_OF_THE_MONTH);
+        boolean everyOne = years.rest() instanceof Remainder.Exhausted;
+        for (Place year : years.numbers()) {
+            for (Place month : months) {
+                java.time.YearMonth in = java.time.YearMonth.of(
+                        whole(year), whole(month));
+                for (Place day : days) {
+                    if (whole(day) <= in.lengthOfMonth()) {
+                        return new Search(in.atDay(whole(day)), everyOne);
+                    }
+                }
             }
         }
-        java.math.BigDecimal year = asked(parts, TakenAs.DatePart.YEAR);
-        java.math.BigDecimal month = asked(parts, TakenAs.DatePart.MONTH);
-        java.math.BigDecimal day = asked(parts, TakenAs.DatePart.DAY);
-        if (year != null && !within(year, java.time.LocalDate.MIN.getYear(),
-                java.time.LocalDate.MAX.getYear())) {
-            return null;
-        }
-        if (month != null && !within(month, java.time.temporal.ChronoField.MONTH_OF_YEAR)) {
-            return null;
-        }
-        java.time.YearMonth in = java.time.YearMonth.of(
-                year == null ? A_LEAP_YEAR : year.intValueExact(),
-                month == null ? A_LONGEST_MONTH : month.intValueExact());
-        if (day != null && !within(day, 1, in.lengthOfMonth())) {
-            return null;
-        }
-        return in.atDay(day == null ? FIRST_OF_THE_MONTH : day.intValueExact());
+        return new Search(null, everyOne);
     }
 
-    /** The number a part was asked to stand at, or null where nobody asked for it. */
-    private static java.math.BigDecimal asked(Map<TakenAs.DatePart, Count> parts,
-                                              TakenAs.DatePart part) {
-        Count count = parts.get(part);
-        return count == null ? null : count.at();
+    /** A date this composed for those parts, or the reason there is none to report with.
+     *
+     *  @param on       the date, or null where the walk below found none
+     *  @param everyOne whether the walk went over every combination the parts admit, which is what
+     *                  tells a calendar that has no such date from a search that stopped short */
+    private record Search(java.time.LocalDate on, boolean everyOne) {}
+
+    /**
+     * The numbers a part may stand at, in the order they are to be tried.
+     *
+     * <p>What the part runs between is the calendar's and is handed in; which of those the rules
+     * admit is the set's. A part nobody asked for stands at the one value that rules out the fewest
+     * of the parts that were asked for, which is a choice about the date to write and is why the
+     * fallback is a number rather than the whole range.
+     */
+    private static List<Place> numbersOf(Map<TakenAs.DatePart, NumericSet> parts,
+                                         TakenAs.DatePart part, Carrier observed,
+                                         int asFarAs, int whenUnasked) {
+        NumericSet wanted = parts.get(part);
+        return wanted == null
+                ? List.of(Count.of(BigDecimal.valueOf(whenUnasked)))
+                : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
     }
 
-    /** The same for the one part a rule named, which is where the parts beside it are every part
-     *  there is. */
-    private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
-                                          Place answer, RuleReadingSource ruleSource) {
-        if (!(answer instanceof Count count)) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        return onThoseParts(Map.of(part, count), sourceType, observed, ruleSource);
+    private static int whole(Place at) {
+        return ((Count) at).at().intValueExact();
     }
 
     /**
@@ -658,15 +1054,12 @@ final class TermRealizations {
     /** The day a year or a month is offered on. */
     private static final int FIRST_OF_THE_MONTH = 1;
 
-    private static boolean within(java.math.BigDecimal answer,
-                                  java.time.temporal.ChronoField field) {
-        return within(answer, field.range().getMinimum(), field.range().getMaximum());
-    }
+    /** How far the months run, which is what a month may stand at whatever the rules leave it. */
+    private static final int MONTHS_A_YEAR_HAS = 12;
 
-    private static boolean within(java.math.BigDecimal answer, long from, long to) {
-        return answer.compareTo(java.math.BigDecimal.valueOf(from)) >= 0
-                && answer.compareTo(java.math.BigDecimal.valueOf(to)) <= 0;
-    }
+    /** How far the days run in the longest month there is, which is as far as a day of any date
+     *  runs. How far they run in the month a date is actually built in is asked of that month. */
+    private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
 
     /** One value, wearing every name the position declares, or the reason there is none. */
     private static Realization oneValue(FixtureTemplate bare, Type sourceType, RuleReadingSource ruleSource) {
