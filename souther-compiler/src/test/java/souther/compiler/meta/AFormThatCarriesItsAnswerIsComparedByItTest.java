@@ -11,14 +11,11 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenTypeMeaning;
 
-import java.lang.reflect.ParameterizedType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -54,8 +51,8 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
 
     /**
      * A declaration's own name is its key and not a spelling to pass over, so the three declaration
-     * forms are not among the ones compared by an answer. They are held by
-     * {@code DeclarationAgreement.held}, which pairs them by name before comparing anything.
+     * forms are not among the ones compared by an answer. They are paired by name before anything
+     * of them is compared.
      */
     private static final Set<String> COMPARED_BY_NAME = Set.of(
             Hir.Data.class.getName(), Hir.SumData.class.getName(), Hir.UnitData.class.getName());
@@ -112,6 +109,26 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 "and so is the field a value is read under");
     }
 
+    /**
+     * And what the comparison names as read by the answer is those and no others.
+     *
+     * <p>The two sides of one thing. Above says a form with the shape has an arm; this says the
+     * arms are for forms with the shape, so the naming beside the comparison cannot grow a form the
+     * comparison reads by how it was written — which would refuse a set of them for a reason that
+     * is not there.
+     */
+    @Test
+    void andTheArmsAreNamedForThoseAndNoOthers() {
+        for (Class<?> form : reachable()) {
+            assertEquals(carriesASpellingAndItsAnswer(form)
+                            && !COMPARED_BY_NAME.contains(form.getName()),
+                    DeclarationAgreement.readByTheAnswerBesideItsSpelling(form),
+                    form.getName() + " is read by the answer beside its spelling, or it is not, and"
+                            + " what the comparison does with it and what it is made of have to"
+                            + " say the same thing");
+        }
+    }
+
     /** Whether {@code form} holds a spelling and, beside it, what that spelling was settled to be. */
     private static boolean carriesASpellingAndItsAnswer(Class<?> form) {
         if (!StructuralParts.areHandedOver(form)) {
@@ -150,27 +167,9 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 continue;
             }
             for (StructuralParts.Part part : StructuralParts.of(type)) {
-                todo.addAll(held(part.held()));
+                todo.addAll(TypesAPartIsDeclaredToHold.named(part.held()));
             }
         }
         return seen;
-    }
-
-    /** The types a component holds: itself, or what its container is of. */
-    private static List<Class<?>> held(java.lang.reflect.Type type) {
-        if (type instanceof Class<?> plain) {
-            return plain.isArray() ? List.of(plain.getComponentType()) : List.of(plain);
-        }
-        if (type instanceof ParameterizedType parameterized
-                && parameterized.getRawType() instanceof Class<?> raw
-                && (raw == List.class || raw == Set.class || raw == Optional.class
-                        || raw == Map.class)) {
-            List<Class<?>> of = new ArrayList<>();
-            for (java.lang.reflect.Type argument : parameterized.getActualTypeArguments()) {
-                of.addAll(held(argument));
-            }
-            return of;
-        }
-        return List.of();
     }
 }

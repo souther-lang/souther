@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -11,13 +12,12 @@ import java.util.List;
 /**
  * What a form is made of, read one way wherever this comparison asks.
  *
- * <p>Three readers ask: the comparison that holds two builds' declarations to each other, the walk
- * that follows what one of them reaches, and the check that every type a declaration can reach has
- * been classified. Each of them used to ask a record for its components, which made "a form of the
- * grammar" and "a Java record" one thing — and they are not. A form whose representation its own
- * subsystem settled for its own reasons is still a form, and a reader that cannot see inside one
- * does not say so: the comparison falls to comparing written values, the walk stops, and the check
- * reaches less and stays green. Asked here, the three see the same parts or none of them do.
+ * <p>A reader that goes inside a form asks here rather than working out for itself what one is made
+ * of. Readers used to ask a record for its components, which made "a form of the grammar" and "a
+ * Java record" one thing — and they are not. A form whose representation its own subsystem settled
+ * for its own reasons is still a form, and a reader that cannot see inside one does not say so: a
+ * comparison falls to comparing written values, a walk stops, a check reaches less and stays green.
+ * Asked here, readers see the same parts or none of them do.
  *
  * <p>A record hands over its components. Anything else hands over what it declares and lets be read
  * — a final instance field with a no-argument method of the same name answering the type the field
@@ -37,7 +37,7 @@ final class StructuralParts {
      * may hold is a question about the form, and a walk over what some tree happened to build
      * answers about that tree instead.
      */
-    record Part(String name, java.lang.reflect.Type held, Method read) {
+    record Part(String name, Type held, Method read) {
 
         /** This part of {@code form}. */
         Object of(Object form) {
@@ -113,4 +113,5 @@ final class StructuralParts {
         }
         return handedOver;
     }
+
 }

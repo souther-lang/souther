@@ -15,8 +15,10 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -549,22 +551,22 @@ public final class DeclarationAgreement {
             }
             return true;
         }
-        // A set, and the keys of a map, are compared by their own equality — which reads every part
-        // of what they hold, including the parts erased here. That is right for the values they hold
-        // today and wrong for a form, so a form arriving in one stops the comparison rather than
-        // being compared by an equality that does not know what this does.
+        // A set, and the keys of a map, are compared by their own equality rather than by this walk.
+        // That is right exactly where the two agree, and a value whose equality this comparison
+        // would have answered differently about stops it rather than being held by a rule this
+        // class does not control.
         if (ours instanceof Set<?> mine && theirs instanceof Set<?> yours) {
             // Both sides. What is being refused is a comparison by an equality this class does not
-            // control, and that is what happens whichever side the form is on — read on one side
+            // control, and that is what happens whichever side the value is on — read on one side
             // only, a declaration that lost its last entry has an empty set here and whatever their
             // build put in theirs goes through the guard it was written to meet.
-            refuseForms(mine);
-            refuseForms(yours);
+            refuseWhatThisComparisonAnswersDifferently(mine);
+            refuseWhatThisComparisonAnswersDifferently(yours);
             return mine.equals(yours);
         }
         if (ours instanceof Map<?, ?> mine && theirs instanceof Map<?, ?> yours) {
-            refuseForms(mine.keySet());
-            refuseForms(yours.keySet());
+            refuseWhatThisComparisonAnswersDifferently(mine.keySet());
+            refuseWhatThisComparisonAnswersDifferently(yours.keySet());
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
                             .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()), bound));
@@ -588,34 +590,136 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * Refuses a collection that holds a form of a declaration.
+     * Refuses a collection holding a value this comparison would not have answered about the way
+     * that value's own equality does.
      *
-     * <p>What is held in one is compared by its own equality, and a form's equality reads where it
-     * was written and which binding it is — the two things this erases. A form arriving here is
-     * therefore compared by a rule this class does not control, which is a decision nobody made.
+     * <p>A collection compares what it holds by that thing's own equality. Where the two agree
+     * there is nothing to say; where they part, the collection has settled a question this class
+     * was written to settle, and settled it by a rule nobody here chose. So what is refused is the
+     * parting and not a kind of value — {@link #comparedTheSameByItsOwnEquality} is the whole of
+     * what is asked.
      *
-     * <p>Which of them is a form is the question {@link StructuralParts} answers, and it is asked of
-     * that rather than of whether the thing is a record: a form the comparison would have taken
-     * apart is a form a collection must not compare whole, and those are one set. Asked the other
-     * way, a form written by hand would be handed to {@code equals} by the branch above this one,
-     * which is what this exists to stop.
-     *
-     * <p>Open to the package so what it refuses can be asked of it. Nothing in either build puts a
-     * form in a set today, so the walk cannot be made to arrive at one and a refusal nobody can
-     * reach is a refusal nobody would notice going quiet — which is how the reading of forms one
+     * <p>Open to the package so what it refuses can be asked of it. Nothing in either build puts
+     * such a value in a set today, so the walk cannot be made to arrive at one and a refusal nobody
+     * can reach is a refusal nobody would notice going quiet — which is how the reading of forms one
      * door along came to see less without failing.
      */
-    static void refuseForms(Set<?> held) {
+    static void refuseWhatThisComparisonAnswersDifferently(Set<?> held) {
         for (Object one : held) {
-            if (one != null && StructuralParts.areHandedOver(one.getClass())) {
+            if (!comparedTheSameByItsOwnEquality(one)) {
                 throw new IllegalStateException(one.getClass().getName()
-                        + " is a form of a declaration held in a set or used as a map key, and a"
-                        + " collection compares what it holds by its own equality — which reads what"
-                        + " this comparison erases. Compare it as a form, or say why its equality is"
-                        + " the right one.");
+                        + " is held in a set or used as a map key, and a collection compares what it"
+                        + " holds by its own equality — which answers differently from this"
+                        + " comparison about what it reads. Compare it the way this comparison"
+                        + " does, or say why its equality is the right one.");
             }
         }
     }
+
+    /**
+     * Whether this comparison answers about {@code value} what that value's own equality does.
+     *
+     * <p>A reading of {@link #sameShape} and not a second account of it. Every arm there is one of
+     * these, in the order that one takes them: an erased part is passed over here and read by an
+     * equality; a binding is held by what it stands for across the two builds; a form carrying an
+     * answer beside a spelling is read by the answer; a container is read through, so it answers
+     * whatever what it holds answers; anything the walk does not take apart is handed to
+     * {@code ConstEval.equal}, which <em>is</em> that value's own equality but for a written number.
+     * A walk that takes a value apart answers whatever its parts answer.
+     *
+     * <p>Asked of a value and not of a type, because that is what the arms dispatch on and what a
+     * collection holds. A container says nothing about what it will hold, and a part declared as
+     * something a reader here cannot name says nothing at all; asked of the value, there is no such
+     * gap to answer across — what is in hand is what this comparison will meet.
+     */
+    static boolean comparedTheSameByItsOwnEquality(Object value) {
+        return comparedTheSame(value, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private static boolean comparedTheSame(Object value, Set<Object> asking) {
+        if (value == null) {
+            return true;   // held against null and nothing else, whoever is asking
+        }
+        if (!asking.add(value)) {
+            return true;   // already being answered above, and a cycle reaches nothing new
+        }
+        if (erases(value.getClass()) || value instanceof BindingId
+                || value instanceof BigDecimal
+                || readByTheAnswerBesideItsSpelling(value.getClass())) {
+            return false;
+        }
+        if (value instanceof Optional<?> maybe) {
+            return comparedTheSame(maybe.orElse(null), asking);
+        }
+        if (value instanceof List<?> written) {
+            for (Object one : written) {
+                if (!comparedTheSame(one, asking)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (value instanceof Set<?> held) {
+            for (Object one : held) {
+                if (!comparedTheSame(one, asking)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (value instanceof Map<?, ?> keyed) {
+            for (Map.Entry<?, ?> each : keyed.entrySet()) {
+                if (!comparedTheSame(each.getKey(), asking)
+                        || !comparedTheSame(each.getValue(), asking)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (!StructuralParts.areHandedOver(value.getClass())) {
+            // What the walk does not take apart it hands to its own equality, which is the answer
+            // a collection would have reached by itself.
+            return true;
+        }
+        for (StructuralParts.Part part : StructuralParts.of(value.getClass())) {
+            if (!comparedTheSame(part.of(value), asking)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether this comparison reads it by the answer the front end settled beside its spelling.
+     *
+     * <p>The forms {@link #sameShape} has an arm for, named because that is what they are:
+     * what makes a form one of these is that the comparison reads it that way, and a form that grew
+     * an answer and has no arm is read by how it was written whatever its shape suggests. That a
+     * form with the shape has an arm is held beside the comparison rather than assumed here.
+     */
+    static boolean readByTheAnswerBesideItsSpelling(Class<?> type) {
+        for (Class<?> arm : READ_BY_THE_ANSWER) {
+            if (arm.isAssignableFrom(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The forms {@link #sameShape} reads by the answer. One arm each, and this says which.
+     *
+     * <p>A local is among them. What stands beside its spelling is which binding it is, and the arm
+     * that reads it holds two of those to standing for each other rather than to being the same one
+     * — a second thing an equality of it does not do, and the same passing over of the spelling.
+     *
+     * <p>Not {@link #NAMED}. This is the arms and only the arms: a form here is one {@link
+     * #sameShape} reads by the answer instead of by the spelling. What is named there is named for
+     * a different question, and the two neither contain nor exclude each other.
+     */
+    private static final Set<Class<?>> READ_BY_THE_ANSWER = Set.of(
+            Hir.Var.Denoting.class, Hir.Name.Denoting.class, Hir.Binder.class,
+            Hir.TypeRef.class, ValueName.OfType.class, ValueName.Local.class);
 
     /**
      * The parts of a settled declaration a value crossing cannot see.
