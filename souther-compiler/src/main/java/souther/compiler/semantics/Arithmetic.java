@@ -94,6 +94,19 @@ public sealed interface Arithmetic {
             return TWO_OF_ITS_OWN;
         }
 
+        /**
+         * Which of the numbers it reads is the one it divides by, which is the second of them.
+         *
+         * <p>Said here because it is a fact about this arithmetic and nowhere else is. What each
+         * argument has to be travels with the arithmetic and is read by position (above), so which
+         * position is the divisor is the same statement one step further in — and a reader working
+         * it out from something beside the arithmetic would be answering it from a place that has
+         * no say.
+         */
+        public int divisor() {
+            return 1;
+        }
+
         @Override
         public BinOp writtenAs() {
             return BinOp.DIV;

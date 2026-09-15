@@ -48,9 +48,8 @@ public sealed interface TakenAs {
      *
      * <p>Asked where a term is built ({@code inputs.NumericTerm.TakenOf}), so that a taking whose
      * arguments leave the number unsettled is no term rather than a term every reader below has to
-     * answer for. What counts as settled is the account's: a divisor has to be there and has to be
-     * a number the operation answers a quotient for, and an account reading no argument is settled
-     * by anything.
+     * answer for. What counts as settled is the account's, and an account that reads none of them
+     * is settled by anything.
      */
     default boolean settledBy(TakenArguments arguments) {
         return true;
@@ -128,10 +127,11 @@ public sealed interface TakenAs {
      * be whichever reader arrived. A call where the divisor is a name, or is nought, has no account
      * here and is a rule nothing draws a line for.
      *
-     * <p>Which argument the divisor is, is the declaration's, read where this is derived and
-     * carried here as the position it resolved to. A word for an argument is what a fact is
-     * authored in and is resolved once ({@code check.OperationFactBinder}); an account below the
-     * binding that held one would be asking the binder's question again.
+     * <p>Which argument the divisor is, is the arithmetic's own answer
+     * ({@link Arithmetic.ATruncatingQuotient#divisor}) and is carried here as a position. A word
+     * for an argument is what a fact is authored in and is resolved once
+     * ({@code check.OperationFactBinder}); an account below the binding that held one would be
+     * asking the binder's question again.
      */
     record TheTruncatingQuotient(int divisor) implements TakenAs {
 

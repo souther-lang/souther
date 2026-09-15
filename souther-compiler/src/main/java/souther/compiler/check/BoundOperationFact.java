@@ -192,30 +192,28 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
          * on a grid the call chooses, which is not this arm.
          *
          * <p><b>And only where the call names a quotient there is.</b> Such an operation answers
-         * its number at one case and something else at another, and which argument decides that is
-         * what the declaration states — that argument is the divisor, and it is where the account
-         * is written for. Whether the number this call takes is one the position has is the
-         * account's own answer ({@link TakenAs#settledBy}), so what the operation may answer and
-         * what this call takes stay two sentences.
+         * its number at one case and something else at another, and what a call of it takes is not
+         * the same sentence as what the operation may answer. Which quotients there are to take is
+         * the account's own answer ({@link TakenAs#settledBy}): a divisor the reading has, and not
+         * nought, since nothing is divided by nought.
          */
         public TakenAs takenAs(TakenArguments arguments) {
-            if (!(result.computes() instanceof Arithmetic.ATruncatingQuotient)
-                    || result.unless() == null) {
+            if (!(result.computes() instanceof Arithmetic.ATruncatingQuotient quotient)) {
                 return null;
             }
-            // Which argument the divisor is, is the declaration's. Such an operation answers its
-            // other case when one of its arguments stands a certain way, and for a quotient that
-            // argument is the one it divides by — so the account is written for the position the
-            // condition names rather than for a place written down here.
+            // Which argument it divides by is the arithmetic's own answer, and the binding has
+            // already held the declaration to the arguments that arithmetic reads. Taken from the
+            // condition the other case comes back under instead, which names the divisor too, the
+            // account would be resting on a sentence about which answer comes back.
             TakenAs.TheTruncatingQuotient how =
-                    new TakenAs.TheTruncatingQuotient(result.unless().argument().position());
+                    new TakenAs.TheTruncatingQuotient(quotient.divisor());
             return how.settledBy(arguments) ? how : null;
         }
     }
 
-    /** The operation answers a number taken of the one value it is given — {@code of}, the one
-     *  argument its declaration takes — and {@code how} is what it takes of it; {@code answers} is
-     *  the number it was held to answer. */
+    /** The operation answers a number taken of a value it is given — {@code of}, the first argument
+     *  its declaration takes — and {@code how} is what it takes of it; {@code answers} is the
+     *  number it was held to answer. */
     record AnswersANumberTakenOfAValueItIsGiven(DeclaredOperation operation,
                                                      DeclaredArgument of, Type answers,
                                                      TakenAs how)
