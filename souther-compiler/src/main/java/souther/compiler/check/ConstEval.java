@@ -119,8 +119,7 @@ public final class ConstEval {
             // the string case folds, and a list is not a constant here to begin with.
             case CONCAT -> a instanceof String x && b instanceof String y
                     ? Optional.of(x + y) : Optional.empty();
-            // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).
-            case DIV -> Optional.empty();
+            case DIV -> quotient(a, b);
             // Answered above as what it placed. Written out rather than left to a default, because
             // what would arrive here is the partition above having admitted a comparison into the
             // arms that compute a value, and an arm inventing an answer for that is how a fold
@@ -165,6 +164,23 @@ public final class ConstEval {
             case NE -> !equal(a, b);
             case GE, GT, LE, LT -> null;
         };
+    }
+
+    /**
+     * The quotient of two written whole numbers, or empty where this is not the one to answer it.
+     *
+     * <p>A whole-number divide by a divisor written down and not nought is the truncating quotient
+     * the language defines, computed here as a sum or a product is. What it declines is what a
+     * value handed back would be wrong about: a divisor of nought, which the run time aborts on; the
+     * quotient whose value is outside the range an {@code Int} holds, which aborts there too while
+     * {@code long} division quietly answers the dividend; and a {@code Decimal} divide, whose answer
+     * is rounded at a scale this does not hold.
+     */
+    private static Optional<Object> quotient(Object a, Object b) {
+        if (!(a instanceof Long x) || !(b instanceof Long y) || y == 0) {
+            return Optional.empty();
+        }
+        return x == Long.MIN_VALUE && y == -1 ? Optional.empty() : Optional.of(x / y);
     }
 
     private static Optional<Object> arith(BinOp op, Object a, Object b) {
