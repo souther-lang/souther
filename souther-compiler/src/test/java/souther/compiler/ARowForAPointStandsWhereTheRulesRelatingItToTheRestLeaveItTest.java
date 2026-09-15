@@ -69,7 +69,7 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
     @Test
     void andNoPointOfItIsLeftWithoutOne() {
         List<String> missed = new ArrayList<>();
-        for (Generator.UnresolvedCombination each : offeredFor(RELATED).unresolved()) {
+        for (Generator.UnresolvedCombination each : OFFERED.unresolved()) {
             missed.addAll(each.classes());
         }
 
@@ -80,7 +80,7 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
     /** The rows offered for a point the {@code y} border draws, as the pair they stand at. */
     private static List<int[]> pointsOfTheYBorder() {
         List<int[]> out = new ArrayList<>();
-        for (Generator.GeneratedRow row : offeredFor(RELATED).rows()) {
+        for (Generator.GeneratedRow row : OFFERED.rows()) {
             if (row.purposes().stream().anyMatch(
                     purpose -> purpose instanceof Generator.Purpose.ForAPoint point
                             && aboutYAlone(point.label()))) {
@@ -104,6 +104,15 @@ class ARowForAPointStandsWhereTheRulesRelatingItToTheRestLeaveItTest {
         return new int[] {Integer.parseInt(inputs.get(0).text()),
                 Integer.parseInt(inputs.get(1).text())};
     }
+
+    /**
+     * What the model is offered, composed once for the whole class.
+     *
+     * <p>Both sentences here are about one block, and measuring it is what this test costs. Asked
+     * per method, the second would compose every row again to read the labels of the points that
+     * got none.
+     */
+    private static final Generator.GenerationResult OFFERED = offeredFor(RELATED);
 
     private static Generator.GenerationResult offeredFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

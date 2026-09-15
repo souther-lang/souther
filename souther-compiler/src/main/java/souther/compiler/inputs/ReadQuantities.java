@@ -584,6 +584,12 @@ final class ReadQuantities implements Quantities {
      * range between them, it would come back as a position with room to move.
      */
     private ConstraintState<InputAtom> effectiveConstraints(StructuralContext under) {
+        // Nothing fixed, which is every reading that answers about the declarations rather than
+        // about a row being written. The same rules, and kept as the one answer rather than as a
+        // second entry saying the same thing under a second key.
+        if (fixed.isEmpty()) {
+            return constraints(under);
+        }
         ConstraintState<InputAtom> had = withTheFixings.get(under);
         if (had != null) {
             return had;

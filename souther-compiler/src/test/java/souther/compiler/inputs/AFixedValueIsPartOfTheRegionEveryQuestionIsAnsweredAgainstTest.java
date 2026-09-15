@@ -138,8 +138,19 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 .minus(LinearForm.<NumericTerm>atom(term(other)));
     }
 
+    /**
+     * The model read once for the whole class.
+     *
+     * <p>Every question here is asked of one reading of one source, and reading it again per term
+     * would compile this model once for each name a form is spelled with. Held as the reading and
+     * the rules together because a region is made of both.
+     */
+    private record Read(InputDomain input, RuleReadingSource rules) {}
+
+    private static final Read READ = read();
+
     private static SearchRegion region() {
-        return reading().quantities(rulesOf(PAIR)).region();
+        return READ.input().quantities(READ.rules()).region();
     }
 
     private static NumericTerm.FromOnePosition term(String spelled) {
@@ -151,21 +162,14 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
     }
 
     private static TermPath pathOf(String spelled) {
-        return reading().positions().stream().map(Position::path)
+        return READ.input().positions().stream().map(Position::path)
                 .filter(each -> each.toString().equals(spelled))
                 .findFirst().orElseThrow(() -> new AssertionError(
-                        "no position at " + spelled + " among " + reading().positions().stream()
+                        "no position at " + spelled + " among " + READ.input().positions().stream()
                                 .map(Position::path).toList()));
     }
 
-    private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        return RuleReadings.of(compilation, compilation.modules().get(0));
-    }
-
-    private static InputDomain reading() {
+    private static Read read() {
         Compilation compilation =
                 Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
@@ -173,6 +177,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES),
+                rules);
     }
 }
