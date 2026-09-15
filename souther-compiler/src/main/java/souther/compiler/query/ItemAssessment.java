@@ -483,6 +483,28 @@ public sealed interface ItemAssessment {
             /** The value this search composed, whichever of the two this is. */
             Generator.GeneratedRow row();
 
+            /**
+             * Refuses a row held beside a proof that the way it is on leaves nothing standing.
+             *
+             * <p>Of the shape and not of one of its cases. What a row was not composed against is
+             * this compiler's shortfall wherever a row exists, and both ways of having one rest on
+             * that: the readers of either take the row and leave the list. Held on one case only,
+             * the other is the way the same wrong value gets built — and which of the two a caller
+             * happens to make is not something the invariant should turn on.
+             */
+            static List<souther.compiler.partition.ReachabilityGap> withNoProofAmongThem(
+                    List<souther.compiler.partition.ReachabilityGap> gaps) {
+                List<souther.compiler.partition.ReachabilityGap> held = List.copyOf(gaps);
+                for (souther.compiler.partition.ReachabilityGap gap : held) {
+                    if (gap instanceof souther.compiler.partition.ReachabilityGap
+                            .ProvedImpossible) {
+                        throw new IllegalArgumentException("a row stands where the rules leave"
+                                + " nothing standing: " + gap.anchor());
+                    }
+                }
+                return held;
+            }
+
             /** A row composed where the whole way was stated and used. */
             static Certified certified(Generator.GeneratedRow row,
                                        souther.compiler.partition.WayToTheBorder way) {
@@ -543,14 +565,7 @@ public sealed interface ItemAssessment {
                 implements Attempt, Searched, Built {
 
             public Certified {
-                uncomposed = List.copyOf(uncomposed);
-                for (souther.compiler.partition.ReachabilityGap gap : uncomposed) {
-                    if (gap instanceof souther.compiler.partition.ReachabilityGap
-                            .ProvedImpossible) {
-                        throw new IllegalArgumentException("a row stands where the rules leave"
-                                + " nothing standing: " + gap.anchor());
-                    }
-                }
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
             }
         }
 
@@ -574,7 +589,7 @@ public sealed interface ItemAssessment {
                 implements Attempt, Searched, Built, Prevented {
 
             public Unverified {
-                uncomposed = List.copyOf(uncomposed);
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
                 Objects.requireNonNull(why, "a row nothing certified says what stopped it");
             }
 

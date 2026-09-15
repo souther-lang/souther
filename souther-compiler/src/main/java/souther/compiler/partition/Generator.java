@@ -428,13 +428,17 @@ public final class Generator {
              */
             THE_SEARCH_LEFT_SOMETHING_UNTRIED,
             /**
-             * The rules leave no value here, and the whole of what they leave was walked.
+             * The rules leave no value here.
              *
              * <p>Apart from every other word here, and the difference is the whole point of having
              * it. The rest say what this compiler did not manage; this one says what the model
-             * settles — every position of the point is bounded, every combination of those bounds
-             * was tried, and none of them reaches it. A reader may act on this and may not act on
-             * the others (ADR-0091).
+             * settles, and a reader may act on this and on none of the others (ADR-0091).
+             *
+             * <p><b>The word is the theorem and not the way it was come by.</b> Two routes reach it
+             * and ADR-0091 admits both: a walk of the whole of what the rules leave that reached
+             * nothing, and rules shown to leave nothing before anything was walked. What a reader
+             * does about it is the same either way, and a word that also said which route it was
+             * would be false on one of them the moment the other was added — which it was.
              */
             THE_RULES_LEAVE_NOTHING_THERE,
             /**
@@ -3465,6 +3469,18 @@ public final class Generator {
             here = here.given(each.getKey().term(), each.getValue());
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            // What the cut says, asked as the one thing it says. A cut over two positions is a
+            // statement about their sum, and the rules can leave that sum nowhere while leaving each
+            // position somewhere — so the positions asked one at a time answer a weaker question
+            // than the cut put. Asked here, before the cut is taken apart into the positions a
+            // value has to be chosen at.
+            if (cut.taken() instanceof TakenConstraint.Affine affine
+                    && here.projectionOf(affine.form())
+                            instanceof souther.compiler.numeric.NumericDomain.FormProjection
+                                    .NothingIsLeft) {
+                unrepresented.add(new ReachabilityGap.ProvedImpossible(cut));
+                continue;
+            }
             List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
             boolean shared = false;
             boolean placeable = true;

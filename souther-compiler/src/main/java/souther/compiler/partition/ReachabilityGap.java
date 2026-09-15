@@ -66,10 +66,9 @@ public sealed interface ReachabilityGap {
      * <p><b>The condition is where the proof was met and not what the proof is about.</b> What was
      * shown empty is the region the way narrowed — every condition on it taken together, and
      * whatever the row has fixed — so this one is the place a reader is sent and not the one that
-     * closed it. Attributing the proof to the way itself is
-     * {@link souther.compiler.query.Reachability}'s to do and is not done here; until it is, what a
-     * report says of this has to stay what is known, which is that the way's conditions leave
-     * nothing standing together.
+     * closed it. Attributing the proof to the way itself is {@link Reachability}'s to do and is not
+     * done here; until it is, what a report says of this has to stay what is known, which is that
+     * the way's conditions leave nothing standing together.
      */
     record ProvedImpossible(OnTheWay.TakenIn condition) implements ReachabilityGap {
 

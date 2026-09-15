@@ -126,6 +126,28 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     }
 
     /**
+     * A form the rules leave nowhere settles the item, though every position of it stands.
+     *
+     * <p>The question a per-position reading cannot put. What a rule over two positions leaves is a
+     * fact about their sum, and each of them running somewhere says nothing about whether the sum
+     * does — so an item over a form that asked its positions one at a time would walk a form the
+     * rules have already refused, and come back naming a figure.
+     */
+    @Test
+    void aFormTheRulesLeaveNowhereSettlesTheItemThoughItsPositionsStand() {
+        Standing standing = new BorderQuantity.OverAForm("decide",
+                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                Map.of(WIDE, WHOLE,
+                        NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
+                .standingAt(new Criterion.AtTheLevel(new Level.ACount(Count.of(4))));
+
+        assertEquals(new Realization.Impossible(),
+                new LevelRealizer().realize(standing, EveryPositionStandsAndTheirSumDoesNot.REGION,
+                        NothingTheDeclarationsRefuse.at()),
+                "the form is what the rules refuse, and each of its positions runs somewhere");
+    }
+
+    /**
      * A position left nothing by the value the walk fixed above it ends that branch, and does not
      * end the search.
      *
