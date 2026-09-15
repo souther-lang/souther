@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -104,18 +103,22 @@ public final class UninhabitableTypes {
     }
 
     /**
-     * The groups to report, each at the first of {@code declarations} it holds.
+     * The groups to report, each at the first of {@code declared} it holds.
      *
-     * <p>Only groups holding one of {@code declarations}: a type of another module having no value
-     * is that module's to report, and a type here that has none because of it is left to come right
+     * <p>Only groups holding one of {@code declared}: a type of another module having no value is
+     * that module's to report, and a type here that has none because of it is left to come right
      * when it does. So what the caller passes is the declarations the report is being made for, and
      * nothing about the rest of the module is read.
+     *
+     * <p>In the order they are written, which is what decides where a group is reported and what
+     * order its members are named in. Names and not declarations, because that order and which
+     * names are the module's own are the whole of what is read of them.
      */
-    public static List<UninhabitableGroup> withNoValueOfTheirOwn(List<Hir.Def> declarations,
+    public static List<UninhabitableGroup> withNoValueOfTheirOwn(List<? extends TypeSymbol> declared,
                                                              TypeCardinality.Cardinalities solved) {
         Map<TypeSymbol, Integer> declaredAt = new LinkedHashMap<>();
-        for (Hir.Def def : declarations) {
-            declaredAt.put(def.declares(), declaredAt.size());
+        for (TypeSymbol named : declared) {
+            declaredAt.putIfAbsent(named, declaredAt.size());
         }
         Set<TypeSymbol> none = solved.withNoValue();
         if (none.isEmpty()) {

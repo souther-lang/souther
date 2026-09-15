@@ -211,6 +211,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         // assembling a module's scope out of the declarations it and its imports
                         // have, and writing a declaration's class into the metadata.
                         "SyntaxSymbols.java: def.declaredKey()",
+                        "Front.java: def.declaredKey()",
                         "Scoping.java: own.declaredKey()",
                         "Scoping.java: declared.declaredKey()",
                         "ModuleMetadata.java: def.declaredKey()",

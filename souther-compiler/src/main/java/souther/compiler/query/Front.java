@@ -6,6 +6,8 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -888,6 +890,47 @@ public final class Front {
                 m = fromPath == null ? null : fromPath.module();
             }
             return m == null ? Answer.absent() : Answer.of(Scoping.behaviorNames(m));
+        }
+    }
+
+    /**
+     * The types a module declares, in the order it writes them.
+     *
+     * <p>Its own question for the reason {@link Exposes} and {@link Behaviors} are theirs: what
+     * reads this wants which names a module introduces, and that survives every edit to what the
+     * declarations say and to the bodies beside them. A reader taking the declarations instead
+     * would be worked out again by an edit to any rule in the module.
+     *
+     * <p>A sequence, because the order is read. Which declaration a group of types with no value is
+     * reported at is the first of them the module writes, so an answer that only said which names
+     * there are would leave that to be settled somewhere the store does not watch.
+     *
+     * <p>Identities and not spellings, made where each declaration is in hand and says which one it
+     * is. What a declaration is called says nothing about which module declares it, and a reader
+     * pairing a name with the module it happens to be asking about would answer for a declaration
+     * here whatever the name came from.
+     */
+    public record DeclaredTypes(String name) implements Key<List<TypeSymbol.AtModule>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<TypeSymbol.AtModule>> compute(Db db) {
+            Ast.Module m = db.ask(new Exposed(name)).value();
+            if (m == null) {
+                FromPath.OnThePath fromPath = onThePath(db, name);
+                m = fromPath == null ? null : fromPath.module();
+            }
+            if (m == null) {
+                return Answer.absent();
+            }
+            List<TypeSymbol.AtModule> declared = new ArrayList<>();
+            for (Ast.Def def : m.defs()) {
+                declared.add(TypeSymbols.declared(def.declaredKey()));
+            }
+            return Answer.of(List.copyOf(declared));
         }
     }
 

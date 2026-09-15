@@ -34,7 +34,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 "the model this reads has to be one somebody could write");
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
-        return UninhabitableTypes.withNoValueOfTheirOwn(defs,
+        return UninhabitableTypes.withNoValueOfTheirOwn(
+                defs.stream().map(souther.compiler.ast.Hir.Def::declares).toList(),
                 TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
