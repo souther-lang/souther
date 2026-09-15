@@ -652,10 +652,11 @@ final class AnswerClosure {
      * <p>Every cause a projection reports names the atom it is about, and the atom is a term. So
      * this is one member of one type, met once under each of them.
      */
-    private static void whatATermHolds(List<KnownDeclared> into, TypePath.Step... under) {
+    private static void whatATermHolds(List<KnownDeclared> into, String question,
+                                       TypePath.Step... under) {
         for (String cause : List.of("Lossy", "Rounded")) {
             String owner = "souther.compiler.check.ProjectionEvidence$Cause$" + cause;
-            into.add(new KnownDeclared(declared(Q + "Adequacy$Inputs", "java.lang.Object",
+            into.add(new KnownDeclared(declared(question, "java.lang.Object",
                     then(under,
                             part("souther.compiler.inputs.ReadPosition", "projection"),
                             arm("souther.compiler.check.ProjectionEvidence$NotCertified"),
@@ -668,15 +669,21 @@ final class AnswerClosure {
         }
     }
 
-    /** Down to a position of a reading of an input, by each way the reading holds one. */
-    private static final TypePath.Step[] EVERY_POSITION = {
-            MAP_VALUE, part("souther.compiler.inputs.InputDomain", "positions"), HELD,
-            arm("souther.compiler.inputs.ReadPosition")};
-
-    /** And the same positions under the paths they were read at. */
-    private static final TypePath.Step[] BY_PATH = {
-            MAP_VALUE, part("souther.compiler.inputs.InputDomain", "byPath"), MAP_VALUE,
-            arm("souther.compiler.inputs.ReadPosition")};
+    /**
+     * Down to a position of a reading of an input, by each way the reading holds one: in the order
+     * the positions were read, and under the paths they were read at.
+     *
+     * <p>{@code to} is the way from the answer to the reading, which is where the two questions
+     * that answer with one differ. A behavior's reading is the answer; a module's is that same
+     * reading under the behavior's name.
+     */
+    private static List<TypePath.Step[]> everyPosition(TypePath.Step... to) {
+        return List.of(
+                then(to, part("souther.compiler.inputs.InputDomain", "positions"), HELD,
+                        arm("souther.compiler.inputs.ReadPosition")),
+                then(to, part("souther.compiler.inputs.InputDomain", "byPath"), MAP_VALUE,
+                        arm("souther.compiler.inputs.ReadPosition")));
+    }
 
     /**
      * Every place a question's own declaration puts something that cannot be compared as a value.
@@ -701,6 +708,10 @@ final class AnswerClosure {
             // Where the declarations a reading of an input reached borrow what has already been
             // made of them, kept by the reading for the readers of those declarations that come
             // after the walk.
+            new KnownDeclared(declared(Q + "Adequacy$InputsOf",
+                    "souther.compiler.check.DeclarationReadings",
+                    part("souther.compiler.inputs.InputDomain", "machines")),
+                    A_LENDING_OF_READINGS, Traversal.Why.NOTHING_CLOSES_IT),
             new KnownDeclared(declared(Q + "Adequacy$Inputs",
                     "souther.compiler.check.DeclarationReadings", MAP_VALUE,
                     part("souther.compiler.inputs.InputDomain", "machines")),
@@ -823,17 +834,25 @@ final class AnswerClosure {
         // A reading of an input holds its positions twice — in the order they were read, and under
         // the paths they were read at — so everything under a position is two places the answer
         // exposes it.
-        for (TypePath.Step[] positions : List.of(EVERY_POSITION, BY_PATH)) {
-            bothEndsOfARange(out, Q + "Adequacy$Inputs",
-                    then(positions, part("souther.compiler.inputs.ReadPosition", "bounds"), HELD,
-                            part("souther.compiler.inputs.PositionBounds", "narrowedEnds")));
-            whatATermHolds(out, positions);
-            // What the position's own rules leave it, which travels with the position because it is
-            // what a behavior's rules have left to divide.
-            theMachineUnderALanguage(out, Q + "Adequacy$Inputs",
-                    then(positions, part("souther.compiler.inputs.ReadPosition", "admitted"),
-                            part("souther.compiler.values.AdmissibleSet", "approximation")));
-        }
+        // One for the behavior whose reading it is, and one for the module that hands that same
+        // reading out under the behavior's name.
+        Map<String, List<TypePath.Step[]>> readings = new LinkedHashMap<>();
+        readings.put(Q + "Adequacy$InputsOf", everyPosition());
+        readings.put(Q + "Adequacy$Inputs", everyPosition(MAP_VALUE));
+        readings.forEach((question, everyPosition) -> {
+            for (TypePath.Step[] positions : everyPosition) {
+                bothEndsOfARange(out, question,
+                        then(positions, part("souther.compiler.inputs.ReadPosition", "bounds"),
+                                HELD,
+                                part("souther.compiler.inputs.PositionBounds", "narrowedEnds")));
+                whatATermHolds(out, question, positions);
+                // What the position's own rules leave it, which travels with the position because
+                // it is what a behavior's rules have left to divide.
+                theMachineUnderALanguage(out, question,
+                        then(positions, part("souther.compiler.inputs.ReadPosition", "admitted"),
+                                part("souther.compiler.values.AdmissibleSet", "approximation")));
+            }
+        });
         // The machine a class denotes where what it denotes is a pattern's strings, reached at each
         // of the two places an axis is carried from.
         theMachineUnderALanguage(out, Q + "Adequacy$Divided",
