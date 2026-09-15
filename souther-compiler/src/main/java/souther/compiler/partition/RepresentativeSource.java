@@ -96,6 +96,34 @@ public sealed interface RepresentativeSource {
          * report a case somebody can write in one line as a row that does not exist.
          */
         record NothingProducible(String why) implements Evaluation {}
+
+        /**
+         * Nothing was produced for this class and nothing here says none can be.
+         *
+         * <p>Apart from {@link NothingProducible}, and the difference is what a reader may say
+         * about the model. That one is a search that looked everywhere it was going to look; this
+         * one stopped — at a figure of this compiler's, or short of a population it writes some of
+         * — so the class may hold values and this did not reach one.
+         *
+         * <p>Run together, the sentence an author reads says nothing writes a value in a range
+         * whose values this compiler simply did not walk to. Which is the same mistake as reporting
+         * a compiler's own shortfall in words about the model, one layer up from where it was
+         * fixed.
+         *
+         * @param heldBack which figures of this compiler's stopped it, each a number somebody can
+         *                 raise to have the search go on
+         * @param notAllOf what it wrote some of rather than all of, which no figure reaches
+         * @param why      what to tell a reader, in words that are about this compiler
+         */
+        record NotArrivedAt(java.util.Set<CompositionBudget> heldBack,
+                            java.util.Set<CompositionRepertoire> notAllOf, String why)
+                implements Evaluation {
+
+            public NotArrivedAt {
+                heldBack = java.util.Set.copyOf(heldBack);
+                notAllOf = java.util.Set.copyOf(notAllOf);
+            }
+        }
     }
 
     /**
@@ -108,7 +136,9 @@ public sealed interface RepresentativeSource {
     default boolean buildable() {
         return switch (evaluate()) {
             case Evaluation.Values _, Evaluation.Compose _ -> true;
-            case Evaluation.NothingProducible _ -> false;
+            // And a class nothing reached a value for is not one a caller may count on either. What
+            // this answers is whether a value can be had, and a search that stopped has not said.
+            case Evaluation.NothingProducible _, Evaluation.NotArrivedAt _ -> false;
         };
     }
 
@@ -176,8 +206,10 @@ public sealed interface RepresentativeSource {
                     yield new Evaluation.Compose(compose.through(), both);
                 }
                 // Nothing to put a name on. What the inner recipe says stands: a name wrapped round
-                // a value nothing composed does not make one, and does not change why there is none.
-                case Evaluation.NothingProducible _ -> inner.evaluate();
+                // a value nothing composed does not make one, and does not change why there is
+                // none — nor whether anything looked.
+                case Evaluation.NothingProducible _, Evaluation.NotArrivedAt _ ->
+                        inner.evaluate();
             };
         }
     }
@@ -188,6 +220,29 @@ public sealed interface RepresentativeSource {
         @Override
         public Evaluation evaluate() {
             return new Evaluation.NothingProducible(why);
+        }
+    }
+
+    /** A class this compiler did not reach a value for, and what stopped it. */
+    record NotReached(java.util.Set<CompositionBudget> heldBack,
+                      java.util.Set<CompositionRepertoire> notAllOf, String why)
+            implements RepresentativeSource {
+
+        public NotReached {
+            heldBack = java.util.Set.copyOf(heldBack);
+            notAllOf = java.util.Set.copyOf(notAllOf);
+            if (heldBack.isEmpty() && notAllOf.isEmpty()) {
+                // Nothing stopped it and it reached nothing, which is a search that looked
+                // everywhere — and that is the other case, which says so.
+                throw new IllegalArgumentException(
+                        "a class nothing reached a value for says what stopped the reaching: "
+                                + why);
+            }
+        }
+
+        @Override
+        public Evaluation evaluate() {
+            return new Evaluation.NotArrivedAt(heldBack, notAllOf, why);
         }
     }
 

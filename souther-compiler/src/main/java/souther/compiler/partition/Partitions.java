@@ -1738,7 +1738,8 @@ public final class Partitions {
             case RepresentativeSource.Evaluation.Compose compose ->
                     composed(compose.through(), reading, expanding).stream()
                             .map(compose::written).toList();
-            case RepresentativeSource.Evaluation.NothingProducible _ -> List.of();
+            case RepresentativeSource.Evaluation.NothingProducible _,
+                 RepresentativeSource.Evaluation.NotArrivedAt _ -> List.of();
         };
     }
 

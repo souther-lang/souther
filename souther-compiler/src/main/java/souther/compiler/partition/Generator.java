@@ -4532,6 +4532,16 @@ public final class Generator {
                     return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                             Optional.of(cannot.why()));
                 }
+                // And the other of those two answers. Nothing was arrived at and the class says so
+                // as what stopped the arriving, which is a figure somebody can raise or work
+                // nobody has done — never that the class holds no value.
+                case RepresentativeSource.Evaluation.NotArrivedAt stopped -> {
+                    return new Attempt(null,
+                            stopped.heldBack().isEmpty()
+                                    ? UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED
+                                    : UnresolvedCombination.Reason.wordFor(stopped.heldBack()),
+                            at, Optional.of(stopped.why()));
+                }
             }
         }
         List<FixtureTemplate> inputs = new ArrayList<>();

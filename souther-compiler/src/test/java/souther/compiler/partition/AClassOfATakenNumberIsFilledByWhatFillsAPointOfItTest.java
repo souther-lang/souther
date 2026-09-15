@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,6 +72,19 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
                 | ([9]) -> true
             """;
 
+    /** A class of counts higher than what its position holds any of, which this compiler tries a
+     *  few of and gives up on. */
+    private static final String MORE_THAN_IT_HOLDS = """
+            module example.taken
+
+            behavior h : (s: Set<Bool>) -> Bool
+            let h (s) = {
+                guard Set.size(s) >= 3 else false
+
+                true
+            }
+            """;
+
     /**
      * A class of the hour is offered a time standing in it.
      *
@@ -127,6 +141,26 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
     }
 
     /**
+     * And a class this compiler stopped before reaching a value for is not one nothing writes a
+     * value for.
+     *
+     * <p>The two sentences a class with no value can carry, and which of them it is turns on
+     * whether the search looked everywhere. A set of truths holds two at most, so the counts this
+     * class admits run past what this compiler tries and none of the ones it tried built — which is
+     * this compiler giving up, not the position having no such value. Told the other way, an author
+     * reads a shortfall of this compiler's as a fact about the model, which is what the classes of
+     * a taken number were doing before any of this.
+     */
+    @Test
+    void aClassNothingReachedAValueForDoesNotSayNothingWritesOne() {
+        String block = offered(MORE_THAN_IT_HOLDS, "h");
+
+        assertTrue(block.contains("nothing here composed a value whose Set.size is in this range,"
+                + " which does not make one unwritable"), block);
+        assertFalse(block.contains("nothing here writes a value whose Set.size"), block);
+    }
+
+    /**
      * What this compiler composed for each class of that behavior, by the class it composed it for.
      *
      * <p>Read off the purpose each row carries rather than out of the block. A row written for a
@@ -147,6 +181,13 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
             }
         }
         return out;
+    }
+
+    /** The rows this compiler offers for what nothing covers, and the sentences beside them. */
+    private static String offered(String source, String behavior) {
+        Compilation compilation = measured(source);
+        return souther.compiler.report.GeneratedRows.of(compilation, "example.taken", behavior,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     private static String report(String source) {

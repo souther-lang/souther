@@ -212,12 +212,8 @@ final class Intervals {
             // both empty answers carry is about composing: it is true of a run that holds nothing
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
-            List<FixtureTemplate> values = standingIn(orders, admits, type, reading, ruleReading);
-            classes.add(values.isEmpty()
-                    ? PartitionClass.ungeneratable(id, label, is,
-                            "nothing here writes a value whose " + measureOf(of) + " is in this range")
-                    : PartitionClass.of(id, label, is,
-                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
+            classes.add(PartitionClass.of(id, label, is,
+                    standingIn(orders, admits, type, reading, ruleReading, measureOf(of))));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
         return classes.stream().map(each -> each.ofTheNumber(of)).toList();
@@ -263,18 +259,32 @@ final class Intervals {
      * rather than handed a region a caller built, since a region worked out beside the reading is a
      * second answer to where the declarations leave room.
      *
-     * <p>What comes back short of values built is a class with no representative, which is as much
-     * as the class a report names can hold. The reasons that answer parts under — a budget of this
-     * compiler's having stopped, a walk that saw some of what there is — are distinctions a reader
-     * of a class has no place to put yet, and they are lost here.
+     * <p><b>And what comes back short of values built is handed on as what it was.</b> A search
+     * that looked everywhere it was going to look and a search a figure of this compiler's stopped
+     * both leave a class with no value, and only the first is a thing to say about the model. Read
+     * as one, the sentence an author gets says nothing writes a value in a range whose values this
+     * compiler did not walk to — which is the shortfall reported as a fact about the model that
+     * this file exists to have stopped doing.
      */
-    private static List<FixtureTemplate> standingIn(TermOrders orders, NumericSet admits, Type type,
-                                                    Quantities reading,
-                                                    RuleReadingContext ruleReading) {
-        return TermRealizations.satisfying(type, orders, admits, reading.region(), ruleReading)
-                instanceof TermRealizations.Realization.Built built
-                ? built.values()
-                : List.of();
+    private static RepresentativeSource standingIn(TermOrders orders, NumericSet admits, Type type,
+                                                   Quantities reading,
+                                                   RuleReadingContext ruleReading, String measure) {
+        TermRealizations.Realization made =
+                TermRealizations.satisfying(type, orders, admits, reading.region(), ruleReading);
+        return switch (made) {
+            case TermRealizations.Realization.Built built ->
+                    RepresentativeSource.of(built.values());
+            case TermRealizations.Realization.None _ -> new RepresentativeSource.Ungeneratable(
+                    "nothing here writes a value whose " + measure + " is in this range");
+            case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotReached(
+                    stopped.by(), stopped.notAllOf(),
+                    "nothing here composed a value whose " + measure + " is in this range, which"
+                            + " does not make one unwritable");
+            case TermRealizations.Realization.Unexhausted some ->
+                    new RepresentativeSource.NotReached(java.util.Set.of(), some.notAllOf(),
+                            "nothing here composed a value whose " + measure + " is in this range,"
+                                    + " which does not make one unwritable");
+        };
     }
 
     private Intervals() {}
