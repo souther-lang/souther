@@ -275,6 +275,10 @@ public final class PublicationOrders {
     public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
             CanonicalSelection.Order.overValues(
                     List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD,
+                            // Nearest the value a reader wanted: how a total is spread is about
+                            // what one value holds, where the two below are about which value out
+                            // of a range or a line this compiler names at all.
+                            CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
     /**

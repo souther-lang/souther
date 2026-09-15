@@ -371,7 +371,8 @@ final class TermRealizations {
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            case NumericTerm.ValueOf _ -> standing(sourceType, orders, wanted, within, reading);
+            case NumericTerm.ValueOf _ ->
+                    standing(sourceType, orders, wanted, within, reading);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
                     orders, wanted, within, reading);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
@@ -471,10 +472,13 @@ final class TermRealizations {
                 case Realization.None _, Realization.Built _ -> { }
             }
         }
-        if (!tried.everyOne()) {
-            // The numbers past the figure were never tried, so nothing here is a statement about
-            // the set. Said as the figure, which is what an author raises to have them tried.
-            met.add(CompositionBudget.NUMBERS_OF_A_SET_TRIED);
+        // Why there were no more to try, said by whatever handed them over. Worked out here, this
+        // would be the one place that knows what every account's numbers are and how it walks them,
+        // which is what handing the reason over is for.
+        switch (tried.rest()) {
+            case Remainder.Exhausted _ -> { }
+            case Remainder.StoppedAt(CompositionBudget figure) -> met.add(figure);
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) -> some.addAll(written);
         }
         if (!met.isEmpty()) {
             return new Realization.Stopped(met, some);
@@ -553,16 +557,53 @@ final class TermRealizations {
      * @param everyOne whether there is nothing else to try, which is what tells a set with no value
      *                 in it from a search that stopped short of one
      */
-    private record Tried(List<Place> numbers, boolean everyOne) {
+    private record Tried(List<Place> numbers, Remainder rest) {
 
         static Tried allOf(List<Place> numbers) {
-            return new Tried(numbers, true);
+            return new Tried(numbers, new Remainder.Exhausted());
         }
 
         /** The one number a set of one is, handed over without a window: what an account can be
          *  asked for is the account's to judge, and a demand for one number names it outright. */
         static Tried theOne(Place number) {
-            return new Tried(List.of(number), true);
+            return allOf(List.of(number));
+        }
+    }
+
+    /**
+     * Why there are no more numbers to try than the ones handed over.
+     *
+     * <p><b>The producer's answer, and the reason a consumer does not have to guess one.</b> Three
+     * things leave a search with numbers it did not try, and they are three different things to
+     * tell an author: the set had no more, a figure of this compiler's stopped the handing over,
+     * or this compiler has one way of naming a number where the set has many. Carried as whether
+     * the set was exhausted, the last two are one bit — and what a reader was told is the figure,
+     * which they may raise to be handed exactly what they were handed before.
+     *
+     * <p>The same three {@link Realization} is told apart by, one step earlier. A search that says
+     * why it stopped and a set of candidates that does not would leave the word a reader gets
+     * standing on a guess.
+     */
+    private sealed interface Remainder {
+
+        /** There are no more: the numbers handed over are every one the set has in the window its
+         *  account can be asked for. */
+        record Exhausted() implements Remainder {}
+
+        /** A figure of this compiler's stopped the handing over, and raising it hands over more. */
+        record StoppedAt(CompositionBudget figure) implements Remainder {}
+
+        /** This compiler writes some of the numbers there are and has no way of writing the rest,
+         *  which no figure reaches. */
+        record SomeOf(Set<CompositionRepertoire> written) implements Remainder {
+
+            public SomeOf {
+                written = Set.copyOf(written);
+                if (written.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk that wrote some of them says some of what");
+                }
+            }
         }
     }
 
@@ -583,14 +624,20 @@ final class TermRealizations {
         BigDecimal first = startOf(lies.min(), BigDecimal.valueOf(from));
         BigDecimal last = endOf(lies.max(), BigDecimal.valueOf(to));
         List<Place> out = new ArrayList<>();
-        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() < many;
+        // One past what is handed over, so that a window holding exactly as many as the figure
+        // allows is a window this walked to the end of. Stopped at the figure itself, a set of
+        // exactly that many numbers comes back as a search that gave something up.
+        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() <= many;
                 at = at.add(BigDecimal.ONE)) {
             Count place = new Count(at);
             if (wanted.holds(place, on)) {
                 out.add(place);
             }
         }
-        return new Tried(List.copyOf(out), out.size() < many);
+        return out.size() > many
+                ? new Tried(List.copyOf(out.subList(0, many)),
+                        new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED))
+                : Tried.allOf(List.copyOf(out));
     }
 
     /** The first whole number at or above an end, or the window's own start where the set runs
@@ -624,26 +671,32 @@ final class TermRealizations {
      * the ones that are not — worked out here as whole numbers, a run between a tenth and nine
      * tenths would hold none, and a number past what an int holds would be one nothing offers.
      *
-     * <p>One of them, and what comes back says so. Which of a run this compiler would offer second
-     * is a question nothing here asks, so a caller that built nothing at this one has not walked
-     * the run — and says that rather than that the run holds no value.
+     * <p>One of them, and what comes back says so — as a population this compiler writes some of
+     * and never as a figure. Raising a number reaches no second place in a run: where the order has
+     * a smallest step nothing here steps to it, and where it has none there is no step. So a caller
+     * that built nothing at the one place has not walked the run, and what it may say is that, and
+     * not that the run holds nothing.
      */
     private static Tried onTheOrder(NumericSet wanted, TermOrders orders,
                                     souther.compiler.inputs.SearchRegion within) {
         if (wanted instanceof NumericSet.At one) {
+            // A set of one number is that number, and there is nothing else it could have been.
             return Tried.theOne(one.value());
         }
+        Set<CompositionRepertoire> ofTheRun =
+                Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
         if (!(wanted instanceof NumericSet.InARun run)) {
-            // The values a rule singled out leave a set with no run to search. What lies outside
-            // them is chosen against the carrier by the reader that holds those values, and this
-            // has not looked at any of it.
-            return new Tried(List.of(), false);
+            // Anything but the values a rule singled out. Which place beside them to try is a
+            // witness somebody pays for, and what a witness may cost is named where witnesses are
+            // paid for — so the number arrives here already chosen, as the one it is.
+            return new Tried(List.of(), new Remainder.SomeOf(ofTheRun));
         }
         NumericDomain.Bounds leaves = within == null ? null : within.runsBetween(orders.term());
         Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
                 orders.answered(),
                 leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
-        return found == null ? new Tried(List.of(), true) : new Tried(List.of(found), false);
+        return new Tried(found == null ? List.of() : List.of(found),
+                new Remainder.SomeOf(ofTheRun));
     }
 
     /** The one value whose quotient by that divisor is exactly that number. */
@@ -904,7 +957,7 @@ final class TermRealizations {
                 MONTHS_A_YEAR_HAS, A_LONGEST_MONTH);
         List<Place> days = numbersOf(parts, TakenAs.DatePart.DAY, observed,
                 DAYS_THE_LONGEST_MONTH_HAS, FIRST_OF_THE_MONTH);
-        boolean everyOne = years.everyOne();
+        boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
             for (Place month : months) {
                 java.time.YearMonth in = java.time.YearMonth.of(

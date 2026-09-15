@@ -213,12 +213,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years a date is looked for in, and whether they were all of them"),
-            Map.entry("souther.compiler.partition.TermRealizations#firstThatBuilds("
-                            + "Lsouther/compiler/partition/TermRealizations$Tried;"
-                            + "Ljava/util/function/Function;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "names the figure where nothing was built and the numbers were not all of the"
-                            + " set, which is what keeps that apart from nothing writing one"),
+            Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/Carrier;JJI)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "names the figure as what left more of the set untried, where the walk filled"
+                            + " what it was allowed before the window ran out"),
             Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
                             + "Ljava/util/Map;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"

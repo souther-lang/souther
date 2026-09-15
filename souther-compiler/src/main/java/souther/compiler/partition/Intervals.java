@@ -213,7 +213,8 @@ final class Intervals {
             // as much as of one the order would not choose in, and it is the only one of the two
             // claims this compiler is in a position to make (ADR-0091).
             classes.add(PartitionClass.of(id, label, is,
-                    standingIn(orders, admits, type, reading, ruleReading, measureOf(of))));
+                    standingFor(orders, admits, type, reading, ruleReading,
+                            "a value whose " + measureOf(of) + " is in this range")));
         }
         // Classes of the number the runs are runs of, said here because here is where that is known.
         return classes.stream().map(each -> each.ofTheNumber(of)).toList();
@@ -221,7 +222,7 @@ final class Intervals {
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
      *  the number is what one answered, and the position's own value otherwise. */
-    private static String measureOf(NumericTerm.FromOnePosition of) {
+    static String measureOf(NumericTerm.FromOnePosition of) {
         // Exhaustive, with no `default`. What a range is a range of is a word per kind of number,
         // so a kind added is one a reader has to be given a word for rather than one that arrives
         // under whichever word the condition left it on.
@@ -266,24 +267,23 @@ final class Intervals {
      * compiler did not walk to — which is the shortfall reported as a fact about the model that
      * this file exists to have stopped doing.
      */
-    private static RepresentativeSource standingIn(TermOrders orders, NumericSet admits, Type type,
-                                                   Quantities reading,
-                                                   RuleReadingContext ruleReading, String measure) {
-        TermRealizations.Realization made =
-                TermRealizations.satisfying(type, orders, admits, reading.region(), ruleReading);
+    static RepresentativeSource standingFor(TermOrders orders, NumericSet admits, Type type,
+                                            Quantities reading,
+                                            RuleReadingContext ruleReading, String what) {
+        TermRealizations.Realization made = TermRealizations.satisfying(type, orders, admits,
+                reading.region(), ruleReading);
         return switch (made) {
             case TermRealizations.Realization.Built built ->
                     RepresentativeSource.of(built.values());
-            case TermRealizations.Realization.None _ -> new RepresentativeSource.Ungeneratable(
-                    "nothing here writes a value whose " + measure + " is in this range");
+            case TermRealizations.Realization.None _ ->
+                    new RepresentativeSource.Ungeneratable("nothing here writes " + what);
             case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotReached(
                     stopped.by(), stopped.notAllOf(),
-                    "nothing here composed a value whose " + measure + " is in this range, which"
-                            + " does not make one unwritable");
+                    "nothing here composed " + what + ", which does not make one unwritable");
             case TermRealizations.Realization.Unexhausted some ->
                     new RepresentativeSource.NotReached(java.util.Set.of(), some.notAllOf(),
-                            "nothing here composed a value whose " + measure + " is in this range,"
-                                    + " which does not make one unwritable");
+                            "nothing here composed " + what
+                                    + ", which does not make one unwritable");
         };
     }
 

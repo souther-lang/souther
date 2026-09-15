@@ -72,6 +72,30 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
                 | ([9]) -> true
             """;
 
+    /** A rule that singles one number out rather than drawing a line, over a part of a time. */
+    private static final String AN_HOUR_SINGLED_OUT = """
+            module example.taken
+
+            behavior k : (t: Time) -> Bool
+            let k (t) = {
+                guard Time.hour(t) /= 9 else false
+
+                true
+            }
+            """;
+
+    /** The same over a total, which is the other account a count is shaped like. */
+    private static final String A_TOTAL_SINGLED_OUT = """
+            module example.taken
+
+            behavior m : (ns: List<Int>) -> Bool
+            let m (ns) = {
+                guard List.sum(ns) /= 9 else false
+
+                true
+            }
+            """;
+
     /** A class of counts higher than what its position holds any of, which this compiler tries a
      *  few of and gives up on. */
     private static final String MORE_THAN_IT_HOLDS = """
@@ -138,6 +162,28 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
 
         assertTrue(report.contains("equivalence partitions 1/2"), report);
         assertTrue(report.contains("no row is in `List.sum(ns)/9 <= x`"), report);
+    }
+
+    /**
+     * A class of a number a rule singled out is offered a value of the position, not the number.
+     *
+     * <p>The other shape a class of a number comes in, and one measured on its own rather than
+     * beside a second number of the same location. A rule that names a number instead of drawing a
+     * line leaves that number and everything else, and a value standing in either is built by what
+     * builds a value at a number — the ninth hour is a time, and the number nine is not one.
+     */
+    @Test
+    void aClassOfAPartOfATimeSingledOutIsOfferedATime() {
+        assertEquals(Map.of("t== 9", "Time(\"09:00:00\")",
+                        "t=/= 9", "Time(\"10:00:00\")"),
+                offeredForEachClass(AN_HOUR_SINGLED_OUT, "k"));
+    }
+
+    /** And a class of a total singled out is offered a list coming to it. */
+    @Test
+    void aClassOfATotalSingledOutIsOfferedAList() {
+        assertEquals(Map.of("ns== 9", "[9]", "ns=/= 9", "[10]"),
+                offeredForEachClass(A_TOTAL_SINGLED_OUT, "m"));
     }
 
     /**

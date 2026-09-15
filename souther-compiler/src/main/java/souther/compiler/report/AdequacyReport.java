@@ -3304,6 +3304,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         "the ways a total may be spread over what adds up to it";
                 case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
                         "the places on a line between two positions a pair is tried at";
+                case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
+                        "the places inside one run a value is named at";
             });
         }
         return String.join(", ", out);
