@@ -31,7 +31,7 @@ import java.util.TreeSet;
  * to before. That is one question and it is the whole of it, and it cannot be read off the graph —
  * it takes the graph, what equality says about the answers, and an edit.
  *
- * <p>{@link WhatItIs} is read afterwards and says why the answer held. Asked first, it lets through
+ * <p>{@link WhyItHeld} is read afterwards and says why the answer held. Asked first, it lets through
  * exactly what this is for: a reader answering with every entry of an index is entries of it,
  * reads as a projection, and moves with the index whenever it moves.
  *
@@ -78,7 +78,7 @@ final class IndexEdges {
      * nothing: the index moves, the answer moves with it, and every reader downstream is asked
      * again while this says the edge is fine.
      */
-    enum WhatItIs {
+    enum WhyItHeld {
 
         /** The reader answers with entries of the index, so what it comes to is what those entries
          *  are. */
@@ -117,7 +117,7 @@ final class IndexEdges {
      * @param instances how many edges were read, which says a census of nothing is a census of
      *                  nothing rather than a clean one
      */
-    record Census(Map<Edge, Set<WhatItIs>> whereTheIndexMoved, List<String> neither,
+    record Census(Map<Edge, Set<WhyItHeld>> whereTheIndexMoved, List<String> neither,
                   Set<Edge> exercised, Set<Edge> everyEdge, Set<Part> unread,
                   int instances) {}
 
@@ -129,7 +129,7 @@ final class IndexEdges {
      * only to say why it held.
      */
     static Census taken(Snapshot before, Snapshot after) {
-        Map<Edge, Set<WhatItIs>> moved = new LinkedHashMap<>();
+        Map<Edge, Set<WhyItHeld>> moved = new LinkedHashMap<>();
         Set<Edge> exercised = new TreeSet<>();
         List<String> neither = new ArrayList<>();
         Set<Edge> everyEdge = new TreeSet<>();
@@ -164,8 +164,8 @@ final class IndexEdges {
                 }
                 moved.computeIfAbsent(edge, _ -> new TreeSet<>())
                         .add(projectsSomething(each.getValue(), index)
-                                ? WhatItIs.A_PROJECTION
-                                : WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT);
+                                ? WhyItHeld.A_PROJECTION
+                                : WhyItHeld.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT);
             }
         }
         Collections.sort(neither);
@@ -280,21 +280,28 @@ final class IndexEdges {
      * where the rest say how to read it ({@link Bodies.Expanding} takes a policy), so a count
      * misreads both ways.
      *
-     * <p>One thing is settled by what is there and it is the only one: a component holding the name
-     * the key says it is about <em>is</em> that module, and no judgement can make it something else.
-     * A component holding any other text is not thereby a name — it could as well say how to read
-     * what is asked for — so it is asked of {@link #whatEachComponentHolds} like everything else,
-     * and is {@link WhatAComponentHolds#UNREAD} where nobody has said. Read the other way, a module
-     * index taking a mode written as text would drop out of the census, which is the failure the
-     * word {@code UNREAD} exists to prevent.
+     * <p><b>What somebody said comes first.</b> A role is the component's, so a reading taken off
+     * what happens to be there cannot overrule one. The two come apart where a module and a
+     * definition of it are spelled alike — {@code module orders} with a {@code behavior orders} in
+     * it — and there the text says module while the component says behavior. Taken the other way
+     * round, that question stops being about one definition, its reads of an index leave the census,
+     * and nothing says so.
+     *
+     * <p>What is left to the text is the component nobody wrote down, and one thing only: holding
+     * the name the key says it is about is being that module. Any other text is not thereby a name
+     * — it could as well say how to read what is asked for — so it is {@link
+     * WhatAComponentHolds#UNREAD}, which is the word that keeps a module index taking a mode written
+     * as text from dropping out of the census.
      */
     private static WhatAComponentHolds roleOf(Key<?> key, RecordComponent part) {
-        if (part.getType() == String.class && held(key, part) instanceof String named
-                && named.equals(key.module())) {
-            return WhatAComponentHolds.THE_MODULE;
+        WhatAComponentHolds said = whatEachComponentHolds().get(
+                new Part(key.getClass(), part.getName()));
+        if (said != null) {
+            return said;
         }
-        return whatEachComponentHolds().getOrDefault(new Part(key.getClass(), part.getName()),
-                WhatAComponentHolds.UNREAD);
+        return part.getType() == String.class && held(key, part) instanceof String named
+                && named.equals(key.module())
+                ? WhatAComponentHolds.THE_MODULE : WhatAComponentHolds.UNREAD;
     }
 
     /** Every component of a key this census met that nobody has read. */
@@ -308,6 +315,17 @@ final class IndexEdges {
                 out.add(new Part(key.getClass(), part.getName()));
             }
         }
+    }
+
+    /** What {@code key} holds at the component named {@code component}, for a check of the reading
+     *  itself. */
+    static WhatAComponentHolds roleAt(Key<?> key, String component) {
+        for (RecordComponent part : key.getClass().getRecordComponents()) {
+            if (part.getName().equals(component)) {
+                return roleOf(key, part);
+            }
+        }
+        throw new IllegalArgumentException(key.getClass() + " holds nothing at " + component);
     }
 
     /** One component of one question. */

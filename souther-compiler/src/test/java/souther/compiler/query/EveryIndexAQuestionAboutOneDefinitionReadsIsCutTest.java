@@ -168,27 +168,29 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
         A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT("""
 
                 data Broken = { missing: NoSuchType }
-                """, true);
+                """, "E1023");
 
         private final String added;
-        private final boolean saysSomething;
+        private final List<String> says;
 
-        Edit(String added) {
-            this(added, false);
-        }
-
-        Edit(String added, boolean saysSomething) {
+        Edit(String added, String... says) {
             this.added = added;
-            this.saysSomething = saysSomething;
+            this.says = List.of(says);
         }
 
         String source() {
             return MODULE + added;
         }
 
-        /** Whether the compiler is expected to speak about what this adds. */
-        boolean saysSomething() {
-            return saysSomething;
+        /**
+         * What the compiler is expected to say once this is added.
+         *
+         * <p>Which problems and not whether there are any. An edit that broke something already
+         * written would say something too, and every verdict taken under it would be a verdict about
+         * a module the edit had changed the meaning of.
+         */
+        List<String> says() {
+            return says;
         }
     }
 
@@ -212,12 +214,18 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
             c.update(Map.of(ID, edit.source()), Set.of());
             c.measure(Adequacy.Asked.fullReport());
             c.answerEverything();
-            assertEquals(edit.saysSomething(), !c.db().allReports().isEmpty(),
+            assertEquals(edit.says(), codesFrom(c),
                     () -> "after " + edit + " the compiler said " + said(c));
 
             out.put(edit, IndexEdges.taken(before, IndexEdges.Snapshot.of(c.db())));
         }
         return out;
+    }
+
+    /** Which problems the compiler has, in the order it found them. */
+    private static List<String> codesFrom(Compilation c) {
+        return c.db().allReports().stream()
+                .map(each -> each.report().diagnostic().code()).toList();
     }
 
     /** What the compiler said about the fixture, as a reader of a failure can read it. */
@@ -236,7 +244,7 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      * index leaves every edge under it exactly as they were, so a register of verdicts alone cannot
      * tell an edge that is still held from one nothing is asking any more.
      */
-    private record Witness(IndexEdges.WhatItIs is, Edit under) implements Comparable<Witness> {
+    private record Witness(IndexEdges.WhyItHeld is, Edit under) implements Comparable<Witness> {
 
         @Override
         public String toString() {
@@ -328,32 +336,35 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
     }
 
     /**
-     * What each edge of this compiler's graph is, said once so that this can read it.
+     * What each edge of this compiler's graph was seen to be, and under which edit, said once so
+     * that this can read it.
      *
-     * <p>Written down rather than worked out, for the reason the classification cannot be read off
-     * the graph at all. An edge read as sound because it came out sound is an edge nobody has
-     * judged, and the day it stops being a projection the census would follow it into whatever it
-     * became.
+     * <p>Written down rather than worked out, because an edge read as sound because it came out
+     * sound is an edge nobody has judged: the day one stops holding the way it held, the census
+     * would follow it into whatever it became.
+     *
+     * <p>A register of observations and not of natures. An entry says an edit moved this index and
+     * the reader held, and why it held that time; an edge seen both ways is written both ways.
      */
     private static Map<IndexEdges.Edge, Set<Witness>> written() {
         Map<IndexEdges.Edge, Set<Witness>> out = new TreeMap<>();
-        eitherWay(out, Bodies.BehaviorAritiesForBody.class, Bodies.NamedBehaviorArity.class,
+        metEitherWay(out,Bodies.BehaviorAritiesForBody.class, Bodies.NamedBehaviorArity.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
-        eitherWay(out, Bodies.CalleeSigsForBody.class, Bodies.CalleeSigs.class,
+        metEitherWay(out,Bodies.CalleeSigsForBody.class, Bodies.CalleeSigs.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
         projection(out, Bodies.DeclaredSignature.class, Bodies.DeclaredSignatures.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE,
                 Edit.A_BEHAVIOR_BESIDE_TAKING_A_REQUIREMENT, Edit.A_BEHAVIOR_DECLARED_BESIDE,
                 Edit.A_RECURSIVE_HELPER_BESIDE, Edit.A_ROW_WRITTEN_BESIDE);
-        eitherWay(out, Bodies.RecursiveCallSigsForBody.class, Bodies.RecursiveCallSigs.class,
+        metEitherWay(out,Bodies.RecursiveCallSigsForBody.class, Bodies.RecursiveCallSigs.class,
                 Edit.A_RECURSIVE_HELPER_BESIDE);
-        eitherWay(out, Bodies.RecursiveHelperConstructsForBody.class,
+        metEitherWay(out,Bodies.RecursiveHelperConstructsForBody.class,
                 Bodies.RecursiveHelperConstructs.class, Edit.A_RECURSIVE_HELPER_BESIDE);
         projection(out, Bodies.SettledFn.class, Bodies.RowFixtureDefs.class,
                 Edit.A_ROW_WRITTEN_BESIDE);
-        eitherWay(out, Bodies.Stated.class, Bodies.StatedContracts.class,
+        metEitherWay(out,Bodies.Stated.class, Bodies.StatedContracts.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);
         projection(out, Names.Declaration.class, Names.Declarations.class,
                 Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
@@ -377,32 +388,33 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
 
     private static void projection(Map<IndexEdges.Edge, Set<Witness>> out, Class<?> reader,
                                    Class<?> index, Edit... under) {
-        out.put(new IndexEdges.Edge(reader, index), witnesses(IndexEdges.WhatItIs.A_PROJECTION,
+        out.put(new IndexEdges.Edge(reader, index), witnesses(IndexEdges.WhyItHeld.A_PROJECTION,
                 under));
     }
 
     /**
-     * An edge whose answer is an entry of the index where the definition has one and nothing where
-     * it has none.
+     * An edge met both ways: its answer is an entry of the index at a definition that has one, and
+     * nothing at a definition that has none.
      *
-     * <p>Both words and not the stronger of them. A behavior that names none is answered an empty
-     * map, and nothing is not entries of the index however true it is that the answer held; the
-     * reading that says so is the one that says an answer holding nothing says nothing.
+     * <p>Two observations of one edge and not two natures of it. What this register holds is what
+     * was seen under each edit — the edge held, and here is why it held that time — so an edge
+     * standing at a behavior that names none and at a behavior that names one is seen both ways and
+     * says so. The stronger word alone would be a claim about instances nobody looked at.
      */
-    private static void eitherWay(Map<IndexEdges.Edge, Set<Witness>> out, Class<?> reader,
-                                  Class<?> index, Edit... under) {
-        Set<Witness> both = new TreeSet<>(witnesses(IndexEdges.WhatItIs.A_PROJECTION, under));
-        both.addAll(witnesses(IndexEdges.WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
+    private static void metEitherWay(Map<IndexEdges.Edge, Set<Witness>> out, Class<?> reader,
+                                     Class<?> index, Edit... under) {
+        Set<Witness> both = new TreeSet<>(witnesses(IndexEdges.WhyItHeld.A_PROJECTION, under));
+        both.addAll(witnesses(IndexEdges.WhyItHeld.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
         out.put(new IndexEdges.Edge(reader, index), both);
     }
 
     private static void equalUnderASiblingEdit(Map<IndexEdges.Edge, Set<Witness>> out,
                                                Class<?> reader, Class<?> index, Edit... under) {
         out.put(new IndexEdges.Edge(reader, index),
-                witnesses(IndexEdges.WhatItIs.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
+                witnesses(IndexEdges.WhyItHeld.AN_ANSWER_EQUAL_UNDER_A_SIBLING_EDIT, under));
     }
 
-    private static Set<Witness> witnesses(IndexEdges.WhatItIs is, Edit... under) {
+    private static Set<Witness> witnesses(IndexEdges.WhyItHeld is, Edit... under) {
         Set<Witness> out = new TreeSet<>();
         for (Edit each : under) {
             out.add(new Witness(is, each));
@@ -435,6 +447,31 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
         assertEquals(Set.of(), unread,
                 "a question holds something at a component that nobody has said whether it names"
                         + " something the module holds");
+    }
+
+    /**
+     * And what somebody said a component holds is what it holds, whatever is in it.
+     *
+     * <p>A module and a definition of it may be spelled alike — {@code module orders} with a
+     * {@code behavior orders} in it — and then the text at a component says module while the
+     * component says behavior. Read off the text, that question stops being about one definition,
+     * every index it reads leaves the census, and nothing says so: the reading is not
+     * {@code UNREAD}, so the question that catches an unread component never sees it.
+     *
+     * <p>Its own sentence rather than a line of the census, because the census cannot show it. The
+     * shape of every edge that instance holds is held by its siblings too, so what is lost is one
+     * instance out of many and no count this keeps would move.
+     */
+    @Test
+    void whatSomebodySaidAComponentHoldsBeatsWhatIsInIt() {
+        Key<?> named = new Bodies.CheckedBehavior("orders", "orders");
+
+        assertEquals(IndexEdges.WhatAComponentHolds.SOMETHING_THE_MODULE_HOLDS,
+                IndexEdges.roleAt(named, "behavior"),
+                "a behavior spelled like the module it is in was read as the module");
+        assertEquals(IndexEdges.WhatAComponentHolds.THE_MODULE,
+                IndexEdges.roleAt(named, "module"),
+                "and the component that is the module is still the module");
     }
 
     /**
