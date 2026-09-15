@@ -927,9 +927,25 @@ public interface Hir {
      */
     sealed interface TypeTerm extends Hir permits TypeRef, FnType {}
 
-    /** A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
-     * function may take one and may return one. */
-    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {}
+    /**
+     * A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
+     * function may take one and may return one.
+     *
+     * <p>It answers something. A function type whose result was not written is a state of
+     * {@link Ast.FnType} — what the parser recovers to where the arrow or what follows it is
+     * missing — and a source that reads that way is refused where it is written, so it is not a
+     * state this tree is reached with. Refused here too, the way a {@link TypeRef} that denotes
+     * nothing is: what a reader below has to take apart is a written type and never an absence, and
+     * a tree that arrived holding one says the reading above it let something through.
+     */
+    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {
+
+        public FnType {
+            if (result == null) {
+                throw new IllegalArgumentException("a function type answers something: " + pos);
+            }
+        }
+    }
 
     /** A written type: one term, or the unmarked sum of several (spec §unmarked-output). */
     record RetType(List<TypeTerm> cases, SourcePos pos) implements Hir {
