@@ -236,7 +236,13 @@ final class Intervals {
         // so a kind added is one a reader has to be given a word for rather than one that arrives
         // under whichever word the condition left it on.
         return switch (of) {
-            case NumericTerm.TakenOf taken -> taken.operation().qualified();
+            // The operation, and the whole term where the operation alone would not say which
+            // number this is. What it was given beside the value is part of which number it is —
+            // the quotient by two and the quotient by three are two — and the line this stands in
+            // names the place and the range, so a taking given nothing beside the value is already
+            // said by the operation and repeating the place there would say nothing.
+            case NumericTerm.TakenOf taken ->
+                    taken.arguments().none() ? taken.operation().qualified() : taken.toString();
             case NumericTerm.ValueOf _ -> "value";
         };
     }

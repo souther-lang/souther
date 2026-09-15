@@ -162,7 +162,7 @@ final class OperationFactBinder {
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
             }
-            case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
+            case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
             case OperationFact.AccumulatesItsContainer accumulates ->
                     new BoundOperationFact.AccumulatesItsContainer(operation,
@@ -655,9 +655,13 @@ final class OperationFactBinder {
     }
 
     /**
-     * Holds a declared account of what an operation takes of the one value it is given to the
-     * operation: it takes exactly one value, since what such a term is read off is one location and
-     * a term names one path; and it answers a number, since a boundary is drawn on one.
+     * Holds a declared account of what an operation takes of a value it is given to the operation:
+     * it takes at least one value, since what such a term is read off is a location and a term
+     * names one path; and it answers a number, since a boundary is drawn on one.
+     *
+     * <p>The number is taken of the first argument. Whether an operation takes others is not what
+     * settles such an account: what stands at them may decide which number of the first is taken,
+     * and a taking whose arguments say is read where a call is read rather than here.
      *
      * <p>Two of the four things such an account is held to, the two that are about this fact and
      * this declaration alone. The other two are about the operation — that its number is read by
@@ -667,26 +671,27 @@ final class OperationFactBinder {
      * representation may already read, and asked the other way round the exclusivity would be
      * reachable only through accounts that happen to fit.
      */
-    private static BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven holdTakenOf(
+    private static BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven holdTakenOf(
             CompleteSignature declaration, TakenAs how) {
         String named = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
-        if (declaration.params().size() != 1) {
-            throw new IllegalStateException(named + " takes " + declaration.params().size()
-                    + " arguments, and a number taken of the one value an operation is given is"
-                    + " taken of one");
+        if (declaration.params().isEmpty()) {
+            throw new IllegalStateException(named + " takes no arguments, and a number taken of a"
+                    + " value an operation is given is taken of one it was given");
         }
         // A number and not a number at one case of a union. A term names one path and stands for
         // what the operation answered there, and what an operation answering `Int | NotANumber`
-        // answers at that path is the union — which case it is in is a question this account has no
-        // room for. Narrower than the range of whatever asks for such an account, and deliberately:
-        // what may be declared and what is asked about are two ranges.
+        // answers at that path is the union — which case it is in is a question a declared account
+        // has no room for. An operation that reports a case may still be read as a term of its
+        // number, and where that holds is a fact about a call rather than about the operation: the
+        // account for one is derived where the call's own arguments are known
+        // ({@link BoundOperationFacts#takenAs(ValueName, TakenArguments)}), not declared here.
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a term of its answer is about");
         // The one value, as the declaration has it, carried so that what the account is held to
         // fit is read off the bound fact and not off the declaration a second time.
         DeclaredArgument of = holdToTheDeclaration(declaration, new ArgumentRef.At(0), null,
-                TypeRequirement.ANY, "the one value a number is taken of");
-        return new BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                TypeRequirement.ANY, "the value a number is taken of");
+        return new BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven(
                 declaration.declaring(), of, declaration.result(), how);
     }
 
@@ -723,7 +728,7 @@ final class OperationFactBinder {
             }
         }
         for (BoundOperationFact fact : facts.all()) {
-            if (!(fact instanceof BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven
+            if (!(fact instanceof BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven
                     taken)) {
                 continue;
             }

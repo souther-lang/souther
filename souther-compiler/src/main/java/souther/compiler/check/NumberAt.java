@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
 /**
@@ -63,9 +64,18 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsOwnValue());
     }
 
-    /** The number {@code operation} answers of what stands at {@code position}. */
+    /** The number {@code operation} answers of what stands at {@code position}, given nothing
+     *  beside it. */
     public static <P> NumberAt<P> takenOf(P position, ValueName operation) {
-        return new NumberAt<>(position, new OfWhatNumber.OfWhatAnOperationAnswers(operation));
+        return takenOf(position, operation, TakenArguments.NONE);
+    }
+
+    /** The number {@code operation} answers of what stands at {@code position} when it is given
+     *  {@code arguments} as well. */
+    public static <P> NumberAt<P> takenOf(P position, ValueName operation,
+                                          TakenArguments arguments) {
+        return new NumberAt<>(position,
+                new OfWhatNumber.OfWhatAnOperationAnswers(operation, arguments));
     }
 
     /**
@@ -93,11 +103,23 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         /** What stands at the place. */
         record OfItsOwnValue() implements OfWhatNumber {}
 
-        /** What an operation answers of what stands there. */
-        record OfWhatAnOperationAnswers(ValueName operation) implements OfWhatNumber {
+        /**
+         * What an operation answers of what stands there, when it is given {@code arguments} as
+         * well.
+         *
+         * <p>The arguments are part of which number this is. An operation may be given values
+         * beside the one it takes its number of, and those decide which number it takes: the
+         * quotient of a position by two and its quotient by three are two numbers at one place.
+         * Named by the operation alone, a line drawn on either would fall on both.
+         */
+        record OfWhatAnOperationAnswers(ValueName operation, TakenArguments arguments)
+                implements OfWhatNumber {
 
             public OfWhatAnOperationAnswers {
                 java.util.Objects.requireNonNull(operation, "this one names the operation");
+                java.util.Objects.requireNonNull(arguments,
+                        "and says what it was given beside the value, which is nothing where it"
+                                + " was given nothing");
             }
         }
     }
@@ -117,7 +139,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return switch (of) {
             case OfWhatNumber.OfItsOwnValue _ -> position.toString();
             case OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                    taken.operation() + "(" + position + ")";
+                    taken.operation() + taken.arguments().writtenWith(position.toString());
         };
     }
 }

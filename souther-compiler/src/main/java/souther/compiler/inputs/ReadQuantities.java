@@ -1267,7 +1267,7 @@ final class ReadQuantities implements Quantities {
         return switch (term) {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
-                    NumberAt.takenOf(at.named(), taken.operation());
+                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenOf(at.named(), over.operation());
         };

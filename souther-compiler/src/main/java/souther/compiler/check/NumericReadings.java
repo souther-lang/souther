@@ -135,7 +135,7 @@ final class NumericReadings {
             // nobody would think to come here and ask. Answered by falling through a default, the
             // fifth representation would be exclusive with nothing.
             switch (each) {
-                case BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
+                case BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                         terms.add(new NumericReading.AsATermTakenOfItsArgument(taken.how()));
                 case BoundOperationFact.AnswersAFormOfItsArguments(
                         var _, LinearForm<DeclaredArgument> form) ->

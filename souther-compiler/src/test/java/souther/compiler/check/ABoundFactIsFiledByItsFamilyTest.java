@@ -60,7 +60,7 @@ class ABoundFactIsFiledByItsFamilyTest {
     void aSecondFactOfAKindAnOperationCarriesOneOfIsRefused() {
         List<OperationFacts.Declared> gained = new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(LIST_LENGTH,
-                new OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                new OperationFact.AnswersANumberTakenOfAValueItIsGiven(
                         new TakenAs.HowManyItHolds())));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,

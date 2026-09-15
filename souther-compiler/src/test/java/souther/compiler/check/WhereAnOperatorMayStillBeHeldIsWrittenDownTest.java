@@ -330,6 +330,25 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands back the operator a library fact states its other case by"),
             new Held("souther.compiler.check.DischargeRules.operator",
                     "reads the operator a library operation is declared to compute"),
+            new Held("souther.compiler.semantics.Arithmetic.writtenAs",
+                    "answers with the operator the language writes an arithmetic as, which is none"
+                            + " for an arithmetic it writes no operator for"),
+            new Held("souther.compiler.semantics.Arithmetic.TheOperator.writtenAs",
+                    "hands back the operator such an arithmetic is: it is the one it computes"),
+            new Held("souther.compiler.semantics.Arithmetic.ATruncatingQuotient.writtenAs",
+                    "names the operator a truncating quotient is written as, which is what makes"
+                            + " the quotient an author writes and the one the library answers one"
+                            + " number"),
+            new Held("souther.compiler.check.BoundOperationFacts.writtenAs",
+                    "indexes the operations by the operator each of their arithmetics is written"
+                            + " as, once, where the facts are gathered"),
+            new Held("souther.compiler.check.BoundOperationFacts.computing",
+                    "looks an operator up in that index, for a reader holding an operator and"
+                            + " wanting the operations whose accounts say how such a number is"
+                            + " read"),
+            new Held("souther.compiler.check.NumericMeasures.writing",
+                    "asks which operations compute what that operator computes, and tells them"
+                            + " apart by the number this call answered"),
 
             // Naming a constant, which is the other way to come by one.
             new Held("souther.compiler.check.Resolve.binOp",

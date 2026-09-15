@@ -10,6 +10,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -94,13 +95,27 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * here and an atom in the discharge procedure are the same term when they are the same operation
      * over the same location.
      *
-     * <p><b>Only for an operation that has declared how its number is taken.</b> Checked here and
-     * not at whichever factory happened to be reached: a record is constructible by anyone who can
-     * name it, so a rule kept at the call sites is a rule until the next call site. What the
-     * declaration settles is every other answer about the term, so a term without one is a term that
-     * would be read as whatever the reader's default happened to be — which for a carrier is an end
-     * moved onto a value the term never takes, and for a reading is a row classified against a
-     * number the model never named, with nothing about either looking like a failure (#1027).
+     * <p><b>And by what the operation was given beside the location.</b> A taking may be handed
+     * values that decide which number it takes — a divisor is one — and two takings differing only
+     * there are two numbers of one place: {@code x / 2} and {@code x / 3} are no more one term than
+     * the length of a string and the hour of a time are. What those arguments read as is what is
+     * carried, so a constant written out and a name given one are one term.
+     *
+     * <p><b>Only where there is an account of how its number is taken.</b> Checked here and not at
+     * whichever factory happened to be reached: a record is constructible by anyone who can name
+     * it, so a rule kept at the call sites is a rule until the next call site. What the account
+     * settles is every other answer about the term, so a term without one is a term that would be
+     * read as whatever the reader's default happened to be — which for a carrier is an end moved
+     * onto a value the term never takes, and for a reading is a row classified against a number the
+     * model never named, with nothing about either looking like a failure (#1027).
+     *
+     * <p>Declared of the operation, or derived for this call from a representation the operation
+     * already has. A length is the first: what {@code String.length} takes is declared of it and is
+     * the account of every call there is. A quotient is the second: what {@code Int.divide}
+     * computes is the arithmetic, and a call of it whose divisor the reading has as a number is a
+     * number taken of what it divides, while the calls beside it are not. Which of the two it is
+     * does not reach this far — the account is asked for with the arguments in hand
+     * ({@code check.BoundOperationFacts}) and what comes back is the account or nothing.
      *
      * <p><b>The operation and the location go together, and {@link #of} is what says so.</b> That
      * was a premise the two call sites carried between them, which is a claim about who builds one
@@ -117,6 +132,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
 
         private final ValueName.Stdlib operation;
         private final TermPath position;
+        private final TakenArguments arguments;
 
         /**
          * Built only where the operation and what stands at the location have been put to the one
@@ -132,23 +148,28 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * this package rather than of the term — and this package's own tests were already going
          * round it (#1027).
          */
-        private TakenOf(ValueName.Stdlib operation, TermPath position) {
+        private TakenOf(ValueName.Stdlib operation, TermPath position, TakenArguments arguments) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
             this.position = java.util.Objects.requireNonNull(position, "and taken of somewhere");
+            this.arguments = java.util.Objects.requireNonNull(arguments,
+                    "and with whatever it was given beside that value, which is nothing where it"
+                            + " was given nothing");
         }
 
         /**
          * The term for what {@code operation} answers of what stands at {@code path}, or null where
          * the two do not go together.
          *
-         * <p><b>The one way one of these is made.</b> Three things have to hold and each of them is
-         * a proposition somebody already owns: the operation declares an account of what it takes
-         * ({@code semantics.OperationFacts}), it answers a number ({@link NumericAnswers}), and what
-         * stands at the location is what that account is taken of ({@link TakenAs#takenOf}). The
-         * third was a premise the call sites carried — "the operation and the location agree, by
-         * construction" — which is a claim about who happens to build one today and not an invariant
-         * (#1027).
+         * <p><b>The one way one of these is made.</b> Four things have to hold and each of them is
+         * a proposition somebody already owns: there is an account of what such a call takes, from
+         * the declarations or from what they already say of the operation
+         * ({@code check.BoundOperationFacts}), it answers a number ({@link NumericAnswers}), what
+         * stands at the location is what that account is taken of ({@link TakenAs#takenOf}), and
+         * what it was given beside that value settles which number is taken
+         * ({@link TakenAs#settledBy}). The third was a premise the call sites carried — "the
+         * operation and the location agree, by construction" — which is a claim about who happens
+         * to build one today and not an invariant (#1027).
          *
          * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
          * question every reader of an expression asks, and the answer "it does not" is one they all
@@ -159,16 +180,25 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          */
         public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
                                  NewtypeInners inners, Symbols symbols) {
-            TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation);
+            return of(operation, position, TakenArguments.NONE, at, inners, symbols);
+        }
+
+        /** The same, for a taking the operation was given {@code arguments} beside the value at
+         *  {@code position}. */
+        public static TakenOf of(ValueName.Stdlib operation, TermPath position,
+                                 TakenArguments arguments, Type at, NewtypeInners inners,
+                                 Symbols symbols) {
+            TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation, arguments);
             // Of what stands here, because for an operation that walks a container the answer is
             // what the container holds. Asked of the operation alone, a sum answered no number this
             // could name and no term was made for any rule written on one.
             Type answers = NumericAnswers.typeOf(operation, at, inners, symbols);
-            if (how == null || answers == null || at == null) {
+            if (how == null || answers == null || at == null || arguments == null) {
                 return null;
             }
             return how.takenOf(souther.compiler.check.TypeOps.base(at, inners), answers)
-                    ? new TakenOf(operation, position) : null;
+                    && how.settledBy(arguments)
+                    ? new TakenOf(operation, position, arguments) : null;
         }
 
         /** The operation whose answer this term is. */
@@ -176,32 +206,40 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return operation;
         }
 
+        /** What it was given beside the value at {@link #position()}, read as constants — and
+         *  nothing where it was given nothing. */
+        public TakenArguments arguments() {
+            return arguments;
+        }
+
         @Override
         public TermPath position() {
             return position;
         }
 
-        /** What this operation takes of the value at {@link #position()}. Never null: one of these
-         *  cannot be built for an operation that declares none. */
+        /** What this operation takes of the value at {@link #position()}, given what it was handed
+         *  beside it. Never null: one of these cannot be built where there is no such account. */
         public TakenAs takenAs() {
-            return DefaultBoundOperationFacts.get().takenAs(operation);
+            return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
-        /** By the operation and the location, which is what makes two of these one term. */
+        /** By the operation, the location and what it was given beside it, which is what makes two
+         *  of these one term. */
         @Override
         public boolean equals(Object other) {
             return other instanceof TakenOf taken
-                    && operation.equals(taken.operation) && position.equals(taken.position);
+                    && operation.equals(taken.operation) && position.equals(taken.position)
+                    && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, position);
+            return java.util.Objects.hash(operation, position, arguments);
         }
 
         @Override
         public String toString() {
-            return operation.qualified() + "(" + position + ")";
+            return operation.qualified() + arguments.writtenWith(position.toString());
         }
     }
 

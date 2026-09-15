@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
@@ -2192,7 +2193,8 @@ public final class FieldDomains {
             return null;
         }
         return new CountLeft(counted.by(), leftAt(path,
-                new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(counted.by())));
+                new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(counted.by(),
+                        TakenArguments.NONE)));
     }
 
     /**
