@@ -60,27 +60,46 @@ final class NumericWitness {
      */
     static Standing of(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
                        Function<NumericTerm, Carrier> on) {
+        // Whether there is anything to look in, before anything is looked for. A region two of the
+        // conditions on the way closed between them leaves no assignment, so every value a walk of
+        // it reaches is one the rules refuse — and the walk ends at a figure this compiler wrote
+        // with nothing to show for it. What is owed there is the proof, which a search that spends
+        // its budget first can no longer tell from having run out.
+        if (within.emptiness().isPresent()) {
+            return new Standing(null, java.util.Set.of(), true);
+        }
         Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         return walk(within, terms, 0, on, standing, stoppedBy)
-                ? new Standing(standing, java.util.Set.of())
-                : new Standing(null, stoppedBy);
+                ? new Standing(standing, java.util.Set.of(), false)
+                : new Standing(null, stoppedBy, false);
     }
 
     /**
-     * Where the positions may stand together, or nothing, and what stopped this looking further.
+     * Where the positions may stand together, or nothing, and what this compiler knows about the
+     * nothing.
      *
-     * <p>Two halves of one answer. A walk that tried every value it had and one that stopped at a
-     * figure of this compiler's both come back with nothing, and only the second names something a
-     * reader could raise.
+     * <p>Three answers and not two. A walk that tried every value it had, a walk that stopped at a
+     * figure of this compiler's, and a region the rules were already shown to leave nothing in all
+     * come back with no assignment — and a reader may act on the third as they may act on neither of
+     * the others (ADR-0091). Only the second names a figure somebody could raise.
+     *
+     * @param provedEmpty whether the rules were shown to leave the region nothing. Nothing was
+     *                    walked where this holds, so no figure travels beside it
      */
     record Standing(Map<NumericTerm.FromOnePosition, Place> at,
-                    java.util.Set<CompositionBudget> stoppedBy) {
+                    java.util.Set<CompositionBudget> stoppedBy,
+                    boolean provedEmpty) {
 
         Standing {
             at = at == null ? null : Map.copyOf(at);
             stoppedBy = java.util.Set.copyOf(stoppedBy);
+            if (provedEmpty && (at != null || !stoppedBy.isEmpty())) {
+                throw new IllegalArgumentException(
+                        "a region shown to hold nothing was not walked, so nothing was reached in it"
+                                + " and no figure was spent on it");
+            }
         }
     }
 
@@ -101,7 +120,13 @@ final class NumericWitness {
         }
         NumericTerm.FromOnePosition term = terms.get(at);
         Carrier carrier = on.apply(term);
-        NumericDomain.Bounds runs = within.runsBetween(term);
+        // Where the term runs here. A region that holds nothing is turned away before this walk
+        // starts, and one narrowed to nothing along the way is stepped past below, so what this
+        // meets is a range — read back out of a region that leaves no assignment, it would be the
+        // widest answer there is and every value of it would be refused.
+        NumericDomain.Bounds runs =
+                within.projectionOf(term) instanceof NumericDomain.FormProjection.Within(
+                        NumericDomain.Bounds held) ? held : null;
         if (carrier == null || runs == null) {
             return false;
         }

@@ -451,7 +451,7 @@ public sealed interface ItemAssessment {
              * of the walk's answers. Both halves are put together where a reader wants one list
              * ({@link #unaccountedFor()}).
              */
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
+            List<souther.compiler.partition.ReachabilityGap> uncomposed();
         }
 
         /**
@@ -529,7 +529,7 @@ public sealed interface ItemAssessment {
         /** Built, and read back standing where it was built for. */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                         List<souther.compiler.partition.ReachabilityGap> uncomposed)
                 implements Attempt, Searched, Built {
 
             public Certified {
@@ -552,7 +552,7 @@ public sealed interface ItemAssessment {
          */
         record Unverified(Generator.GeneratedRow row,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                          List<souther.compiler.partition.ReachabilityGap> uncomposed,
                           EstablishmentGap.Observation why)
                 implements Attempt, Searched, Built, Prevented {
 
@@ -593,7 +593,7 @@ public sealed interface ItemAssessment {
          */
         record Stopped(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
                        CanonicalSelection<CompositionBudget> stoppedBy,
                        CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
@@ -639,7 +639,7 @@ public sealed interface ItemAssessment {
          */
         record Unexhausted(Generator.UnresolvedCombination why,
                            souther.compiler.partition.WayToTheBorder way,
-                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                           List<souther.compiler.partition.ReachabilityGap> uncomposed,
                            CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
 
@@ -675,7 +675,7 @@ public sealed interface ItemAssessment {
          */
         record Limited(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
                        CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Searched, Prevented {
 
@@ -717,7 +717,7 @@ public sealed interface ItemAssessment {
          */
         record Unplanned(Generator.UnresolvedCombination why,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                         List<souther.compiler.partition.ReachabilityGap> uncomposed,
                          CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Prevented {
 
@@ -750,7 +750,7 @@ public sealed interface ItemAssessment {
          */
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                          List<souther.compiler.partition.ReachabilityGap> uncomposed)
                 implements Attempt, Searched {
 
             public Unresolved {
@@ -808,7 +808,7 @@ public sealed interface ItemAssessment {
          */
         default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
             souther.compiler.partition.WayToTheBorder way;
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed;
+            List<souther.compiler.partition.ReachabilityGap> uncomposed;
             switch (this) {
                 case Unresolved it -> {
                     if (it.why().reason().provesInfeasible()) {

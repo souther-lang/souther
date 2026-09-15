@@ -3247,6 +3247,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (gap) {
             case ReachabilityGap.Unstated(var condition) ->
                     whyDeclined(condition.why());
+            // The model's word and not this compiler's. Every other sentence here says what was not
+            // managed and leaves the condition owed; this one says the rules leave nothing once it
+            // is taken in, which is what an author can act on.
+            case ReachabilityGap.ProvedImpossible _ ->
+                    "a condition the rules leave nothing under";
             case ReachabilityGap.Uncomposed(var _, var why) ->
                     switch (why) {
                         case ReachabilityGap.Why

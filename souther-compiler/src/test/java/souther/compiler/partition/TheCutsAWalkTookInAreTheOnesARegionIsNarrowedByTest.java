@@ -72,7 +72,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         }
 
         @Override
-        public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
+        public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
             throw new UnsupportedOperationException("narrowing reads no value");
         }
 

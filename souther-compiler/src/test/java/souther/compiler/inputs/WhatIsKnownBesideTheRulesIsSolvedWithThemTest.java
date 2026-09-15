@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -61,15 +62,18 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         SearchRegion rules = region();
 
         // Nothing bounds the third, so the rules alone leave the sum nowhere in particular.
-        assertNull(rules.runsBetween(sum()).min(), "the third can be as far below nothing as it likes");
+        assertNull(runsBetween(rules, sum()).min(),
+                "the third can be as far below nothing as it likes");
 
         // And on its own the third is exactly what the caller said and no more, so a reader meeting
         // that onto the answer above would still have no floor for the sum.
         SearchRegion withAFloorUnderTheThird =
                 rules.assuming(LinearForm.atom(Z), Rel.GE);
-        assertEquals(Endpoint.inclusive(Count.of(0)), withAFloorUnderTheThird.runsBetween(Z).min());
+        assertEquals(Endpoint.inclusive(Count.of(0)),
+                runsBetween(withAFloorUnderTheThird, LinearForm.atom(Z)).min());
 
-        assertEquals(Endpoint.inclusive(Count.of(1)), withAFloorUnderTheThird.runsBetween(sum()).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)),
+                runsBetween(withAFloorUnderTheThird, sum()).min(),
                 "two of them come to one and the third is never below nought");
     }
 
@@ -79,9 +83,19 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     void aFactAboutAPositionTheRulesDoNotNameChangesNothing() {
         SearchRegion rules = region();
 
-        assertEquals(rules.runsBetween(LinearForm.atom(X)),
-                rules.assuming(LinearForm.atom(Z), Rel.GE)
-                        .runsBetween(LinearForm.atom(X)));
+        assertEquals(runsBetween(rules, LinearForm.atom(X)),
+                runsBetween(rules.assuming(LinearForm.atom(Z), Rel.GE), LinearForm.atom(X)));
+    }
+
+    /** Where the form runs, of a region that holds something — which every region here does. */
+    private static NumericDomain.Bounds runsBetween(SearchRegion within,
+                                                    LinearForm<NumericTerm> form) {
+        return switch (within.projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) -> runs;
+            case NumericDomain.FormProjection.NothingIsLeft _ ->
+                    throw new AssertionError("these rules leave a value: " + form);
+            case null -> null;
+        };
     }
 
     private static LinearForm<NumericTerm> sum() {

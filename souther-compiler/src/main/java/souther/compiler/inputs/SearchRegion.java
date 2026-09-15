@@ -114,14 +114,24 @@ public interface SearchRegion {
         return given(Map.of(term, fixed));
     }
 
-    /** Where the values of {@code form} run inside this region, or null at either end where
-     *  nothing bounds them. */
-    NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form);
+    /**
+     * Where the values of {@code form} run inside this region, or that this region leaves it
+     * nowhere to run.
+     *
+     * <p><b>Not a range, because one of the answers is not one.</b> A region shown to hold nothing
+     * has no assignment to project, and a range with neither end says the form is at every value —
+     * the widest answer there is, handed back by the narrowest region there is. A search reading it
+     * spends what it is allowed on values the rules already refuse and reports what it came to as a
+     * figure of this compiler's, which is the reading ADR-0091 is written against.
+     *
+     * <p>Within a region that holds something, a {@code null} end is one nothing bounds.
+     */
+    NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form);
 
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
-    default NumericDomain.Bounds runsBetween(NumericTerm term) {
-        return runsBetween(LinearForm.atom(term));
+    default NumericDomain.FormProjection projectionOf(NumericTerm term) {
+        return projectionOf(LinearForm.atom(term));
     }
 
     /**

@@ -47,8 +47,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return within.runsBetween(form);
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return within.projectionOf(form);
     }
 
     @Override

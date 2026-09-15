@@ -84,10 +84,44 @@ public final class LevelRealizer {
                             + " the reading already has: a search that may be handed none is one"
                             + " that composes without asking");
         }
+        // Whether there is anything here to look in, asked before anything is looked for. The region
+        // is what the rules a row passes on the way to this item leave, and two of those can close
+        // it between them — at which point no place any walk of it reaches is a row, and the walk
+        // ends at a figure of this compiler's with nothing to show. Which is a proof about the model
+        // reported as this compiler falling short, and the one thing a reader may act on reported as
+        // the one thing they may not (ADR-0091).
+        if (within.emptiness().isPresent() || leavesNothing(standing, within)) {
+            return new Realization.Impossible();
+        }
         return switch (standing) {
             case Standing.OfOneCoordinate one -> ofOne(one, within, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, tried);
+        };
+    }
+
+    /**
+     * Whether the rules leave one of the item's positions nowhere to stand.
+     *
+     * <p>Beside the region holding nothing and not the same question. A region is about the whole
+     * assignment, and it may admit one while a position of it admits none — a position inside a
+     * collection the rules cap at none is the ordinary case, and the input holding an empty
+     * collection is a value. So both are asked, and either of them settles the item the same way:
+     * what the model leaves is nothing, which is a proof and not a search that came back empty.
+     */
+    private static boolean leavesNothing(Standing standing,
+                                         souther.compiler.inputs.SearchRegion within) {
+        return termsOf(standing).anyMatch(term ->
+                within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
+    }
+
+    /** Every position the item asks a value at. */
+    private static java.util.stream.Stream<NumericTerm> termsOf(Standing standing) {
+        return switch (standing) {
+            case Standing.OfOneCoordinate one -> java.util.stream.Stream.of(one.term());
+            case Standing.OfTwoOnOneCarrier two ->
+                    java.util.stream.Stream.of(two.on(), two.against());
+            case Standing.OfAForm over -> over.form().coefs().keySet().stream();
         };
     }
 
@@ -1177,11 +1211,24 @@ public final class LevelRealizer {
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 
-    /** The same, of the rules as some of the positions have been fixed. */
+    /**
+     * The same, of the rules as some of the positions have been fixed.
+     *
+     * <p>Open where the rules bound neither end, and refused where they leave the term nowhere at
+     * all. A region proved empty is turned away at {@link #realize} before any of this runs, so
+     * reaching here with one is a region that was narrowed to nothing between the two — and read
+     * back as open, it would be the widest answer there is taken out of the narrowest region there
+     * is.
+     */
     private static NumericDomain.Bounds bounds(souther.compiler.inputs.SearchRegion rules,
                                                NumericTerm term) {
-        NumericDomain.Bounds held = rules.runsBetween(term);
-        return held == null ? new NumericDomain.Bounds(null, null) : held;
+        return switch (rules.projectionOf(term)) {
+            case null -> new NumericDomain.Bounds(null, null);
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? new NumericDomain.Bounds(null, null) : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> throw new IllegalStateException(
+                    "a search of a region that holds nothing: " + term);
+        };
     }
 
     private static Place placeOf(Level level) {

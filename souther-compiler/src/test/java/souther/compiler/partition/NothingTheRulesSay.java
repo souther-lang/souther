@@ -46,8 +46,8 @@ final class NothingTheRulesSay implements SearchRegion {
 
 
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return NumericDomain.Bounds.OPEN;
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return new NumericDomain.FormProjection.Within(NumericDomain.Bounds.OPEN);
     }
 
     @Override

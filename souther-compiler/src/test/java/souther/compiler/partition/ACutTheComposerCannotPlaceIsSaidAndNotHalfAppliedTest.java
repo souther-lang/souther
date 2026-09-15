@@ -77,7 +77,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         assertEquals(1, attempt.unrepresented().size(),
                 "the one cut it was handed and could not place: " + attempt.unrepresented());
         assertInstanceOf(ReachabilityGap.Why.NoValueComposedForItsPositions.class,
-                attempt.unrepresented().get(0).why());
+                assertInstanceOf(ReachabilityGap.Uncomposed.class,
+                        attempt.unrepresented().get(0)).why());
         assertEquals(WHERE, attempt.unrepresented().get(0).anchor(),
                 "said of the condition, which is what a reader is sent to");
     }
@@ -103,7 +104,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 "one location, two numbers, and nothing composes a value to both: "
                         + attempt.unrepresented());
         assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
-                attempt.unrepresented().get(0).why(),
+                assertInstanceOf(ReachabilityGap.Uncomposed.class,
+                        attempt.unrepresented().get(0)).why(),
                 "said as what it is, and not as a position nothing could build at");
     }
 

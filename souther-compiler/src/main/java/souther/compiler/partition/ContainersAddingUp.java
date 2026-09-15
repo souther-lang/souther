@@ -101,8 +101,12 @@ final class ContainersAddingUp {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         DeclaredBounds.CountRange howMany = howMany(view, target.writeRoot(), within, reading);
-        NumericDomain.Bounds runs =
-                within.runsBetween(new NumericTerm.ValueOf(occurrences(target)));
+        // Where the rules leave nothing there is no run to spread a total over, and no element of
+        // one to place. Said as the model settling it, which is what it is.
+        if (!(within.projectionOf(new NumericTerm.ValueOf(occurrences(target)))
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
+            return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+        }
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
         if (ends == null) {
             // Nowhere for an element to stand. Which is the rules leaving the elements nothing, and
@@ -452,7 +456,12 @@ final class ContainersAddingUp {
         NumericTerm.FromOnePosition term = counts == null ? null
                 : NumericTerm.TakenOf.of(counts, root, container.declared(),
                         reading.source().inners(), symbols);
-        NumericDomain.Bounds runs = term == null ? null : within.runsBetween(term);
+        // What the rules leave on top of what the declarations do. A region that leaves nothing
+        // narrows no count: what it settles is the whole item and is answered where the item is,
+        // and read as a range here it would be the widest one there is.
+        NumericDomain.Bounds runs = term != null && within.projectionOf(term)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
+                ? held : null;
         if (runs == null) {
             return declared;
         }
