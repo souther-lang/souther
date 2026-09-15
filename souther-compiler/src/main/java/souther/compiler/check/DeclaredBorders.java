@@ -165,7 +165,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
         // The value a newtype wraps is at no name, and the clause writing about it says `value`.
         String where = at.position().isTheValueItself() ? "value" : at.position().toString();
         return at.of() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken
-                ? taken.operation() + "(" + where + ")" : where;
+                ? taken.operation() + taken.arguments().writtenWith(where) : where;
     }
 
     /** The same, for a caller holding the line as the clause drew it. */

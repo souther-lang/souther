@@ -8,6 +8,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 
 import souther.compiler.inputs.NumericTerm.Reading;
@@ -152,7 +153,7 @@ final class TermReading {
      * nought, is refused where the term is made. Answered here as an observation of the wrong shape
      * is, so that a reader reaching it is told what it has rather than stopped.
      */
-    private static Reading quotient(java.math.BigDecimal by, ObservedValue at, Carrier observed) {
+    private static Reading quotient(BigDecimal by, ObservedValue at, Carrier observed) {
         if (observed == null || by == null || by.signum() == 0) {
             return new Reading.NotNumber();
         }

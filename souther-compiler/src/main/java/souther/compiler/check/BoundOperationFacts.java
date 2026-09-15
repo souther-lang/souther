@@ -9,9 +9,9 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.types.BinOp;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -374,8 +374,8 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * What {@code operation} takes of the one value it is given, or null where the number it
-     * answers is not taken of one value.
+     * What {@code operation} takes of a value it is given whatever else it is given, or null where
+     * the number it answers is not taken of one value at all.
      *
      * <p>Declared, or read off the walk where the operation is one — and the second is the walk's
      * own reading ({@link BoundOperationFact.AccumulatesItsContainer#takenAs}), put beside the first
@@ -417,10 +417,14 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The operations that answer a number taken of the one value they are given.
+     * The operations that answer a number taken of a value they are given, whatever else they are
+     * given.
      *
-     * <p>The ones {@link #takenAs} answers for, which is not the same as the ones an account is
-     * declared of: a walk that adds up a container is read as one and its account is that walk.
+     * <p>The ones {@link #takenAs(ValueName)} answers for, which is not the same as the ones an
+     * account is declared of: a walk that adds up a container is read as one and its account is
+     * that walk. Nor is it every operation some call of which is such a number: an account a call's
+     * own arguments settle belongs to the call ({@link #takenAs(ValueName, TakenArguments)}), and a
+     * reader walking operations is not holding one.
      */
     public Set<ValueName> answersANumberTakenOfItsArgument() {
         Set<ValueName> out = new LinkedHashSet<>(

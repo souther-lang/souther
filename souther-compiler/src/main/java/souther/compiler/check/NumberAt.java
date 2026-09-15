@@ -139,8 +139,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return switch (of) {
             case OfWhatNumber.OfItsOwnValue _ -> position.toString();
             case OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                    taken.operation() + "(" + position
-                            + (taken.arguments().none() ? "" : ", " + taken.arguments()) + ")";
+                    taken.operation() + taken.arguments().writtenWith(position.toString());
         };
     }
 }

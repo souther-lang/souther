@@ -88,9 +88,12 @@ sealed interface InputAtom {
             String at = place();
             return switch (kind) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> at;
+                // With what it was given beside the value, since that is part of which number it
+                // is: two quotients of one place written alike would be one name for two numbers.
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
-                                ? named.qualified() + "(" + at + ")" : "|" + at + "|";
+                                ? named.qualified() + taken.arguments().writtenWith(at)
+                                : "|" + at + "|";
             };
         }
     }

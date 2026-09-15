@@ -132,6 +132,7 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
                 """;
         assertEquals(List.of("f/Int.divide(x, 2)", "f/Int.divide(x, 3)"),
                 axesOf(measured(model)).stream().sorted().toList(), () -> report(measured(model)));
+
     }
 
     /**
@@ -143,10 +144,16 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
      */
     @Test
     void aDivisorTheReadingDoesNotHaveIsNotOneOfThese() {
-        assertTrue(report(measured(dividedBy("y", ""))).contains("does not read"),
-                () -> report(measured(dividedBy("y", ""))));
-        assertTrue(report(measured(dividedBy("0", ""))).contains("does not read"),
-                () -> report(measured(dividedBy("0", ""))));
+        for (String divisor : List.of("y", "0")) {
+            String model = dividedBy(divisor, "");
+            assertEquals(List.of(), axesOf(measured(model)),
+                    () -> "nothing is divided by `" + divisor + "`: " + report(measured(model)));
+            assertTrue(report(measured(model)).lines().anyMatch(line ->
+                            line.contains("not read: comparison@")
+                                    && line.contains("written in a form this compiler does not"
+                                            + " read")),
+                    () -> "and the rule says so: " + report(measured(model)));
+        }
     }
 
     /**

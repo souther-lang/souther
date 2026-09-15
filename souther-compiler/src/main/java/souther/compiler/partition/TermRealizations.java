@@ -15,6 +15,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -385,9 +386,12 @@ final class TermRealizations {
      * composed. Asked of the carrier and not worked out here: what a whole number stops at is the
      * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
      */
-    private static Realization atThatQuotient(java.math.BigDecimal by, Type sourceType,
+    private static Realization atThatQuotient(BigDecimal by, Type sourceType,
                                               Carrier observed, Place answer,
                                               RuleReadingSource ruleSource) {
+        // A divisor that is not there, or is nought, is a term nothing built — what quotients there
+        // are is settled where the account is asked for. Answered here as a place nothing composes
+        // a value for, which is what a reader that got this far has somewhere to put.
         if (observed == null || by == null || by.signum() == 0 || !(answer instanceof Count wanted)) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

@@ -52,6 +52,19 @@ public record TakenArguments(Map<Integer, BigDecimal> byPosition) {
         return byPosition.isEmpty();
     }
 
+    /**
+     * A taking of {@code value} with these arguments, as a call of it is written: the value and
+     * whatever stands beside it, in brackets.
+     *
+     * <p>One owner for how such a number is spelled, because several readers spell one — a subject,
+     * a term, a finding, the name a report shows for a measure. Spelled apiece, the ones that were
+     * written before a taking could be given anything would go on naming two numbers of one place
+     * alike, and a reader looking one of them up would be given both.
+     */
+    public String writtenWith(String value) {
+        return none() ? "(" + value + ")" : "(" + value + ", " + this + ")";
+    }
+
     /** The arguments as they are written between the brackets, and nothing where there are none. */
     @Override
     public String toString() {

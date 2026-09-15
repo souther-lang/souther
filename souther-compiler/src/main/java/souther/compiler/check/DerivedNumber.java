@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
 /**
@@ -20,13 +21,16 @@ import souther.compiler.types.ValueName;
  * @param position where the number is read from
  * @param operation the operation that answers it, as it resolved. Two spellings reaching one
  *                  operation are one number, and two operations over one place are two
+ * @param arguments what the operation was given beside the value at {@code position}, which is part
+ *                  of which number this is: two takings differing only there are two numbers, and a
+ *                  reading keyed by these without them would hold one order for both
  */
-record DerivedNumber(RuleKey position, ValueName operation) {
+record DerivedNumber(RuleKey position, ValueName operation, TakenArguments arguments) {
 
     DerivedNumber {
-        if (position == null || operation == null) {
+        if (position == null || operation == null || arguments == null) {
             throw new IllegalArgumentException("a derived number is what some operation answers"
-                    + " of somewhere");
+                    + " of somewhere, with whatever it was given beside that value");
         }
     }
 
@@ -34,16 +38,16 @@ record DerivedNumber(RuleKey position, ValueName operation) {
      *  something answered of it. */
     static DerivedNumber of(NumberAt<RuleKey> at) {
         return at.of() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken
-                ? new DerivedNumber(at.position(), taken.operation()) : null;
+                ? new DerivedNumber(at.position(), taken.operation(), taken.arguments()) : null;
     }
 
     /** The same number as the subject every other reader knows it by. */
     NumberAt<RuleKey> asNumber() {
-        return NumberAt.takenOf(position, operation);
+        return NumberAt.takenOf(position, operation, arguments);
     }
 
     @Override
     public String toString() {
-        return operation + "(" + position + ")";
+        return operation + arguments.writtenWith(position.toString());
     }
 }

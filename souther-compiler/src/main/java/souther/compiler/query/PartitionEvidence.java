@@ -245,7 +245,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                         .OfItsOwnValue _ -> null;
                                 case NumberAt.OfWhatNumber
                                         .OfWhatAnOperationAnswers taken ->
-                                        named(taken.operation()) + "(" + at() + ")";
+                                        named(taken.operation())
+                                                + taken.arguments().writtenWith(at());
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the

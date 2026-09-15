@@ -230,8 +230,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
 
         @Override
         public String toString() {
-            return operation.qualified() + "(" + position
-                    + (arguments.none() ? "" : ", " + arguments) + ")";
+            return operation.qualified() + arguments.writtenWith(position.toString());
         }
     }
 
