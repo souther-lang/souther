@@ -38,6 +38,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Sig;
+import souther.compiler.check.StatedContract;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
@@ -565,11 +566,17 @@ public final class Adequacy {
     /**
      * What can arrive at each position of each behavior's input, in this module.
      *
-     * <p>Asked once, here, and read by every measure that needs a denominator. What a signature's
-     * cases are, what a position divides into, what arms a row is owed and what a body's
-     * {@code unreachable} claims are held against are projections of one reading, and deriving that
-     * reading per measure is what let a case the rules refuse stay in one denominator while another
-     * had already taken it out.
+     * <p>One reading per behavior, and every measure that needs a denominator reads it. What a
+     * signature's cases are, what a position divides into, what arms a row is owed and what a
+     * body's {@code unreachable} claims are held against are projections of that one reading, and
+     * deriving it per measure is what let a case the rules refuse stay in one denominator while
+     * another had already taken it out.
+     *
+     * <p>This answer is which behaviors the module has, and nothing about any of them: each
+     * reading is {@link InputsOf} and is handed out as that behavior settled it. Walked here
+     * instead, one was walked for every behavior of the module whenever anything about any of them
+     * was edited — and the walk is what a reading costs, the declarations it opens being lent to it
+     * by whoever read them first.
      */
     public record Inputs(String name) implements Key<Map<String, InputDomain>> {
 
@@ -580,6 +587,11 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, InputDomain>> compute(Db db) {
+            // What a module has to be readable for before this says anything about it, asked for
+            // whether they answer and not for what they answer. A module none of them holds for is
+            // one this has no reading of, which is not the same thing as a module with no behaviors
+            // — and a reader told the second when the first is true takes every measure of it as
+            // covering nothing.
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
@@ -599,38 +611,66 @@ public final class Adequacy {
             if (!db.ask(new Shapes.Derived(name)).present()) {
                 return Answer.absent();
             }
-            // What the behaviors state about their own answers, which name locations of an input as
-            // readily as a body does and reach them by the same paths.
-            Map<String, souther.compiler.check.StatedContract> stated =
-                    db.ask(new Bodies.StatedContracts(name)).value();
             Map<String, InputDomain> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition's inputs are its first stage's, read there
                 }
-                DeclaredSig declared = sigs.value().get(spec.name());
-                if (declared != null) {
-                    // The implementation the body was checked against, which is where a read of a
-                    // parameter gets the binding it carries: the check binds `fn`'s own binders and
-                    // the lowering leaves them alone. A behavior nothing implements has positions
-                    // all the same.
-                    Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
-                    SpecImplementation.Implemented implemented = fn.present()
-                            ? SpecImplementation.align(spec, fn.value()) : null;
-                    out.put(spec.name(), InputDomain.of(declared,
-                            implemented == null ? List.of() : implemented.declaredInputs(),
-                            reading.value(), db.ask(new Front.Reading()).value(),
-                            // What this behavior's body reads, so the reading is closed over the
-                            // paths its measurement names as well as the ones the enumeration
-                            // finds. Asked as the reading is made and never after it: one that
-                            // grew a position when somebody looked one up would answer a question
-                            // differently depending on what had been asked before it.
-                            demandOf(db, name, spec, implemented,
-                                    scope.value(), statedOf(stated, spec)),
-                            db.readings()));
+                Answer<InputDomain> one = db.ask(new InputsOf(name, spec.name()));
+                if (one.present()) {
+                    out.put(spec.name(), one.value());
                 }
             }
             return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * What can arrive at each position of one behavior's input.
+     *
+     * <p>Rooted in what the behavior declares and in the declarations its inputs reach, which is
+     * what the answer is about. A body beside it is neither: it names no position of this input and
+     * states no rule about one, so an edit to it leaves this reading where it was rather than
+     * walking it again.
+     *
+     * <p>A behavior nothing implements has one all the same — its clauses draw lines on positions
+     * whether or not a body ever writes there — and a composition has none, its inputs being its
+     * first stage's and read at that stage.
+     */
+    public record InputsOf(String module, String behavior) implements Key<InputDomain> {
+
+        @Override
+        public Answer<InputDomain> compute(Db db) {
+            Answer<Hir.SpecBehavior> spec = db.ask(new Bodies.Spec(module, behavior));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            // This behavior's own signature and its own clauses, each asked for rather than taken
+            // out of the module's index of them. Read whole, either index hands this reading the
+            // module's identity: a behavior declared beside this one, or a clause stated on one,
+            // moves the index and says nothing about what arrives here.
+            Answer<DeclaredSig> declared = db.ask(new Bodies.DeclaredSignature(module, behavior));
+            if (!spec.present() || !scope.present() || !declared.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            // The implementation the body was checked against, which is where a read of a parameter
+            // gets the binding it carries: the check binds `fn`'s own binders and the lowering
+            // leaves them alone. A behavior nothing implements has positions all the same.
+            Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(module, behavior));
+            SpecImplementation.Implemented implemented = fn.present()
+                    ? SpecImplementation.align(spec.value(), fn.value()) : null;
+            // What this behavior states about its own answer, which names locations of an input as
+            // readily as a body does and reaches them by the same paths.
+            Answer<StatedContract> stated = db.ask(new Bodies.Stated(module, behavior));
+            return Answer.of(InputDomain.of(declared.value(),
+                    implemented == null ? List.of() : implemented.declaredInputs(),
+                    reading.value(), db.ask(new Front.Reading()).value(),
+                    // What this behavior's body reads, so the reading is closed over the paths its
+                    // measurement names as well as the ones the enumeration finds. Asked as the
+                    // reading is made and never after it: one that grew a position when somebody
+                    // looked one up would answer a question differently depending on what had been
+                    // asked before it.
+                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value()),
+                    db.readings()));
         }
     }
 

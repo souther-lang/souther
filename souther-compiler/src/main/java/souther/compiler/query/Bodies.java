@@ -394,6 +394,27 @@ public final class Bodies {
     }
 
     /**
+     * One behavior's declared signature, read out of its module's index of them.
+     *
+     * <p>The index is the module's identity: declaring a behavior beside this one changes it, and a
+     * reader that took it would answer about this behavior again for a declaration this behavior
+     * says nothing about. Read here and projected, the index is still built once and what comes out
+     * of this is the same answer until this signature moves.
+     */
+    public record DeclaredSignature(String module, String behavior) implements Key<DeclaredSig> {
+
+        @Override
+        public Answer<DeclaredSig> compute(Db db) {
+            Answer<Map<String, DeclaredSig>> declared = db.ask(new DeclaredSignatures(module));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            DeclaredSig one = declared.value().get(behavior);
+            return one == null ? Answer.absent() : Answer.of(one);
+        }
+    }
+
+    /**
      * The signature of every behavior this module can name — its own and the ones it borrows — each
      * under the declaration it belongs to.
      *
@@ -917,6 +938,30 @@ public final class Bodies {
                 return Answer.absent(e);
             }
             return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * What one behavior states about its answer, read out of its module's index of them.
+     *
+     * <p>Absent where the behavior states nothing, which is what a behavior with no clauses of its
+     * own says, and absent again where its declaration could not be read — both are the same thing
+     * to a reader, which has no rule of this behavior's to take.
+     *
+     * <p>The index is the module's identity: a clause the behavior beside this one states changes
+     * it, and a reader that took it would answer about this behavior again for a rule that is not
+     * about it.
+     */
+    public record Stated(String module, String behavior) implements Key<StatedContract> {
+
+        @Override
+        public Answer<StatedContract> compute(Db db) {
+            Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(module));
+            if (!stated.present()) {
+                return Answer.absent();
+            }
+            StatedContract one = stated.value().get(behavior);
+            return one == null ? Answer.absent() : Answer.of(one);
         }
     }
 
