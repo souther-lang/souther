@@ -593,10 +593,21 @@ public final class DeclarationAgreement {
      * <p>What is held in one is compared by its own equality, and a form's equality reads where it
      * was written and which binding it is — the two things this erases. A form arriving here is
      * therefore compared by a rule this class does not control, which is a decision nobody made.
+     *
+     * <p>Which of them is a form is the question {@link StructuralParts} answers, and it is asked of
+     * that rather than of whether the thing is a record: a form the comparison would have taken
+     * apart is a form a collection must not compare whole, and those are one set. Asked the other
+     * way, a form written by hand would be handed to {@code equals} by the branch above this one,
+     * which is what this exists to stop.
+     *
+     * <p>Open to the package so what it refuses can be asked of it. Nothing in either build puts a
+     * form in a set today, so the walk cannot be made to arrive at one and a refusal nobody can
+     * reach is a refusal nobody would notice going quiet — which is how the reading of forms one
+     * door along came to see less without failing.
      */
-    private static void refuseForms(Set<?> held) {
+    static void refuseForms(Set<?> held) {
         for (Object one : held) {
-            if (one != null && one.getClass().isRecord()) {
+            if (one != null && StructuralParts.areHandedOver(one.getClass())) {
                 throw new IllegalStateException(one.getClass().getName()
                         + " is a form of a declaration held in a set or used as a map key, and a"
                         + " collection compares what it holds by its own equality — which reads what"
