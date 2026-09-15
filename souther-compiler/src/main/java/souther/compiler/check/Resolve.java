@@ -977,8 +977,8 @@ public final class Resolve {
             switch (symbols.scope().resolve(denoted.written())) {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
-                case Denotation.StandsForNothing ignored -> failed++;
-                case Denotation.NotInScope ignored -> { }
+                case Denotation.StandsForNothing _ -> failed++;
+                case Denotation.NotInScope _ -> { }
             }
         }
         return denoted;
@@ -1735,8 +1735,8 @@ public final class Resolve {
             // In scope standing for nothing: a name an import line could not bring in takes the
             // error type rather than being reported as an unknown name at every use. The import
             // line is where that was reported, so nothing more is said here.
-            case Denotation.StandsForNothing ignored -> unanswered(n);
-            case Denotation.NotInScope ignored -> nothingDenotes(n);
+            case Denotation.StandsForNothing _ -> unanswered(n);
+            case Denotation.NotInScope _ -> nothingDenotes(n);
         });
     }
 
@@ -1754,8 +1754,8 @@ public final class Resolve {
     private Hir.Name caseName(Ast.Name n) {
         return answered(switch (symbols.scope().resolveCase(n.name())) {
             case Denotation.Denotes d -> denoting(n, d.type());
-            case Denotation.StandsForNothing ignored -> unanswered(n);
-            case Denotation.NotInScope ignored -> {
+            case Denotation.StandsForNothing _ -> unanswered(n);
+            case Denotation.NotInScope _ -> {
                 TypeSymbol option = TypeSymbol.optionCase(n.written());
                 yield option != null ? denoting(n, option) : nothingDenotes(n);
             }
