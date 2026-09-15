@@ -46,6 +46,23 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let rename (t, to) = Todo { title = to, done = t.done }
             """;
 
+    /** A rule read through a helper, so the block it is written as belongs to a body. */
+    private static final String RULE_IN_A_HELPER = """
+            module example.rules exposing ( Item, Book, keep )
+
+            data Item = { product: String, name: String }
+
+            data Book = List<Item>
+                invariant distinct(value)
+
+            behavior keep : (b: Book) -> Book
+                constructs Book
+
+            let distinct (xs: List<Item>) : Bool = List.allDistinctBy(.product, xs)
+
+            let keep (b) = Book(b.value)
+            """;
+
     /** A model spread over two modules: what a field's type is declared by is imported. */
     private static final String SHARED = """
             module example.shared exposing ( Title, Note )
@@ -827,6 +844,43 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "the module the rows are written for agrees, and what it imports does not");
         assertEquals("example.shared", said.module(), "it names the module that moved");
         assertEquals("Title", said.declaration());
+    }
+
+    /**
+     * A rule written where a row can meet it is compared by what it says.
+     *
+     * <p>Which rule a source wrote is an identity, and the reader that needs one is the coverage
+     * that files what a row exercised: a helper's body spliced into two call sites carries the rule
+     * it was written as. A crossing is not that reader. What it depends on is what a rule admits,
+     * and two builds that admit the same values over the same parts have not moved whatever number
+     * either gave the block.
+     *
+     * <p>So it is the block and not the number of it. These are the two edits a crossing must
+     * report about a rule read through a helper — what it applies, and which part it reads — and
+     * reporting them is what says the identity was dropped without the block going with it.
+     */
+    @Test
+    void aRuleIsComparedByWhatItSaysAndNotByWhichBlockOfItsOwnerItIs() {
+        Agreement itself = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(RULE_IN_A_HELPER),
+                DefaultStdlib.get());
+        assertInstanceOf(Agreement.Agree.class, itself,
+                "two builds of one model agree about the rule they both hold");
+
+        String reads = RULE_IN_A_HELPER.replace("allDistinctBy(.product, xs)",
+                "allDistinctBy(.name, xs)");
+        Agreement other = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(reads), DefaultStdlib.get());
+        assertInstanceOf(Agreement.Disagree.class, other,
+                "a rule reading another part of what it is handed admits other values, which is a"
+                        + " difference a row meets");
+
+        String applies = RULE_IN_A_HELPER.replace("List.allDistinctBy(.product, xs)",
+                "List.length(List.map(.product, xs)) >= 0");
+        Agreement wider = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(applies), DefaultStdlib.get());
+        assertInstanceOf(Agreement.Disagree.class, wider,
+                "and one applying something else admits others again, blocks and all");
     }
 
     /** Two builds of a model spread over two modules agree, one import deep. */

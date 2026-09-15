@@ -10,6 +10,7 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -153,7 +154,6 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             "souther.compiler.types.ReferenceDerivationCause$CollectionLiteral",
             "souther.compiler.types.ReferenceDerivationCause$ReferenceWrittenBack",
             "souther.compiler.types.ReferenceDerivationCause$SizeMeaningOfReference",
-            "souther.compiler.types.RuleOrigin",
             "souther.compiler.types.SourceReferenceOrigin",
             "souther.compiler.types.Type$Erroneous",
             "souther.compiler.types.Type$FnOf",
@@ -260,6 +260,28 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertNotSame(DeclarationAgreement.erasedAs(QuotedFrom.TextItCannotName.class),
                 DeclarationAgreement.erasedAs(SourcePos.class),
                 "and two erased kinds stay two, so a text is not held against a position");
+    }
+
+    /**
+     * Which rule a source wrote is one thing not compared, and it is that by a decision.
+     *
+     * <p>It is a record of the front end's, so the package rule answered for it and a crossing read
+     * it on those terms. What it holds is an identity — which owner wrote the block, and which of
+     * that owner's blocks it is — and the reader that needs one is the coverage that files what a
+     * row exercised, not a crossing.
+     *
+     * <p>Its own kind, like every other erased thing. Held against a position or a text, a rule
+     * would come back equal to them, and what is erased is a part a crossing cannot see rather than
+     * a slot anything may turn up in.
+     */
+    @Test
+    void whichBlockOfItsOwnerARuleIsIsNotWhatACrossingReadsItBy() {
+        assertTrue(DeclarationAgreement.erases(RuleOrigin.class),
+                "what a crossing depends on is what a rule admits, not the number its owner gave"
+                        + " the block");
+        assertNotSame(DeclarationAgreement.erasedAs(RuleOrigin.class),
+                DeclarationAgreement.erasedAs(SourcePos.class),
+                "and two erased kinds stay two, so a rule is not held against a position");
     }
 
     /**
