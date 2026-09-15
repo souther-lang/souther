@@ -18,7 +18,7 @@ package souther.compiler.types;
  * or has its work moved, and a cause named after one says something different afterwards about the
  * same source.
  */
-public sealed interface ReferenceDerivationCause {
+public sealed interface ReferenceDerivationCause extends RecordOfTheBuilding {
 
     /**
      * A collection the author wrote in brackets — {@code [a, b]}, and the empty {@code []}.

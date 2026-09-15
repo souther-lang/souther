@@ -40,9 +40,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * still passes, and what changed is what two builds are held to.
  *
  * <p>So the walk is required to be a decision. A form reachable from a declaration that hands its
- * parts over is a form of the grammar, or one of the front end's settled answers, or it is erased
- * because a value cannot be read differently by it. There is no fourth, and this is what refuses
- * one.
+ * parts over is one of three things: a form of the grammar, an answer the front end settled, or a
+ * record this compile keeps about how it built what it built. There is no fourth, and this is what
+ * refuses one.
+ *
+ * <p>Three things it is, and not three things done with it. Whether the comparison passes over a
+ * form is the other question and has its own answer, which is why a form can have both: an
+ * application the author wrote is a record of the building and is also erased, and neither of those
+ * is said by the other. Erased is enough on its own here — something the comparison never reads is
+ * something nobody has to say what it is — so it is one of the ways a form is accounted for, and
+ * the only one that is about the reading rather than about the form.
  *
  * <p>Those and not the records. What the comparison walks with nobody having said so is what this
  * is about, and a record is how most of them are written rather than what makes one of them one: a
@@ -50,10 +57,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * walked at all whatever it is written as. Asked of the records, a node written by hand joins the
  * comparison unanswered about.
  *
- * <p>One of the three accounts is given to a package and not to a type, so it answers for a record
- * whose author decided nothing about a crossing. What is reached through it is written down here.
- * That is not an account and does not stand in for one; what it does is make a type that joins them
- * something somebody is asked about, rather than something the comparison takes up in silence.
+ * <p>Each of them is said by the type. A form of the grammar is one the tree holds or one that says
+ * it is a shape; the other two are said by the types themselves in the package the front end writes
+ * its answers in, which is also where this compile writes what it keeps about its own building. Read
+ * off the package, a record added there would be handed an account nobody gave it, and the day
+ * somebody wrote one that is neither, the comparison would take it up in silence.
  *
  * <p>Static, over what a declaration can reach rather than over what some fixture happened to build.
  * A form in a corner of the grammar no test writes would otherwise sit there until an author used
@@ -77,114 +85,12 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 .filter(t -> !decided(t)).map(Class::getName).toList()));
 
         assertEquals(List.of(), undecided,
-                "a declaration is made of these and the comparison has not decided about them."
-                        + " Each is a form of the grammar, or one of the front end's settled"
-                        + " answers, or erased because a value crossing between two builds cannot"
-                        + " be read differently by it");
+                "a declaration is made of these and nobody has said what they are. Each says it is"
+                        + " a form of the grammar, or one of the front end's settled answers, or a"
+                        + " record this compile keeps about how it built what it built — or else it"
+                        + " is erased, because a value crossing between two builds cannot be read"
+                        + " differently by it");
     }
-
-    /**
-     * And the answers bought with a package name are written down one by one.
-     *
-     * <p>One of the three accounts is given to a package rather than to a type: what the front end
-     * settles is written in {@code souther.compiler.types}, and a record is taken for one of those
-     * answers by being written there. So a record added to that package is decided about by nobody
-     * and is walked by the comparison all the same, and the sweep above cannot say so — it asks
-     * whether every reached form has an account, and that rule hands one to whatever joins.
-     *
-     * <p>So the ones it is the whole account for are listed here, and a type that joins them is a
-     * finding somebody answers. What to answer is which of the three it is: a form the grammar
-     * holds, a record this compile keeps about how it built what it built, or an answer the front
-     * end settled whose parts a crossing depends on.
-     *
-     * <p>A record written there and erased is not one of these. Erasure is an account somebody
-     * wrote and it is the one that governs — the comparison reads it before it reads anything about
-     * a form's parts — so a type with that answer has been decided about wherever else it sits.
-     */
-    @Test
-    void andTheAnswersBoughtWithAPackageNameAreWrittenDownOneByOne() {
-        Set<String> found = new TreeSet<>(walkOfDeclarations().reached().stream()
-                .filter(DeclarationAgreement::isASettledAnswer)
-                .filter(type -> !DeclarationAgreement.isAFormOfTheGrammar(type))
-                .filter(type -> !DeclarationAgreement.erases(type))
-                .map(Class::getName).toList());
-
-        List<String> moved = new ArrayList<>();
-        found.stream().filter(name -> !ANSWERED_BY_WHERE_THEY_ARE_WRITTEN.contains(name))
-                .map("a crossing now reads: "::concat).forEach(moved::add);
-        ANSWERED_BY_WHERE_THEY_ARE_WRITTEN.stream().filter(name -> !found.contains(name))
-                .map("no longer reached: "::concat).forEach(moved::add);
-
-        assertEquals(List.of(), moved,
-                "which of them a crossing reads on the strength of where their file sits has moved."
-                        + " Say of the one that joined which of the three it is — a form of the"
-                        + " grammar, a record of this compile's own building, or an answer the front"
-                        + " end settled — and write it down here. One that left is written down"
-                        + " about nothing and comes off the list");
-    }
-
-    /** What a declaration reaches that nothing but the package rule has answered about. */
-    private static final List<String> ANSWERED_BY_WHERE_THEY_ARE_WRITTEN = List.of(
-            "souther.compiler.types.ApplicationDerivationCause$ApplicationWrittenBack",
-            "souther.compiler.types.ApplicationDerivationCause$CollectionLiteral",
-            "souther.compiler.types.ApplicationDerivationCause$NameReadAsAValue",
-            "souther.compiler.types.ApplicationDerivationCause$SizeMeaningOfApplication",
-            "souther.compiler.types.ApplicationOrigin$ComposedFixture",
-            "souther.compiler.types.ApplicationOrigin$Derived",
-            "souther.compiler.types.ApplicationOrigin$Eta",
-            "souther.compiler.types.BindingOwner$OfData",
-            "souther.compiler.types.BindingOwner$OfFields",
-            "souther.compiler.types.BindingOwner$OfSignature",
-            "souther.compiler.types.BindingOwner$OfValue",
-            "souther.compiler.types.DerivedReferenceOrigin",
-            "souther.compiler.types.EtaOrigin$Bound",
-            "souther.compiler.types.EtaOrigin$Declaration",
-            "souther.compiler.types.ExpansionLineage$Step",
-            "souther.compiler.types.ExpansionSite$Named",
-            "souther.compiler.types.ExpansionSite$Supplied",
-            "souther.compiler.types.ExpansionSite$Supplied$Handover",
-            "souther.compiler.types.ExpansionSite$Written",
-            "souther.compiler.types.FixtureReferenceOrigin",
-            "souther.compiler.types.ParameterSlot",
-            "souther.compiler.types.ReachName$InScope",
-            "souther.compiler.types.ReachName$OfLibrary",
-            "souther.compiler.types.ReachName$OfModule",
-            "souther.compiler.types.ReachName$Own",
-            "souther.compiler.types.ReachName$TheNamespace",
-            "souther.compiler.types.ReferenceDerivationCause$CollectionLiteral",
-            "souther.compiler.types.ReferenceDerivationCause$ReferenceWrittenBack",
-            "souther.compiler.types.ReferenceDerivationCause$SizeMeaningOfReference",
-            "souther.compiler.types.SourceReferenceOrigin",
-            "souther.compiler.types.Type$Erroneous",
-            "souther.compiler.types.Type$FnOf",
-            "souther.compiler.types.Type$ListOf",
-            "souther.compiler.types.Type$MapOf",
-            "souther.compiler.types.Type$MetaVar",
-            "souther.compiler.types.Type$Never",
-            "souther.compiler.types.Type$Nothing",
-            "souther.compiler.types.Type$OptionOf",
-            "souther.compiler.types.Type$Ref",
-            "souther.compiler.types.Type$SetOf",
-            "souther.compiler.types.Type$TupleOf",
-            "souther.compiler.types.Type$Union",
-            "souther.compiler.types.Type$Var",
-            "souther.compiler.types.TypeKey",
-            "souther.compiler.types.TypeSymbol$LanguageCase",
-            "souther.compiler.types.TypeSymbol$Primitive",
-            "souther.compiler.types.ValueName$Behavior",
-            "souther.compiler.types.ValueName$Builtin",
-            "souther.compiler.types.ValueName$Helper",
-            "souther.compiler.types.ValueName$Local",
-            "souther.compiler.types.ValueName$OfType",
-            "souther.compiler.types.ValueName$Stdlib$Namespace",
-            "souther.compiler.types.ValueName$Stdlib$Operation",
-            "souther.compiler.types.WrittenOwner$Body",
-            "souther.compiler.types.WrittenOwner$Declaration",
-            "souther.compiler.types.WrittenOwner$Examples",
-            "souther.compiler.types.WrittenOwner$Fake",
-            "souther.compiler.types.WrittenOwner$Stated",
-            "souther.compiler.types.WrittenTypeMeaning$NotAMember",
-            "souther.compiler.types.WrittenTypeMeaning$Settled");
 
     /**
      * The control: the walk can tell an undecided record from a decided one.
@@ -200,6 +106,33 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 "a record the front end settled an answer as is not a form of the grammar");
         assertTrue(DeclarationAgreement.isASettledAnswer(ValueName.Behavior.class),
                 "it is decided by being one of those, which is another way of deciding");
+    }
+
+    /**
+     * Each of the three is said by the type, and a record written beside them is told nothing.
+     *
+     * <p>The front end's answers and what this compile keeps about its own building are written in
+     * one package, so where a file sits tells the two apart from nothing. Each says which it is, and
+     * a record that says neither has been accounted for by nobody — which is what the sweep above
+     * reports, and what it could not report while the package answered.
+     */
+    @Test
+    void whichOfTheThreeAFormIsIsSaidByTheFormAndNotByWhereItIsWritten() {
+        assertTrue(DeclarationAgreement.isASettledAnswer(ValueName.Behavior.class),
+                "which declaration a name reaches is settled before a crossing sees either build");
+        assertTrue(DeclarationAgreement.isARecordOfTheBuilding(ApplicationOrigin.Derived.class),
+                "and an application a pass wrote, counted as it went, is what this compile kept"
+                        + " about building it");
+        assertFalse(DeclarationAgreement.isASettledAnswer(ApplicationOrigin.Derived.class),
+                "a record of the building is not an answer about a declaration, and the package"
+                        + " they share says neither");
+
+        assertFalse(DeclarationAgreement.isASettledAnswer(RuleOrigin.class),
+                "a record written there that says nothing is told nothing by being written there");
+        assertFalse(DeclarationAgreement.isARecordOfTheBuilding(RuleOrigin.class),
+                "by either of them");
+        assertTrue(decided(RuleOrigin.class),
+                "which leaves the answer it does have, which is that the comparison passes over it");
     }
 
     /**
@@ -370,10 +303,11 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     /** Stands for a record someone adds to a declaration without saying what it is. */
     private record Undecided(String what) {}
 
-    /** Whether {@code type} is one the comparison has an answer for. */
+    /** Whether {@code type} is one somebody has said what it is. */
     private static boolean decided(Class<?> type) {
         return DeclarationAgreement.isAFormOfTheGrammar(type)
                 || DeclarationAgreement.isASettledAnswer(type)
+                || DeclarationAgreement.isARecordOfTheBuilding(type)
                 || DeclarationAgreement.erases(type);
     }
 

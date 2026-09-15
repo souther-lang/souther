@@ -11,7 +11,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.RecordOfTheBuilding;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.types.SettledAnswer;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -870,13 +872,27 @@ public final class DeclarationAgreement {
      * Whether it is one of the front end's settled answers, whose parts are what a crossing depends
      * on.
      *
-     * <p>Where it is declared, again. What the front end settles about a declaration lives in
-     * {@code souther.compiler.types} — what a type is, what a name reaches, how a map key crosses —
-     * and a crossing depends on all of it: a field whose type moved is the plainest disagreement
-     * there is.
+     * <p>Asked of the type, which says so. What the front end settles about a declaration — what a
+     * type is, what a name reaches, how a map key crosses — is what a crossing depends on: a field
+     * whose type moved is the plainest disagreement there is. And what this compile keeps about how
+     * it built what it built is written beside it, so a rule reading where the file sits would hand
+     * one answer to both.
      */
     static boolean isASettledAnswer(Class<?> type) {
-        return type.isRecord() && type.getPackageName().equals(TypeSymbol.class.getPackageName());
+        return SettledAnswer.class.isAssignableFrom(type);
+    }
+
+    /**
+     * Whether it is one of the records this compile keeps about how it built what it built.
+     *
+     * <p>The third thing a form reachable from a declaration can be, beside a form of the grammar
+     * and a settled answer. It says what the type is and not what this reads of one: which of them
+     * a crossing passes over is said by {@link #ERASED}, and a type is often both — an application
+     * the author wrote is a record of the building that a crossing is also blind to, and neither of
+     * those is said by the other.
+     */
+    static boolean isARecordOfTheBuilding(Class<?> type) {
+        return RecordOfTheBuilding.class.isAssignableFrom(type);
     }
 
     /**

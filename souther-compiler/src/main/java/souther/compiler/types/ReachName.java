@@ -32,7 +32,7 @@ package souther.compiler.types;
  * <p>The interface is sealed and the switches over it carry no {@code default}, so a shape added here
  * is a compile error at every place that reads one rather than something quietly taken for another.
  */
-public sealed interface ReachName {
+public sealed interface ReachName extends SettledAnswer {
 
     /** What this reference reaches. */
     ValueName denotes();

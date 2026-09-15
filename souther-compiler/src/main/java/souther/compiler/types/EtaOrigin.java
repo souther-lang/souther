@@ -16,7 +16,7 @@ package souther.compiler.types;
  * models this repository carries; a third would be a generation whose meaning is worth a look before
  * it gets an arm.
  */
-public sealed interface EtaOrigin {
+public sealed interface EtaOrigin extends RecordOfTheBuilding {
 
     /**
      * A reference to something a module declares.

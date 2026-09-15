@@ -23,7 +23,7 @@ package souther.compiler.types;
  * splices it had performed before, which of the trees it was building: a chain holding any of them
  * would move when the compiler is asked to do the same work in another order.
  */
-public sealed interface ExpansionLineage {
+public sealed interface ExpansionLineage extends SettledAnswer {
 
     /** The construct as the source wrote it, in the body that wrote it. */
     ExpansionLineage ORIGINAL = new Original();
@@ -87,7 +87,7 @@ public sealed interface ExpansionLineage {
      * inside its own expansion, and a declaration that can reach itself is left standing rather than
      * inlined ({@link souther.compiler.check.HelperGraph#recurses}).
      */
-    record Step(ValueName expanded, ExpansionSite at) {
+    record Step(ValueName expanded, ExpansionSite at) implements SettledAnswer {
 
         public Step {
             if (expanded == null || at == null) {

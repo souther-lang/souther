@@ -19,7 +19,7 @@ import souther.compiler.diag.SourcePos;
  * <p>Beside the type rather than beside the tree, being what the front end settled about a written
  * type rather than a form the grammar has.
  */
-public sealed interface WrittenTypeMeaning {
+public sealed interface WrittenTypeMeaning extends SettledAnswer {
 
     /** The type this written type stands for. */
     record Settled(Type type) implements WrittenTypeMeaning {}

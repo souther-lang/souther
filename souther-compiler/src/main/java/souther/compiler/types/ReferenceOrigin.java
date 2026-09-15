@@ -28,7 +28,7 @@ package souther.compiler.types;
  * behind it is a question about what its occurrences are; an arm it has to be given is how that
  * question gets asked, and a name for "composed by some pass" is how it goes unasked.
  */
-public sealed interface ReferenceOrigin
+public sealed interface ReferenceOrigin extends RecordOfTheBuilding
         permits SourceReferenceOrigin, DerivedReferenceOrigin, FixtureReferenceOrigin {
 
     /**
