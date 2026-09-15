@@ -33,8 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Every record a published declaration is made of is one {@link DeclarationAgreement} has decided
- * about.
+ * Every form a published declaration is made of says which of three things it is.
  *
  * <p>The comparison walks a form's components when it has nothing else to say about it, which is
  * right for a form of the grammar and is a default for everything else. A record the compiler puts
@@ -151,6 +150,28 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         assertEquals(0, accountsGiven(ConstructOccurrence.class),
                 "so a declaration reaching one would be reaching a form nobody has said what it is,"
                         + " which is the finding this makes");
+    }
+
+    /**
+     * The control for that: the forms under an erased sealed type are reached and asked.
+     *
+     * <p>Named rather than counted, because what this holds is that a whole corner of the world is
+     * in sight. An erased sealed type stands for forms like any other, and a walk that stopped at
+     * it would leave them reached by nobody — so the sweeps above would go green over the forms
+     * that had never been put to them, and two sweeps written to catch different things would both
+     * be blind in the same place.
+     */
+    @Test
+    void andTheFormsUnderAnErasedSealedTypeAreAmongThemToo() {
+        Set<Class<?>> reached = walkOfDeclarations().reached();
+
+        assertTrue(reached.contains(QuotedFrom.ASourceThisCompileHolds.class),
+                "a text a rule was quoted from is erased, and which texts there are is not that"
+                        + " question and is not answered by it");
+        assertTrue(DeclarationAgreement.erases(QuotedFrom.ASourceThisCompileHolds.class),
+                "the comparison does pass over it, which is what makes it the one to ask about");
+        assertEquals(1, accountsGiven(QuotedFrom.ASourceThisCompileHolds.class),
+                "and being passed over is no reason to have said nothing about what it is");
     }
 
     /**
@@ -426,6 +447,13 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
      * other, and one does not follow from the other. A walk steered by the classification stops
      * wherever an answer has been written down, so a form under one is reached by nobody and
      * decided by nobody, and this test goes on passing over a smaller world.
+     *
+     * <p><b>Which forms there are is settled before what is done with them is asked.</b> A sealed
+     * type is not a form — its permitted ones are — so it stands for them whether or not the
+     * comparison passes over it. Asked the other way round, an erased sealed type would stop the
+     * walk at a name no value ever has, and the forms underneath it would be the ones nobody is
+     * asked about: the same policy deciding what a form is, one step further back, where it
+     * decides which forms there are to ask about at all.
      */
     private static Walked walkOfDeclarations() {
         Set<Class<?>> seen = new LinkedHashSet<>();
@@ -437,16 +465,16 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
             if (!seen.add(type) || type.isPrimitive()) {
                 continue;
             }
-            if (DeclarationAgreement.erases(type)) {
-                reached.add(type);
-                stoppedAt.add(type);
-                continue;   // the comparison does not go inside one, so neither does this
-            }
             if (type.isSealed()) {
                 for (Class<?> permitted : type.getPermittedSubclasses()) {
                     todo.addLast(permitted);
                 }
                 continue;   // the interface itself holds nothing; its forms do
+            }
+            if (DeclarationAgreement.erases(type)) {
+                reached.add(type);
+                stoppedAt.add(type);
+                continue;   // the comparison does not go inside one, so neither does this
             }
             reached.add(type);
             if (type.isInterface() || !StructuralParts.areHandedOver(type)) {
