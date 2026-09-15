@@ -939,7 +939,7 @@ public final class Resolve {
         for (Ast.TypeTerm c : ret.cases()) {
             cases.add(typeTerm(c));
         }
-        return new Hir.RetType(cases, ret.pos());
+        return Hir.RetType.of(cases, ret.pos());
     }
 
     private Hir.TypeTerm typeTerm(Ast.TypeTerm t) {

@@ -21,6 +21,7 @@ import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.UnionMember;
+import souther.compiler.types.WrittenTypeMeaning;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
@@ -208,6 +209,11 @@ public final class TypeOps {
     /**
      * The output type of a behavior return: a single case, or a union of two or more cases.
      *
+     * <p>The reading is the written type's own and was done when it was built. What is left here is
+     * to act on what it came to: a type, or a member no arm can name, which is a mistake an author
+     * owns and is reported at the type they wrote. So asking twice costs nothing and says the same
+     * thing twice, which is what a reader in a loop needs of it.
+     *
      * <p>An output with a member resting on a name that denotes nothing has no case set, and is the
      * type that absorbs — the same answer a single such case already gives, so one mistake has one
      * recovery wherever it is written. A check that would hold such an output against what is
@@ -215,31 +221,11 @@ public final class TypeOps {
      * then asks {@link #restsOnAnUnresolvedName} whether there is a case set to compare.
      */
     public static Type successType(Hir.RetType ret) {
-        List<Type> members = new ArrayList<>();
-        for (Hir.TypeTerm t : ret.cases()) {
-            members.add(resolveTerm(t));
-        }
-        if (members.size() == 1) {
-            return members.get(0);
-        }
-        // The two ways a member can fail to be one are different mistakes, and the author owns only
-        // one of them. A member that cannot be written in an arm is theirs and is reported where it
-        // stands, as the first such member always was. A member whose name denotes nothing was
-        // reported where that name was written, and what this reading finds there is that same
-        // mistake: the output has no case set at all, so it takes the type that absorbs and this
-        // says nothing further. Finding one does not end the reading, because a member the author
-        // does own may be written after it.
-        Set<TypeSymbol> names = new LinkedHashSet<>();
-        boolean unknown = false;
-        for (Type m : members) {
-            switch (UnionMember.of(m)) {
-                case UnionMember.Named named -> names.add(named.name());
-                case UnionMember.NoType _ -> unknown = true;
-                case UnionMember.NotAMember _ -> throw CompileException.of(Diagnostic
-                                .at(ret.pos()).say(new TypeMessage.NotAUnionMember(Type.show(m))).build());
-            }
-        }
-        return unknown ? Type.ERRONEOUS : Type.union(names);
+        return switch (ret.meaning()) {
+            case WrittenTypeMeaning.Settled settled -> settled.type();
+            case WrittenTypeMeaning.NotAMember no -> throw CompileException.of(Diagnostic
+                    .at(no.at()).say(new TypeMessage.NotAUnionMember(Type.show(no.member()))).build());
+        };
     }
 
 

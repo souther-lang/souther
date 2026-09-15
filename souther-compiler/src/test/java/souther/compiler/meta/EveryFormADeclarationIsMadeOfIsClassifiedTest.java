@@ -80,6 +80,33 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                 "it is decided by being named, which is the other way of deciding");
     }
 
+    /**
+     * The other control: a form the grammar has which is not a record hands its parts over, and this
+     * walk goes through it.
+     *
+     * <p>Asked of the form's parts rather than of what the walk reached from a root. A type held
+     * inside one is usually held somewhere else too, so a reachable set says the walk arrived and
+     * not that it arrived this way — and the day a second route appears, a walk that stopped here
+     * would go on passing. What this holds is that it does not stop.
+     *
+     * <p>A form written by hand rather than as a record is what the walk used to treat as a leaf,
+     * and treating one as a leaf is the failure that says nothing: everything held inside it drops
+     * out of what has been decided about, and the sweep above goes green over a smaller world.
+     */
+    @Test
+    void aFormOfTheGrammarWrittenByHandHandsItsPartsOver() {
+        assertTrue(StructuralParts.areHandedOver(Hir.RetType.class),
+                "a written type is a form of the grammar however it is written");
+
+        List<String> parts = new ArrayList<>();
+        for (StructuralParts.Part part : StructuralParts.of(Hir.RetType.class)) {
+            parts.add(part.name());
+        }
+        assertEquals(List.of("cases", "meaning", "pos"), parts,
+                "the terms, what they come to, and where they are written: all three are held and"
+                        + " all three are what this walk goes on to decide about");
+    }
+
     /** Stands for a record someone adds to a declaration without saying what it is. */
     private record Undecided(String what) {}
 

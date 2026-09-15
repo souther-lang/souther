@@ -111,7 +111,7 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
     /** A parameter of function type, which is what a rule the caller supplies is. It answers
      *  {@code Bool}, being what a guard reads it for. */
     private static Hir.RetType aRuleType() {
-        Hir.RetType answers = new Hir.RetType(List.of(Hir.TypeRef.of(Type.BOOL, AT)), AT);
-        return new Hir.RetType(List.of(new Hir.FnType(List.of(), answers, AT)), AT);
+        Hir.RetType answers = Hir.RetType.of(List.of(Hir.TypeRef.of(Type.BOOL, AT)), AT);
+        return Hir.RetType.of(List.of(new Hir.FnType(List.of(), answers, AT)), AT);
     }
 }
