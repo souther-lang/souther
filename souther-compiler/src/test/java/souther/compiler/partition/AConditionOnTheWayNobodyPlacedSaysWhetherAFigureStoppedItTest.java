@@ -10,9 +10,8 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A condition on the way that nothing placed says whether a figure of this compiler's stopped the
@@ -52,9 +51,9 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
                 List.of(WIDE, NOWHERE), term -> term == NOWHERE ? null : Carrier.WHOLE);
 
-        assertNull(standing.at(), "the second position has no order, so no pair stands anywhere");
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
-                standing.stoppedBy(),
+                assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
+                        "the second position has no order, so no pair stands anywhere").stoppedBy(),
                 "and the walk stopped at how many values a position on the way is tried at");
     }
 
@@ -85,8 +84,10 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     /** What the walk over a run of {@code many} whole numbers stopped at, where every value of it
      *  leads nowhere. */
     private static Set<CompositionBudget> stoppedByOverARunOf(int many) {
-        return NumericWitness.of(new ARunOfThisMany(many), List.of(WIDE, NOWHERE),
-                term -> term == NOWHERE ? null : Carrier.WHOLE).stoppedBy();
+        return assertInstanceOf(NumericWitness.Standing.NotFound.class,
+                NumericWitness.of(new ARunOfThisMany(many), List.of(WIDE, NOWHERE),
+                        term -> term == NOWHERE ? null : Carrier.WHOLE),
+                "every value of the run leads nowhere, so no pair stands").stoppedBy();
     }
 
     /**
@@ -100,8 +101,9 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
                 List.of(NOWHERE), _ -> null);
 
-        assertNull(standing.at(), "there is nothing for the position to stand on");
-        assertEquals(Set.of(), standing.stoppedBy(),
+        assertEquals(Set.of(),
+                assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
+                        "there is nothing for the position to stand on").stoppedBy(),
                 "and nothing was stopped, which is not the same as having been stopped by nothing");
     }
 
@@ -111,8 +113,9 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
                 List.of(WIDE), _ -> Carrier.WHOLE);
 
-        assertNotNull(standing.at(), "a whole number stands somewhere in a region nothing narrows");
-        assertTrue(standing.stoppedBy().isEmpty(), "so no figure was reached on the way");
+        assertNotNull(assertInstanceOf(NumericWitness.Standing.Found.class, standing,
+                        "a whole number stands somewhere in a region nothing narrows").at(),
+                "and where it stands is what comes back");
     }
 
     /**

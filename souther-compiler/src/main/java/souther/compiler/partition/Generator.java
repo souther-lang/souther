@@ -428,13 +428,17 @@ public final class Generator {
              */
             THE_SEARCH_LEFT_SOMETHING_UNTRIED,
             /**
-             * The rules leave no value here, and the whole of what they leave was walked.
+             * The rules leave no value here.
              *
              * <p>Apart from every other word here, and the difference is the whole point of having
              * it. The rest say what this compiler did not manage; this one says what the model
-             * settles — every position of the point is bounded, every combination of those bounds
-             * was tried, and none of them reaches it. A reader may act on this and may not act on
-             * the others (ADR-0091).
+             * settles, and a reader may act on this and on none of the others (ADR-0091).
+             *
+             * <p><b>The word is the theorem and not the way it was come by.</b> Two routes reach it
+             * and ADR-0091 admits both: a walk of the whole of what the rules leave that reached
+             * nothing, and rules shown to leave nothing before anything was walked. What a reader
+             * does about it is the same either way, and a word that also said which route it was
+             * would be false on one of them the moment the other was added — which it was.
              */
             THE_RULES_LEAVE_NOTHING_THERE,
             /**
@@ -2960,14 +2964,35 @@ public final class Generator {
          * <p>Empty is the ordinary case and says so: every condition the walk stated was one this
          * put a value under.
          */
-        List<ReachabilityGap.Uncomposed> unrepresented();
+        List<ReachabilityGap> unrepresented();
 
-        /** A value with the edge in it, built and accepted. */
-        record Built(GeneratedRow row, List<ReachabilityGap.Uncomposed> unrepresented)
+        /**
+         * A value with the edge in it, built and accepted.
+         *
+         * <p><b>What it was not composed against is what this compiler could not do, and never what
+         * the model settles.</b> A reader holding one of these has a row, and every entry beside it
+         * says the row may not arrive for a reason somebody could work on — so a reader that acts on
+         * the row and leaves the list is reading it the way it is meant. A proof that the way leaves
+         * nothing is not that: it says the row does not arrive, and a list that could hold one would
+         * make every existing reader of a built row wrong without a word to any of them.
+         *
+         * <p>Refused here rather than left to whoever assembles one. There is one place a proof can
+         * come from and one place a row is assembled, and they are the same method — which is what
+         * makes this cheap to hold and worth holding: the next word added beside these has the same
+         * question to answer, and this is where it gets asked.
+         */
+        record Built(GeneratedRow row, List<ReachabilityGap> unrepresented)
                 implements BoundaryAttempt {
 
             public Built {
                 unrepresented = List.copyOf(unrepresented);
+                for (ReachabilityGap gap : unrepresented) {
+                    if (gap instanceof ReachabilityGap.ProvedImpossible) {
+                        throw new IllegalArgumentException("a row was built for a way the rules"
+                                + " leave nothing standing on, which is a row that does not arrive:"
+                                + " " + gap.anchor());
+                    }
+                }
             }
         }
 
@@ -2988,7 +3013,7 @@ public final class Generator {
         }
 
         /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(UnresolvedCombination why, List<ReachabilityGap.Uncomposed> unrepresented)
+        record Unresolved(UnresolvedCombination why, List<ReachabilityGap> unrepresented)
                 implements NoRow {
 
             public Unresolved {
@@ -3009,7 +3034,7 @@ public final class Generator {
          */
         record Stopped(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
                        java.util.Set<CompositionRepertoire> notAllOf,
-                       List<ReachabilityGap.Uncomposed> unrepresented)
+                       List<ReachabilityGap> unrepresented)
                 implements NoRow {
 
             public Stopped {
@@ -3031,7 +3056,7 @@ public final class Generator {
 
             /** One at the label given, in the word its budgets come back with. */
             static Stopped at(String label, java.util.Set<CompositionBudget> by,
-                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                              List<ReachabilityGap> unrepresented) {
                 return at(label, null, by, java.util.Set.of(), unrepresented);
             }
 
@@ -3039,7 +3064,7 @@ public final class Generator {
              *  separately walked some of a population. */
             static Stopped at(String label, String detail, java.util.Set<CompositionBudget> by,
                               java.util.Set<CompositionRepertoire> notAllOf,
-                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                              List<ReachabilityGap> unrepresented) {
                 return at(label, detail, new LinkedHashMap<>(), by, notAllOf, unrepresented);
             }
 
@@ -3055,7 +3080,7 @@ public final class Generator {
                               SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                               java.util.Set<CompositionBudget> by,
                               java.util.Set<CompositionRepertoire> notAllOf,
-                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                              List<ReachabilityGap> unrepresented) {
                 return new Stopped(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.wordFor(by), detail, Optional.empty(),
                         alsoShort), by, notAllOf, unrepresented);
@@ -3076,7 +3101,7 @@ public final class Generator {
          * it differs, and that is what travels here.
          */
         record Unexhausted(UnresolvedCombination why, java.util.Set<CompositionRepertoire> writes,
-                           List<ReachabilityGap.Uncomposed> unrepresented)
+                           List<ReachabilityGap> unrepresented)
                 implements NoRow {
 
             public Unexhausted {
@@ -3091,7 +3116,7 @@ public final class Generator {
             /** One at the label given, of a search that has something to say about what it saw. */
             static Unexhausted at(String label, String detail,
                                   java.util.Set<CompositionRepertoire> writes,
-                                  List<ReachabilityGap.Uncomposed> unrepresented) {
+                                  List<ReachabilityGap> unrepresented) {
                 return at(label, detail, new LinkedHashMap<>(), writes, unrepresented);
             }
 
@@ -3099,7 +3124,7 @@ public final class Generator {
             static Unexhausted at(String label, String detail,
                                   SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                                   java.util.Set<CompositionRepertoire> writes,
-                                  List<ReachabilityGap.Uncomposed> unrepresented) {
+                                  List<ReachabilityGap> unrepresented) {
                 return new Unexhausted(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, detail,
                         Optional.empty(), alsoShort), writes, unrepresented);
@@ -3122,7 +3147,7 @@ public final class Generator {
          * for look like one the model admits no row at.
          */
         record Limited(UnresolvedCombination why, Set<CompositionBudget> by,
-                       List<ReachabilityGap.Uncomposed> unrepresented)
+                       List<ReachabilityGap> unrepresented)
                 implements NoRow {
 
             public Limited {
@@ -3137,7 +3162,7 @@ public final class Generator {
             /** One at the label given, in the word the search itself came back with. */
             static Limited at(String label, UnresolvedCombination.Reason why, String detail,
                               java.util.Set<CompositionBudget> by,
-                              List<ReachabilityGap.Uncomposed> unrepresented) {
+                              List<ReachabilityGap> unrepresented) {
                 return new Limited(new UnresolvedCombination(List.of(label), why, detail), by,
                         unrepresented);
             }
@@ -3151,7 +3176,7 @@ public final class Generator {
          * is owed it about a search that never happened, which is what its word says.
          */
         record Unplanned(UnresolvedCombination why, Set<CompositionBudget> by,
-                         List<ReachabilityGap.Uncomposed> unrepresented)
+                         List<ReachabilityGap> unrepresented)
                 implements NoRow {
 
             public Unplanned {
@@ -3165,7 +3190,7 @@ public final class Generator {
 
             /** One at the label given, in the word a reading nothing searched comes back with. */
             static Unplanned at(String label, Set<CompositionBudget> by,
-                                List<ReachabilityGap.Uncomposed> unrepresented) {
+                                List<ReachabilityGap> unrepresented) {
                 return new Unplanned(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
                         by, unrepresented);
@@ -3243,6 +3268,22 @@ public final class Generator {
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
+        // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
+        // to compose for this point and the rest of this would be composing one. What comes back is
+        // the model's word, which is the same word the realizer's proof comes back with and is
+        // reached here by the other of the two routes to it.
+        //
+        // <p>Said before a row is built rather than beside one. A row assembled here is a row that
+        // does not arrive, and handing it over with the proof attached asks every reader of it to
+        // know that the second component can take the first one away — which is what they were
+        // written before this word existed and is not what {@link BoundaryAttempt.Built} means.
+        for (ReachabilityGap gap : where.unrepresented()) {
+            if (gap instanceof ReachabilityGap.ProvedImpossible) {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        where.unrepresented());
+            }
+        }
         Map<RealizationTarget, Place> standing = where.at();
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
@@ -3422,12 +3463,24 @@ public final class Generator {
     private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
                                          Reachability.Reaching reaching) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
-        List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
+        List<ReachabilityGap> unrepresented = new ArrayList<>();
         souther.compiler.inputs.SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             here = here.given(each.getKey().term(), each.getValue());
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            // What the cut says, asked as the one thing it says. A cut over two positions is a
+            // statement about their sum, and the rules can leave that sum nowhere while leaving each
+            // position somewhere — so the positions asked one at a time answer a weaker question
+            // than the cut put. Asked here, before the cut is taken apart into the positions a
+            // value has to be chosen at.
+            if (cut.taken() instanceof TakenConstraint.Affine affine
+                    && here.projectionOf(affine.form())
+                            instanceof souther.compiler.numeric.NumericDomain.FormProjection
+                                    .NothingIsLeft) {
+                unrepresented.add(new ReachabilityGap.ProvedImpossible(cut));
+                continue;
+            }
             List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
             boolean shared = false;
             boolean placeable = true;
@@ -3474,17 +3527,29 @@ public final class Generator {
             NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
                             term -> subject.quantities().ordersOf(term).answered());
-            Map<NumericTerm.FromOnePosition, Place> standing =
-                    found == null ? null : found.at();
+            // What the rules settle before what this compiler managed, because a reader may act on
+            // the first and on none of the rest.
+            //
+            // And where a budget of this compiler's is why the walk found nothing, that rather than
+            // the word for a walk that had everything and reached none of it.
+            Map<NumericTerm.FromOnePosition, Place> standing = switch (found) {
+                case null -> null;
+                case NumericWitness.Standing.Found it -> it.at();
+                case NumericWitness.Standing.ProvedImpossible _, NumericWitness.Standing.NotFound _
+                        -> null;
+            };
             if (standing == null) {
-                // And where a budget of this compiler's is why the walk found nothing, that rather
-                // than the word for a walk that had everything and reached none of it.
-                unrepresented.add(new ReachabilityGap.Uncomposed(cut, shared
-                        ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
-                        : found != null && !found.stoppedBy().isEmpty()
-                                ? ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                                        found.stoppedBy())
-                                : new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                unrepresented.add(switch (found) {
+                    case NumericWitness.Standing.ProvedImpossible _ ->
+                            new ReachabilityGap.ProvedImpossible(cut);
+                    case NumericWitness.Standing.NotFound it when !it.stoppedBy().isEmpty() ->
+                            new ReachabilityGap.Uncomposed(cut,
+                                    ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
+                                            it.stoppedBy()));
+                    case null, default -> new ReachabilityGap.Uncomposed(cut, shared
+                            ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
+                            : new ReachabilityGap.Why.NoValueComposedForItsPositions());
+                });
                 continue;
             }
             for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
@@ -3550,7 +3615,7 @@ public final class Generator {
      * "no row was seen reaching it" beside a way that says everything on it was taken in.
      */
     private record Standing(Map<RealizationTarget, Place> at,
-                            List<ReachabilityGap.Uncomposed> unrepresented) {}
+                            List<ReachabilityGap> unrepresented) {}
 
     /**
      * {@code check}, refusing any candidate at this parameter that does not read back at the place
@@ -5683,7 +5748,7 @@ public final class Generator {
          * walked in part travels with them all the same, since a stop does not make it untrue.
          */
         BoundaryAttempt cameToNothing(String label,
-                                      List<ReachabilityGap.Uncomposed> unrepresented) {
+                                      List<ReachabilityGap> unrepresented) {
             if (!stoppedBy().isEmpty()) {
                 return BoundaryAttempt.Stopped.at(label, detail(), stoppedBy(), notAllOf(),
                         unrepresented);

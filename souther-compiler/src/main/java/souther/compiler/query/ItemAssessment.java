@@ -451,7 +451,7 @@ public sealed interface ItemAssessment {
              * of the walk's answers. Both halves are put together where a reader wants one list
              * ({@link #unaccountedFor()}).
              */
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
+            List<souther.compiler.partition.ReachabilityGap> uncomposed();
         }
 
         /**
@@ -482,6 +482,28 @@ public sealed interface ItemAssessment {
 
             /** The value this search composed, whichever of the two this is. */
             Generator.GeneratedRow row();
+
+            /**
+             * Refuses a row held beside a proof that the way it is on leaves nothing standing.
+             *
+             * <p>Of the shape and not of one of its cases. What a row was not composed against is
+             * this compiler's shortfall wherever a row exists, and both ways of having one rest on
+             * that: the readers of either take the row and leave the list. Held on one case only,
+             * the other is the way the same wrong value gets built — and which of the two a caller
+             * happens to make is not something the invariant should turn on.
+             */
+            static List<souther.compiler.partition.ReachabilityGap> withNoProofAmongThem(
+                    List<souther.compiler.partition.ReachabilityGap> gaps) {
+                List<souther.compiler.partition.ReachabilityGap> held = List.copyOf(gaps);
+                for (souther.compiler.partition.ReachabilityGap gap : held) {
+                    if (gap instanceof souther.compiler.partition.ReachabilityGap
+                            .ProvedImpossible) {
+                        throw new IllegalArgumentException("a row stands where the rules leave"
+                                + " nothing standing: " + gap.anchor());
+                    }
+                }
+                return held;
+            }
 
             /** A row composed where the whole way was stated and used. */
             static Certified certified(Generator.GeneratedRow row,
@@ -526,14 +548,24 @@ public sealed interface ItemAssessment {
             EstablishmentGap by();
         }
 
-        /** Built, and read back standing where it was built for. */
+        /**
+         * Built, and read back standing where it was built for.
+         *
+         * <p>What it was not composed against is this compiler's shortfall and never the model's
+         * word, which is why {@link #unaccountedFor()} answers nothing for one of these: a row that
+         * stands where it was built for settles the point, and what could not be composed on the way
+         * to it is not something a reader has to act on. A proof that the way leaves nothing says
+         * the opposite of standing there, so it cannot be one of these — held as one, the sentence
+         * saying the point is settled and the proof saying no row reaches it would be the same
+         * answer.
+         */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                         List<souther.compiler.partition.ReachabilityGap> uncomposed)
                 implements Attempt, Searched, Built {
 
             public Certified {
-                uncomposed = List.copyOf(uncomposed);
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
             }
         }
 
@@ -552,12 +584,12 @@ public sealed interface ItemAssessment {
          */
         record Unverified(Generator.GeneratedRow row,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                          List<souther.compiler.partition.ReachabilityGap> uncomposed,
                           EstablishmentGap.Observation why)
                 implements Attempt, Searched, Built, Prevented {
 
             public Unverified {
-                uncomposed = List.copyOf(uncomposed);
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
                 Objects.requireNonNull(why, "a row nothing certified says what stopped it");
             }
 
@@ -593,7 +625,7 @@ public sealed interface ItemAssessment {
          */
         record Stopped(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
                        CanonicalSelection<CompositionBudget> stoppedBy,
                        CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
@@ -639,7 +671,7 @@ public sealed interface ItemAssessment {
          */
         record Unexhausted(Generator.UnresolvedCombination why,
                            souther.compiler.partition.WayToTheBorder way,
-                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                           List<souther.compiler.partition.ReachabilityGap> uncomposed,
                            CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
 
@@ -675,7 +707,7 @@ public sealed interface ItemAssessment {
          */
         record Limited(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
                        CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Searched, Prevented {
 
@@ -717,7 +749,7 @@ public sealed interface ItemAssessment {
          */
         record Unplanned(Generator.UnresolvedCombination why,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                         List<souther.compiler.partition.ReachabilityGap> uncomposed,
                          CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Prevented {
 
@@ -750,7 +782,7 @@ public sealed interface ItemAssessment {
          */
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                          List<souther.compiler.partition.ReachabilityGap> uncomposed)
                 implements Attempt, Searched {
 
             public Unresolved {
@@ -808,7 +840,7 @@ public sealed interface ItemAssessment {
          */
         default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
             souther.compiler.partition.WayToTheBorder way;
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed;
+            List<souther.compiler.partition.ReachabilityGap> uncomposed;
             switch (this) {
                 case Unresolved it -> {
                     if (it.why().reason().provesInfeasible()) {

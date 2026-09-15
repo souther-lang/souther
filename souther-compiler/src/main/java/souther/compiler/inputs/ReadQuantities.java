@@ -936,6 +936,27 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().isEmpty()) {
             return null;
         }
+        // What the declarations were read to prove, which is what a reader drawing the lines of a
+        // position wants: where they admit no value there are no lines owed, and that is answered
+        // where a value's own emptiness is rather than by a range here. A caller looking for
+        // somewhere to put a value asks the region face, and that one keeps the difference
+        // ({@link #projectionOf}).
+        return switch (projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+        };
+    }
+
+    /**
+     * The region's face of the same question, which keeps the answer a range cannot hold.
+     *
+     * <p>Null where the form weighs no term, which is a question about nothing rather than an answer
+     * about a form.
+     */
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        if (form.coefs().isEmpty()) {
+            return null;
+        }
         form.coefs().keySet().forEach(this::held);
         // Projected out of the rules, which is one question with one answer. The rules of every
         // parameter are said together and what each number is on its own is said onto them, so what
@@ -954,19 +975,27 @@ final class ReadQuantities implements Quantities {
      * value accumulated — which is the fold that asks how many a container holds under a case, where
      * the context is the one the fold has reached and not the one anybody fixed.
      */
-    private NumericDomain.Bounds runsIn(StructuralContext under,
-                                        LinearForm<NumericTerm> form) {
+    private NumericDomain.FormProjection runsIn(StructuralContext under,
+                                                LinearForm<NumericTerm> form) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         for (NumericTerm term : form.coefs().keySet()) {
             rules = holding(rules, term, under);
         }
-        NumericDomain.Bounds projected = rules.numbers().boundsOf(over(form, under));
+        // What the rules leave, carried as what it is. A reading that admits no assignment says so
+        // here and goes on saying it: read back as a range with neither end, it would widen whoever
+        // met it and the proof would leave with it — and every search downstream would spend what it
+        // is allowed on a region these rules already refuse.
+        if (!(rules.numbers().projectionOf(over(form, under))
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds projected))) {
+            return new NumericDomain.FormProjection.NothingIsLeft();
+        }
         // One term taken as itself, which is the arithmetic being the identity rather than a second
         // answer to the same question. It is also the only shape a position the arithmetic cannot
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
         // this is where a floor written as a value rather than as a number survives at all.
         NumericTerm only = onlyTermOf(form);
-        return only == null ? projected : meeting(projected, whereOneTermRuns(only));
+        return new NumericDomain.FormProjection.Within(
+                only == null ? projected : meeting(projected, whereOneTermRuns(only)));
     }
 
     /**
@@ -1186,7 +1215,14 @@ final class ReadQuantities implements Quantities {
         if (counted == null) {
             return new Viability.MayStand();
         }
-        NumericDomain.Bounds many = runsIn(under, LinearForm.atom(counted));
+        // A floor under how many it holds, where the rules leave one. Rules that admit no assignment
+        // leave no floor to read, and what nothing stands under is answered where the rules are
+        // asked whether they hold anything — said here, this would be a container proved non-empty
+        // out of a reading that proves nothing at all.
+        NumericDomain.Bounds many =
+                runsIn(under, LinearForm.atom(counted))
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
+                        ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }

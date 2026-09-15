@@ -112,10 +112,10 @@ public final class NumericDomain<A> {
                 coefs, Rational.of(f.constant()), rel, knowing.kinds::get);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
-            case AffineConstraint.Read.HoldsNever<A> ignored ->
+            case AffineConstraint.Read.HoldsNever<A> _ ->
                     new NumericDomain<>(StatedRules.none(), knowing.kinds, true);
             // Every value satisfies it, so there is nothing to keep.
-            case AffineConstraint.Read.HoldsAlways<A> ignored -> knowing;
+            case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
         };
     }
@@ -416,8 +416,8 @@ public final class NumericDomain<A> {
             return false;
         }
         return switch (AffineConstraint.of(coefs, Rational.of(f.constant()), rel, kinds::get)) {
-            case AffineConstraint.Read.HoldsAlways<A> ignored -> true;
-            case AffineConstraint.Read.HoldsNever<A> ignored -> false;
+            case AffineConstraint.Read.HoldsAlways<A> _ -> true;
+            case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
         };
     }
@@ -583,6 +583,13 @@ public final class NumericDomain<A> {
      * carries a bound from another position, and a rule over several positions leaves each of them
      * whatever the others cannot help taking. That is the whole point of asking here rather than
      * reading back what was put in.
+     *
+     * <p><b>What was proven and not where a value may be put.</b> A reading that admits no
+     * assignment still has ends written down, and reading them back is how a refusal names the
+     * position whose ends crossed. A caller choosing somewhere for a value to stand is asking the
+     * other question, and the pair of nulls this hands back on such a reading is the widest answer
+     * there is: {@link #projectionOf(Object)} is that question, and it has the answer this has no
+     * room for.
      */
     public Bounds boundsOf(A atom) {
         if (isBottom()) {
@@ -631,11 +638,39 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * What this domain says about where a form's values lie.
+     *
+     * <p>Two answers and not the three an atom gets. Whether an atom was ever named is a fact about
+     * the vocabulary and is worth telling a reader; a form is several atoms, and whether it was
+     * "named" would have to be invented — every term spoken of, or any of them — for a difference no
+     * reader of a form asks about. What a form is owed is the one that changes the answer: a form
+     * over a reading that admits no assignment is at no value, and a pair of nulls says it is at
+     * every one.
+     */
+    public FormProjection projectionOf(LinearForm<A> f) {
+        return isBottom() ? new FormProjection.NothingIsLeft()
+                : new FormProjection.Within(boundsOf(f));
+    }
+
+    /** What a domain says about a form: where its values lie, or that it has none. */
+    public sealed interface FormProjection {
+
+        /** The rules prove it lies here — which is every value where they place no edge. */
+        record Within(Bounds bounds) implements FormProjection {}
+
+        /** The rules admit no assignment at all, so the form is at no value rather than at any. */
+        record NothingIsLeft() implements FormProjection {}
+    }
+
+    /**
      * The tightest bounds the rules prove on a whole form.
      *
      * <p>Read for a value the rules cannot carry directly: a product of two positions and a
      * truncating quotient are outside what this reasons in, and what they answer is bounded by what
      * their parts are proven to lie between.
+     *
+     * <p>What was proven, as the one above is, and {@link #projectionOf(LinearForm)} is where a
+     * caller looking for somewhere to put a value asks.
      */
     public Bounds boundsOf(LinearForm<A> f) {
         if (isBottom()) {

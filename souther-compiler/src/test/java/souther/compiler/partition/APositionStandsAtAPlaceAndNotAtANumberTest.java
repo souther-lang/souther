@@ -100,7 +100,10 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
     /** Where {@code path} runs once it has been fixed at {@code at}, as the two ends. */
     private static String runsAfterFixing(String path, Place at) {
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(TermPath.of(path));
-        NumericDomain.Bounds runs = region().given(term, at).runsBetween(term);
+        NumericDomain.Bounds runs = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                region().given(term, at).projectionOf(term),
+                "a fixed position runs somewhere").bounds();
         assertNotNull(runs, "a fixed position runs somewhere");
         return "[" + runs.min().at().key() + ", " + runs.max().at().key() + "]";
     }
@@ -119,7 +122,7 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         Quantities quantities = quantities();
         NumericWitness.Standing stood = NumericWitness.of(quantities.region(), List.of(term),
                 each -> quantities.ordersOf(each).answered());
-        return stood.at() == null ? null : stood.at().get(term);
+        return stood instanceof NumericWitness.Standing.Found found ? found.at().get(term) : null;
     }
 
     private static SearchRegion region() {

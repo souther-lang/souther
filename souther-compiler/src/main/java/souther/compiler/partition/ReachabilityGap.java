@@ -52,6 +52,33 @@ public sealed interface ReachabilityGap {
     }
 
     /**
+     * The walk stated it, and the rules of the way it is on leave nothing.
+     *
+     * <p>Apart from {@link Uncomposed} and not one of its reasons, because it is not one. Every
+     * {@link Why} says what this composer did not manage, and a reader may act on none of them; this
+     * says what the model settles, and a reader may act on it (ADR-0091). Held as a fourth reason,
+     * the two kinds of news would be one list that a reader has to sort by hand — and the sentence
+     * saying a figure could be raised would be written for a condition no figure reaches.
+     *
+     * <p>No figure travels with it. Nothing was walked: the proof was there before any value was
+     * chosen, which is what makes it worth saying rather than what a search came to.
+     *
+     * <p><b>The condition is where the proof was met and not what the proof is about.</b> What was
+     * shown empty is the region the way narrowed — every condition on it taken together, and
+     * whatever the row has fixed — so this one is the place a reader is sent and not the one that
+     * closed it. Attributing the proof to the way itself is {@link Reachability}'s to do and is not
+     * done here; until it is, what a report says of this has to stay what is known, which is that
+     * the way's conditions leave nothing standing together.
+     */
+    record ProvedImpossible(OnTheWay.TakenIn condition) implements ReachabilityGap {
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
+        }
+    }
+
+    /**
      * What stopped a stated condition from being composed against.
      *
      * <p>Each says what this composer did rather than what the model says. A row is written without

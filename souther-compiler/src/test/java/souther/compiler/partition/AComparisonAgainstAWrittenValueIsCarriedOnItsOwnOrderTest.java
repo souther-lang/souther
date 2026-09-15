@@ -221,7 +221,9 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
                 taken(behavior, true), behavior + " is a bound on an order");
         SearchRegion narrowed = new WayToTheBorder(stating(behavior, true))
                 .narrowing(regionOf(behavior));
-        NumericDomain.Bounds runs = narrowed.runsBetween(bound.term());
+        NumericDomain.Bounds runs =
+                narrowed.projectionOf(bound.term()) instanceof NumericDomain.FormProjection.Within(
+                        NumericDomain.Bounds held) ? held : null;
         return "[" + end(runs == null ? null : runs.min()) + ", "
                 + end(runs == null ? null : runs.max()) + "]";
     }

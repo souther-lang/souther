@@ -55,9 +55,10 @@ record ARunOfThisMany(int many) implements SearchRegion {
      * directions would each hold half and the figure would be reached at twice the width.
      */
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return new NumericDomain.Bounds(new Endpoint(Count.of(0), true),
-                new Endpoint(Count.of(many - 1), true));
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return new NumericDomain.FormProjection.Within(
+                new NumericDomain.Bounds(new Endpoint(Count.of(0), true),
+                        new Endpoint(Count.of(many - 1), true)));
     }
 
     @Override

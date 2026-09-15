@@ -60,27 +60,81 @@ final class NumericWitness {
      */
     static Standing of(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
                        Function<NumericTerm, Carrier> on) {
+        // What the rules settle about the question, before any of it is looked for. Two ways for
+        // them to settle it and both are the region as it was handed over: it may admit no
+        // assignment at all, and it may admit one while leaving a position the question names
+        // nowhere to stand. The second is not the first — an input holding an empty collection is a
+        // value, and a position inside that collection has no value — and a walk that met either of
+        // them would spend what it is allowed on values the rules refuse and come back naming a
+        // figure.
+        if (within.emptiness().isPresent() || leavesNothing(within, terms)) {
+            return new Standing.ProvedImpossible();
+        }
         Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         return walk(within, terms, 0, on, standing, stoppedBy)
-                ? new Standing(standing, java.util.Set.of())
-                : new Standing(null, stoppedBy);
+                ? new Standing.Found(standing)
+                : new Standing.NotFound(stoppedBy);
     }
 
     /**
-     * Where the positions may stand together, or nothing, and what stopped this looking further.
+     * Whether the region leaves one of the positions the question names nowhere to stand.
      *
-     * <p>Two halves of one answer. A walk that tried every value it had and one that stopped at a
-     * figure of this compiler's both come back with nothing, and only the second names something a
-     * reader could raise.
+     * <p>Asked of the region as it was handed over and of nothing narrower. A position left nothing
+     * once some other has been fixed is that fixing's answer and not the question's — another value
+     * of the same position may leave it something — so a proof taken there would say of the whole
+     * question what holds of one branch of it.
      */
-    record Standing(Map<NumericTerm.FromOnePosition, Place> at,
-                    java.util.Set<CompositionBudget> stoppedBy) {
+    private static boolean leavesNothing(SearchRegion within,
+                                         List<NumericTerm.FromOnePosition> terms) {
+        return terms.stream().anyMatch(term ->
+                within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
+    }
 
-        Standing {
-            at = at == null ? null : Map.copyOf(at);
-            stoppedBy = java.util.Set.copyOf(stoppedBy);
+    /**
+     * Where the positions may stand together, or what this compiler knows about their standing
+     * nowhere.
+     *
+     * <p>Three answers and not two. A walk that tried every value it had, a walk that stopped at a
+     * figure of this compiler's, and rules that were shown to leave nothing all come back with no
+     * assignment — and a reader may act on the third as they may act on neither of the others
+     * (ADR-0091). Only the second names a figure somebody could raise.
+     *
+     * <p>Held as three cases rather than as a map beside a flag, so that a proof carrying a figure
+     * or an assignment cannot be written down at all: those were the pairs a reader would have had
+     * to know not to trust.
+     */
+    sealed interface Standing {
+
+        /** Where each position stands, which is an assignment the region admits. */
+        record Found(Map<NumericTerm.FromOnePosition, Place> at) implements Standing {
+
+            public Found {
+                at = Map.copyOf(at);
+            }
+        }
+
+        /**
+         * The rules leave the question nothing, which is the model's answer rather than this
+         * compiler's.
+         *
+         * <p>No figure travels with it and no assignment: nothing was walked, because the proof was
+         * there before any value was chosen.
+         */
+        record ProvedImpossible() implements Standing {}
+
+        /**
+         * Nothing was found, and nothing follows about whether an assignment exists.
+         *
+         * <p>{@code stoppedBy} is what a reader could raise, and it is empty as readily as not — a
+         * walk that tried everything it had to try is not a walk that walked everything there is.
+         */
+        record NotFound(java.util.Set<CompositionBudget> stoppedBy) implements Standing {
+
+            public NotFound {
+                stoppedBy = java.util.Set.copyOf(stoppedBy);
+            }
         }
     }
 
@@ -101,8 +155,28 @@ final class NumericWitness {
         }
         NumericTerm.FromOnePosition term = terms.get(at);
         Carrier carrier = on.apply(term);
-        NumericDomain.Bounds runs = within.runsBetween(term);
-        if (carrier == null || runs == null) {
+        if (carrier == null) {
+            return false;
+        }
+        // Where the term runs under what has been fixed so far. The rules leaving it nothing here is
+        // this branch's answer and not the question's: the values fixed above are what took it away,
+        // and another of them may leave it something. So the branch ends and the caller steps on,
+        // which is what it does with a value the rules refuse.
+        //
+        // The question's own answer was taken before any of this ran, where the region is the one
+        // that was handed over — read back as a range there, it would be the widest answer there is
+        // out of the narrowest region there is.
+        NumericDomain.Bounds runs;
+        switch (within.projectionOf(term)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> runs = held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return false;
+            }
+            case null -> {
+                return false;
+            }
+        }
+        if (runs == null) {
             return false;
         }
         Place first = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));

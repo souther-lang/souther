@@ -869,7 +869,14 @@ public final class GeneratedRows {
         };
     }
 
-    private static String why(Generator.UnresolvedCombination.Reason reason) {
+    /**
+     * What a reader is told about a search that wrote no row, in this surface's words.
+     *
+     * <p>Open to the package so that what each word says can be held to what the word means. A
+     * sentence that says more than the word does is the way a reader comes to act on something
+     * nothing established, and reading it back is the only way to ask whether one does.
+     */
+    static String why(Generator.UnresolvedCombination.Reason reason) {
         return switch (reason) {
             case NOTHING_COMPOSES_ONE ->
                     "nothing here could build a representative for it, which does not make one"
@@ -909,8 +916,13 @@ public final class GeneratedRows {
             // what any of the words above are about.
             case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE ->
                     "a value was found for it and this block already offers as many rows as it may";
+            // What the model settles, said without a word about how this compiler came to know it.
+            // Two routes reach here — a walk of the whole of what the rules leave that reached
+            // nothing, and a proof that was in hand before anything was walked — and a sentence
+            // saying everything was tried is false of the second and tells a reader of the first
+            // something they cannot act on either.
             case THE_RULES_LEAVE_NOTHING_THERE ->
-                    "the rules leave no value here, and every combination they do leave was tried";
+                    "the rules leave no value here";
             case ONE_POSITION_CANNOT_BE_BOTH ->
                     "it would need one position to be two things at once, which no value is, so"
                             + " there is no row to write";

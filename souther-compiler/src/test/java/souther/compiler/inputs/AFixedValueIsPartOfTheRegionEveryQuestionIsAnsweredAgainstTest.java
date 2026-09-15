@@ -57,9 +57,8 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
     /** Where {@code x} runs once {@code y} is fixed above the line {@code y <= 2x} draws. */
     @Test
     void aFormRunsWhereTheFixedCompanionPutsIt() {
-        NumericDomain.Bounds runs = related()
-                .given(term("y"), Count.of(BigDecimal.valueOf(100)))
-                .runsBetween(term("x"));
+        NumericDomain.Bounds runs = runsBetween(
+                related().given(term("y"), Count.of(BigDecimal.valueOf(100))), term("x"));
 
         assertNotNull(runs, "x is a number this reading answers about");
         assertNotNull(runs.min(), () -> "x starts where y <= 2x puts it once y stands, and runs "
@@ -71,9 +70,8 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
     /** And nothing else starts it, so the end above is the relation's doing. */
     @Test
     void andWithoutTheRelationNothingStartsIt() {
-        NumericDomain.Bounds runs = region()
-                .given(term("y"), Count.of(BigDecimal.valueOf(100)))
-                .runsBetween(term("x"));
+        NumericDomain.Bounds runs = runsBetween(
+                region().given(term("y"), Count.of(BigDecimal.valueOf(100))), term("x"));
 
         assertTrue(runs == null || runs.min() == null,
                 () -> "x is started by nothing once the relation is gone, and runs " + runs);
@@ -114,14 +112,25 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
      */
     @Test
     void aFixingReachesWhatTheRelationsReachAndNotOnlyItsNeighbour() {
-        NumericDomain.Bounds runs = related().assuming(minus("z", "y"), Rel.LE)
-                .given(term("z"), Count.of(BigDecimal.valueOf(100)))
-                .runsBetween(term("x"));
+        NumericDomain.Bounds runs = runsBetween(
+                related().assuming(minus("z", "y"), Rel.LE)
+                        .given(term("z"), Count.of(BigDecimal.valueOf(100))), term("x"));
 
         assertNotNull(runs, "x is a number this reading answers about");
         assertNotNull(runs.min(), () -> "x starts where z <= y <= 2x puts it, and runs " + runs);
         assertEquals("50", number(runs.min()),
                 "z at 100 under z <= y and y <= 2x leaves x at 50 and above");
+    }
+
+    /** Where the term runs, of a region that holds something — which every region here does. */
+    private static NumericDomain.Bounds runsBetween(SearchRegion within,
+                                                    NumericTerm.FromOnePosition term) {
+        return switch (within.projectionOf(term)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) -> runs;
+            case NumericDomain.FormProjection.NothingIsLeft _ ->
+                    throw new AssertionError("these rules leave a value: " + term);
+            case null -> null;
+        };
     }
 
     /** The region with {@code y - 2x <= 0} taken in. */
