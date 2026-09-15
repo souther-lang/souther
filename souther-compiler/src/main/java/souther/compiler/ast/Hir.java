@@ -52,6 +52,21 @@ public interface Hir {
     SourcePos pos();
 
     /**
+     * A shape the nodes hold as syntax, which is not a node in its own right.
+     *
+     * <p>Said by the shape rather than worked out about it. What a declaration is written as is the
+     * nodes here and the shapes they hold, and a reader that has to tell one of those from a value
+     * the compiler put beside a node has no way to: both are written wherever their own readers
+     * wanted them, and where a type sits says what its author found convenient rather than what it
+     * is. So a shape says so, and whoever writes one decides.
+     *
+     * <p>Nothing is carried. What is being said is which question a type answers, and a type that
+     * says it is syntax is read as syntax wherever the tree is read.
+     */
+    interface Shape {
+    }
+
+    /**
      * A node an author wrote, which therefore has a stretch of source as well as an anchor.
      *
      * <p>Here rather than on each kind of node that has one, because it is one rule: what a report

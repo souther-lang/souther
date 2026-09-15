@@ -47,7 +47,7 @@ import java.util.List;
  * replaced.
  */
 public record WrittenName(String canonical, String spelling, List<Region> segments,
-                          SourcePos anchor) {
+                          SourcePos anchor) implements Hir.Shape {
 
     public WrittenName {
         if (canonical == null) {

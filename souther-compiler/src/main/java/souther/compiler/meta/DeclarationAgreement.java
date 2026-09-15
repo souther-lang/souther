@@ -787,28 +787,22 @@ public final class DeclarationAgreement {
      * Whether it is a form of the grammar — something a declaration is written as, whose parts are
      * held one by one.
      *
-     * <p>Asked of where the type is declared rather than of a list. The tree is written in
-     * {@link Hir}'s package, and something declared elsewhere that arrives in a declaration is one
-     * of the front end's settled answers or a record this compile keeps about itself; reading a
-     * node's provenance as though it were a part would make a crossing depend on which pass wrote
-     * the node, which is not something a value can be read differently by.
+     * <p>Two ways of being one, and the grammar says both. A node is written inside {@link Hir},
+     * where being one of the tree's own kinds is what putting it there is for. A shape the nodes
+     * hold — a name as written, and whatever is written beside it later — says so by being a
+     * {@link Hir.Shape}, because a shape is its own file exactly when its readers wanted it there
+     * and where it sits answers nothing about what it is.
      *
-     * <p>The package and not {@link Hir} itself, because a shape a node holds is a form of the
-     * grammar wherever it is written down. A name as written carries a spelling and where the
-     * author put it, is held by node after node, and is its own file for the readers it answers
-     * rather than for being a different kind of thing. Where a form of the tree falls outside this,
-     * the comparison walks its parts with no account saying that is what to do with it.
+     * <p>Asked of the grammar and never of what surrounds a type. A package holds whatever its
+     * author found convenient, so reading one would hand a form's account to anything written
+     * beside the tree and take it from a shape written anywhere else; and the comparison's own
+     * erasing is an answer about what a crossing can see, so subtracting it here would settle what
+     * a thing is by what is done with it. Either way the account is bought with something nobody
+     * decided, which is what an account is for.
      *
-     * <p>Minus what the comparison erases, which is where the records this compile keeps about its
-     * own building are said once. They are written in the same package, and being written there is
-     * what they have in common with a form rather than anything a crossing can see.
-     *
-     * <p>This is the account and not the reading. Whether parts can be read off something is what
-     * {@code StructuralParts.areHandedOver} asks and is a fact about how the type is written;
-     * whether a crossing depends on them is this, and the walk that goes looking for declarations
-     * has to go inside an erased form all the same to find what it holds. Asked as one question,
-     * the erasing would reach that walk and a declaration held inside a record this compile keeps
-     * about itself would stop being found.
+     * <p>So a record beside the tree gets nothing from being beside it. What this compile keeps
+     * about its own building is answered where that is answered — the comparison erases it — and a
+     * type that is neither is undecided and says so.
      *
      * <p>Which of them is a form, and not which of them is a record. A record is how most are
      * written and a node whose own subsystem settled on writing it by hand is a form all the same —
@@ -816,26 +810,38 @@ public final class DeclarationAgreement {
      * and an enum or an interface there is neither.
      */
     static boolean isAFormOfTheGrammar(Class<?> type) {
-        return isWrittenWhereTheTreeIs(type) && !erases(type)
-                && (type.isRecord() || isANodeWrittenByHand(type));
+        if (type.isInterface() || type.isEnum()) {
+            return false;
+        }
+        if (Hir.Shape.class.isAssignableFrom(type)) {
+            return true;
+        }
+        return isDeclaredInsideHir(type)
+                && (type.isRecord() || Hir.class.isAssignableFrom(type));
+    }
+
+    /** Where it is written, not what it implements. Several nodes stand for a part of one rather
+     *  than for a node in their own right, so they are nested there without implementing it. */
+    private static boolean isDeclaredInsideHir(Class<?> type) {
+        for (Class<?> enclosing = type; enclosing != null;
+                enclosing = enclosing.getEnclosingClass()) {
+            if (enclosing == Hir.class) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Whether it is one of the tree's nodes written by hand rather than as a record.
+     * Whether it is a form of the grammar written by hand rather than as a record.
      *
-     * <p>What {@code StructuralParts} asks to know whether it can read parts off one. A node whose
-     * own subsystem settled on writing it out keeps the shape a record has, and a reader that took
-     * it for something with no parts would hold two of them by an equality and see none of what
-     * they are made of.
+     * <p>What {@code StructuralParts} asks to know whether it can read parts off one, records
+     * being the case it answers for itself. A form whose own subsystem settled on writing it out
+     * keeps the shape a record has, and a reader that took it for something with no parts would
+     * hold two of them by an equality and see none of what they are made of.
      */
     static boolean isANodeWrittenByHand(Class<?> type) {
-        return isWrittenWhereTheTreeIs(type) && !type.isRecord() && !type.isInterface()
-                && !type.isEnum() && Hir.class.isAssignableFrom(type);
-    }
-
-    /** Where the tree is written: the package {@link Hir} is in, and not {@link Hir} itself. */
-    private static boolean isWrittenWhereTheTreeIs(Class<?> type) {
-        return type.getPackageName().equals(Hir.class.getPackageName());
+        return !type.isRecord() && isAFormOfTheGrammar(type);
     }
 
     /**

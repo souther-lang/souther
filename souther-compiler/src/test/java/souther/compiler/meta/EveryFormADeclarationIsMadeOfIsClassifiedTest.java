@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
@@ -111,50 +112,25 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     }
 
     /**
-     * A shape a node holds is a form of the grammar wherever it is written down.
+     * A shape the nodes hold is a form of the grammar because it says it is one.
      *
-     * <p>Held here because the other way round is the one that says nothing: a form the tree is
-     * made of, answered about by no account, is walked part by part all the same and every part it
-     * reaches drops out of what anything has decided.
+     * <p>The three answers a type written beside the tree can have, and each comes from something
+     * that was decided rather than from where the file sits. A shape says it is syntax; a record
+     * this compile keeps about its own building is erased, and that is said of it once; and a
+     * record that is neither gets no account by being written next door.
      */
     @Test
-    void aShapeANodeHoldsIsAFormWhereverItIsWritten() {
+    void aShapeIsAFormBecauseItSaysSoAndNotBecauseOfWhereItIsWritten() {
         assertTrue(DeclarationAgreement.isAFormOfTheGrammar(WrittenName.class),
-                "a name as written is held by node after node and is a form of the grammar for"
-                        + " that, not for which file it is written in");
+                "a name as written is held by node after node and says it is syntax");
+        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(DefinitionName.class),
+                "and what a definition is filed under is written beside the tree and says nothing,"
+                        + " so it is a form of the grammar by nobody's decision");
         assertFalse(DeclarationAgreement.isAFormOfTheGrammar(RowPosition.Supplies.class),
-                "and what this compile numbered a row as is written in the same place and is not a"
-                        + " form: the comparison erases it, which is where it is said");
+                "nor is what this compile numbered a row as, which is written there too");
         assertTrue(StructuralParts.areHandedOver(RowPosition.Supplies.class),
                 "which is not the walk refusing to read it. Parts can be read off one, and the walk"
                         + " that looks for the declarations a crossing reaches reads them");
-    }
-
-    /**
-     * A form of the grammar is one the tree holds, and the tree is not everything written beside it.
-     *
-     * <p>Where a type is written answers which of the tree's own shapes it is, and answers it for
-     * everything else in the same package too. So what the sweep reaches from there is pinned: a
-     * type joining this list is one somebody put in a declaration's reach, and what it is is a
-     * decision — a form the tree holds, or a record this compile keeps about itself and erases.
-     */
-    @Test
-    void theOnlyShapeTheTreeHoldsFromOutsideItsOwnFileIsAName() {
-        List<String> beside = new ArrayList<>(new TreeSet<>(walkOfDeclarations().reached().stream()
-                .filter(t -> t.getPackageName().equals(Hir.class.getPackageName()))
-                .filter(t -> !t.getName().startsWith(Hir.class.getName() + "$"))
-                .map(Class::getName).toList()));
-
-        assertEquals(List.of(
-                        // What a construct was made from, and what a definition was made as: both
-                        // this compile's record of how it built its own tree, and both erased.
-                        "souther.compiler.ast.ConstructionOrigin",
-                        "souther.compiler.ast.DefinitionRole",
-                        // And the one shape the tree holds that is written in its own file.
-                        "souther.compiler.ast.WrittenName"),
-                beside,
-                "a declaration reaches these from where the tree is written, and each is answered"
-                        + " about by where it is rather than by what it is");
     }
 
     /**
