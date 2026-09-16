@@ -3894,8 +3894,9 @@ public final class Adequacy {
      * offer never asked for — and a behavior whose only work was the classes was offered nothing
      * and had a block written for it.
      *
-     * <p>So the plan and the rule search are built from this, and what an offer is made on is
-     * whether it holds anything. A reason added here reaches all of them.
+     * <p>So the criterion is one criterion. The plan a search walks and the rules it settles are
+     * built from this, the points say a boundary search is worth making and leave what it finds to
+     * it, and what an offer is made on is whether any of them holds something.
      */
     public record RowsOwed(String name, String behavior) implements Key<RowWork> {
 
@@ -3906,9 +3907,10 @@ public final class Adequacy {
 
         @Override
         public Answer<RowWork> compute(Db db) {
-            // The whole account, which is where every one of these but the classes was
-            // established. Read through the one way in, so that the half a surface forgets to ask
-            // for is not a half this one can forget either.
+            // The whole account, which is where the arms, the pairs, the meetings and the rules
+            // were established. The classes are the partition measure's and the points are the
+            // obligations', both below. Read through the one way in, so that the half a surface
+            // forgets to ask for is not a half this one can forget either.
             List<Finding> account = accountOf(db, name);
             Map<String, PartitionEvidence> coverage = db.ask(new Coverage(name)).value();
             if (account == null || coverage == null) {
@@ -3925,7 +3927,15 @@ public final class Adequacy {
                     .filter(each -> each.subject().isBehavior(behavior))
                     .filter(each -> each.weakenedBy().isEmpty())
                     .toList();
+            // The measure of this behavior's positions. Absent where the coverage holds none,
+            // which is a name this module declares no behavior of: the coverage answers for every
+            // behavior it prepared, so there is no such thing as a behavior it measured nothing
+            // about. Read as owing no class, a question about nothing would reach the generation
+            // as a behavior with nothing to write.
             PartitionEvidence measured = coverage.get(behavior);
+            if (measured == null) {
+                return Answer.absent();
+            }
             Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
             CoverageSites.Plan sites = checked == null ? CoverageSites.Plan.NONE : checked.plan();
 
@@ -3982,8 +3992,7 @@ public final class Adequacy {
                          About.AQuestionNothingAnswered _ -> { }
                 }
             }
-            return Answer.of(new RowWork(
-                    measured == null ? List.of() : classesOwed(measured),
+            return Answer.of(new RowWork(classesOwed(measured),
                     arms.values().stream().map(Generator.ArmOwed::new).toList(),
                     pairs, meetings, rules, pointsOwed(db, name, behavior)));
         }
@@ -3992,9 +4001,8 @@ public final class Adequacy {
          * The classes this behavior is owed a row at, in the words a plan is asked in.
          *
          * <p>The measure's own answer ({@link PartitionEvidence#classesOwed()}) and no reading of
-         * it here. A behavior the coverage query holds nothing for is owed nothing; reading the
-         * written rows a second time would be a list derived from something other than the
-         * evidence, which is the arrangement this replaces.
+         * it here. Reading the written rows a second time would be a list derived from something
+         * other than the evidence, which is the arrangement this replaces.
          */
         private static List<ClassOfAPosition> classesOwed(PartitionEvidence evidence) {
             // Gathered once apiece and handed over in the order the measure holds the positions
@@ -4149,9 +4157,9 @@ public final class Adequacy {
                 return Answer.absent();
             }
             // What this run is asked for, settled before the search and before anything that can
-            // stop it. Every way out of the generation below holds this same list, and so does the
-            // offer an editor makes in front of it: the reasons a row would be written are stated
-            // once ({@link RowsOwed}) and read here rather than gathered again.
+            // stop it. Every way out of the generation below holds this same list, and the offer an
+            // editor makes in front of it is made on the same criterion: what a row would be
+            // written for is settled by RowsOwed and read here rather than gathered again.
             RowWork work = db.ask(new RowsOwed(name, behavior)).value();
             if (work == null) {
                 return Answer.absent();

@@ -928,12 +928,17 @@ public final class Analyzer {
     /**
      * Whether the generation behind this offer would look for anything.
      *
-     * <p>Asked of what a generation is asked for ({@link Adequacy.RowsOwed}) and of nothing else.
-     * That list is what the block is composed from, so an offer made on it stands beside exactly
-     * the declarations a person taking it has rows to be handed — which is the whole of what this
-     * offer means. Answered here from the findings and the lines instead, the two were separate
-     * readings of one account: this one read half of it, and a behavior whose only work was the
-     * classes of its position was offered nothing and had a block written for it.
+     * <p>Asked of the criterion a generation is made on ({@link Adequacy.RowsOwed}) and of nothing
+     * else. The block behind this offer is composed against that same criterion, so an offer made
+     * on it stands beside every declaration a person taking it has rows to be handed. Answered here
+     * from the findings and the lines instead, the two were separate readings of one account: this
+     * one read half of it, and a behavior whose only work was the classes of its position was
+     * offered nothing and had a block written for it.
+     *
+     * <p>One direction, and it is the one worth having. A search asked for here may compose
+     * nothing — which is news about the search, and what {@link #resolve} answers with none — so
+     * what this promises is that nothing worth writing goes unoffered, not that everything offered
+     * can be written.
      *
      * <p>Asked of what is owed and never of what a search has composed. Whether a value has been
      * built turns on how much the build was measuring, and an offer that read it would appear at
@@ -941,7 +946,7 @@ public final class Analyzer {
      * one is paid by whoever takes the offer.
      */
     private static boolean thereAreRowsToWrite(Compilation compilation, String module,
-                                                   String behavior) {
+                                               String behavior) {
         RowWork work = compilation.db().ask(new Adequacy.RowsOwed(module, behavior)).value();
         return work != null && !work.isEmpty();
     }
