@@ -554,24 +554,32 @@ final class TermRealizations {
                     return new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
-                // Where the rules leave each of the taken numbers, which is about the way to the
-                // point rather than about the demand. Asked once for the group rather than of each
-                // candidate, and exhaustive over what a region answers: a region admitting no
-                // assignment leaves its number nowhere, which is a thing the rules say and not a
-                // value of the place failing to read back as one.
-                Map<RealizationTarget, NumericDomain.Bounds> leaves = new LinkedHashMap<>();
+                // What each of the taken numbers is asked, put together before a value is tried.
+                // Everything here is about the place and the way to the point, so a walk that
+                // worked it out per candidate would ask the same questions again at every value
+                // and answer them the same way.
+                List<Asked> readOfEach = new ArrayList<>();
                 for (RealizationTarget each : takenOfIt) {
+                    TermOrders of = measuring.ordersOf(each.term());
+                    NumericSet wanted = demands.get(each);
+                    if (of == null || of.answered() == null || wanted == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    // And where the rules leave the number on the way, which is exhaustive over
+                    // what a region answers: a region admitting no assignment leaves its number
+                    // nowhere, which is a thing the rules say and not a value of the place failing
+                    // to read back as one.
                     switch (within == null ? null : within.projectionOf(each.term())) {
                         case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                                leaves.put(each, held);
+                                readOfEach.add(new Asked(of, wanted, held));
                         case NumericDomain.FormProjection.NothingIsLeft _ -> {
                             return new Realization.None(Generator.UnresolvedCombination.Reason
                                     .NOTHING_COMPOSES_ONE);
                         }
                         // Nothing said about this number on the way, which leaves every value of
-                        // it standing. Written down as an entry all the same, so that what the
-                        // read-back walks is the group and not the part of it a region spoke about.
-                        case null -> leaves.put(each, null);
+                        // it standing.
+                        case null -> readOfEach.add(new Asked(of, wanted, null));
                     }
                 }
                 RuleReadingSource ruleSource = reading.source();
@@ -579,7 +587,7 @@ final class TermRealizations {
                 return firstThatBuilds(
                         admitting(onTheOrder(stands, orders, null, within),
                                 at -> everyNumberTakenOfItReadsBack(at, orders.observed(),
-                                        demands, leaves, measuring)),
+                                        readOfEach)),
                         at -> writtenAt(at, sourceType, answered, ruleSource));
             }
         }
@@ -1230,29 +1238,37 @@ final class TermRealizations {
      * <p>And what the rules leave the number on the way is asked beside the demand. A value whose
      * number is one the demand admits and the region does not is a value no row reaching the point
      * could stand at.
+     *
+     * <p>The place is asked of the carrier before it is made a value, because what a carrier can
+     * hold is the carrier's answer: a count past the end of the order it stands on is no value of
+     * it, and writing one out would be reading a place of some other carrier as one of these.
      */
-    private static boolean everyNumberTakenOfItReadsBack(
-            Place at, Carrier decoded,
-            SequencedMap<RealizationTarget, NumericSet> asked,
-            Map<RealizationTarget, NumericDomain.Bounds> leaves,
-            Quantities measuring) {
+    private static boolean everyNumberTakenOfItReadsBack(Place at, Carrier decoded,
+                                                         List<Asked> readOfEach) {
         Place on = decoded.onTheGrid(at);
         if (on == null) {
             return false;
         }
         ObservedValue standing = decoded.valueOf(on);
-        for (Map.Entry<RealizationTarget, NumericDomain.Bounds> each : leaves.entrySet()) {
-            TermOrders orders = measuring.ordersOf(each.getKey().term());
-            NumericSet wanted = asked.get(each.getKey());
-            if (orders == null || wanted == null
-                    || !(orders.read(standing) instanceof NumericTerm.Reading.Number(Place number))
-                    || !wanted.holds(number, orders.answered())
-                    || (each.getValue() != null && !each.getValue().admits(number))) {
+        for (Asked each : readOfEach) {
+            if (!(each.of().read(standing) instanceof NumericTerm.Reading.Number(Place number))
+                    || !each.wanted().holds(number, each.of().answered())
+                    || (each.leaves() != null && !each.leaves().admits(number))) {
                 return false;
             }
         }
         return true;
     }
+
+    /**
+     * One of the numbers taken of a value, and everything asked of it that is not the value.
+     *
+     * @param of     the orders its number is read and measured on
+     * @param wanted the numbers the rules leave it
+     * @param leaves where the way to the point leaves it, or null where nothing on the way spoke
+     *               of it
+     */
+    private record Asked(TermOrders of, NumericSet wanted, NumericDomain.Bounds leaves) { }
 
     /** An end of the quotients read on the other side of nought, which is what dividing by a
      *  negative number does to it. */
