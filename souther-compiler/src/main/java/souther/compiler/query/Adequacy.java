@@ -5095,11 +5095,15 @@ public final class Adequacy {
      *
      * <p>What a kind is, is what a measure found. Whether the model owes a row at it is not asked
      * here and cannot be: a kind is a coarsening of what the finding is about, and two subjects
-     * this puts under one word are not both obligations — so the answer lives with the subject
-     * ({@link About.OfAnObligation}) and every surface reads it there. What a build then does is
-     * decided where a build is — a kind about an obligation has to carry a diagnostic code, or a
-     * build would fail over something it never printed; the agreement is held by a test rather than
-     * by reading one off the other.
+     * this puts under one word need not both be obligations — so the answer lives with the subject
+     * ({@link About.OfAnObligation}) and every surface reads it there. Which subjects fall under
+     * which word is not held to keeping that answer askable here, either: a word that covers a
+     * subject a row is owed at and one it is not is a word that says less, and nothing above it
+     * turns on the difference.
+     *
+     * <p>What a build is told, where it is told anything, is the code beside the constant. Which
+     * findings a build acts on is the subject's, so that a finding it acts on carries a code is a
+     * fact about the pair and is held of the document rather than by reading either off the other.
      */
     public enum Kind {
         /** A case of the output no row expects. */
