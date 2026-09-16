@@ -60,26 +60,28 @@ final class StructuralParts {
      * are their own: a form whose construction is closed to everyone but the world that mints it is
      * written by hand for that, and nothing about it says how two of them are to be compared.
      *
-     * <p>A form of the grammar is asked something else first. It is walked into whatever it holds,
-     * so a part it keeps back is refused here rather than turning it into a form the walk stops at:
-     * the tree's own kinds are compared part by part, and one of them quietly becoming a leaf is a
-     * comparison left to whatever equality that form happens to have.
+     * <p>A form of the grammar is asked one thing more, and is not answered by it. It is walked into
+     * whatever it holds, so a part it keeps back is refused here rather than making it a form the
+     * walk stops at — and what comes back is still the reading, so being one of the tree's kinds is
+     * never itself the reason a form is taken apart.
+     *
+     * <p>A form holding nothing is read as the nothing it holds. Two of one class are one form,
+     * there being nothing else about either, and that is an answer this comparison reaches by
+     * itself; handed to an equality instead, a form written without one would put two builds'
+     * objects to the identity they do not share, and one declaration would disagree with itself.
      */
     static boolean areHandedOver(Class<?> type) {
-        if (type.isRecord()) {
-            return true;
-        }
-        if (DeclarationAgreement.isAFormOfTheGrammar(type)) {
-            refuseWhatIsKeptBack(type, inspect(type));
-            return true;
-        }
-        // Nothing to read off one of these, whatever fields the platform wrote inside it: a case of
-        // a closed set stands for itself, and an array and an interface are not a form at all.
+        // A kind whose class does not say which value is in hand: an enum has a constant for each
+        // of its cases, an array its elements, and an interface stands for its forms rather than
+        // being one. Read as nothing kept back, each would make two of them one.
         if (type.isInterface() || type.isEnum() || type.isArray() || type.isPrimitive()) {
             return false;
         }
         Inspection inspected = inspect(type);
-        return inspected.keptBack().isEmpty() && !inspected.handedOver().isEmpty();
+        if (DeclarationAgreement.isAFormOfTheGrammar(type)) {
+            refuseWhatIsKeptBack(type, inspected);
+        }
+        return inspected.keptBack().isEmpty();
     }
 
     /**
@@ -90,16 +92,11 @@ final class StructuralParts {
      * and an order that varies would make a comparison stop at a different part each run.
      */
     static List<Part> of(Class<?> type) {
-        if (type.isRecord()) {
-            List<Part> parts = new ArrayList<>(type.getRecordComponents().length);
-            for (RecordComponent component : type.getRecordComponents()) {
-                parts.add(new Part(component.getName(), component.getGenericType(),
-                        component.getAccessor()));
-            }
-            return parts;
-        }
         Inspection inspected = inspect(type);
         refuseWhatIsKeptBack(type, inspected);
+        if (type.isRecord()) {
+            return inspected.handedOver();
+        }
         List<Part> parts = new ArrayList<>(inspected.handedOver());
         parts.sort(Comparator.comparing(Part::name));
         return parts;
@@ -119,14 +116,23 @@ final class StructuralParts {
     /**
      * What {@code type} hands over and what it keeps back.
      *
-     * <p>A part is handed over by a final instance field with a no-argument method of the same name
-     * answering the type the field holds, which is the shape a record has. Each of the three is what
-     * it is for: what a part may hold is read off the field and what it does hold off the method, so
-     * a method answering something else is the two readers looking at two things; and a field that
-     * can be written again is a form compared for what it says now and asked about for what it can
-     * ever say.
+     * <p>A record hands over its components, which is what a record is. Anything else hands a part
+     * over by a final instance field with a no-argument method of the same name answering the type
+     * the field holds, which is that same shape written out. Each of the three is what it is for:
+     * what a part may hold is read off the field and what it does hold off the method, so a method
+     * answering something else is the two readers looking at two things; and a field that can be
+     * written again is a form compared for what it says now and asked about for what it can ever
+     * say.
      */
     private static Inspection inspect(Class<?> type) {
+        if (type.isRecord()) {
+            List<Part> components = new ArrayList<>(type.getRecordComponents().length);
+            for (RecordComponent component : type.getRecordComponents()) {
+                components.add(new Part(component.getName(), component.getGenericType(),
+                        component.getAccessor()));
+            }
+            return new Inspection(components, List.of());
+        }
         List<Part> handedOver = new ArrayList<>();
         List<String> keptBack = new ArrayList<>();
         for (Field field : type.getDeclaredFields()) {
