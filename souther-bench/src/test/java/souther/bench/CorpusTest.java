@@ -182,6 +182,43 @@ class CorpusTest {
                         + " series answers for what an edit costs a declaration that states one");
     }
 
+    /**
+     * That the offering figure is taken over runs that looked for rows and over one that searched a
+     * border.
+     *
+     * <p>The measurement this module went without. What {@code offer} is the time of is a search
+     * nothing a compile asks for reaches, so a figure for it can sit where it is while the walks it
+     * is named after are never taken — which is how the phase that charges the written tables came
+     * to be read as the cost of composing rows.
+     *
+     * <p>Out of running the measurement, as the figures above are, so what is asked about is what is
+     * reported. Both halves are asked of the corpora together: rows are offered wherever a behavior
+     * has a reading to compose one from, and a search that came back with nothing is what a model
+     * with numbers bounded by its rules has and a model without them does not. Required of each
+     * corpus, the second would be met by writing a border into a model that has no use for one.
+     *
+     * <p>One round and none to warm it, where the figures above take several. What is read here is
+     * what a search came back with, and that is the same on a cold store as on a warm one — while a
+     * round of this costs what many compiles of the same corpus cost, so rounds this does not read
+     * anything out of are minutes spent on a number nobody takes.
+     */
+    @Test
+    void theOfferingFigureIsTakenOverRunsThatSearchedForRows() {
+        int offers = 0;
+        int cameToNothing = 0;
+        for (Corpus corpus : Corpus.all()) {
+            RowOffering.Reached reached = RowOffering.timeOfferings(corpus, 0, 1).reached();
+            offers += reached.offers();
+            cameToNothing += reached.cameToNothing();
+        }
+        assertTrue(offers > 0,
+                "the offering figure is taken over runs that offer no row, so it sits where it is"
+                        + " however much looking for one costs");
+        assertTrue(cameToNothing > 0,
+                "no search these offerings made came back having composed nothing, so the figure"
+                        + " answers for none of the walks that look for a value at a border");
+    }
+
     /** And a corpus of one source is one on purpose, not one that lost its files: it names one
      *  module, so there was never a second file for it to have lost. */
     @Test
