@@ -168,7 +168,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     }
 
     /**
-     * And where no one value answers both numbers, no row is written for either class.
+     * And where nothing here writes one value for both numbers, no row is written for either class.
      *
      * <p>Two quotients of one whole number are two numbers of one location that nothing here
      * composes a value for together: which value answers both is solving for one from two of its
@@ -182,7 +182,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      * nothing of this compiler's to say why.
      */
     @Test
-    void twoClassesOfOneLocationNoValueAnswersTogetherComposeNoRow() {
+    void twoClassesOfOneLocationNothingHereSolvesTogetherComposeNoRow() {
         FillResult filled = filled(TWO_QUOTIENTS);
 
         assertEquals(List.of(), filled.rows(), "neither class is answered by a row");

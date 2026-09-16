@@ -215,16 +215,19 @@ final class TermRealizations {
      * no place in the spelling of a string, and a value answering both a length and an order is not
      * something below builds.
      *
-     * <p>Distinct parts, which is what makes them independent. Two asks at one part are two asks
-     * for one number and are the same target, so a group holding a part twice is a group somebody
-     * built by hand.
-     *
      * <p>One target is a number on its own, and the way of writing a value for it is the one every
      * other reader of this file asks for — so a caller need not ask whether a group has more than
-     * one member before asking this.
+     * one member before asking this. A group of none is not a question: what is asked for is the
+     * numbers of one location, and a location is asked for at least the number that brought a
+     * caller here.
      */
     static JointRealization jointRealizationOf(Collection<RealizationTarget> targets) {
-        if (targets.size() <= 1) {
+        // A builder is a thing a caller may call, so what comes back of a group with nothing in it
+        // would be a way of writing a value for no number. Which is not a group nobody wrote the
+        // solving for either: said as that, a caller that asked for nothing is told about this
+        // compiler's repertoire.
+        assert !targets.isEmpty() : "a group is the numbers of one location and has one of them";
+        if (targets.size() == 1) {
             return new JointRealization.Supported(new JointBuilder.OneNumberOnItsOwn());
         }
         SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
@@ -246,11 +249,17 @@ final class TermRealizations {
                 }
             }
         }
-        // Distinct parts and one spelling. Two targets at one part are one number asked for twice,
-        // and the parts of a time beside the parts of a date are two values; either way nothing
-        // below writes the group, which is the same thing to say of it.
-        if (Set.copyOf(times.values()).size() + Set.copyOf(dates.values()).size() != targets.size()
-                || !(times.isEmpty() || dates.isEmpty())) {
+        // Two asks at one part are two asks for one number and are the same target, so a group
+        // holding a part twice is a group somebody built by hand. Not a population this compiler
+        // writes none of: read as that, a caller handed a malformed group is told about the
+        // repertoire and goes looking for the solving nobody wrote.
+        assert Set.copyOf(times.values()).size() + Set.copyOf(dates.values()).size()
+                == targets.size() : "one part of one root is one number and one target";
+        // The parts of a time beside the parts of a date are a value spelled two ways, and what
+        // writes one is a builder for that spelling. Said as a group nobody wrote the solving for,
+        // because that is what it is: the day an operation answers a part of each, the group is
+        // owed a builder and this reports it rather than throwing.
+        if (!times.isEmpty() && !dates.isEmpty()) {
             return nothingSolvesAGroup();
         }
         return new JointRealization.Supported(times.isEmpty()
@@ -335,6 +344,10 @@ final class TermRealizations {
                 implements JointBuilder {
 
             public AtThoseTimeParts {
+                if (parts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a way of writing a value for some parts says which parts");
+                }
                 parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
             }
 
@@ -357,6 +370,10 @@ final class TermRealizations {
                 implements JointBuilder {
 
             public OnThoseDateParts {
+                if (parts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a way of writing a value for some parts says which parts");
+                }
                 parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
             }
 
@@ -393,37 +410,6 @@ final class TermRealizations {
             }
             return observed;
         }
-    }
-
-    /**
-     * The values to write at one root so that every one of these numbers is its answer.
-     *
-     * <p><b>One call for the whole of what a location was asked for.</b> Asked once per number and
-     * the answers combined afterwards, there is nothing to combine: two values were built for one
-     * place and the row holds whichever was written last, which is the point answered for one of
-     * its numbers and offered as answered for both.
-     *
-     * <p>A group of one is {@link #at}, and is not a second way of doing what that does. Every
-     * location the composer writes comes through here, so the case that grew the vocabulary is the
-     * case with one number in it rather than the case the code was written for.
-     *
-     * <p>What a group nothing here writes a value for comes back as is a population this compiler
-     * offers none of, which is what {@link #jointRealizationOf} answers before anything is built —
-     * so a caller that asked is not told that no such value exists.
-     *
-     * <p>What each number is measured on is read per term and not handed in, for the reason the
-     * single one reads it: a term this reading measures somewhere else is a term whose value would
-     * be written on a carrier a caller found elsewhere.
-     */
-    static Realization together(Type sourceType, SequencedMap<RealizationTarget, Place> demands,
-                                Quantities measuring,
-                                SearchRegion within,
-                                RuleReadingContext reading) {
-        SequencedMap<RealizationTarget, NumericSet> asked = new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
-            asked.put(each.getKey(), new NumericSet.At(each.getValue()));
-        }
-        return allSatisfying(sourceType, asked, measuring, within, reading);
     }
 
     /**
@@ -1006,6 +992,9 @@ final class TermRealizations {
      * nothing admitted is a time nothing answers rather than a combination this did not find. The
      * parts of a date are not like this, and {@link #onThoseParts} is where that is answered.
      *
+     * <p>At least one part, which both callers hold to: a group of them says which parts it is for
+     * ({@link JointBuilder.AtThoseTimeParts}) and a single number is the part it is of.
+     *
      * <p>The order is handed in and not named here. That what this is taken of is a time is the
      * arm's own condition and the library is held to it, but which carrier a time is written on is
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
@@ -1014,7 +1003,7 @@ final class TermRealizations {
     private static Realization atThoseParts(Map<TakenAs.TimePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
-        if (observed == null || parts.isEmpty()) {
+        if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -1060,6 +1049,9 @@ final class TermRealizations {
      * would be days no date has, and a rule about the thirty-first would have no witness for a
      * reason that is about this choice rather than about the calendar.
      *
+     * <p>At least one part, as the time above has: a group says which parts it is for
+     * ({@link JointBuilder.OnThoseDateParts}) and a single number is the part it is of.
+     *
      * <p>Whether a date can have the part at all is asked of the calendar and not of the bound the
      * operation declares. A bound is what the model may assume of an answer; what dates there are is
      * what a witness can be built from, and reading the second off the first would make a bound
@@ -1068,7 +1060,7 @@ final class TermRealizations {
     private static Realization onThoseParts(Map<TakenAs.DatePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
-        if (observed == null || parts.isEmpty()) {
+        if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }

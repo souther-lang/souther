@@ -4556,8 +4556,9 @@ public final class Generator {
             Edge composed = edgeAt(subject, group.getValue(), subject.quantities().region());
             if (composed.values().isEmpty()) {
                 // What the composing said, and not a sentence about the location holding two
-                // values: a location asked for numbers no one value answers is what that reader
-                // reports, in the words it reports it in.
+                // values: a location asked for numbers nothing here writes one value for is what
+                // that reader reports, in the words it reports it in. Which are never that no such
+                // value exists — whether one does is not a question anything on this route asked.
                 //
                 // And with the word what it met, for the reason every other reader of an edge
                 // carries it: the word says the question is open and only this says whether
