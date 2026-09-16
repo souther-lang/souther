@@ -39,6 +39,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
 
+    /** The rows have met every point of the border, which is what makes this question due. What
+     *  happens before that is its own case below. */
+    private static final boolean MET = true;
+
     /** Rows that leave `-3 * x + y = 0` standing beside `-2 * x + y = 0`: every one of them answers
      *  the same under both. */
     private static final int[][] ALIKE_UNDER_BOTH = {{0, 0}, {0, 1}, {13, 23}, {12, 24}};
@@ -102,10 +106,10 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     void aRuleThatNamesAValueIsAQuestionNobodyHereCanPut() {
         Border names = TheLinesBesideABorder.aBorderThatNamesAValue();
 
-        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names,
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(names, ALIKE_UNDER_BOTH),
-                        Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE),
-                List.of());
+                        Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
 
         AnotherLineTheRowsAllow.CouldNotTell open =
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
@@ -118,11 +122,11 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     @Test
     void andABoundOnOnePositionIsAQuestionThatDoesNotArise() {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(
-                TheLinesBesideABorder.aBoundOnOnePosition(),
+                TheLinesBesideABorder.aBoundOnOnePosition(), MET,
                 () -> {
                     throw new AssertionError("the rows are not read for a line with no neighbour");
                 },
-                List.of());
+                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
 
         assertEquals(new AnotherLineTheRowsAllow.NoSuchQuestion(
                         AnotherLineTheRowsAllow.Reason.THE_LINE_IS_ON_ONE_POSITION), said,
@@ -148,9 +152,9 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     private static AnotherLineTheRowsAllow of(int[][] rows,
                                               StandingAtAPoint.ReadingsTried tried) {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
-        return AnotherLineTheRowsAllow.of(border,
-                () -> new StandingAtAPoint.RowsRead(rowsOf(border, rows), Set.of(), tried),
-                List.of());
+        return AnotherLineTheRowsAllow.of(border, MET,
+                () -> new StandingAtAPoint.RowsRead(rowsOf(border, rows), Set.of(), tried, false),
+                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
     }
 
     /** One reading per row, each value on the term the quantity reads it at. */
@@ -221,14 +225,83 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         return new BorderAssessment(border, items, beside);
     }
 
+    /**
+     * A line the two part company with only where no row arrives is not a line anybody can be shown.
+     *
+     * <p>The rows are the ones that leave {@code -3 * x + y = 0} standing, so what moves between
+     * this and the first case is the way to the border and nothing else. Here the way holds
+     * {@code x} at nought, and every input the two lines answer differently at has {@code x}
+     * somewhere else — so the two are one line as far as a row of this behavior goes, and there is
+     * no fault to name.
+     */
+    @Test
+    void aLineThatPartsCompanyWhereNoRowArrivesIsNotNamed() {
+        Border border = TheLinesBesideABorder.aLineOverTwoPositions();
+
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
+                () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
+                        Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                List.of(), TheLinesBesideABorder.aWayThatHoldsXAtNought());
+
+        AnotherLineTheRowsAllow.CouldNotTell open =
+                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
+                        () -> "the rows leave a line standing and no row reaches where it differs: "
+                                + said);
+        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher.class,
+                open.why(), "which is what is missing, and not a row");
+    }
+
+    /**
+     * And a condition on the way that nothing here took in turns every input away.
+     *
+     * <p>What such a way leaves is not known to be what reaches the border, so an input past it is
+     * one nothing here can say a row arrives at. Read as arriving, a line two borders part company
+     * at somewhere unreachable would go out as a fault and the row asked for would show nothing.
+     */
+    @Test
+    void andAConditionNothingTookInLeavesNothingToNameEither() {
+        Border border = TheLinesBesideABorder.aLineOverTwoPositions();
+
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
+                () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
+                        Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                List.of(), TheLinesBesideABorder.aWayWithAConditionNobodyRead());
+
+        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher.class,
+                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said).why(),
+                "nothing here can say a row arrives past a condition nobody took in");
+    }
+
+    /**
+     * And before the rows have met the border's points, the question is not due and the rows are
+     * not read for it.
+     *
+     * <p>Which is the whole of what keeps one border from being two sentences. A border short of a
+     * row at one of its points is short of the rows that show where it falls, and a row written for
+     * that may well answer this one too.
+     */
+    @Test
+    void andTheQuestionIsNotDueBeforeTheRowsHaveMetThePoints() {
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(
+                TheLinesBesideABorder.aLineOverTwoPositions(), false,
+                () -> {
+                    throw new AssertionError("the rows are not read before the question is due");
+                },
+                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+
+        assertEquals(AnotherLineTheRowsAllow.NOT_DUE_YET, said,
+                "what the rows are short of here is what the points say they are short of");
+    }
+
     /** Held apart from the cases above so the reasons a walk gives are the subject there. */
     @Test
     void aWalkThatMetAReadingGapIsAsShortAsOneThatStopped() {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
-        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border,
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
-                        Set.of(ReadingGap.NO_VALUE), StandingAtAPoint.ReadingsTried.EVERY_ONE),
-                List.of());
+                        Set.of(ReadingGap.NO_VALUE), StandingAtAPoint.ReadingsTried.EVERY_ONE,
+                        false),
+                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
 
         assertNotNull(said);
         assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,

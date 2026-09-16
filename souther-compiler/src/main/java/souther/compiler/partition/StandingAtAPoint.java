@@ -251,16 +251,46 @@ public final class StandingAtAPoint {
      * rows leave nothing else standing may do so from part of them, and one naming a line they do
      * leave standing may not. The same asymmetry {@link Met} has, the other way up, and for the same
      * reason — what a partial walk establishes is on the side its constraints push.
+     *
+     * <p><b>And of the rows that reached the rule, which is the same universe {@link #met} is over.</b>
+     * A row that never got an answer out of the comparison says nothing about where its line falls:
+     * its values are a point of the input and not an observation of this border, and holding a line
+     * against it would rule out a line on the strength of a row that never met one. So the rule is
+     * the one a point is met by — where meeting takes the comparison having run, a row is read only
+     * where a run was watched getting an answer out of it, and where writing the value is the whole
+     * of it, every row is read.
+     *
+     * <p>A row nothing watched is neither: it may have reached and it may not, and dropping it
+     * quietly would leave more lines standing than the rows allow. It is gone without, and this says
+     * so.
+     *
+     * @param watched every place a run through the comparison this line's rule was read from is
+     *                recorded, empty where standing at the value is the whole of reaching it
      */
     public static RowsRead valuesOf(MeasuredInput.BorderReading line,
-                                    List<ObservedInputs> observed) {
+                                    List<ObservedInputs> observed,
+                                    List<ComparisonEmissionSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean stoppedShort = false;
+        boolean unwatched = false;
         for (ObservedInputs one : observed) {
+            if (!watched.isEmpty()) {
+                switch (one.watched()) {
+                    case Generator.Watched.Ran(var account) -> {
+                        if (!gotAnAnswerOutOfTheRule(watched, account)) {
+                            continue;   // it ran and never met this rule, so it says nothing here
+                        }
+                    }
+                    case Generator.Watched.NoAccount _ -> {
+                        unwatched = true;
+                        continue;
+                    }
+                }
+            }
             Map<TermPath, Integer> held = new LinkedHashMap<>();
             OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             Readings readings = readings(where, one, quantity, first, held);
@@ -281,21 +311,24 @@ public final class StandingAtAPoint {
             }
         }
         return new RowsRead(read, unreadable, stoppedShort
-                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS) : ReadingsTried.EVERY_ONE);
+                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS) : ReadingsTried.EVERY_ONE,
+                unwatched);
     }
 
     /**
      * What the rows came to at one quantity, and what the walk over them went without.
      *
-     * @param each  one entry per reading of a row that read as numbers, in the order they were
-     *              walked. A row with no value at the quantity has no entry and is no absence: it
-     *              says nothing about where any line falls
-     * @param why   whatever stopped a reading of a row that was not read
-     * @param tried whether the readings walked are all the readings there are
+     * @param each      one entry per reading of a row that read as numbers, in the order they were
+     *                  walked. A row with no value at the quantity has no entry and is no absence:
+     *                  it says nothing about where any line falls
+     * @param why       whatever stopped a reading of a row that was not read
+     * @param tried     whether the readings walked are all the readings there are
+     * @param unwatched whether some row was left out for nothing having watched its run, so that
+     *                  whether it reached the rule could not be told
      */
     public record RowsRead(
             List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> each,
-            Set<ReadingGap> why, ReadingsTried tried) {
+            Set<ReadingGap> why, ReadingsTried tried, boolean unwatched) {
 
         public RowsRead {
             each = List.copyOf(each);
@@ -306,10 +339,10 @@ public final class StandingAtAPoint {
             }
         }
 
-        /** Whether every reading of every row was read, which is what a caller naming a line the
-         *  rows allow has to have. */
+        /** Whether every reading of every row that reached the rule was read, which is what a
+         *  caller naming a line the rows allow has to have. */
         public boolean everyOne() {
-            return why.isEmpty() && tried instanceof ReadingsTried.EveryOne;
+            return why.isEmpty() && !unwatched && tried instanceof ReadingsTried.EveryOne;
         }
     }
 

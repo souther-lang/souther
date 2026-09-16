@@ -20,6 +20,7 @@ import souther.compiler.partition.LineOrigin;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -61,6 +62,40 @@ final class TheLinesBesideABorder {
     static Border aBoundOnOnePosition() {
         return over(ordered(), new BorderQuantity.OfACoordinate("f", X,
                 TermOrdersFixtures.itself(X, WHOLE)));
+    }
+
+    /**
+     * A way to the border that holds {@code x} at nought, which is what two guards either side of a
+     * value leave.
+     *
+     * <p>Every input the lines one step from {@code -2 * x + y} part company with this one at has
+     * {@code x} somewhere else, so this is a way that makes them one line as far as a row goes.
+     */
+    static souther.compiler.partition.WayToTheBorder aWayThatHoldsXAtNought() {
+        Map<NumericTerm, BigDecimal> onlyX = new LinkedHashMap<>();
+        onlyX.put(X, BigDecimal.ONE);
+        return new souther.compiler.partition.WayToTheBorder(List.of(
+                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
+                        new souther.compiler.partition.TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.ZERO, onlyX),
+                                souther.compiler.numeric.Rel.LE)),
+                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
+                        new souther.compiler.partition.TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.ZERO, onlyX),
+                                souther.compiler.numeric.Rel.GE))));
+    }
+
+    /** And one holding a condition nothing turned into something a row can be held against. */
+    static souther.compiler.partition.WayToTheBorder aWayWithAConditionNobodyRead() {
+        return new souther.compiler.partition.WayToTheBorder(List.of(
+                new souther.compiler.partition.OnTheWay.Declined(
+                        new souther.compiler.partition.ConditionOccurrence("f", 0), anchor(),
+                        new souther.compiler.partition.OnTheWay.Declined.Why.NoWordsForTheShape())));
+    }
+
+    private static souther.compiler.partition.ConditionReportAnchor anchor() {
+        return new souther.compiler.partition.ConditionReportAnchor.WhereTheReadingMetIt("m",
+                new souther.compiler.partition.ConditionOccurrence("f", 0));
     }
 
     /** What the rows are weighed by: {@code x} at minus two and {@code y} at one. */

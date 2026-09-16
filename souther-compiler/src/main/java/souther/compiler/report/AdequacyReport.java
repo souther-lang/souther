@@ -6158,6 +6158,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NO_STRATEGY_FOR_THE_RULE -> WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED;
                 case THE_ROWS_ARE_ALL_ON_ONE_SIDE ->
                         WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE;
+                case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;
+                case NO_REACHABLE_DISTINGUISHER ->
+                        WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER;
             };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->

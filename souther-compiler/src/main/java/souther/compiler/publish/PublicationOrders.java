@@ -343,6 +343,8 @@ public final class PublicationOrders {
                 WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED,
                 WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED,
                 WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
+                WeakeningWord.A_BORDERS_RUN_NOT_WATCHED,
+                WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
                 WeakeningWord.BODIES_NOT_ELABORATED,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,

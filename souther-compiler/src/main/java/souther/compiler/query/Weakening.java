@@ -201,7 +201,13 @@ public sealed interface Weakening {
             NO_STRATEGY_FOR_THE_RULE,
             /** Every row the quantity has a value at falls on one side of the line, so the rows pin
              *  no threshold on any line beside it. */
-            THE_ROWS_ARE_ALL_ON_ONE_SIDE
+            THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+            /** A row was left out because nothing watched its run, so whether it reached the rule
+             *  could not be told. */
+            NOTHING_WATCHED_THE_RUNS,
+            /** A line beside it stands after every row, and nothing here could show an input the
+             *  two answer differently at that a row still arrives at. */
+            NO_REACHABLE_DISTINGUISHER
         }
 
         public ABorderNotHeldAgainstTheLinesBesideIt {
@@ -209,11 +215,21 @@ public sealed interface Weakening {
             java.util.Objects.requireNonNull(why, "a question not put says what stood in the way");
         }
 
-        /** No allowance of this compiler stopped either of them: one wants a strategy nobody has
-         *  written and the other wants a row nobody has. */
+        /**
+         * Asked of what stood in the way, because they do not answer alike.
+         *
+         * <p>A strategy nobody has written and rows that fall all on one side are not allowances:
+         * one wants code and the other wants a row, and every run of this compiler over this model
+         * says the same. What a run watched is an allowance — the arms are instrumented because a
+         * build asked for them — so a run allowing more need not leave the same rows out.
+         */
         @Override
         public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
+            return switch (why) {
+                case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+                     NO_REACHABLE_DISTINGUISHER -> RunSensitivity.UNAFFECTED;
+                case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;
+            };
         }
     }
 

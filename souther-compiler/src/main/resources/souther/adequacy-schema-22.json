@@ -223,6 +223,8 @@
           "border_readings_not_exhausted",
           "lines_beside_a_border_not_tried",
           "a_borders_rows_are_all_on_one_side",
+          "a_borders_run_not_watched",
+          "no_reachable_distinguisher_for_a_border",
           "rule_unread",
           "position_not_read",
           "question_unanswered",

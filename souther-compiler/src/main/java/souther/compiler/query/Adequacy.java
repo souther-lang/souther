@@ -3052,9 +3052,11 @@ public final class Adequacy {
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), subject, observed, level,
                         ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term())), numbering));
+                                partitioning.edgeIsKnownWritable(axis.term())), numbering,
+                        partitioning.reaching()));
             }
-            out.addAll(Coverages.assessBetween(subject, observed, level, numbering));
+            out.addAll(Coverages.assessBetween(subject, observed, level, numbering,
+                    partitioning.reaching()));
             return new LineReadings(out);
         }
 
@@ -6423,26 +6425,25 @@ public final class Adequacy {
         private static void linesNotToldApart(String behavior, List<BorderAssessment> lines,
                                               Measure<List<BorderObligationPointAssessment>> account,
                                               List<Finding> out) {
-            // Every point met, and at least one point owed. A border the rules leave no value at
-            // any point of is owed no row at all, so there is nothing the rows were asked to show
-            // about it and nothing they can be short of — asked of one, this would name a line
-            // against rows that were never owed against the line either.
+            // Of the lines this behavior's account owes, and of no others. A line a declaration
+            // drew is owed once for the module and is answered under that declaration, the way its
+            // points are — reported here, one line would be shown under every behavior that reads
+            // it, and each of them would be asking for a row somebody else owes.
+            //
+            // Whether the rows have met its points is not asked here. That is a condition of the
+            // question rather than of the finding, and the answer carries it
+            // ({@link AnotherLineTheRowsAllow.NotDueYet}) — asked in both places, one of them would
+            // be the rule and the other would be a copy of it going out of step.
             java.util.Set<souther.compiler.partition.BorderObligationId> owes =
-                    new LinkedHashSet<>();
-            java.util.Set<souther.compiler.partition.BorderObligationId> stillOwed =
                     new LinkedHashSet<>();
             for (BorderObligationPointAssessment owed
                     : account == null ? List.<BorderObligationPointAssessment>of()
                             : account.made().orElseGet(List::of)) {
                 owes.add(owed.point().line());
-                if (!(owed.item().disposition() instanceof ObligationDisposition.Met)) {
-                    stillOwed.add(owed.point().line());
-                }
             }
             for (BorderAssessment line : lines) {
                 if (line.beside() instanceof AnotherLineTheRowsAllow.OneDoes named
-                        && owes.contains(line.border().obligation())
-                        && !stillOwed.contains(line.border().obligation())) {
+                        && owes.contains(line.border().obligation())) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior), named,
                             new About.ALineTheRowsDoNotTellFromAnother(line)));
                 }

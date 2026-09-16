@@ -95,6 +95,16 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .NO_STRATEGY_FOR_THE_RULE));
+            // The two lines part company only where nothing here can say a row arrives, which is a
+            // question about the way to the border rather than about the rows.
+            case AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NO_REACHABLE_DISTINGUISHER));
+            case AnotherLineTheRowsAllow.Unsettled.TheRunsWereNotWatched _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NOTHING_WATCHED_THE_RUNS));
         };
     }
 

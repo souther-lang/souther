@@ -94,6 +94,27 @@ public enum WeakeningWord {
      */
     A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
 
+    /**
+     * A row was left out of what a border was held against because nothing watched its run.
+     *
+     * <p>Beside the two above because a run allowing more need not leave the same rows out, and
+     * beside {@link #DECISION_RUN_NOT_WATCHED} because the two are about different measures: that
+     * one is a run this compiler could not place among the rules of a decision, and this is a row
+     * whose reaching a comparison could not be told. A consumer joining them would be told one
+     * thing about two.
+     */
+    A_BORDERS_RUN_NOT_WATCHED,
+
+    /**
+     * A line beside a border stands after every row, and no input the two answer differently at is
+     * one a row still arrives at the border by.
+     *
+     * <p>So the two are one line as far as this behavior goes, or the way to the border holds a
+     * condition nothing here took in — and which of those it is, is not established. A consumer acts
+     * on it as it acts on the rest: what is missing is this compiler's, and no row settles it.
+     */
+    NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

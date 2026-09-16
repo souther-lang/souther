@@ -166,6 +166,17 @@ public sealed interface AnotherLineTheRowsAllow {
         }
 
         /**
+         * A row was left out because nothing watched its run, so whether it reached the rule could
+         * not be told.
+         *
+         * <p>Which is not a row that says nothing. A row that ran and never got an answer out of
+         * this comparison is an answer about that row and is left out with nothing gone without;
+         * this one may have reached and may not, and a line that stands after the rest of the rows
+         * is one it might have ruled out.
+         */
+        record TheRunsWereNotWatched() implements Unsettled {}
+
+        /**
          * Every row this quantity has a value at falls on one side of the line.
          *
          * <p>So the rows pin no threshold on any line beside it, and every one of them stands.
@@ -178,6 +189,19 @@ public sealed interface AnotherLineTheRowsAllow {
          * the rule and the other does not.
          */
         record TheRowsAreAllOnOneSide() implements Unsettled {}
+
+        /**
+         * A line beside this one stands after every row, and nothing here could show an input that
+         * tells the two apart and reaches this rule.
+         *
+         * <p>Which is what a line beside this one has to have to be a fault anybody could show. Two
+         * lines that part company only where the rules never send a row are one line as far as this
+         * behavior is concerned, and naming the second of them would be asking for a row that shows
+         * nothing. So an input is named only where the conditions on the way to the rule answer the
+         * same at it as at a row that reached — and where one of them could not be read, or the
+         * arithmetic does not come out in whole steps, this is what is left.
+         */
+        record NoReachableDistinguisher() implements Unsettled {}
 
         /**
          * There is a line beside this one and this compiler holds no border against it.
@@ -200,6 +224,21 @@ public sealed interface AnotherLineTheRowsAllow {
         /** A rule that names a value rather than ordering the values around it. */
         A_RULE_THAT_NAMES_A_VALUE
     }
+
+    /**
+     * The rows have not yet met the points of this border, so this question is not due.
+     *
+     * <p><b>The question after the points and never instead of them.</b> A border short of a row at
+     * one of its points is already short of the rows that show where it falls, and what the rows
+     * leave standing beside it is asked of a border every point of which a row is at. Asked sooner,
+     * an author is given two sentences about one border, the second of which the first one's row may
+     * well answer — and a border whose kept side the rules leave no value at would be held open on a
+     * row nobody could ever write.
+     *
+     * <p>So this is settled without being answered, and weakens nothing: what the rows are short of
+     * here is what the points say they are short of, said once, where it is owed.
+     */
+    record NotDueYet() implements AnotherLineTheRowsAllow {}
 
     /**
      * There is no line one step from this one, so there is nothing here to ask.
@@ -231,6 +270,8 @@ public sealed interface AnotherLineTheRowsAllow {
 
     AnotherLineTheRowsAllow NONE_DOES = new NoneDoes();
 
+    AnotherLineTheRowsAllow NOT_DUE_YET = new NotDueYet();
+
     /**
      * What the rows leave standing beside {@code boundary}.
      *
@@ -239,8 +280,10 @@ public sealed interface AnotherLineTheRowsAllow {
      * would put a reader in front of a list every entry of which is the same row to write.
      */
     static AnotherLineTheRowsAllow of(souther.compiler.partition.Border border,
+                                      boolean everyPointMet,
                                       java.util.function.Supplier<StandingAtAPoint.RowsRead> read,
-                                      List<OrderedAffineBoundary> elsewhere) {
+                                      List<OrderedAffineBoundary> elsewhere,
+                                      souther.compiler.partition.WayToTheBorder way) {
         // The two ways a border is not a line another line can be written beside, told apart. A
         // rule that names a value orders nothing and has no side to keep a row on; a rule on an
         // order with no numbers has no weights to write differently. Read off one answer, either
@@ -266,6 +309,12 @@ public sealed interface AnotherLineTheRowsAllow {
             // Weighed every way one step allows and every one of them is this line. There is
             // nothing to be told from, which is the same fact the reasons above are.
             return new NoSuchQuestion(Reason.THE_LINE_IS_ON_ONE_POSITION);
+        }
+        // And the rows have met its points. Asked sooner, a border the rows have not caught up with
+        // would be held open on what the points already say — and one whose kept side the rules
+        // leave no value at would be held open on a row nobody could ever write.
+        if (!everyPointMet) {
+            return NOT_DUE_YET;
         }
         // And now the rule. There is a line one step from this one, and a rule that names a value
         // orders nothing — so it has no side to keep a row on and nothing here holds it against its
@@ -298,12 +347,27 @@ public sealed interface AnotherLineTheRowsAllow {
             if (cut == null) {
                 continue;
             }
+            // What was gone without, in the words of the thing that went without it. A row nothing
+            // watched and a reading that came to nothing are two different things to do about, so
+            // the first is answered before the second rather than folded into the reasons a reading
+            // answers in.
+            if (rows.unwatched()) {
+                return new CouldNotTell(new Unsettled.TheRunsWereNotWatched());
+            }
             if (!rows.everyOne()) {
                 return new CouldNotTell(new Unsettled.RowsIncomplete(
                         ReadingReasons.of(rows.why(), rows.tried())));
             }
-            return new OneDoes(other, cut,
-                    partingAt(boundary, other, cut, satisfying, refusing, elsewhere));
+            // And an input the two part company at that the rules do send a row to. A line this
+            // one parts company with only where nothing arrives is the same line here, so it is no
+            // fault and this walks on to the next; where nothing could show either, the question
+            // stands rather than being answered by whichever way it fell.
+            Map<NumericTerm, Place> parting =
+                    partingAt(boundary, other, cut, satisfying, refusing, elsewhere, way);
+            if (parting == null) {
+                return new CouldNotTell(new Unsettled.NoReachableDistinguisher());
+            }
+            return new OneDoes(other, cut, parting);
         }
         // Nothing stands, which the rows that were read establish however few of them there were:
         // a row read leaves fewer lines standing and never more, so a line none of these allows is
@@ -365,19 +429,20 @@ public sealed interface AnotherLineTheRowsAllow {
      * reach. A step is whole numbers of each position's own units, and where a position has no value
      * at the number it lands on there is nothing here to name.
      *
-     * <p><b>And the ones the model's other rules keep come first.</b> An input the two lines answer
-     * differently at is a row that tells them apart, and a row whose answer another rule settles
-     * before this line is consulted tells a reader nothing they can see — the two lines part company
-     * there and the behavior answers the same either way. So the inputs every other line of this
-     * behavior is satisfied at are preferred, and the nearest of those is named; where the rules
-     * leave none, the nearest input of any kind is still an input the two part company at, and it is
-     * said rather than nothing.
+     * <p><b>And it has to be an input the rules send a row to.</b> Two lines that part company only
+     * where nothing arrives at this rule are one line as far as this behavior goes, so naming the
+     * second of them would be asking for a row that shows nothing. What says a step keeps the input
+     * arriving is the way to the border: every condition on it has to answer the same at the input
+     * as it did at the row the step began from, and that row arrived. A condition this compiler
+     * could not take in is one nothing here can answer that of, so a way holding one names no input
+     * at all.
      */
     private static Map<NumericTerm, Place> partingAt(OrderedAffineBoundary boundary,
                                                      QuantityKey other, BigDecimal cut,
                                                      List<Map<NumericTerm, Place>> satisfying,
                                                      List<Map<NumericTerm, Place>> refusing,
-                                                     List<OrderedAffineBoundary> elsewhere) {
+                                                     List<OrderedAffineBoundary> elsewhere,
+                                                     souther.compiler.partition.WayToTheBorder way) {
         Map<NumericTerm, BigDecimal> along = alongTheLine(boundary.direction(), other);
         if (along == null) {
             return null;
@@ -388,15 +453,22 @@ public sealed interface AnotherLineTheRowsAllow {
         }
         // Every row, on whichever side of the line it is: which way a step has to go to cross the
         // other line depends on where the row already stands.
+        Reaches reaches = new Reaches(way, along.keySet());
         List<Parting> found = new ArrayList<>();
         for (Map<NumericTerm, Place> values : satisfying) {
-            partings(boundary, other, cut, values, along, moves, true, elsewhere, found);
+            partings(boundary, other, cut, values, along, moves, true, reaches, elsewhere, found);
         }
         for (Map<NumericTerm, Place> values : refusing) {
-            partings(boundary, other, cut, values, along, moves, false, elsewhere, found);
+            partings(boundary, other, cut, values, along, moves, false, reaches, elsewhere, found);
         }
-        return found.stream()
-                .min(java.util.Comparator.comparingInt((Parting each) -> each.reached() ? 0 : 1)
+        // Of the inputs the rules still send a row to, the one whose difference an author can see,
+        // and the nearest of those. Reaching is the condition: an input the way turns away is not a
+        // worse answer than another, it is no answer, because two lines answering differently where
+        // no row arrives is not something a row could show. What the behavior's other lines do with
+        // it is the preference beside that: where they keep it, this line is what settles the answer
+        // there, and where they do not the two part company under a rule that has already decided.
+        return found.stream().filter(Parting::reached)
+                .min(java.util.Comparator.comparingInt((Parting each) -> each.visible() ? 0 : 1)
                         .thenComparing(Parting::steps))
                 .map(Parting::at).orElse(null);
     }
@@ -404,17 +476,21 @@ public sealed interface AnotherLineTheRowsAllow {
     /**
      * The inputs near one row that the two lines part company at.
      *
-     * @param reached whether the model's other lines are satisfied there
+     * @param reached whether a row still arrives at this rule there, which is the condition
+     * @param visible whether the behavior's other lines keep it, so that what this line answers is
+     *                what the behavior answers — the preference, and never the condition
      * @param steps   how far from the row it is, which is what makes one input nearer than another
      */
-    record Parting(Map<NumericTerm, Place> at, boolean reached, BigDecimal steps) {}
+    record Parting(Map<NumericTerm, Place> at, boolean reached, boolean visible,
+                   BigDecimal steps) {}
 
     /** Whatever {@code values} reaches by stepping along the model's own line, collected into
      *  {@code found}. */
     private static void partings(OrderedAffineBoundary boundary, QuantityKey other, BigDecimal cut,
                                  Map<NumericTerm, Place> values,
                                  Map<NumericTerm, BigDecimal> along, BigDecimal moves,
-                                 boolean kept, List<OrderedAffineBoundary> elsewhere,
+                                 boolean kept, Reaches reaches,
+                                 List<OrderedAffineBoundary> elsewhere,
                                  List<Parting> found) {
         BigDecimal at = OrderedAffineBoundary.along(other.direction(), values);
         for (BigDecimal steps
@@ -429,24 +505,106 @@ public sealed interface AnotherLineTheRowsAllow {
             }
             Map<NumericTerm, Place> moved = movedBy(boundary, values, along, steps);
             if (moved != null) {
-                found.add(new Parting(moved, reachedBy(elsewhere, moved), steps.abs()));
+                found.add(new Parting(moved, reaches.stillArrives(values, moved),
+                        keptByTheOthers(elsewhere, moved), steps.abs()));
             }
         }
     }
 
-    /** Whether every other line of this behavior is satisfied at an input, which is what puts it
-     *  where this line is what settles the answer. */
-    private static boolean reachedBy(List<OrderedAffineBoundary> elsewhere,
-                                     Map<NumericTerm, Place> at) {
+    /**
+     * Whether the behavior's other lines are satisfied at an input.
+     *
+     * <p>A preference and never a condition. Where they are, this line is what settles what the
+     * behavior answers there, so an author writing the row sees the two lines part company; where
+     * they are not, the two still part company at the line and a rule that has already decided
+     * covers it over. Both are inputs the two lines answer differently at, which is what the
+     * sentence says — this only decides which of them is worth naming.
+     */
+    private static boolean keptByTheOthers(List<OrderedAffineBoundary> elsewhere,
+                                           Map<NumericTerm, Place> at) {
         for (OrderedAffineBoundary each : elsewhere) {
-            // A line over positions this input says nothing about is a line it does not reach past,
-            // and is no reason to prefer one input over another.
             if (at.keySet().containsAll(each.direction().direction().keySet())
                     && !each.satisfiedBy(at)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a step from a row that arrived at this rule leaves the input still arriving.
+     *
+     * <p>Asked of the way to the border, which is every condition a row passed to get there. A
+     * condition the step moves no position of answers at the input exactly what it answered at the
+     * row, and the row arrived — so it holds, with nothing to work out. One the step does move a
+     * position of has to be read at the input, which takes the input holding a number at every
+     * position that condition is over.
+     *
+     * <p><b>And a condition nothing here took in turns every step away.</b> What such a way leaves
+     * is not known to be what reaches the border — that is what {@link
+     * souther.compiler.partition.WayToTheBorder} says of itself — so an input past it is one nothing
+     * here can say a row arrives at. Read as arriving, a line two borders part company at somewhere
+     * unreachable would be published as a fault, and the row asked for would show nothing.
+     */
+    final class Reaches {
+
+        private final souther.compiler.partition.WayToTheBorder way;
+
+        private final Set<NumericTerm> moved;
+
+        Reaches(souther.compiler.partition.WayToTheBorder way, Set<NumericTerm> moved) {
+            this.way = way;
+            this.moved = Set.copyOf(moved);
+        }
+
+        boolean stillArrives(Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
+            for (souther.compiler.partition.OnTheWay each : way.onTheWay()) {
+                switch (each) {
+                    // Nothing here turned it into something a row can be held against, so nothing
+                    // here can say whether the input still passes it.
+                    case souther.compiler.partition.OnTheWay.Declined _ -> {
+                        return false;
+                    }
+                    // Which case a value turned out to be. A step moves numbers and a narrowing is
+                    // about a position being one of its cases, so a step that moves no number of
+                    // that position leaves it as the row had it; one that does is past what this
+                    // reads.
+                    case souther.compiler.partition.OnTheWay.Narrowed(var _, var position) -> {
+                        if (moved.stream().anyMatch(term -> term.subjectPath().equals(position))) {
+                            return false;
+                        }
+                    }
+                    case souther.compiler.partition.OnTheWay.TakenIn(var _, var taken) -> {
+                        if (java.util.Collections.disjoint(taken.terms(), moved)) {
+                            continue;   // the row's answer at it, unmoved
+                        }
+                        Boolean holds = holdsAt(taken, at);
+                        if (holds == null || !holds) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return from != null;
+        }
+    }
+
+    /** Whether a condition holds at an input, or null where the input says nothing about some
+     *  position it is over. */
+    private static Boolean holdsAt(souther.compiler.partition.TakenConstraint taken,
+                                   Map<NumericTerm, Place> at) {
+        if (!at.keySet().containsAll(taken.terms())) {
+            return null;
+        }
+        return switch (taken) {
+            case souther.compiler.partition.TakenConstraint.Affine(var form, var rel) ->
+                    rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
+                            .add(form.constant()).signum());
+            case souther.compiler.partition.TakenConstraint.Ordered(var term, var place, var rel) ->
+                    rel.holds(at.get(term).compareTo(place));
+            case souther.compiler.partition.TakenConstraint.AwayFrom(var term, var place) ->
+                    at.get(term).compareTo(place) != 0;
+        };
     }
 
 
