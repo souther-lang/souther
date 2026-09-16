@@ -173,9 +173,11 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
      * between them, so the pair is refused whatever the accounts are.
      *
      * <p>Held here so the state is a decision and not a surprise. What the report says about such a
-     * point is that nothing here could build a representative for it — which is about this compiler
-     * — and not that no row can stand there. A change that moved either half, by composing the
-     * value or by reporting the point as unreachable, is a change this has to be looked at with.
+     * point is which values this compiler writes none of, and not that nothing could be built for
+     * it and not that no row can stand there — the values that answer several of their own numbers
+     * are the population, and what reaches the rest of them is somebody writing the solving. A
+     * change that moved either half, by composing the value or by reporting the point as
+     * unreachable, is a change this has to be looked at with.
      */
     @Test
     void twoNumbersOfOnePlaceAreRecognisedAndNoRowIsComposedForTheirLine() {
@@ -191,8 +193,14 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
                 """;
         String report = report(measured(model));
         assertTrue(report.contains("borders 1"), report);
-        assertTrue(report.contains("nothing here could build a representative"), report);
+        assertTrue(report.contains("this compiler writes some of the values that answer several of"
+                + " their own numbers rather than all of them"), report);
+        // The two sentences a reader may not be told, and they are the point of the case. One says
+        // no value exists and the other says nothing here could build one at all; what happened is
+        // that nothing here solves a value out of several numbers of a place, and neither of these
+        // is that.
         assertFalse(report.contains("no value can be written"), report);
+        assertFalse(report.contains("nothing here could build a representative"), report);
         assertFalse(block(measured(model)).contains("| ("),
                 () -> "and no row is offered at it: " + block(measured(model)));
     }

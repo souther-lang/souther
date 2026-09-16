@@ -26,9 +26,11 @@ import java.math.BigDecimal;
  *
  * <p><b>Three questions and not one, so an arm may answer the first and not the second.</b> An
  * account whose building nothing here does is an operation a boundary is found on and no row
- * composed for, which is what {@code NOTHING_COMPOSES_ONE} says of a point; read as an obligation to
- * write something, the arm added next would get whatever its author could make return a value, and
- * a row offered at an edge it does not stand on is worse than no row. What must hold of what is
+ * composed for, which is what {@code NOTHING_COMPOSES_ONE} says of a point asked for one number —
+ * several numbers of one place come back as the values nothing here solves out of them
+ * ({@code partition.CompositionRepertoire}). Read as an obligation to write something, the arm
+ * added next would get whatever its author could make return a value, and a row offered at an edge
+ * it does not stand on is worse than no row. What must hold of what is
  * built is one way round — every value built reads back as the number it was built for — and that
  * is stated where the building is.
  *

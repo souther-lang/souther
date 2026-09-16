@@ -3646,7 +3646,12 @@ public final class Generator {
             both.add(target);
         }
         both.add(RealizationTarget.of(at));
-        return TermRealizations.oneValueAnswersThemTogether(both);
+        // The classification is the realizer's and the word for it is this reader's. What it comes
+        // back with is which way of writing one value the group has, and a reader here has nothing
+        // to do with the way — what it does is place the numbers or say it could not, which is a
+        // sentence about the path to a point and not about what this compiler composes.
+        return TermRealizations.jointRealizationOf(both)
+                instanceof TermRealizations.JointRealization.Supported;
     }
 
     /**
@@ -4551,10 +4556,18 @@ public final class Generator {
             Edge composed = edgeAt(subject, group.getValue(), subject.quantities().region());
             if (composed.values().isEmpty()) {
                 // What the composing said, and not a sentence about the location holding two
-                // values: a location asked for numbers no one value answers is what that reader
-                // reports, in the words it reports it in.
+                // values: a location asked for numbers nothing here writes one value for is what
+                // that reader reports, in the words it reports it in. Which are never that no such
+                // value exists — whether one does is not a question anything on this route asked.
+                //
+                // And with the word what it met, for the reason every other reader of an edge
+                // carries it: the word says the question is open and only this says whether
+                // anything a reader could raise reaches it. Taken as the word alone, a group this
+                // compiler writes none of the values for arrives as a search that left something
+                // untried with nothing of this compiler's beside it.
                 return new Attempt(null, composed.reason(), group.getKey().toString(),
-                        Optional.ofNullable(composed.detail()));
+                        Optional.ofNullable(composed.detail()), new LinkedHashMap<>(),
+                        composed.met());
             }
             together.put(group.getKey(), composed.values());
         }
@@ -5923,6 +5936,17 @@ public final class Generator {
             };
         }
 
+        /**
+         * What this edge met of this compiler's, as the account a caller carries beside the word.
+         *
+         * <p>Both vocabularies in one value because that is what an account of an attempt holds,
+         * and neither is read for the other on the way in: {@link CompositionShortfall} keeps the
+         * figures somebody could raise apart from the populations nobody has written the rest of.
+         */
+        CompositionShortfall met() {
+            return CompositionShortfall.of(stoppedBy(), notAllOf());
+        }
+
         /** What to report where no value was offered here at all. */
         UnresolvedCombination.Reason reason() {
             return switch (came) {
@@ -5979,8 +6003,8 @@ public final class Generator {
      *
      * <p>A location asked for several numbers settles at none of them. What is settled is a place on
      * the root's own order, and a group is over numbers taken of the root — which numbers go in one
-     * group is {@link TermRealizations#oneValueAnswersThemTogether}, and the content of the location
-     * is not among the ones it puts together.
+     * group is {@link TermRealizations#jointRealizationOf}, and the content of the location is not
+     * among the ones it puts together.
      */
     private static Edge edgeFrom(TermRealizations.Realization made,
                                  SequencedMap<RealizationTarget, NumericSet> group) {

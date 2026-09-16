@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -21,6 +22,7 @@ import souther.compiler.types.Type;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,7 +126,12 @@ final class TermRealizations {
         }
 
         /**
-         * Nothing was composed, and what this walked was some of what there is to walk.
+         * Nothing was composed, and what this walked was not the whole of what there is to walk.
+         *
+         * <p>Which covers a walk that took no step in it at all. A group of numbers nothing here
+         * writes a value for is a population this offered none of, and none is as far short of the
+         * whole of it as some — what a reader may conclude is the same, and that is what the word
+         * is for.
          *
          * <p>Apart from {@link None}, and the difference is what a reader may conclude. Nothing was
          * refused by a figure, so there is no number to raise; and nothing here looked at every
@@ -178,12 +185,24 @@ final class TermRealizations {
     }
 
     /**
-     * Whether one value of a root answers all of these numbers at once.
+     * How a value answering all of these numbers at once is written, and what is missing where
+     * nothing writes one.
+     *
+     * <p><b>A capability of this compiler's and not a proposition about the model.</b> What this
+     * answers is which way of writing one value there is for a group of numbers taken like these —
+     * so a group it has no way for is a group nobody has written the solving for, and never a group
+     * no value answers. Said as the second, a whole number whose halves and thirds are both asked
+     * for comes back as a value that does not exist, which is a sentence about the model this has
+     * no standing to say.
+     *
+     * <p><b>The way and not a yes.</b> What comes back of a group there is a way for is the way
+     * itself, so the arms over what the numbers are taken as are here and the composer has none:
+     * read a second time where the value is built, the two would be one classification written
+     * twice and an account added to the language would reach a composer that had not heard of it.
      *
      * <p><b>Asked before anything is built, the way its neighbour above is.</b> A row writes one
      * value where a location is, so a location asked for two numbers is answered by composing a
-     * value that has both or by nothing at all. Which of those it is turns on what the numbers are
-     * taken as, and that is this file's question: the composer's is where the value goes.
+     * value that has both or by nothing at all.
      *
      * <p>The parts of a time and the parts of a date are the ones a value can be built to have
      * together. Not because they are independent — the parts of a time are and the parts of a date
@@ -196,69 +215,201 @@ final class TermRealizations {
      * no place in the spelling of a string, and a value answering both a length and an order is not
      * something below builds.
      *
-     * <p>Distinct parts, which is what makes them independent. Two asks at one part are two asks
-     * for one number and are the same target, so a group holding a part twice is a group somebody
-     * built by hand.
-     *
-     * <p>One target is always together with itself, so a caller need not ask whether it has more
-     * than one before asking this.
+     * <p>One target is a number on its own, and the way of writing a value for it is the one every
+     * other reader of this file asks for — so a caller need not ask whether a group has more than
+     * one member before asking this. A group of none is not a question: what is asked for is the
+     * numbers of one location, and a location is asked for at least the number that brought a
+     * caller here.
      */
-    static boolean oneValueAnswersThemTogether(Collection<RealizationTarget> targets) {
-        if (targets.size() <= 1) {
-            return true;
+    static JointRealization jointRealizationOf(Collection<RealizationTarget> targets) {
+        // A builder is a thing a caller may call, so what comes back of a group with nothing in it
+        // would be a way of writing a value for no number. Which is not a group nobody wrote the
+        // solving for either: said as that, a caller that asked for nothing is told about this
+        // compiler's repertoire.
+        assert !targets.isEmpty() : "a group is the numbers of one location and has one of them";
+        if (targets.size() == 1) {
+            return new JointRealization.Supported(new JointBuilder.OneNumberOnItsOwn());
         }
-        Set<TakenAs.TimePart> times = new java.util.LinkedHashSet<>();
-        Set<TakenAs.DatePart> dates = new java.util.LinkedHashSet<>();
+        SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget, TakenAs.DatePart> dates = new LinkedHashMap<>();
         for (RealizationTarget target : targets) {
             if (!(target.term() instanceof NumericTerm.TakenOf taken)) {
-                return false;
+                return nothingSolvesAGroup();
             }
             switch (taken.takenAs()) {
-                case TakenAs.PartOfTime part -> times.add(part.part());
-                case TakenAs.PartOfDate part -> dates.add(part.part());
+                case TakenAs.PartOfTime part -> times.put(target, part.part());
+                case TakenAs.PartOfDate part -> dates.put(target, part.part());
                 // A quotient is here rather than beside the parts. Two of them at one place do
                 // leave values that answer both — a whole number divides by two and by three at
                 // once — and working out which is solving for a value from two numbers of it,
                 // which is not what putting parts side by side does.
                 case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
                         TakenAs.TheTruncatingQuotient _ -> {
-                    return false;
+                    return nothingSolvesAGroup();
                 }
             }
         }
-        return times.size() + dates.size() == targets.size()
-                && (times.isEmpty() || dates.isEmpty());
+        // Two asks at one part are two asks for one number and are the same target, so a group
+        // holding a part twice is a group somebody built by hand. Not a population this compiler
+        // writes none of: read as that, a caller handed a malformed group is told about the
+        // repertoire and goes looking for the solving nobody wrote.
+        assert Set.copyOf(times.values()).size() + Set.copyOf(dates.values()).size()
+                == targets.size() : "one part of one root is one number and one target";
+        // The parts of a time beside the parts of a date are a value spelled two ways, and what
+        // writes one is a builder for that spelling. Said as a group nobody wrote the solving for,
+        // because that is what it is: the day an operation answers a part of each, the group is
+        // owed a builder and this reports it rather than throwing.
+        if (!times.isEmpty() && !dates.isEmpty()) {
+            return nothingSolvesAGroup();
+        }
+        return new JointRealization.Supported(times.isEmpty()
+                ? new JointBuilder.OnThoseDateParts(dates)
+                : new JointBuilder.AtThoseTimeParts(times));
     }
 
     /**
-     * The values to write at one root so that every one of these numbers is its answer.
+     * What a group of numbers nothing here solves a value out of comes back as.
      *
-     * <p><b>One call for the whole of what a location was asked for.</b> Asked once per number and
-     * the answers combined afterwards, there is nothing to combine: two values were built for one
-     * place and the row holds whichever was written last, which is the point answered for one of
-     * its numbers and offered as answered for both.
-     *
-     * <p>A group of one is {@link #at}, and is not a second way of doing what that does. Every
-     * location the composer writes comes through here, so the case that grew the vocabulary is the
-     * case with one number in it rather than the case the code was written for.
-     *
-     * <p>What a group this cannot build together comes back as is a root nothing composes a value
-     * for, which is what {@link #oneValueAnswersThemTogether} says before a caller gets here — so a
-     * caller that asked is not told anything it could have avoided asking for.
-     *
-     * <p>What each number is measured on is read per term and not handed in, for the reason the
-     * single one reads it: a term this reading measures somewhere else is a term whose value would
-     * be written on a carrier a caller found elsewhere.
+     * <p>The population and not a word about the model, which is the whole of why this file answers
+     * in this vocabulary: the values that answer several of their own numbers are ones this compiler
+     * writes the parts of a moment of and none of the rest, and what reaches the rest is somebody
+     * writing the solving rather than an author writing a row.
      */
-    static Realization together(Type sourceType, SequencedMap<RealizationTarget, Place> demands,
-                                Quantities measuring,
-                                souther.compiler.inputs.SearchRegion within,
-                                RuleReadingContext reading) {
-        SequencedMap<RealizationTarget, NumericSet> asked = new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
-            asked.put(each.getKey(), new NumericSet.At(each.getValue()));
+    private static JointRealization nothingSolvesAGroup() {
+        return new JointRealization.Missing(
+                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS);
+    }
+
+    /**
+     * Which way of writing one value a group of numbers has, where it has one.
+     *
+     * <p>Two answers and not a yes and a no. A group there is a way for comes back with the way, so
+     * nothing downstream classifies the group a second time; a group there is none for comes back
+     * with the population this compiler offers none of, and a reader of that may conclude nothing
+     * about whether a value exists.
+     */
+    sealed interface JointRealization {
+
+        /** The way one value answering all of them is written. */
+        record Supported(JointBuilder builder) implements JointRealization {}
+
+        /**
+         * Nothing here writes a value for this group, and the population it is part of.
+         *
+         * <p>Carried as a {@link CompositionRepertoire} because that is what it is — a set of
+         * values this compiler produces some of rather than all of. What each caller says of it is
+         * its own: this file answers a search in the words a search comes back in, and a reader
+         * asking whether a row could reach a point has a vocabulary of its own for the same fact.
+         */
+        record Missing(CompositionRepertoire notAllOf) implements JointRealization {}
+    }
+
+    /**
+     * A way of writing one value that answers a group of numbers of it.
+     *
+     * <p>Made where the group is classified and asked for the value where the row is composed, so
+     * what the arms of that classification came to is carried rather than worked out twice. Which
+     * numbers each of them is for is the group it was made from; what those numbers are asked to be
+     * arrives with the demands, since a group is asked for exact numbers at a point of a border and
+     * for the classes themselves where a class is what a row stands in.
+     */
+    sealed interface JointBuilder {
+
+        Realization from(Type sourceType, SequencedMap<RealizationTarget, NumericSet> demands,
+                         Quantities measuring, SearchRegion within, RuleReadingContext reading);
+
+        /**
+         * One number, whose value is what every other reader of this file asks for.
+         *
+         * <p>Here so that a group of one is not a second way of doing what
+         * {@link TermRealizations#satisfying(Type, TermOrders, NumericSet, SearchRegion,
+         * RuleReadingContext)} does — it is that way, reached by the one road a caller takes to any
+         * group.
+         */
+        record OneNumberOnItsOwn() implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                Map.Entry<RealizationTarget, NumericSet> one = demands.firstEntry();
+                return satisfying(sourceType, measuring.ordersOf(one.getKey().term()),
+                        one.getValue(), within, reading);
+            }
         }
-        return allSatisfying(sourceType, asked, measuring, within, reading);
+
+        /** The parts of a time, each standing at what its own set admits. */
+        record AtThoseTimeParts(SequencedMap<RealizationTarget, TakenAs.TimePart> parts)
+                implements JointBuilder {
+
+            public AtThoseTimeParts {
+                if (parts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a way of writing a value for some parts says which parts");
+                }
+                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                Map<TakenAs.TimePart, NumericSet> asked = new LinkedHashMap<>();
+                for (Map.Entry<RealizationTarget, TakenAs.TimePart> each : parts.entrySet()) {
+                    asked.put(each.getValue(), demands.get(each.getKey()));
+                }
+                return atThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
+                        reading.source());
+            }
+        }
+
+        /** The parts of a date, solved over the calendar. */
+        record OnThoseDateParts(SequencedMap<RealizationTarget, TakenAs.DatePart> parts)
+                implements JointBuilder {
+
+            public OnThoseDateParts {
+                if (parts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a way of writing a value for some parts says which parts");
+                }
+                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
+                for (Map.Entry<RealizationTarget, TakenAs.DatePart> each : parts.entrySet()) {
+                    asked.put(each.getValue(), demands.get(each.getKey()));
+                }
+                return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
+                        reading.source());
+            }
+        }
+
+        /**
+         * The carrier the group's root is observed on, or null where a term of it is not measured.
+         *
+         * <p>One root has one, so this is read off each term and is the same answer every time
+         * round — which is what being one location means. Read off the group rather than handed in
+         * because a term measured somewhere else is a term whose value would be written on a
+         * carrier a caller found elsewhere.
+         */
+        private static Carrier rootOf(Collection<RealizationTarget> group, Quantities measuring) {
+            Carrier observed = null;
+            for (RealizationTarget target : group) {
+                TermOrders orders = measuring.ordersOf(target.term());
+                if (orders == null) {
+                    return null;
+                }
+                observed = orders.observed();
+            }
+            return observed;
+        }
     }
 
     /**
@@ -274,47 +425,33 @@ final class TermRealizations {
      * what an account knows — a part of a time runs as far as the part does, a count runs from
      * none — so the account walks its own numbers and asks the set which of them the rules admit.
      * Written here instead, this would be the one place that knows what every account's numbers
-     * are, which is the switch below saying it does not.
+     * are, which is what {@link #jointRealizationOf} answers and this does not.
+     *
+     * <p><b>A group nothing writes a value for is said as the population it is part of.</b> That
+     * nothing here solves a value out of several numbers of one place is a fact about this compiler
+     * and never one about the model: the halves and thirds of a whole number are both asked for by
+     * models that have such a value in them, and a word for a walk that looked everywhere would
+     * tell their author no value exists. Nothing looked. So what comes back is a walk that offered
+     * none of a population, which is the answer a reader may conclude nothing from.
      */
     static Realization allSatisfying(Type sourceType,
                                      SequencedMap<RealizationTarget, NumericSet> demands,
                                      Quantities measuring,
-                                     souther.compiler.inputs.SearchRegion within,
+                                     SearchRegion within,
                                      RuleReadingContext reading) {
-        if (demands.size() == 1) {
-            Map.Entry<RealizationTarget, NumericSet> one = demands.firstEntry();
-            return satisfying(sourceType, measuring.ordersOf(one.getKey().term()), one.getValue(),
-                    within, reading);
-        }
-        if (sourceType == null || !oneValueAnswersThemTogether(demands.keySet())) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        Map<TakenAs.TimePart, NumericSet> times = new LinkedHashMap<>();
-        Map<TakenAs.DatePart, NumericSet> dates = new LinkedHashMap<>();
-        Carrier observed = null;
-        for (Map.Entry<RealizationTarget, NumericSet> each : demands.entrySet()) {
-            TermOrders orders = measuring.ordersOf(each.getKey().term());
-            if (orders == null || !(each.getKey().term() instanceof NumericTerm.TakenOf taken)) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-            // The root's, and one root has one. Read off each term because that is where a reading
-            // answers it, and the same answer each time round is what being one location means.
-            observed = orders.observed();
-            switch (taken.takenAs()) {
-                case TakenAs.PartOfTime part -> times.put(part.part(), each.getValue());
-                case TakenAs.PartOfDate part -> dates.put(part.part(), each.getValue());
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
-                        TakenAs.TheTruncatingQuotient _ -> {
-                    return new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-                }
-            }
-        }
-        return times.isEmpty()
-                ? onThoseParts(dates, sourceType, observed, reading.source())
-                : atThoseParts(times, sourceType, observed, reading.source());
+        // What type the value is written at is the caller's answer and is settled before this is
+        // asked. Read here as one more thing that could be missing, a location whose write path
+        // this reading has no type for would come back as a group nothing solves — which is a
+        // sentence about what this compiler cannot compose, said of a question nobody asked.
+        assert sourceType != null : "a group is realized at the type its caller settled";
+        return switch (jointRealizationOf(demands.keySet())) {
+            // Which population, and no detail beside it: nothing was walked here, so there is
+            // nothing this found to tell a reader.
+            case JointRealization.Missing(CompositionRepertoire notAllOf) ->
+                    new Realization.Unexhausted(Set.of(notAllOf), null);
+            case JointRealization.Supported(JointBuilder builder) ->
+                    builder.from(sourceType, demands, measuring, within, reading);
+        };
     }
 
     /**
@@ -334,7 +471,7 @@ final class TermRealizations {
      * whether a value was written.
      */
     static Realization at(Type sourceType, TermOrders orders,
-                          Place answer, souther.compiler.inputs.SearchRegion within,
+                          Place answer, SearchRegion within,
                           RuleReadingContext reading) {
         return satisfying(sourceType, orders, new NumericSet.At(answer), within, reading);
     }
@@ -355,7 +492,7 @@ final class TermRealizations {
      * which no reader may take for a statement about the model.
      */
     static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
-                                  souther.compiler.inputs.SearchRegion within,
+                                  SearchRegion within,
                                   RuleReadingContext reading) {
         return satisfying(sourceType, orders, wanted, null, within, reading);
     }
@@ -375,7 +512,7 @@ final class TermRealizations {
      */
     static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
                                   Place named,
-                                  souther.compiler.inputs.SearchRegion within,
+                                  SearchRegion within,
                                   RuleReadingContext reading) {
         if (sourceType == null) {
             return new Realization.None(
@@ -410,7 +547,7 @@ final class TermRealizations {
      */
     private static Realization standing(Type sourceType, TermOrders orders, NumericSet wanted,
                                         Place named,
-                                        souther.compiler.inputs.SearchRegion within,
+                                        SearchRegion within,
                                         RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         Carrier carrier = orders.answered();
@@ -431,7 +568,7 @@ final class TermRealizations {
      */
     private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
                                      TermOrders orders, NumericSet wanted, Place named,
-                                     souther.compiler.inputs.SearchRegion within,
+                                     SearchRegion within,
                                      RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         return switch (how) {
@@ -517,7 +654,7 @@ final class TermRealizations {
      *  this number to be there. */
     private static Realization addingUp(NumericSet wanted, Type sourceType, TermOrders orders,
                                         Place named,
-                                        souther.compiler.inputs.SearchRegion within,
+                                        SearchRegion within,
                                         RuleReadingContext reading) {
         if (orders.answered() == null) {
             return new Realization.None(
@@ -550,7 +687,7 @@ final class TermRealizations {
      */
     private static Realization atThatQuotient(BigDecimal by, Type sourceType, TermOrders orders,
                                               NumericSet wanted, Place named,
-                                              souther.compiler.inputs.SearchRegion within,
+                                              SearchRegion within,
                                               RuleReadingSource ruleSource) {
         Carrier observed = orders.observed();
         // A divisor that is not there, or is nought, is a term nothing built — what quotients there
@@ -699,7 +836,7 @@ final class TermRealizations {
      * not that the run holds nothing.
      */
     private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
-                                    souther.compiler.inputs.SearchRegion within) {
+                                    SearchRegion within) {
         if (wanted instanceof NumericSet.At one) {
             // A set of one number is that number, and there is nothing else it could have been.
             return Tried.theOne(one.value());
@@ -768,7 +905,7 @@ final class TermRealizations {
      */
     private static Realization overARun(TakenAs how, Type sourceType,
                                         TermOrders orders, NumericSet wanted, Place named,
-                                        souther.compiler.inputs.SearchRegion within,
+                                        SearchRegion within,
                                         RuleReadingContext reading) {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
@@ -855,6 +992,9 @@ final class TermRealizations {
      * nothing admitted is a time nothing answers rather than a combination this did not find. The
      * parts of a date are not like this, and {@link #onThoseParts} is where that is answered.
      *
+     * <p>At least one part, which both callers hold to: a group of them says which parts it is for
+     * ({@link JointBuilder.AtThoseTimeParts}) and a single number is the part it is of.
+     *
      * <p>The order is handed in and not named here. That what this is taken of is a time is the
      * arm's own condition and the library is held to it, but which carrier a time is written on is
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
@@ -863,7 +1003,7 @@ final class TermRealizations {
     private static Realization atThoseParts(Map<TakenAs.TimePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
-        if (observed == null || parts.isEmpty()) {
+        if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
@@ -909,6 +1049,9 @@ final class TermRealizations {
      * would be days no date has, and a rule about the thirty-first would have no witness for a
      * reason that is about this choice rather than about the calendar.
      *
+     * <p>At least one part, as the time above has: a group says which parts it is for
+     * ({@link JointBuilder.OnThoseDateParts}) and a single number is the part it is of.
+     *
      * <p>Whether a date can have the part at all is asked of the calendar and not of the bound the
      * operation declares. A bound is what the model may assume of an answer; what dates there are is
      * what a witness can be built from, and reading the second off the first would make a bound
@@ -917,7 +1060,7 @@ final class TermRealizations {
     private static Realization onThoseParts(Map<TakenAs.DatePart, NumericSet> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
-        if (observed == null || parts.isEmpty()) {
+        if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }

@@ -49,6 +49,21 @@ public enum CompositionRepertoire {
     PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
 
     /**
+     * The values that answer several of their own numbers at once.
+     *
+     * <p>A location asked for two numbers is one value to write, and which values have both is
+     * solved for rather than put together. What is written here is the parts a moment is spelled
+     * in: the parts of a time and the parts of a date are places in the spelling, so a value with
+     * all of them asked for is built by writing each place. Every other group is solved for out of
+     * the numbers, and nothing here does that — a whole number whose halves and thirds are both
+     * asked for is a value this compiler names none of.
+     *
+     * <p>So a group nothing built a value for is not a group no value answers. Raising anything
+     * reaches none of them; what would is somebody writing the solving.
+     */
+    VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+
+    /**
      * The places inside one run of an order that this compiler names a value at.
      *
      * <p>It names one. Where the order has a smallest step there are others to step to and nothing

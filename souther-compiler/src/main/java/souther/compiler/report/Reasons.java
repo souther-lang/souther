@@ -156,6 +156,8 @@ final class Reasons {
                         "the ways a total may be spread over what adds up to it";
                 case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
                         "the places on a line between two positions a pair is tried at";
+                case VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS ->
+                        "the values that answer several of their own numbers";
                 case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
                         "the places inside one run a value is named at";
             });
