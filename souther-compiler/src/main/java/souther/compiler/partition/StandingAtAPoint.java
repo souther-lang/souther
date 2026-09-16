@@ -112,9 +112,12 @@ public final class StandingAtAPoint {
      * stopped may say it found something and may not say it found nothing, and this is the fact that
      * tells the two apart.
      *
-     * <p>Read off how many readings there are rather than off what the walk did. A product that
-     * comes to exactly what one point is tried against was walked in full, and a walk that built as
-     * many as it was allowed to cannot tell that from a product one longer.
+     * <p><b>Said by the walk that stopped.</b> Which figure a walk stopped at is the walk's own
+     * answer and nothing downstream can work it out: a reading count short of the steps is short
+     * for whatever reason, and a reader deriving the reason from the shortfall names a figure
+     * wherever a walk fell short of one it never reached. So this is built where the readings are
+     * and travels from there, the way a decision reading says it stopped at a figure rather than
+     * leaving its length to be read.
      */
     public sealed interface ReadingsTried {
 
@@ -170,7 +173,8 @@ public final class StandingAtAPoint {
             OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             boolean stands = false;
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-            List<OneReadingOfARow> tried = readings(where, one, quantity, criterion, first, held);
+            Readings readings = readings(where, one, quantity, criterion, first, held);
+            List<OneReadingOfARow> tried = readings.tried();
             for (OneReadingOfARow reading : tried) {
                 switch (quantity.standsAt(criterion, reading)) {
                     // A reading that could not look. What the row wrote nothing at is not among
@@ -203,8 +207,21 @@ public final class StandingAtAPoint {
             // And where none of them stood there, whether there were others to try. Asked of the
             // rows that came to nothing and of no others: a row that stood at the point was answered
             // by the reading that stood, and the readings after it are not ones this went without.
-            if (!stands && !everyReadingWasTried(held, tried.size())) {
-                stoppedShort = true;
+            if (!stands) {
+                if (readings.whether() instanceof ReadingsTried.StoppedAtTheLimit) {
+                    stoppedShort = true;
+                } else if (stepsAllowMoreThan(held, tried.size())) {
+                    // The steps the readings were built from are not the steps the readings found,
+                    // which the quantity's contract does not allow: it reads every term before it
+                    // concludes anything, and that is how many elements each position holds is
+                    // known before there is anything to choose between. A walk short of the
+                    // readings for any other reason than its own figure is this compiler's two
+                    // answers about one row disagreeing, and neither of them is news about the
+                    // model.
+                    throw new IllegalStateException("the steps a row's positions take grew after"
+                            + " the readings of it were built, and the readings that were tried"
+                            + " are not all of them: " + held + " over " + tried.size());
+                }
             }
             unreadable.addAll(stopped);
         }
@@ -323,17 +340,30 @@ public final class StandingAtAPoint {
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
      */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs observed,
-                                                   BorderQuantity quantity, Criterion criterion,
-                                                   OneReadingOfARow first,
-                                                   Map<TermPath, Integer> held) {
+    private static Readings readings(BehaviorInputs where, ObservedInputs observed,
+                                     BorderQuantity quantity, Criterion criterion,
+                                     OneReadingOfARow first, Map<TermPath, Integer> held) {
         quantity.standsAt(criterion, first);
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(held)) {
             out.add(new OneReadingOfARow(where, observed, choice, held));
         }
-        return out;
+        // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out
+        // afterwards from how many readings came back, a walk that was cut short and one the steps
+        // never had more than are one answer, and whichever word is chosen for the pair is wrong
+        // about the other.
+        return new Readings(out, stepsAllowMoreThan(held, MOST_READINGS)
+                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
+                : ReadingsTried.EVERY_ONE);
     }
+
+    /**
+     * The readings of one row that were made, and whether they are all of them.
+     *
+     * @param tried   the readings, in the order the choices were taken
+     * @param whether what the walk that built them says about itself
+     */
+    private record Readings(List<OneReadingOfARow> tried, ReadingsTried whether) {}
 
     /**
      * Every reading of a row over the steps {@code held} says its positions take.
@@ -360,31 +390,29 @@ public final class StandingAtAPoint {
     }
 
     /**
-     * Whether the readings a point was tried against are every reading the steps allow.
+     * Whether the steps a row's positions take allow more readings of it than {@code howMany}.
      *
-     * <p>Counted from the steps and compared with what was tried, rather than read off the walk that
-     * built them. A walk that built as many readings as it is allowed to built either all of them or
-     * all it could, and nothing it holds tells those apart; the steps know how many there are. So a
-     * product coming to exactly what one point is tried against is answered here as the full walk it
-     * is.
+     * <p>One question, and what it is about is the number it is asked with. Against the figure one
+     * point is tried against, it is whether a walk over the steps will be cut short — which is what
+     * the walk that does the cutting asks. Against the readings that came back, it is whether the
+     * steps the walk found are the steps it was built from, which is a fact about this compiler and
+     * not about the row.
      *
-     * <p>And asked of the steps as they stand once the readings have been run, because a position a
-     * later reading reached is a step the first one did not know about. Such a walk tried every
-     * reading it knew of and not every reading there is, which is the same shortfall a limit leaves
-     * and is said the same way.
+     * <p>A product coming to exactly the number asked about is not more than it. A walk that built
+     * as many readings as it is allowed to built either all of them or all it could, and nothing it
+     * holds tells those apart; the steps are what know how many there are.
      */
-    private static boolean everyReadingWasTried(Map<TermPath, Integer> held, int tried) {
+    private static boolean stepsAllowMoreThan(Map<TermPath, Integer> held, int howMany) {
         long there = 1;
         for (int cardinality : held.values()) {
-            // Asked before the multiplication rather than after it. What is wanted is whether the
-            // steps allow more readings than were tried, and a product that runs past what a long
-            // holds answers that by wrapping round to a number that says the opposite.
-            if (cardinality != 0 && there > tried / cardinality) {
-                return false;
+            // Asked before the multiplication rather than after it. A product that runs past what a
+            // long holds answers this by wrapping round to a number that says the opposite.
+            if (cardinality != 0 && there > howMany / cardinality) {
+                return true;
             }
             there *= cardinality;
         }
-        return there <= tried;
+        return there > howMany;
     }
 
     /** How many readings of one row a point is tried against. */

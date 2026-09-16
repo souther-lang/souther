@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -70,6 +71,19 @@ class ASearchThatStoppedMayNotSayNobodyWroteARowTest {
                 saidAbout(report),
                 "the value is in a reading nobody made, and a walk that did not make it cannot say"
                         + " nobody wrote the row");
+    }
+
+    @Test
+    void andSaysOnlyWhatStoppedWhereTheObservingIsWhatStopped() throws Exception {
+        String report = run(aLeague(rows(1, LONGER_THAN_A_ROW_IS_OBSERVED_AT, NOWHERE, NOWHERE)));
+
+        List<String> said = saidAbout(report);
+        assertEquals(1, said.size(), () -> "one point, one sentence: " + said);
+        assertTrue(said.getFirst().contains("the observation of it was stopped by a limit"),
+                () -> "the row was observed as far as a row is observed: " + said);
+        assertFalse(said.getFirst().contains("the readings"),
+                () -> "and its readings were every reading its one step allows, so nothing here is"
+                        + " a search that stopped: " + said);
     }
 
     @Test
