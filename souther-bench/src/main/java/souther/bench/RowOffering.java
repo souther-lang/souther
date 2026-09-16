@@ -12,12 +12,13 @@ import java.util.List;
 /**
  * What looking for the rows a model does not cover costs, asked of a module at a time.
  *
- * <p>The search this is the time of is the one that composes a row for a point of a border: it asks
- * where the positions have to stand, narrows a region as each is chosen, walks what is left, and
- * stops at figures of this compiler's where a walk runs long. Nothing a compile asks for reaches it
- * — a build asks for classes, and the rows are asked for by a person — so the figures those walks
- * are held to could be changed either way with every number this repository takes staying where it
- * was.
+ * <p>What a request asks for is two searches, and the figure is what answering it costs: the
+ * combinations a behavior's own rows have not covered, and a row at each point of a border — the
+ * second asking where the positions have to stand, narrowing a region as each is chosen, walking
+ * what is left, and stopping at figures of this compiler's where a walk runs long. It is the second
+ * that nothing a compile asks for reaches — a build asks for classes, and the rows are asked for by
+ * a person — so the figures those walks are held to could be changed either way with every number
+ * this repository takes staying where it was.
  *
  * <p><b>Not a phase.</b> {@link Phases} takes one warm compile apart into lines that add up to it,
  * and this is not part of a compile: it is an operation somebody asks for afterwards, and over a
@@ -57,10 +58,12 @@ final class RowOffering {
     private static final int WARMUP = 1;
     private static final int MEASURED = 3;
 
+    /** The median and the floor, and no quantile between them: a ninetieth taken over as few rounds
+     *  as these is the largest of them under a name that says it is not. */
     static void measure(Report report, Corpus corpus) {
         Timing timing = timeOfferings(corpus, WARMUP, MEASURED).timing();
-        report.line("OFFER %-14s median %8.1f ms  min %8.1f ms  p90 %8.1f ms", corpus.name(),
-                timing.medianMillis(), timing.minMillis(), timing.p90Millis());
+        report.line("OFFER %-14s median %8.1f ms  min %8.1f ms", corpus.name(),
+                timing.medianMillis(), timing.minMillis());
     }
 
     /**
@@ -78,22 +81,31 @@ final class RowOffering {
      * for a walk nothing arrives at is a number, and nothing about it says which of the two it is.
      * This is the defect this measurement exists because of, so the measurement answers for itself.
      *
-     * <p>Both halves, because either alone can stand while the search goes dark. Rows are offered
-     * for what a behavior's own reading composed as well as for a border, so a run that stopped
-     * looking at the borders still offers rows; a search that came to nothing is a search that ran.
+     * <p><b>A field per search, each read off that search's own answer.</b> A request is answered by
+     * two of them and the answer keeps them apart, because filling a combination and writing a row
+     * at an edge are different requests asked with different flags. So what a border search reached
+     * is read from the border search: counted from the combinations, the figure would stand while
+     * the borders went dark, which is the state this measurement exists to catch and would then be
+     * the state it was in.
+     *
+     * <p>Answered rather than unresolved. A search says what it has to say in rows, in what it could
+     * not resolve, and in what stopped it; a border search that composed a row for every point has
+     * nothing unresolved and ran all the same, so what is asked of it is whether it came back with
+     * anything ({@link souther.compiler.partition.Generator.GenerationResult#isEmpty()}).
      *
      * <p>Added up over the rounds the figure was taken over, and over the modules of each. What is
      * asked of it is whether the walks happened at all, which a total answers; what one round or one
      * module came to is a question about that round or that module and is not one this is here for.
      *
-     * @param offers what the offerings put in front of a reader to complete
-     * @param cameToNothing searches that ran and composed nothing, which is what a walk that was
-     *                      taken and did not get there answers with
+     * @param offers what the offerings put in front of a reader to complete, from both searches,
+     *               naming neither
+     * @param bordersAnswered behaviors whose border search came back with something to say
      */
-    record Reached(int offers, int cameToNothing) {
+    record Reached(int offers, int bordersAnswered) {
 
         Reached and(Reached other) {
-            return new Reached(offers + other.offers(), cameToNothing + other.cameToNothing());
+            return new Reached(offers + other.offers(),
+                    bordersAnswered + other.bordersAnswered());
         }
     }
 
@@ -142,13 +154,15 @@ final class RowOffering {
 
     private static Reached cameTo(List<Offering> answers) {
         int offers = 0;
-        int cameToNothing = 0;
+        int bordersAnswered = 0;
         for (Offering offering : answers) {
             offers += offering.count();
             for (Adequacy.Filling filling : offering.searched().values()) {
-                cameToNothing += filling.composed().unresolved().size();
+                if (!filling.boundaries().isEmpty()) {
+                    bordersAnswered++;
+                }
             }
         }
-        return new Reached(offers, cameToNothing);
+        return new Reached(offers, bordersAnswered);
     }
 }

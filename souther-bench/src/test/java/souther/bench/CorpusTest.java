@@ -193,9 +193,14 @@ class CorpusTest {
      *
      * <p>Out of running the measurement, as the figures above are, so what is asked about is what is
      * reported. Both halves are asked of the corpora together: rows are offered wherever a behavior
-     * has a reading to compose one from, and a search that came back with nothing is what a model
-     * with numbers bounded by its rules has and a model without them does not. Required of each
-     * corpus, the second would be met by writing a border into a model that has no use for one.
+     * has a reading to compose one from, and a border is what a model whose rules bound its numbers
+     * has and a model without them does not. Required of each corpus, the second would be met by
+     * writing a border into a model that has no use for one.
+     *
+     * <p>The second half is read off the border search and not off the rows offered beside it. A
+     * request is answered by two searches, and a run whose borders went dark still offers what the
+     * combinations composed — so a figure held to the offering alone is held to nothing this is
+     * named after, which is the defect the measurement was written for arriving in the check on it.
      *
      * <p>One round and none to warm it, where the figures above take several. What is read here is
      * what a search came back with, and that is the same on a cold store as on a warm one — while a
@@ -205,17 +210,17 @@ class CorpusTest {
     @Test
     void theOfferingFigureIsTakenOverRunsThatSearchedForRows() {
         int offers = 0;
-        int cameToNothing = 0;
+        int bordersAnswered = 0;
         for (Corpus corpus : Corpus.all()) {
             RowOffering.Reached reached = RowOffering.timeOfferings(corpus, 0, 1).reached();
             offers += reached.offers();
-            cameToNothing += reached.cameToNothing();
+            bordersAnswered += reached.bordersAnswered();
         }
         assertTrue(offers > 0,
                 "the offering figure is taken over runs that offer no row, so it sits where it is"
                         + " however much looking for one costs");
-        assertTrue(cameToNothing > 0,
-                "no search these offerings made came back having composed nothing, so the figure"
+        assertTrue(bordersAnswered > 0,
+                "no border search these offerings made came back with anything, so the figure"
                         + " answers for none of the walks that look for a value at a border");
     }
 
