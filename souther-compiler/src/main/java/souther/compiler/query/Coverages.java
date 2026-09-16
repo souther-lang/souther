@@ -1404,8 +1404,11 @@ final class Coverages {
             // arrives at the account as an observation that was stopped and the report says a limit
             // did something that never fired; named as the second, it says the row put nothing
             // where nothing ever looked.
+            // And nothing was left untried by a limit: there was no row for readings of it to be
+            // made from, so what stopped this is the reason beside it and not the search.
             return new StandingAtAPoint.Met.CouldNotTell(
-                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW));
+                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW),
+                    StandingAtAPoint.ReadingsTried.EVERY_ONE);
         }
         return StandingAtAPoint.met(line, List.of(read), criterion, site);
     }
@@ -1642,6 +1645,12 @@ final class Coverages {
         if (met instanceof StandingAtAPoint.Met.CouldNotTell it) {
             for (souther.compiler.partition.ReadingGap why : it.why()) {
                 by.add(new Weakening.BorderValueUnreadable(border, why));
+            }
+            // And the readings nobody made, which is not one of the reasons the ones that were made
+            // came to nothing. Both can be true of one point, so this is asked beside them rather
+            // than after them.
+            if (it.tried() instanceof StandingAtAPoint.ReadingsTried.StoppedAtTheLimit stopped) {
+                by.add(new Weakening.BorderReadingsNotExhausted(border, stopped.limit()));
             }
         }
         for (Incompleteness.Met gap : observed.gaps()) {

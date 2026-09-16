@@ -19,6 +19,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ConditionReportAnchor;
@@ -3016,7 +3017,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // carrying dropping it.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                         ReadingReasons met) ->
-                        "undecided whether a row is at the " + point + whatTheReadingsMet(met);
+                        "undecided whether a row is at the " + point
+                                + whyTheReadingsDidNotSettle(met);
                 // And why nobody read, where nobody did. Off the question and not off the coverage
                 // beside it: what a question is open on travels with the question, so a sentence
                 // that reached past it for the evidence would be one more reader working the
@@ -3054,10 +3056,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * has its reason said where the row stopped, and repeating it here would be one gap wearing two
      * sentences.
      */
-    private static String whatTheReadingsMet(ReadingReasons met) {
+    private static String whyTheReadingsDidNotSettle(ReadingReasons met) {
         List<String> said = new ArrayList<>();
         for (ReadingGap each : met.eachKindOnce().written()) {
             said.add(atTheBorder(each));
+        }
+        // And the readings nobody made, said after what the ones that were made came to and never
+        // instead of them. A row can stop a reading and hold more readings than a point is tried
+        // against, and a sentence choosing between the two would tell an author to raise a figure
+        // where nothing they raise reaches the value, or to look at a value nobody was stopped
+        // from reading.
+        if (met.tried() instanceof StandingAtAPoint.ReadingsTried.StoppedAtTheLimit _) {
+            said.add("the readings of the row ran past what one point is tried against,"
+                    + " so the rest of them were never tried");
         }
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
     }
@@ -6109,6 +6120,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
             };
+            // Beside those and not among them: what the readings that were made came to is above,
+            // and this is the readings nobody made.
+            case Weakening.BorderReadingsNotExhausted _ ->
+                    WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;

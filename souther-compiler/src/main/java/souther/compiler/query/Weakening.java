@@ -146,6 +146,33 @@ public sealed interface Weakening {
         }
     }
 
+    /**
+     * A row holds more readings at one border than a point is tried against, so what no reading
+     * stands at is undecided rather than absent.
+     *
+     * <p>Beside {@link BorderValueUnreadable}, and not one of it. There the reading was made and
+     * came to nothing; here the readings that were made were read in full and the rest were never
+     * made. A row whose positions run inside sequences has one reading per element chosen at each
+     * step, and which of them holds the value at the line is the row's business — so a walk that
+     * stops part-way through them may say it found the value and may not say nobody wrote it.
+     *
+     * <p><b>The border and not the row.</b> Two rows can stop this walk at one border and a third
+     * can run out, and what is owed a reader is that the border was not searched to the end. How
+     * large the search was is what one row happened to hold rather than what is true of the point,
+     * so a figure of it here would make two facts of one.
+     *
+     * @param limit how many readings of one row a point is tried against
+     */
+    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, int limit)
+            implements Weakening {
+
+        /** The figure is this compiler's, so a run allowed more readings comes to another answer. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {
 
