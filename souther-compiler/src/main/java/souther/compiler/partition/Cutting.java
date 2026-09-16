@@ -320,7 +320,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * One line, with what the rules leave the quantity it is on.
      *
      * <p>Asked of every quantity and not of the one shape that used to ask. What a quantity runs
-     * between is a question about the quantity, which {@link #direction} answers for all three
+     * between is a question about the quantity, which {@link BorderQuantity#direction} answers for
+     * all three
      * alike; asked only where the quantity was a form, a rule cutting a length at a negative drew a
      * border where a length never goes, and a row was owed at a value no row can carry.
      *
