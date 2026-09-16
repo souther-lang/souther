@@ -31,7 +31,14 @@ public enum MeasureWord {
     /** The arms of the behavior's body, and which of them a row runs through. */
     BRANCH,
 
-    /** The lines the behavior's rules draw, and the points either side of them. */
+    /**
+     * The lines the behavior's rules draw, and the points either side of them.
+     *
+     * <p>And each of those lines held against the lines the model's own weights put one step from
+     * it, which is a second question over the same reading rather than a measure of its own: what a
+     * reading of a line comes back with answers both, so a reading short of either is a reading
+     * short. Which of the two fell short is the word the shortfall itself carries.
+     */
     BOUNDARY,
 
     /** Which positions the model divides the behavior's input into. Not what the rows reach of any

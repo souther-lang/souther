@@ -97,16 +97,44 @@ public final class BoundaryDerivation {
             return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
         }
         if (closure instanceof MeasureClosure.OfTheBorder.Closed closed) {
-            return at.isEmpty()
-                    ? new Measure.NotApplicable<>(new NoRuleDrawsALine(closed))
-                    : new Measurement.Complete<>(List.copyOf(at));
+            if (at.isEmpty()) {
+                return new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
+            }
+            WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
+            return beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
+                    : new Measurement.Partial<>(List.copyOf(at), beside);
         }
         WeakeningSet by =
                 PartitionDerivation.weakening(((MeasureClosure.OfTheBorder.Open) closure).by());
         return at.isEmpty()
                 ? new Measurement.FailedToMeasure<>(
                         TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
-                : new Measurement.Partial<>(List.copyOf(at), by);
+                : new Measurement.Partial<>(List.copyOf(at),
+                        by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+    }
+
+    /**
+     * What holding these lines against the lines beside them went without.
+     *
+     * <p>Part of this measure and not a measure of its own, because it is the same value: an
+     * assessment of a line answers what a row stands at each of its points and what the rows leave
+     * standing beside it, and a reading that came back short of the second is a reading of these
+     * lines that came back short. What is missing is said in words of its own
+     * ({@link Weakening.ABorderNotHeldAgainstTheLinesBesideIt}), so a reader is told which of the
+     * two questions fell short rather than being left to read it off the measure's name.
+     *
+     * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
+     * walk short of a row that left no line standing has established that, because reading more
+     * rows leaves fewer lines standing and never more — so being short is not what makes this
+     * partial, and coming back unsettled is.
+     */
+    private static WeakeningSet whatHoldingThemAgainstTheirNeighboursWentWithout(
+            List<BorderAssessment> at) {
+        WeakeningSet out = WeakeningSet.none();
+        for (BorderAssessment line : at) {
+            out = out.union(line.besideWeakening());
+        }
+        return out;
     }
 
     /** The lines this behavior is measured at, empty where the measure has none to show. */

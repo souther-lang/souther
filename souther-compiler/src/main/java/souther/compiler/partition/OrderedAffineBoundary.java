@@ -73,7 +73,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * differently — there is nothing to multiply — so it is not a boundary of this kind, and reading
      * one asks its positions for a number they do not have.
      */
-    private static boolean weighable(BorderQuantity of) {
+    public static boolean weighable(BorderQuantity of) {
         for (NumericTerm term : of.terms()) {
             souther.compiler.check.Carrier on = of.carrierOf(term);
             if (on == null || !on.counts()) {
@@ -97,8 +97,14 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * with.
      */
     public java.util.Set<NumericTerm> weighedByANumber() {
+        return weighedByANumber(of);
+    }
+
+    /** The same, asked of a quantity rather than of a boundary on it — for a caller working out
+     *  whether there is a boundary of this kind to build at all. */
+    public static java.util.Set<NumericTerm> weighedByANumber(BorderQuantity of) {
         java.util.Set<NumericTerm> out = new java.util.LinkedHashSet<>();
-        for (NumericTerm term : direction().direction().keySet()) {
+        for (NumericTerm term : QuantityKey.of(of.direction()).direction().keySet()) {
             souther.compiler.check.Carrier on = of.carrierOf(term);
             if (on != null && on.canBeWeighed()) {
                 out.add(term);

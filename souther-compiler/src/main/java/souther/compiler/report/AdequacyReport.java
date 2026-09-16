@@ -615,6 +615,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     : boundaryReadings().made().orElseGet(List::of);
         }
 
+
         /** What they establish about the arms of its body. */
         public Adequacy.BranchEvidence branch() {
             return evidence.branch();
@@ -1636,8 +1637,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // ordinary shape whose boundary measure is made in full, and holding the verdict
                 // open for it would say a model was unmeasured on the strength of the one measure
                 // that was.
+                // The lines, and what holding each of them against the lines beside it came to: two
+                // questions over one reading, so one measure that is short where either of them is
+                // ({@link BoundaryDerivation#of}).
                 if (owesARowAt(Adequacy.Kind.BOUNDARY_UNMET)
-                        || owesARowAt(Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
+                        || owesARowAt(Adequacy.Kind.DOMAIN_POINT_UNCOVERED)
+                        || owesARowAt(Adequacy.Kind.BOUNDARY_NOT_TOLD_FROM_ANOTHER)) {
                     add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                             MeasureWord.BOUNDARY), behavior.boundaryReadings());
                 }
@@ -6146,6 +6151,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // and this is the readings nobody made.
             case Weakening.BorderReadingsNotExhausted _ ->
                     WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED;
+            // Two words for one fact, because what to do about them differs: one wants a strategy
+            // nobody has written and the other wants a row. Which of the two it is is the fact's
+            // own answer, asked here rather than read off whichever list it arrived in.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it -> switch (it.why()) {
+                case NO_STRATEGY_FOR_THE_RULE -> WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED;
+                case THE_ROWS_ARE_ALL_ON_ONE_SIDE ->
+                        WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE;
+            };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;

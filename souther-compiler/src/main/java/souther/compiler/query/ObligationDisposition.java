@@ -279,6 +279,11 @@ public sealed interface ObligationDisposition {
                 case Weakening.ObservationIncomplete _,
                      Weakening.OutputCasesUnreadable _,
                      Weakening.InputCasesUnreadable _,
+                     // And a line nothing held against the lines beside it, which is a second
+                     // question over this line's rows rather than anything about a point of it: a
+                     // point is met by a row standing there, and no strategy for the neighbours
+                     // takes that back.
+                     Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                      Weakening.ModelReadingIncomplete _,
                      Weakening.BodiesNotElaborated _,
                      Weakening.BoundaryNotDerived _,

@@ -83,6 +83,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // And the figure the readings of one row are tried against: a build allowed more tries the
         // readings the walk stopped short of.
         table.put("BorderReadingsNotExhausted", "answers/MAY_CHANGE");
+        // A border nothing held against the lines beside it. Neither way of being left unheld is an
+        // allowance: one wants a strategy nobody has written, the other wants a row.
+        table.put("ABorderNotHeldAgainstTheLinesBesideIt", "answers/UNAFFECTED");
         // And the same figure on the other criterion: a build allowed more walks the group.
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
         // A run this reading cannot place among the rules is not placed by allowing more.
@@ -207,6 +210,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.BodiesNotElaborated _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
+                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
@@ -243,6 +247,12 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
         out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        // One of each way a border goes unheld against the lines beside it, since they publish
+        // different words and a row for one of them says nothing about the other.
+        for (Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why why
+                : Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.values()) {
+            out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(), why));
+        }
         out.add(new Weakening.MeetingsNotWalked("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));

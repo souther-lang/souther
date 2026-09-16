@@ -38,6 +38,13 @@ import java.util.Set;
  * went without a row may say that nothing else stands — the rows it did read were enough — and may
  * not say that something does, because the row it went without is exactly what would have ruled it
  * out.
+ *
+ * <p><b>Four answers, and only one of them is about the model.</b> Two settle the question, one says
+ * it was put and could not be settled, and {@link NoSuchQuestion} says there is no such question to
+ * put. What goes in the last of those is a fact about the line itself — a line over one position has
+ * no line one step from it — and never a limit of this compiler or of the strategy it was asked
+ * under. A question this cannot answer, filed as a question that does not exist, is a verdict
+ * settled on the strength of something nobody established.
  */
 public sealed interface AnotherLineTheRowsAllow {
 
@@ -70,21 +77,146 @@ public sealed interface AnotherLineTheRowsAllow {
             return OrderedAffineBoundary.spelled(direction.direction()) + " = "
                     + cut.stripTrailingZeros().toPlainString();
         }
-    }
 
-    /** Nothing was established either way, and this is what stood in the way. */
-    record NotAsked(Reason why) implements AnotherLineTheRowsAllow {
-
-        public NotAsked {
-            java.util.Objects.requireNonNull(why, "a question not put says what stopped it");
+        /**
+         * What the walk that named this went without, which is nothing.
+         *
+         * <p>Here so that a finding made from this takes what found it, as every finding does. The
+         * condition is carried rather than the consequence: a line the rows allow is named only
+         * where every reading of every row was read
+         * ({@link StandingAtAPoint.RowsRead#everyOne}), and a walk that went without one comes back
+         * as {@link CouldNotTell}. So there is nothing for a finding off this to be weakened by —
+         * and a caller handing over some measure beside it would give this finding whatever another
+         * line of the same behavior went without.
+         */
+        public WeakeningSet weakening() {
+            return WeakeningSet.none();
         }
     }
 
-    /** Why a border was not held against the lines beside it. */
+    /**
+     * The question was put and could not be settled, and this is what stopped it.
+     *
+     * <p>Apart from {@link NoSuchQuestion}, which is the nearest thing and is not this. There the
+     * line has no line one step from it and nothing anybody writes changes that; here there is a
+     * question, and what is missing is a reading, a strategy or a proof. Held as one arm, a
+     * shortfall of this compiler's was published as a fact about the model, and a verdict rested on
+     * it.
+     *
+     * <p><b>Only this arm weakens the measure.</b> A walk short of a row that still left no line
+     * standing has settled the question: reading more rows leaves fewer lines standing, never more,
+     * so what it established holds over every row it did not read. So being short is not what makes
+     * a measure partial — coming back unsettled is, and a measure weakened by every partial walk
+     * would hold a verdict open over a question that was answered.
+     */
+    record CouldNotTell(Unsettled why) implements AnotherLineTheRowsAllow {
+
+        public CouldNotTell {
+            java.util.Objects.requireNonNull(why, "a question not settled says what stopped it");
+        }
+    }
+
+    /**
+     * Why a question that was put could not be settled.
+     *
+     * <p>Each of these is a different thing to do about it, so each is its own shape rather than a
+     * word in one list. What a reading went without is said in the vocabulary a reading answers in
+     * ({@link souther.compiler.partition.ReadingGap}); what no strategy reaches is not a reading
+     * that came to nothing, and a word shared between them would put a rule this compiler read in
+     * full under the reason for one it could not read.
+     */
+    sealed interface Unsettled {
+
+        /**
+         * The rows were read in part, and a line beside this one still stands after them.
+         *
+         * <p>What a walk over rows went without is one value and there is one of it
+         * ({@link ReadingReasons}) — the reasons each once in the order they are published in, and
+         * whether the readings they were met in are all there were. A pair written again here would
+         * be the same two facts under a second name, free to put them in another order.
+         */
+        record RowsIncomplete(ReadingReasons met) implements Unsettled {
+
+            public RowsIncomplete {
+                java.util.Objects.requireNonNull(met, "a walk says what it went without");
+                if (met.eachKindOnce().isEmpty()
+                        && met.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne) {
+                    throw new IllegalArgumentException("a walk that went without nothing and read"
+                            + " every reading there is read the rows in full, and this says it read"
+                            + " them in part");
+                }
+            }
+        }
+
+        /**
+         * Nothing was read against this line at all, and this is the reading that says why.
+         *
+         * <p>The reading's own answer, carried whole. What a measure over these lines is worth is
+         * what that reading is worth, and a word invented here would be a second account of one
+         * thing.
+         */
+        record TheRowsWereNotRead(Measurement<ItemAssessment.Coverage> as) implements Unsettled {
+
+            public TheRowsWereNotRead {
+                if (as instanceof Measurement.Complete) {
+                    throw new IllegalArgumentException("a reading that was made is not why nothing"
+                            + " was read: " + as);
+                }
+            }
+        }
+
+        /**
+         * Every row this quantity has a value at falls on one side of the line.
+         *
+         * <p>So the rows pin no threshold on any line beside it, and every one of them stands.
+         * Which is not a line this can name: what makes a line the rows allow nameable is a
+         * threshold the rows themselves put it at, and rows all on one side put it nowhere. Said as
+         * nothing standing, a border no row is beside would read as one the rows had pinned down.
+         *
+         * <p>A border all four of whose points are met never comes back this way, whichever side of
+         * its line the value it names belongs to: one of the two points against the line satisfies
+         * the rule and the other does not.
+         */
+        record TheRowsAreAllOnOneSide() implements Unsettled {}
+
+        /**
+         * There is a line beside this one and this compiler holds no border against it.
+         *
+         * <p>A limit of the strategy and not of the model. A rule that names a value divides the
+         * quantity at the value it names, and weighing one of its positions differently is as much
+         * a fault there as it is at a rule that orders the values — what is missing is a side to
+         * keep a row on, which is a thing to write rather than a thing that does not exist.
+         */
+        record NoStrategyForIt(Strategy which) implements Unsettled {
+
+            public NoStrategyForIt {
+                java.util.Objects.requireNonNull(which, "a strategy that is missing is named");
+            }
+        }
+    }
+
+    /** Which shape of border this compiler holds against no line beside it. */
+    enum Strategy {
+        /** A rule that names a value rather than ordering the values around it. */
+        A_RULE_THAT_NAMES_A_VALUE
+    }
+
+    /**
+     * There is no line one step from this one, so there is nothing here to ask.
+     *
+     * <p>A fact about the line and about nothing else. Every reason below is one no row anybody
+     * writes and no run allowing more would change — which is what makes this the one arm a settled
+     * verdict may rest on.
+     */
+    record NoSuchQuestion(Reason why) implements AnotherLineTheRowsAllow {
+
+        public NoSuchQuestion {
+            java.util.Objects.requireNonNull(why, "a question that does not exist says why");
+        }
+    }
+
+    /** Why a line has no line one step from it. */
     enum Reason {
-        /** The rule names a value rather than ordering the values around it, so it has no side to
-         *  keep a row on. */
-        THE_RULE_ORDERS_NOTHING,
         /** The line is on an order with no numbers under it — two strings stand one above the other
          *  and no distance apart — so there are no weights for another line to write differently. */
         THE_QUANTITY_HAS_NO_NUMBERS,
@@ -94,33 +226,10 @@ public sealed interface AnotherLineTheRowsAllow {
         /** No position of it is weighed by a number a model writes. A date counts from an origin
          *  nobody wrote, so a line weighing one of them two is a line nobody can state — such a
          *  border can shift and cannot turn. */
-        NO_POSITION_OF_IT_IS_WEIGHED_BY_A_NUMBER,
-        /** Every row this quantity has a value at falls on one side of the line, so there is no
-         *  threshold any other line has to keep them apart at. */
-        THE_ROWS_ARE_ALL_ON_ONE_SIDE,
-        /** Nothing was read against this line at all, so there were no rows to hold it against.
-         *  Apart from the one below: that is a walk that read some of them. */
-        NOTHING_WAS_READ_AGAINST_THE_LINE,
-        /** A line beside this one stands after the rows that were read, and the rows were not all
-         *  read — which is exactly the walk that may not name one. */
-        THE_ROWS_WERE_NOT_ALL_READ
+        NO_POSITION_OF_IT_IS_WEIGHED_BY_A_NUMBER
     }
 
     AnotherLineTheRowsAllow NONE_DOES = new NoneDoes();
-
-    /**
-     * What the walk that came to this went without, which is nothing.
-     *
-     * <p>Here so that a finding made from this takes what found it, as every finding does. The
-     * condition is carried rather than the consequence: this names a line the rows allow only where
-     * every reading of every row was read ({@link StandingAtAPoint.RowsRead#everyOne}), and a walk
-     * that went without one answers that it was not asked. So there is nothing for a finding off
-     * this to be weakened by — and a caller handing over some measure beside it would give this
-     * finding whatever another line of the same behavior went without.
-     */
-    default WeakeningSet weakening() {
-        return WeakeningSet.none();
-    }
 
     /**
      * What the rows leave standing beside {@code boundary}.
@@ -136,24 +245,36 @@ public sealed interface AnotherLineTheRowsAllow {
         // rule that names a value orders nothing and has no side to keep a row on; a rule on an
         // order with no numbers has no weights to write differently. Read off one answer, either
         // would be published under the other's word.
-        if (!(border.origin().lineFacts().claim()
-                instanceof souther.compiler.check.ComparisonClaim.Cut)) {
-            return new NotAsked(Reason.THE_RULE_ORDERS_NOTHING);
+        // What the line is, before what its rule states about it. Whether there is a line one step
+        // from this one is the line's own answer and is the same whichever way the rule reads it —
+        // so a bound on one position comes back as a question that does not arise, and never as one
+        // this compiler declined to put.
+        souther.compiler.partition.BorderQuantity of = border.cut().of();
+        if (!OrderedAffineBoundary.weighable(of)) {
+            return new NoSuchQuestion(Reason.THE_QUANTITY_HAS_NO_NUMBERS);
         }
+        QuantityKey runs = QuantityKey.of(of.direction());
+        if (runs.direction().size() == 1) {
+            return new NoSuchQuestion(Reason.THE_LINE_IS_ON_ONE_POSITION);
+        }
+        Set<NumericTerm> weighed = OrderedAffineBoundary.weighedByANumber(of);
+        if (weighed.isEmpty()) {
+            return new NoSuchQuestion(Reason.NO_POSITION_OF_IT_IS_WEIGHED_BY_A_NUMBER);
+        }
+        List<QuantityKey> family = new FaultFamily(runs, weighed).others();
+        if (family.isEmpty()) {
+            // Weighed every way one step allows and every one of them is this line. There is
+            // nothing to be told from, which is the same fact the reasons above are.
+            return new NoSuchQuestion(Reason.THE_LINE_IS_ON_ONE_POSITION);
+        }
+        // And now the rule. There is a line one step from this one, and a rule that names a value
+        // orders nothing — so it has no side to keep a row on and nothing here holds it against its
+        // neighbours. A strategy nobody wrote, and not a question the model does not raise: the
+        // second would settle a verdict on something nobody established.
         OrderedAffineBoundary boundary = OrderedAffineBoundary.of(border);
         if (boundary == null) {
-            return new NotAsked(Reason.THE_QUANTITY_HAS_NO_NUMBERS);
-        }
-        if (boundary.direction().direction().size() == 1) {
-            return new NotAsked(Reason.THE_LINE_IS_ON_ONE_POSITION);
-        }
-        Set<NumericTerm> weighed = boundary.weighedByANumber();
-        if (weighed.isEmpty()) {
-            return new NotAsked(Reason.NO_POSITION_OF_IT_IS_WEIGHED_BY_A_NUMBER);
-        }
-        List<QuantityKey> family = new FaultFamily(boundary.direction(), weighed).others();
-        if (family.isEmpty()) {
-            return NONE_DOES;
+            return new CouldNotTell(
+                    new Unsettled.NoStrategyForIt(Strategy.A_RULE_THAT_NAMES_A_VALUE));
         }
         // The rows read here and not before. Reading them is a walk of its own over every row, and
         // every question above is about the line alone — so a border with no line beside it, which
@@ -164,8 +285,13 @@ public sealed interface AnotherLineTheRowsAllow {
         for (Map<NumericTerm, Place> values : rows.each()) {
             (boundary.satisfiedBy(values) ? satisfying : refusing).add(values);
         }
-        if (satisfying.isEmpty() || refusing.isEmpty()) {
-            return new NotAsked(Reason.THE_ROWS_ARE_ALL_ON_ONE_SIDE);
+        // No row the rule keeps, so there is nothing a threshold on any other line has to keep, and
+        // the tightest one there is falls below every row instead of at one of them — which is a
+        // place this cannot name without a step of the other line's own. Where the rows are all on
+        // the kept side the tightest threshold is the furthest of them, so that side is answered
+        // below like any other.
+        if (satisfying.isEmpty()) {
+            return new CouldNotTell(new Unsettled.TheRowsAreAllOnOneSide());
         }
         for (QuantityKey other : family) {
             BigDecimal cut = keeping(other, boundary.satisfiedOn(), satisfying, refusing);
@@ -173,11 +299,15 @@ public sealed interface AnotherLineTheRowsAllow {
                 continue;
             }
             if (!rows.everyOne()) {
-                return new NotAsked(Reason.THE_ROWS_WERE_NOT_ALL_READ);
+                return new CouldNotTell(new Unsettled.RowsIncomplete(
+                        ReadingReasons.of(rows.why(), rows.tried())));
             }
             return new OneDoes(other, cut,
                     partingAt(boundary, other, cut, satisfying, refusing, elsewhere));
         }
+        // Nothing stands, which the rows that were read establish however few of them there were:
+        // a row read leaves fewer lines standing and never more, so a line none of these allows is
+        // one none of the rest would have allowed either.
         return NONE_DOES;
     }
 
@@ -194,6 +324,12 @@ public sealed interface AnotherLineTheRowsAllow {
     private static BigDecimal keeping(QuantityKey other, Towards satisfiedOn,
                                       List<Map<NumericTerm, Place>> satisfying,
                                       List<Map<NumericTerm, Place>> refusing) {
+        // Some row the rule keeps, which is settled before this is called. Asked without one, the
+        // loop below would leave the threshold at nothing and read as a line the rows tell this one
+        // from — which is the opposite of what such rows establish.
+        if (satisfying.isEmpty()) {
+            throw new IllegalArgumentException("a threshold that keeps none of the rows");
+        }
         BigDecimal furthest = null;
         for (Map<NumericTerm, Place> values : satisfying) {
             BigDecimal at = OrderedAffineBoundary.along(other.direction(), values);

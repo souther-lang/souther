@@ -55,6 +55,60 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         return Set.of(origin().cited());
     }
 
+    /**
+     * What holding this line against the lines beside it went without, where it came back unsettled.
+     *
+     * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
+     * walk short of a row that left no line standing has established that, because reading more
+     * rows leaves fewer lines standing and never more — so a measure weakened by every partial walk
+     * would hold a verdict open over a question that was answered.
+     *
+     * <p>Made here because the facts are about this border and the answer does not hold one. A
+     * reading that came to nothing and readings nobody made are the same two facts the points of
+     * this border carry, said in the same words, so a reader is told them once however many
+     * questions over these rows went without them.
+     */
+    public WeakeningSet besideWeakening() {
+        if (!(beside instanceof AnotherLineTheRowsAllow.CouldNotTell(var why))) {
+            return WeakeningSet.none();
+        }
+        return switch (why) {
+            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
+                WeakeningSet out = WeakeningSet.none();
+                for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
+                    out = out.union(
+                            WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
+                }
+                yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
+                        .ReadingsTried.StoppedAtTheLimit(int limit)
+                        ? out.union(WeakeningSet.of(
+                                new Weakening.BorderReadingsNotExhausted(border, limit)))
+                        : out;
+            }
+            // The reading's own, which is what a measure over these lines is worth.
+            case AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(var as) -> as.weakening();
+            case AnotherLineTheRowsAllow.Unsettled.TheRowsAreAllOnOneSide _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .THE_ROWS_ARE_ALL_ON_ONE_SIDE));
+            case AnotherLineTheRowsAllow.Unsettled.NoStrategyForIt _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NO_STRATEGY_FOR_THE_RULE));
+        };
+    }
+
+    /**
+     * Whether holding this line against the lines beside it came to an answer.
+     *
+     * <p>Which is not whether a line was found. A border no line beside it survives and a border
+     * with one named are both settled; a border the question could not be put of is not, and a
+     * border with no line beside it at all was never a question.
+     */
+    public boolean besideSettled() {
+        return !(beside instanceof AnotherLineTheRowsAllow.CouldNotTell);
+    }
+
     public BorderAssessment {
         if (beside == null) {
             throw new IllegalArgumentException("a border says what the rows leave standing beside"

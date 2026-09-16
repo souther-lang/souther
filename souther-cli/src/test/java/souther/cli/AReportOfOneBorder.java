@@ -211,13 +211,14 @@ final class AReportOfOneBorder {
                     ItemAssessment.WritabilityProjection.PROVEN,
                     souther.compiler.query.SearchOutcomes.none()));
         }
-        // No rows behind this fixture, so nothing here has been held against the lines beside it.
-        // Said as a question that was not put rather than as one that came back empty: a fixture
-        // that claimed the rows leave nothing standing would be claiming it of rows it has none of.
+        // Every line this fixture builds is on one position, which has no line one step from it:
+        // weighed one less it is nothing, and weighed one more it is the same line. So there is
+        // nothing here to hold it against, which is a fact about the line and not a question this
+        // fixture is dodging — and it is why these reports are settled on that measure.
         return new BorderAssessment(border, items,
-                new souther.compiler.query.AnotherLineTheRowsAllow.NotAsked(
+                new souther.compiler.query.AnotherLineTheRowsAllow.NoSuchQuestion(
                         souther.compiler.query.AnotherLineTheRowsAllow.Reason
-                                .NOTHING_WAS_READ_AGAINST_THE_LINE));
+                                .THE_LINE_IS_ON_ONE_POSITION));
     }
 
     /** A row is at every point the border owes. */

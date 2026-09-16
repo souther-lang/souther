@@ -221,6 +221,8 @@
           "border_value_absent",
           "border_observation_unavailable",
           "border_readings_not_exhausted",
+          "lines_beside_a_border_not_tried",
+          "a_borders_rows_are_all_on_one_side",
           "rule_unread",
           "position_not_read",
           "question_unanswered",
@@ -4424,7 +4426,7 @@
                 "partition",
                 "decision"
               ],
-              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`)."
+              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`). `boundary` answers two questions over one reading of the lines: whether a row stands at each point of a line, which shows the line has not moved, and whether any line one step from it answers alike at every row, which shows it has not turned. A reading short of either is short, and which of the two it was is the word the shortfall itself carries."
             }
           }
         },

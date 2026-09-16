@@ -1032,8 +1032,8 @@ final class Coverages {
         // reading of the line as the points above: a row at each of the four shows the line has not
         // moved, and nothing about the four shows it has not turned.
         return new BorderAssessment(border, items, absent != null
-                ? new AnotherLineTheRowsAllow.NotAsked(
-                        AnotherLineTheRowsAllow.Reason.NOTHING_WAS_READ_AGAINST_THE_LINE)
+                ? new AnotherLineTheRowsAllow.CouldNotTell(
+                        new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(absent))
                 : shape.beside(rows));
     }
 
@@ -1378,10 +1378,10 @@ final class Coverages {
      */
     private static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
                                                    AnotherLineTheRowsAllow b) {
-        if (a instanceof AnotherLineTheRowsAllow.NotAsked) {
+        if (a instanceof AnotherLineTheRowsAllow.CouldNotTell) {
             return b;
         }
-        if (b instanceof AnotherLineTheRowsAllow.NotAsked || a.equals(b)) {
+        if (b instanceof AnotherLineTheRowsAllow.CouldNotTell || a.equals(b)) {
             return a;
         }
         throw new IllegalStateException("two readings of one line disagreeing about which lines"
