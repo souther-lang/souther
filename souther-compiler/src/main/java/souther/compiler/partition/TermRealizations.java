@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -232,6 +234,7 @@ final class TermRealizations {
         }
         SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
         SequencedMap<RealizationTarget, TakenAs.DatePart> dates = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget, BigDecimal> quotients = new LinkedHashMap<>();
         for (RealizationTarget target : targets) {
             if (!(target.term() instanceof NumericTerm.TakenOf taken)) {
                 return nothingSolvesAGroup();
@@ -239,15 +242,29 @@ final class TermRealizations {
             switch (taken.takenAs()) {
                 case TakenAs.PartOfTime part -> times.put(target, part.part());
                 case TakenAs.PartOfDate part -> dates.put(target, part.part());
-                // A quotient is here rather than beside the parts. Two of them at one place do
-                // leave values that answer both — a whole number divides by two and by three at
-                // once — and working out which is solving for a value from two numbers of it,
-                // which is not what putting parts side by side does.
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
-                        TakenAs.TheTruncatingQuotient _ -> {
+                // A quotient is not a place in the spelling of anything, and putting two of them
+                // side by side writes no value: which value has both is solved for out of them.
+                // Which is what the arm below does, and it is the account's divisor that says what
+                // there is to solve.
+                case TakenAs.TheTruncatingQuotient by -> {
+                    BigDecimal divisor = by.read(taken.arguments());
+                    if (divisor == null || divisor.signum() == 0) {
+                        return nothingSolvesAGroup();
+                    }
+                    quotients.put(target, divisor);
+                }
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
                     return nothingSolvesAGroup();
                 }
             }
+        }
+        if (!quotients.isEmpty()) {
+            // Quotients and nothing else. A quotient of a place beside a part of it is a value that
+            // is both a number and a moment, and what would write one is neither arm here.
+            return quotients.size() == targets.size()
+                    ? new JointRealization.Supported(
+                            new JointBuilder.SolvingForTheirQuotients(quotients))
+                    : nothingSolvesAGroup();
         }
         // Two asks at one part are two asks for one number and are the same target, so a group
         // holding a part twice is a group somebody built by hand. Not a population this compiler
@@ -388,6 +405,74 @@ final class TermRealizations {
                 }
                 return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
                         reading.source());
+            }
+        }
+
+        /**
+         * One number of the place whose quotients are the numbers asked for, solved out of them.
+         *
+         * <p><b>Solved and not put together.</b> A quotient is no place in the spelling of a
+         * number, so there is nothing to write side by side: what a value of the place may be is
+         * every demand's answer at once, and finding one is looking in the run they leave between
+         * them. Which the account can say because a quotient by a written number runs over a run
+         * of the place — the numbers whose half is five are ten and eleven — so each demand is a
+         * pair of ends and the demands together are their meet.
+         *
+         * <p><b>Nothing in the run is a statement about the model.</b> Where both ends are written
+         * down this walks every whole number between them, so nothing built there is nothing to
+         * build: the halves of a number that is also its own thirds are asked for by models that
+         * have no such value, and an author is owed that answer rather than a repertoire. Where an
+         * end is open the carrier names one place and what comes back says so.
+         */
+        record SolvingForTheirQuotients(SequencedMap<RealizationTarget, BigDecimal> by)
+                implements JointBuilder {
+
+            public SolvingForTheirQuotients {
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a solving for some quotients says which divisors they are by");
+                }
+                by = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(by));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                Carrier observed = rootOf(by.keySet(), measuring);
+                if (observed == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                NumericDomain.Bounds lies = NumericDomain.Bounds.OPEN;
+                for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+                    NumericDomain.Bounds quotients = quotientsAsked(demands.get(each.getKey()));
+                    if (quotients == null) {
+                        return new Realization.Unexhausted(Set.of(CompositionRepertoire
+                                .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS), null);
+                    }
+                    // And what the rules leave the quotient room for, which is about the way to
+                    // the point rather than about this demand. A region that leaves the number
+                    // nowhere is a thing the rules say, so the run is empty and this says nothing
+                    // was built in it.
+                    switch (within == null ? null
+                            : within.projectionOf(each.getKey().term())) {
+                        case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                                quotients = quotients.meet(held);
+                        case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                            return new Realization.None(
+                                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                        }
+                        case null -> { }
+                    }
+                    lies = lies.meet(numbersWhoseQuotientLiesIn(quotients, each.getValue()));
+                }
+                RuleReadingSource ruleSource = reading.source();
+                return firstThatBuilds(
+                        numbersInside(lies, observed,
+                                at -> readsBackIntoEveryOne(at, by, demands, observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
             }
         }
 
@@ -611,7 +696,7 @@ final class TermRealizations {
      * about the offer reads it the same.
      */
     private static Realization firstThatBuilds(Tried tried,
-                                               java.util.function.Function<Place, Realization> of) {
+                                               Function<Place, Realization> of) {
         Set<CompositionBudget> met = new java.util.LinkedHashSet<>();
         Set<CompositionRepertoire> some = new java.util.LinkedHashSet<>();
         Realization last = null;
@@ -775,12 +860,25 @@ final class TermRealizations {
      */
     private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
                                       int many) {
+        return wholeNumbers(wanted.extent(), at -> wanted.holds(at, on),
+                BigDecimal.valueOf(from), BigDecimal.valueOf(to), many);
+    }
+
+    /**
+     * The same, of ends and a membership a caller answers rather than of one set.
+     *
+     * <p>For a number several sets are asked of at once: which numbers a value of the place may be
+     * is every set's answer together, and no one of them is the question. The ends narrow the
+     * walking and the membership decides it, which is the arrangement the single set has as well —
+     * {@link NumericSet#extent()} beside {@link NumericSet#holds}.
+     */
+    private static Tried wholeNumbers(NumericDomain.Bounds lies, Predicate<Place> holds,
+                                      BigDecimal from, BigDecimal to, int many) {
         // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
         // of number goes, and stepping through the part of it the set is nowhere near is a walk
         // over the kind rather than a choice between the numbers the rules admit.
-        NumericDomain.Bounds lies = wanted.extent();
-        BigDecimal first = startOf(lies.min(), BigDecimal.valueOf(from));
-        BigDecimal last = endOf(lies.max(), BigDecimal.valueOf(to));
+        BigDecimal first = startOf(lies.min(), from);
+        BigDecimal last = endOf(lies.max(), to);
         List<Place> out = new ArrayList<>();
         // One past what is handed over, so that a window holding exactly as many as the figure
         // allows is a window this walked to the end of. Stopped at the figure itself, a set of
@@ -788,7 +886,7 @@ final class TermRealizations {
         for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() <= many;
                 at = at.add(BigDecimal.ONE)) {
             Count place = new Count(at);
-            if (wanted.holds(place, on)) {
+            if (holds.test(place)) {
                 out.add(place);
             }
         }
@@ -873,6 +971,135 @@ final class TermRealizations {
                 new Remainder.SomeOf(ofTheRun));
     }
 
+    /**
+     * The quotients a set asks for, as ends, or null where the set is not a run of them.
+     *
+     * <p>Every number but the ones a rule singled out is an order with holes in it, and no pair of
+     * ends is that. Which is a population nothing here solves a value out of rather than a set
+     * with nothing in it, so a caller says that and does not read these ends as open.
+     */
+    private static NumericDomain.Bounds quotientsAsked(NumericSet wanted) {
+        return switch (wanted) {
+            case NumericSet.At one -> new NumericDomain.Bounds(
+                    Endpoint.inclusive(one.value()), Endpoint.inclusive(one.value()));
+            case NumericSet.InARun _ -> wanted.extent();
+            case NumericSet.AwayFrom _ -> null;
+        };
+    }
+
+    /**
+     * The numbers of a place whose quotient by {@code by} lies between {@code quotients}.
+     *
+     * <p><b>The account's own arithmetic, and wide rather than exact.</b> Truncation is not a
+     * bijection: a run of numbers answers each quotient, so a set of quotients is a run of the
+     * place. These ends are where that run can lie and the membership is asked separately, so an
+     * end this puts further out than the truth costs a number tried and can offer nothing that
+     * does not read back. Read as the answer instead, the sign cases below would each be a row
+     * standing at a number it is not.
+     */
+    static NumericDomain.Bounds numbersWhoseQuotientLiesIn(NumericDomain.Bounds quotients,
+                                                           BigDecimal by) {
+        // Dividing by a negative counts the other way, so the ends swap: the numbers whose
+        // quotient by minus two is at least three are the ones whose quotient by two is at most
+        // minus three. Answered by turning the ends round rather than by a second set of cases.
+        BigDecimal size = by.abs();
+        Endpoint low = by.signum() > 0 ? quotients.min() : upsideDown(quotients.max());
+        Endpoint high = by.signum() > 0 ? quotients.max() : upsideDown(quotients.min());
+        return new NumericDomain.Bounds(
+                low == null ? null : Endpoint.inclusive(lowestWhoseQuotientIs(low, size)),
+                high == null ? null : Endpoint.inclusive(highestWhoseQuotientIs(high, size)));
+    }
+
+    /**
+     * The whole numbers inside these ends that {@code holds} admits, in the order to try them, or
+     * the one place the carrier names where the ends do not close.
+     *
+     * <p>Stepped where both ends are written down, because that is a handful of numbers: the ones
+     * whose quotient is a given number are as many as the divisor. Where an end is open there is
+     * nothing to step from, so the carrier names a place the way it does for a run — and what comes
+     * back says this wrote one of them, since raising nothing reaches a second.
+     */
+    private static Tried numbersInside(NumericDomain.Bounds lies, Carrier on,
+                                       Predicate<Place> holds) {
+        if (lies.min() != null && lies.min().at() instanceof Count low
+                && lies.max() != null && lies.max().at() instanceof Count high) {
+            return wholeNumbers(lies, holds, low.at(), high.at(),
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        }
+        Place found = on.somethingInside(lies.min(), lies.max());
+        return new Tried(found == null || !holds.test(found) ? List.of() : List.of(found),
+                new Remainder.SomeOf(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)));
+    }
+
+    /**
+     * Whether the quotient of {@code at} by each of those divisors is one of the numbers that
+     * demand asked for.
+     *
+     * <p><b>Read through the account and not off the ends.</b> Which numbers a value answers is
+     * what reading it comes to, so a candidate is admitted by dividing it and asking each set —
+     * the ends above only say where to look. Decided from the ends instead, a number the
+     * arithmetic put in the run and truncation does not would be a row offered at a number it
+     * reads back as something else.
+     */
+    private static boolean readsBackIntoEveryOne(Place at,
+                                                 SequencedMap<RealizationTarget, BigDecimal> by,
+                                                 SequencedMap<RealizationTarget, NumericSet> asked,
+                                                 Carrier observed) {
+        if (!(at instanceof Count count)) {
+            return false;
+        }
+        for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+            NumericSet wanted = asked.get(each.getKey());
+            Place quotient = observed.onTheGrid(new Count(
+                    TakenAs.TheTruncatingQuotient.quotientOf(count.at(), each.getValue())));
+            if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** An end of the quotients read on the other side of nought, which is what dividing by a
+     *  negative number does to it. */
+    private static Endpoint upsideDown(Endpoint end) {
+        return end == null || !(end.at() instanceof Count count) ? null
+                : new Endpoint(new Count(count.at().negate()), end.inclusive());
+    }
+
+    /**
+     * The smallest number whose quotient by {@code size} is at that end, or null where the end
+     * names no whole number.
+     *
+     * <p>Wide by a whole quotient's worth at an open end, which is what keeps this from being a
+     * second reading of exclusivity: a number this admits and the rules do not is one the
+     * membership turns down.
+     */
+    private static Place lowestWhoseQuotientIs(Endpoint end, BigDecimal size) {
+        if (!(end.at() instanceof Count count)) {
+            return null;
+        }
+        BigDecimal at = count.at().setScale(0, java.math.RoundingMode.FLOOR);
+        BigDecimal quotient = end.inclusive() ? at : at.subtract(BigDecimal.ONE);
+        return new Count(quotient.signum() < 0
+                ? quotient.multiply(size).subtract(size).add(BigDecimal.ONE)
+                : quotient.signum() == 0 ? size.negate().add(BigDecimal.ONE)
+                        : quotient.multiply(size));
+    }
+
+    /** The largest number whose quotient by {@code size} is at that end, as wide as the smallest
+     *  is at the other. */
+    private static Place highestWhoseQuotientIs(Endpoint end, BigDecimal size) {
+        if (!(end.at() instanceof Count count)) {
+            return null;
+        }
+        BigDecimal at = count.at().setScale(0, java.math.RoundingMode.CEILING);
+        BigDecimal quotient = end.inclusive() ? at : at.add(BigDecimal.ONE);
+        return new Count(quotient.signum() > 0
+                ? quotient.multiply(size).add(size).subtract(BigDecimal.ONE)
+                : quotient.signum() == 0 ? size.subtract(BigDecimal.ONE)
+                        : quotient.multiply(size));
+    }
+
     /** The one value whose quotient by that divisor is exactly that number. */
     private static Realization multipliedBack(BigDecimal by, Type sourceType, Carrier observed,
                                               Place answer, RuleReadingSource ruleSource) {
@@ -880,13 +1107,26 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Place dividend = observed.onTheGrid(new Count(wanted.at().multiply(by)));
-        if (dividend == null) {
+        return writtenAt(new Count(wanted.at().multiply(by)), sourceType, observed, ruleSource);
+    }
+
+    /**
+     * The value of a place standing at that number, wearing every name the place declares.
+     *
+     * <p>Where a number worked out for a root becomes a value, whichever reader worked it out: the
+     * product a quotient asks for, the number several quotients leave. Past the end of what the
+     * position's own order holds nothing is composed, and that is the carrier's answer rather than
+     * anything counted here — a value past it is one no row can write however the arithmetic came
+     * out.
+     */
+    private static Realization writtenAt(Place at, Type sourceType, Carrier observed,
+                                         RuleReadingSource ruleSource) {
+        Place on = observed.onTheGrid(at);
+        if (on == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return oneValue(
-                FixtureTemplate.on(observed, dividend, ruleSource.symbols().scope()::reach),
+        return oneValue(FixtureTemplate.on(observed, on, ruleSource.symbols().scope()::reach),
                 sourceType, ruleSource);
     }
 

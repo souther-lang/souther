@@ -214,11 +214,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years a date is looked for in, and whether they were all of them"),
             Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
-                            + "Lsouther/compiler/partition/NumericSet;"
-                            + "Lsouther/compiler/check/Carrier;JJI)"
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/function/Predicate;"
+                            + "Ljava/math/BigDecimal;Ljava/math/BigDecimal;I)"
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),
+            // The numbers a place may be where several of its quotients are asked for. The run the
+            // demands leave is walked as whole numbers, so the figure bounds how many of them are
+            // tried — and what it hands over is that walk's own answer.
+            Map.entry("souther.compiler.partition.TermRealizations#numbersInside("
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Lsouther/compiler/check/Carrier;Ljava/util/function/Predicate;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "how many numbers of the run the demands leave are tried, and whether they"
+                            + " were all of it"),
             Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
                             + "Ljava/util/Map;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"

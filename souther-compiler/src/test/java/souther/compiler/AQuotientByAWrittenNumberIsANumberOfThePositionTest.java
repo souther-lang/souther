@@ -164,23 +164,19 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
     }
 
     /**
-     * Two numbers of one place are recognised, and no row is composed where a rule relates them.
+     * Two numbers of one place are recognised, and the line between them is offered a row.
      *
-     * <p><b>A limitation, said out loud.</b> {@code x / 2 < x / 3} draws its line between two
-     * numbers of one position, and values that stand on it exist — every negative multiple of six
-     * is one. What cannot be done is composing the value: what writes a value for one number of a
-     * place is chosen per account, and two accounts at one place have no way to say what they admit
-     * between them, so the pair is refused whatever the accounts are.
+     * <p>{@code x / 2 < x / 3} draws its line between two numbers of one position, and the values
+     * that stand on it are solved for out of them: each quotient by a written number runs over a
+     * run of the place, so what a value may be is the run the two leave between them. Minus two is
+     * one — its half is minus one and its third is nought.
      *
-     * <p>Held here so the state is a decision and not a surprise. What the report says about such a
-     * point is which values this compiler writes none of, and not that nothing could be built for
-     * it and not that no row can stand there — the values that answer several of their own numbers
-     * are the population, and what reaches the rest of them is somebody writing the solving. A
-     * change that moved either half, by composing the value or by reporting the point as
-     * unreachable, is a change this has to be looked at with.
+     * <p>Held here because both halves of it are decisions. A row at the line says the solving ran;
+     * the sentences that are pinned absent say what the report may no longer claim, which is that
+     * no value can be written there and that this compiler has no way of writing one.
      */
     @Test
-    void twoNumbersOfOnePlaceAreRecognisedAndNoRowIsComposedForTheirLine() {
+    void twoNumbersOfOnePlaceAreSolvedTogetherAndTheirLineIsOfferedARow() {
         String model = """
                 module example.quotient
 
@@ -191,18 +187,22 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
                     true
                 }
                 """;
+        String offered = block(measured(model));
+        assertTrue(offered.contains("| ("), () -> "a row is offered at the line: " + offered);
         String report = report(measured(model));
         assertTrue(report.contains("borders 1"), report);
-        assertTrue(report.contains("this compiler writes some of the values that answer several of"
-                + " their own numbers rather than all of them"), report);
-        // The two sentences a reader may not be told, and they are the point of the case. One says
-        // no value exists and the other says nothing here could build one at all; what happened is
-        // that nothing here solves a value out of several numbers of a place, and neither of these
-        // is that.
+        // The sentences a reader may not be told. One says no value exists; the other is what this
+        // compiler said while it had no way of solving a value out of several numbers of one
+        // place, and a line it solves one for is told neither.
         assertFalse(report.contains("no value can be written"), report);
-        assertFalse(report.contains("nothing here could build a representative"), report);
-        assertFalse(block(measured(model)).contains("| ("),
-                () -> "and no row is offered at it: " + block(measured(model)));
+        assertFalse(report.contains("the values that answer several of their own numbers"), report);
+        // What is left is the region between the lines, where the pairs of numbers this compiler
+        // tries run out before one of them is a pair some value has. Said as the figure it is,
+        // which is a number somebody raises — so whatever stopped short here says so.
+        assertTrue(report.lines()
+                        .filter(line -> line.contains("nothing could show a row can be written"))
+                        .allMatch(line -> line.contains("a figure of this compiler's is why")),
+                report);
     }
 
     /**

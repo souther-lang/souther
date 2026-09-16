@@ -205,6 +205,19 @@ public sealed interface TakenAs {
         public BigDecimal read(TakenArguments arguments) {
             return arguments.at(divisor);
         }
+
+        /**
+         * What {@code value} answers of this taking: divided the way the operator divides, toward
+         * zero.
+         *
+         * <p><b>Here because both directions need it.</b> Reading a row's value off an observation
+         * and working out which values answer a number of one place are the same arithmetic asked
+         * twice, and a second spelling of "toward zero" is two roundings to keep in step by hand —
+         * which is a row offered at a number it does not read back as, the day they part.
+         */
+        public static BigDecimal quotientOf(BigDecimal value, BigDecimal by) {
+            return value.divideToIntegralValue(by);
+        }
     }
 
     /**
