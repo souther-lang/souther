@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -159,11 +160,11 @@ class CompileExampleGenerateTest {
         // combinations it took part in — which is one fact repeated as many times as the
         // arithmetic allowed.
         assertEquals(1, filled.unresolved().size(), filled.unresolved().toString());
-        for (Generator.UnresolvedCombination left : filled.unresolved()) {
+        for (CameToNothing left : filled.unresolved()) {
             assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                    left.reason());
-            assertTrue(left.classes().contains("request.lo=100 < x"),
-                    left.classes().toString());
+                    left.why().reason());
+            assertTrue(left.why().classes().contains("request.lo=100 < x"),
+                    left.why().classes().toString());
         }
         // And the class beside it is not left unwritten with it. A row for `request.hi = 50 < x`
         // stands where the low end can be built, so it is composed — which is what says the refusal
@@ -630,15 +631,15 @@ class CompileExampleGenerateTest {
                 """.formatted(declarations, fields)
                 .replace("UNREAD", ARuleNoReadingTakesIn.about("a.value"));
 
-        List<Generator.UnresolvedCombination> left = generated(source).get("take").composed()
-                .unresolved();
+        List<CameToNothing> left =
+                generated(source).get("take").composed().unresolved();
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
-        for (Generator.UnresolvedCombination each : left) {
-            assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, each.reason(),
-                    each.toString());
-            assertTrue(each.subject().startsWith("request.flag="),
-                    "and it is still about the combination: " + each.subject());
+        for (CameToNothing each : left) {
+            assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                    each.why().reason(), each.toString());
+            assertTrue(each.why().subject().startsWith("request.flag="),
+                    "and it is still about the combination: " + each.why().subject());
         }
     }
 

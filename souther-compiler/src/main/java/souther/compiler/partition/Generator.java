@@ -843,8 +843,8 @@ public final class Generator {
         /** A row composed for this class. */
         record Built(AxisId at, String classId, GeneratedRow row) implements ClassAttempt {}
 
-        /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(AxisId at, String classId, UnresolvedCombination why)
+        /** No row came of it, and what the search came to. Never a statement that none exists. */
+        record Unresolved(AxisId at, String classId, CameToNothing came)
                 implements ClassAttempt {}
     }
 
@@ -1131,9 +1131,9 @@ public final class Generator {
      */
     private static ArmDisposition acrossOccurrences(
             ArmOwed asked, Map<ArmProbe, RowId> built,
-            Map<ArmProbe, List<UnresolvedCombination>> failed, Set<ArmProbe> cutOff,
+            Map<ArmProbe, List<CameToNothing>> failed, Set<ArmProbe> cutOff,
             souther.compiler.reading.CoverageRead.Read read) {
-        List<UnresolvedCombination> why = new ArrayList<>();
+        List<CameToNothing> why = new ArrayList<>();
         boolean anyCutOff = false;
         for (ArmProbe probe : asked.occurrences()) {
             RowId row = built.get(probe);
@@ -1144,8 +1144,10 @@ public final class Generator {
             anyCutOff |= cutOff.contains(probe);
         }
         if (anyCutOff) {
-            why.add(new UnresolvedCombination(List.of(),
-                    UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
+            // What ran out is how many rows this call writes, which the compilation set and says
+            // for itself. Nothing of this compiler's own was met, so there is no figure here.
+            why.add(CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                    UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED)));
         }
         if (!why.isEmpty()) {
             return new ArmDisposition.Unresolved(why);
@@ -1369,7 +1371,7 @@ public final class Generator {
         // several things, so what says a class was answered is the entry naming the row rather than
         // anything written on the row itself.
         Map<ClassOfAPosition, RowId> answeredAt = new LinkedHashMap<>();
-        List<UnresolvedCombination> unresolved = new ArrayList<>();
+        List<CameToNothing> unresolved = new ArrayList<>();
         List<GenerationReason> reasons = new ArrayList<>(undecided);
         // The classes first. What each is owed is one row, and the arms below are looked for among
         // combinations that would be composed either way — so a budget the combinations spent
@@ -1390,9 +1392,15 @@ public final class Generator {
                     UnresolvedCombination why = new UnresolvedCombination(
                             List.of(label(axis, owed.get(cut)[1])),
                             UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+                    // Nothing of this compiler's own was met: what ran out is how many rows this
+                    // call writes, which the compilation set and a reader is told about where the
+                    // search says how many classes it left ({@link GenerationReason.SearchLimit}).
+                    // Named here as a figure, an author would go looking for one of this
+                    // compiler's to raise and find the number was theirs all along.
                     attempts.add(new ClassAttempt.Unresolved(axis.id(),
-                            axis.classes().get(owed.get(cut)[1]).id(), why));
-                    unresolved.add(why);
+                            axis.classes().get(owed.get(cut)[1]).id(),
+                            CameToNothing.metNothing(why)));
+                    unresolved.add(CameToNothing.metNothing(why));
                 }
                 break;
             }
@@ -1407,7 +1415,7 @@ public final class Generator {
                     answeredAt.put(new ClassOfAPosition(attempt.at(), attempt.classId()),
                             compose(composed, made.row()));
                 }
-                case ClassAttempt.Unresolved none -> unresolved.add(none.why());
+                case ClassAttempt.Unresolved none -> unresolved.add(none.came());
             }
         }
         // And the arms this run was asked for, one at a time and each from its own places to look.
@@ -1427,7 +1435,7 @@ public final class Generator {
             }
         }
         Map<ArmProbe, RowId> built = new LinkedHashMap<>();
-        Map<ArmProbe, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
+        Map<ArmProbe, List<CameToNothing>> failed = new LinkedHashMap<>();
         // Arms the row budget ran out before, which is what the search stopping looks like from an
         // arm. Told apart from an arm with nowhere to look, because raising the budget changes one
         // of them and nothing about the other.
@@ -1485,22 +1493,33 @@ public final class Generator {
                 AlignedObservation seen;
                 switch (place.tried) {
                     case Witness.NoCombination none -> {
-                        noRow(unresolved, failed, probe, new UnresolvedCombination(List.of(),
-                                UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                                Optional.of(none.said())));
+                        noRow(unresolved, failed, probe, CameToNothing.metNothing(
+                                new UnresolvedCombination(List.of(),
+                                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                                        null, Optional.of(none.said()))));
                         continue;
                     }
+                    // The word, and with it what the search met. An arm nothing reached is told
+                    // apart from an arm this compiler stopped short of by what travels beside the
+                    // word, and there is nothing else in the answer that tells them apart.
                     case Witness.Exhausted none -> {
-                        noRow(unresolved, failed, probe, new UnresolvedCombination(
-                                none.classes(), none.reason(), none.detail(), none.said(),
-                                none.alsoShort()));
+                        noRow(unresolved, failed, probe, new CameToNothing(
+                                new UnresolvedCombination(none.classes(), none.reason(),
+                                        none.detail(), none.said(), none.alsoShort()),
+                                none.met()));
                         continue;
                     }
                     case Witness.Limited none -> {
                         // The search stopped, which is this run's news and not the model's. Said as
-                        // that, whatever the candidates it did try came to.
-                        noRow(unresolved, failed, probe, new UnresolvedCombination(none.classes(),
-                                UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
+                        // that, whatever the candidates it did try came to. What ran out is how
+                        // many readings and runs one arm is given, which is a walk of this
+                        // compiler's rather than a figure the composing of a row is held to — and
+                        // beside it whatever those candidates ran into, which is.
+                        noRow(unresolved, failed, probe, new CameToNothing(
+                                new UnresolvedCombination(none.classes(),
+                                        UnresolvedCombination.Reason
+                                                .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+                                none.met()));
                         continue;
                     }
                     case Witness.Certified made -> {
@@ -1548,12 +1567,12 @@ public final class Generator {
             // do not order against each other: one is what the partition divides this body into and
             // the other is what this run declined to do, and a reader handed whichever a condition
             // reached first was handed the order the branches were written in.
-            List<UnresolvedCombination> nowhere = new ArrayList<>();
-            nowhere.add(new UnresolvedCombination(List.of(),
-                    UnresolvedCombination.Reason.THE_WAY_IN_PLACES_AT_NO_CLASS));
+            List<CameToNothing> nowhere = new ArrayList<>();
+            nowhere.add(CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                    UnresolvedCombination.Reason.THE_WAY_IN_PLACES_AT_NO_CLASS)));
             if (notOffered.contains(probe)) {
-                nowhere.add(new UnresolvedCombination(List.of(),
-                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
+                nowhere.add(CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED)));
             }
             unresolved.addAll(nowhere);
             failed.computeIfAbsent(probe, _ -> new ArrayList<>()).addAll(nowhere);
@@ -1613,7 +1632,7 @@ public final class Generator {
             ClassOfAPosition key = new ClassOfAPosition(attempt.at(), attempt.classId());
             classAnswers.put(key, switch (attempt) {
                 case ClassAttempt.Built _ -> new ClassDisposition.Built(answeredAt.get(key));
-                case ClassAttempt.Unresolved none -> new ClassDisposition.Unresolved(none.why());
+                case ClassAttempt.Unresolved none -> new ClassDisposition.Unresolved(none.came());
             });
         }
         for (ClassOfAPosition asked : classesOwed) {
@@ -1622,15 +1641,17 @@ public final class Generator {
             }
             if (withheld.contains(asked.at())) {
                 classAnswers.put(asked, new ClassDisposition.Unresolved(
-                        new UnresolvedCombination(List.of(labelOf(subject, asked)),
-                                UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD)));
+                        CameToNothing.metNothing(new UnresolvedCombination(
+                                List.of(labelOf(subject, asked)),
+                                UnresolvedCombination.Reason.THE_POSITION_WAS_WITHHELD))));
             } else if (leftNoRoom.contains(asked.at())) {
                 // The position is inside a collection the rules cap at none, so no value stands
                 // there in any row this model admits. Which is what the model says rather than what
                 // this search fell short of, and a reader may act on it.
                 classAnswers.put(asked, new ClassDisposition.Unresolved(
-                        new UnresolvedCombination(List.of(labelOf(subject, asked)),
-                                UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)));
+                        CameToNothing.metNothing(new UnresolvedCombination(
+                                List.of(labelOf(subject, asked)),
+                                UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE))));
             }
         }
         // And the combinations the body settles a value by, where those are what this behavior is
@@ -1653,12 +1674,12 @@ public final class Generator {
                 // measure's limit and this search is held to its own, so a group held back here is
                 // a meeting with nowhere to be looked for — which is this run's news and not the
                 // model's.
-                UnresolvedCombination why = new UnresolvedCombination(List.of(),
+                CameToNothing came = CameToNothing.metNothing(new UnresolvedCombination(List.of(),
                         offered.notOffered().isEmpty()
                                 ? UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST
-                                : UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED);
-                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
-                unresolved.add(why);
+                                : UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED));
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(came));
+                unresolved.add(came);
                 continue;
             }
             // A row this run already composed that something watched making it. One row makes as
@@ -1675,26 +1696,38 @@ public final class Generator {
                 continue;
             }
             if (composed.size() >= budget.rowLimit()) {
-                UnresolvedCombination why = new UnresolvedCombination(List.of(),
-                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
-                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
-                unresolved.add(why);
+                CameToNothing came = CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(came));
+                unresolved.add(came);
                 continue;
             }
             RowId made = null;
-            UnresolvedCombination why = null;
+            CameToNothing came = null;
             for (CellSelection at : ways) {
                 Witness tried = witnessFor(axes, at, check, trial, ran, claimed(at),
                         List.of(new Purpose.ForACombinationOfDecisions(asked.settled())),
                         origins, references, answers);
                 switch (tried) {
-                    case Witness.NoCombination none -> why = new UnresolvedCombination(List.of(),
-                            UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                            Optional.of(none.said()));
-                    case Witness.Exhausted none -> why = new UnresolvedCombination(none.classes(),
-                            none.reason(), none.detail(), none.said(), none.alsoShort());
-                    case Witness.Limited none -> why = new UnresolvedCombination(none.classes(),
-                            UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+                    case Witness.NoCombination none -> came = CameToNothing.metNothing(
+                            new UnresolvedCombination(List.of(),
+                                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
+                                    Optional.of(none.said())));
+                    // The word the search came to, and with it what the search met on the way.
+                    // What a reader does about a meeting nothing answered turns on whether a
+                    // number of this compiler's would have reached one.
+                    case Witness.Exhausted none -> came = new CameToNothing(
+                            new UnresolvedCombination(none.classes(), none.reason(), none.detail(),
+                                    none.said(), none.alsoShort()),
+                            none.met());
+                    // What ran out here is how many readings and runs one combination is given,
+                    // which is a walk of this compiler's over the readings rather than a figure
+                    // the composing of a row is held to — and whatever the candidates it did try
+                    // ran into, which is.
+                    case Witness.Limited none -> came = new CameToNothing(
+                            new UnresolvedCombination(none.classes(),
+                                    UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+                            none.met());
                     case Witness.Certified it -> {
                         made = keep(composed, it.row());
                         seenOf.putIfAbsent(made, it.by().seen());
@@ -1706,8 +1739,8 @@ public final class Generator {
                     // right rather than a state a report is written from.
                     case Witness.Unconfirmed _ -> {
                         unconfirmed = true;
-                        why = new UnresolvedCombination(List.of(),
-                                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS);
+                        came = CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS));
                     }
                 }
                 if (made != null) {
@@ -1717,8 +1750,8 @@ public final class Generator {
             if (made != null) {
                 meetingAnswers.put(asked, new ClassDisposition.Built(made));
             } else {
-                meetingAnswers.put(asked, new ClassDisposition.Unresolved(why));
-                unresolved.add(why);
+                meetingAnswers.put(asked, new ClassDisposition.Unresolved(came));
+                unresolved.add(came);
             }
         }
         // And the combinations of two classes, where the pair space is what this behavior is held
@@ -1730,20 +1763,22 @@ public final class Generator {
                 new LinkedHashMap<>();
         for (ObligationIdentity.OfAFallbackPairCell asked : plan.pairsOwed()) {
             if (composed.size() >= budget.rowLimit()) {
-                UnresolvedCombination why = new UnresolvedCombination(labelsOf(axes, asked),
-                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
-                pairAnswers.put(asked, new ClassDisposition.Unresolved(why));
-                unresolved.add(why);
+                CameToNothing came = CameToNothing.metNothing(
+                        new UnresolvedCombination(labelsOf(axes, asked),
+                                UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(came));
+                unresolved.add(came);
                 continue;
             }
             Map<Integer, Integer> wanted = pinned(axes, asked);
             if (wanted == null) {
                 // A class of a position this run has no axis for. Nothing here can be steered to
                 // it, which is this compiler's shortfall and not something the model states.
-                UnresolvedCombination why = new UnresolvedCombination(labelsOf(axes, asked),
-                        UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST);
-                pairAnswers.put(asked, new ClassDisposition.Unresolved(why));
-                unresolved.add(why);
+                CameToNothing came = CameToNothing.metNothing(
+                        new UnresolvedCombination(labelsOf(axes, asked),
+                                UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST));
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(came));
+                unresolved.add(came);
                 continue;
             }
             Pins pins = Pins.of(axes, wanted);
@@ -1766,8 +1801,8 @@ public final class Generator {
                     List.of(new Purpose.ForAFallbackPairCell(asked.classes(), pins.labels())),
                     origins, check, references, answers);
             if (made.row() == null) {
-                pairAnswers.put(asked, new ClassDisposition.Unresolved(made.why()));
-                unresolved.add(made.why());
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(made.came()));
+                unresolved.add(made.came());
             } else {
                 pairAnswers.put(asked, new ClassDisposition.Built(compose(composed, made.row())));
             }
@@ -1965,14 +2000,21 @@ public final class Generator {
      * printing it once per arm looked for there says the same thing as many times as the body has
      * arms. Kept per arm as well, because what an arm was owed and what it got is the arm's own
      * account.
+     *
+     * <p>Both hold the whole answer. What a reader meets in either place is what this came to, and
+     * one of them holding the word alone would print the same thing twice in two vocabularies —
+     * one of them saying a search stopped and naming nothing to raise.
+     *
+     * <p>Said once is what the carriers say, and not what this decides. The same word from two
+     * places is one answer with what both met under it ({@link CameToNothing#joined}), which is
+     * settled where the list becomes the value that travels; dropped here as a repeat instead, the
+     * second place's figures would go with it.
      */
-    private static void noRow(List<UnresolvedCombination> unresolved,
-                              Map<ArmProbe, List<UnresolvedCombination>> failed, ArmProbe probe,
-                              UnresolvedCombination why) {
-        if (!unresolved.contains(why)) {
-            unresolved.add(why);
-        }
-        failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(why);
+    private static void noRow(List<CameToNothing> unresolved,
+                              Map<ArmProbe, List<CameToNothing>> failed, ArmProbe probe,
+                              CameToNothing came) {
+        unresolved.add(came);
+        failed.computeIfAbsent(probe, _ -> new ArrayList<>()).add(came);
     }
 
     /**
@@ -2162,12 +2204,12 @@ public final class Generator {
                 List.of(new Purpose.ForAClass(axis.id(), classId, pins.labels().getFirst())),
                 origins, check, references, answers);
         return made.row() == null
-                ? new ClassAttempt.Unresolved(axis.id(), classId, made.why())
+                ? new ClassAttempt.Unresolved(axis.id(), classId, made.came())
                 : new ClassAttempt.Built(axis.id(), classId, made.row());
     }
 
-    /** What a search for one requirement came back with: the row, or why there is none. */
-    private record Composed(GeneratedRow row, UnresolvedCombination why) {}
+    /** What a search for one requirement came back with: the row, or what the search came to. */
+    private record Composed(GeneratedRow row, CameToNothing came) {}
 
     /**
      * The same, for any requirement the pins say: every one of them is held and everything else is
@@ -2232,7 +2274,11 @@ public final class Generator {
                     : new UnresolvedCombination(pins.labels(), last.reason(), last.detail(),
                             last.said(), last.alsoShort());
         };
-        return new Composed(null, why);
+        // What both walks met over every candidate, and not what the candidate whose word was
+        // taken met. Which walk the word came from is settled by which ran last and which candidate
+        // by which got furthest; a figure is something a walk ran into, and it is a number somebody
+        // can raise whichever candidate was in front of it.
+        return new Composed(null, new CameToNothing(why, building.met.and(composing.met)));
     }
 
     /**
@@ -2267,6 +2313,17 @@ public final class Generator {
 
         /** What the last candidate that composed nothing came to. */
         private Attempt last;
+
+        /**
+         * What every candidate met of this compiler's, and not what the last of them met.
+         *
+         * <p>Beside {@code last} rather than read off it. The word a search comes back with is one
+         * candidate's — the one that got furthest, which is the last that was tried — while a
+         * figure is something this walk ran into, and it went on being true of the walk after the
+         * candidate that met it was replaced. Read off the last candidate, a figure the first one
+         * reached is a number that would have let the walk go on and that nobody is told about.
+         */
+        private CompositionShortfall met = CompositionShortfall.NONE;
 
         /** How many were built, which is what this is allowed so many of. */
         private int builds;
@@ -2306,6 +2363,7 @@ public final class Generator {
             }
             builds++;
             Attempt made = build(axes, candidate.where(), check, given, answers);
+            met = met.and(made.met());
             if (made.row() == null) {
                 last = made;
                 return Taken.AND_MORE;
@@ -4058,18 +4116,28 @@ public final class Generator {
          *  behind it. */
         record Exhausted(List<String> classes, UnresolvedCombination.Reason reason, String detail,
                          Optional<String> said,
-                         SequencedMap<TermPath, StringOfferShortfall> alsoShort)
+                         SequencedMap<TermPath, StringOfferShortfall> alsoShort,
+                         CompositionShortfall met)
                 implements Witness {
 
+            /** One whose search was short of no rule about a position's strings. */
             Exhausted(List<String> classes, UnresolvedCombination.Reason reason, String detail,
-                      Optional<String> said) {
-                this(classes, reason, detail, said, new LinkedHashMap<>());
+                      Optional<String> said, CompositionShortfall met) {
+                this(classes, reason, detail, said, new LinkedHashMap<>(), met);
             }
         }
 
-        /** A bound stopped the search with candidates it had not tried. What the ones it did try
-         *  came to is that candidate's news and not this combination's. */
-        record Limited(List<String> classes) implements Witness {}
+        /**
+         * A bound stopped the search with candidates it had not tried. What the ones it did try
+         * came to is that candidate's news and not this combination's.
+         *
+         * <p>What they met of this compiler's is this combination's all the same. The bound that
+         * stopped the walk over the readings is not a figure the composing of a row is held to, and
+         * a figure a candidate ran into before the walk stopped is still a number somebody can
+         * raise — dropped because the walk then stopped for another reason, it is a stop nothing
+         * downstream can see.
+         */
+        record Limited(List<String> classes, CompositionShortfall met) implements Witness {}
     }
 
     /**
@@ -4161,6 +4229,15 @@ public final class Generator {
          *  all. */
         private Attempt last;
 
+        /**
+         * What every candidate of every reading met of this compiler's, beside the last one's word.
+         *
+         * <p>The same reason the walk over the classes keeps one. A figure is what this search ran
+         * into and stays true of it after the candidate that met it is replaced, so it is added up
+         * over the readings rather than read off whichever candidate came last.
+         */
+        private CompositionShortfall met = CompositionShortfall.NONE;
+
         /** Where the last candidate stood, which is what names the combination in a report. */
         private int[] where;
 
@@ -4250,25 +4327,25 @@ public final class Generator {
                 // Said as that whatever the ones that were tried came to — the miss of the third of
                 // them is a fact about that candidate, and offered as the combination's answer it
                 // stands for a space this never entered.
-                case Completeness.Nothing.SEARCH_STOPPED -> new Witness.Limited(named);
+                case Completeness.Nothing.SEARCH_STOPPED -> new Witness.Limited(named, met);
                 case Completeness.Nothing.LOOKED_EVERYWHERE -> {
                     if (missed) {
                         // Rows were composed and run, and went somewhere else. Which says they were
                         // not witnesses, and not that the combination is unreachable.
                         yield new Witness.Exhausted(named,
                                 UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, null,
-                                Optional.empty());
+                                Optional.empty(), met);
                     }
                     if (last != null && last.row() == null) {
                         yield new Witness.Exhausted(named, last.reason(), last.detail(),
-                                last.said(), last.alsoShort());
+                                last.said(), last.alsoShort(), met);
                     }
                     // Nothing was composed and nothing was refused, which takes every reading
                     // leaving no assignment at all. Named rather than guessed at, the same way
                     // every other empty result here is.
                     yield new Witness.Exhausted(named,
                             UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED, null,
-                            Optional.empty());
+                            Optional.empty(), met);
                 }
             };
         }
@@ -4309,6 +4386,7 @@ public final class Generator {
                 }
                 where = candidate.where();
                 last = build(axes, candidate.where(), check, given, answers);
+                met = met.and(last.met());
                 if (last.row() == null) {
                     // nothing composed here; another assignment may compose
                     return Taken.AND_MORE;
@@ -4381,11 +4459,12 @@ public final class Generator {
 
     private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
                            Optional<String> said,
-                           SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
+                           SequencedMap<TermPath, StringOfferShortfall> alsoShort,
+                           CompositionShortfall met) {
 
         Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
                 Optional<String> said) {
-            this(row, reason, detail, said, new LinkedHashMap<>());
+            this(row, reason, detail, said, new LinkedHashMap<>(), CompositionShortfall.NONE);
         }
 
         static Attempt of(GeneratedRow row) {
@@ -4399,7 +4478,21 @@ public final class Generator {
         /** One whose search was also short of what the rules about a position leave. */
         static Attempt no(UnresolvedCombination.Reason reason, String detail,
                           SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
-            return new Attempt(null, reason, detail, Optional.empty(), alsoShort);
+            return new Attempt(null, reason, detail, Optional.empty(), alsoShort,
+                    CompositionShortfall.NONE);
+        }
+
+        /**
+         * One that came to nothing having met something of this compiler's on the way.
+         *
+         * <p>What it met travels beside the word rather than being read for one and dropped. The
+         * word says the question is open; only this says whether a number somebody raises reaches
+         * it, which is the whole of what tells a figure from work nobody has done.
+         */
+        static Attempt no(UnresolvedCombination.Reason reason, String detail,
+                          SequencedMap<TermPath, StringOfferShortfall> alsoShort,
+                          CompositionShortfall met) {
+            return new Attempt(null, reason, detail, Optional.empty(), alsoShort, met);
         }
     }
 
@@ -4540,7 +4633,8 @@ public final class Generator {
                             stopped.heldBack().isEmpty()
                                     ? UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED
                                     : UnresolvedCombination.Reason.wordFor(stopped.heldBack()),
-                            at, Optional.of(stopped.why()));
+                            at, Optional.of(stopped.why()), new LinkedHashMap<>(),
+                            CompositionShortfall.of(stopped.heldBack(), stopped.notAllOf()));
                 }
             }
         }
@@ -4561,22 +4655,22 @@ public final class Generator {
             Outcome tried = valueFor(subject, p, axes.axes(), decided, required, check);
             switch (tried) {
                 case Outcome.Built(FixtureTemplate value) -> inputs.add(value);
-                // The word alone. What this composes is one assignment of classes, and what it
-                // hands back has never carried a figure — an assignment that came to nothing is
-                // tried again at the next one, so there is no account here for a figure to be
-                // owed to. Which figures were reached is the same question on this route as it is
-                // for every other budget, and it is not this one's.
+                // The word alone, because there was nothing of this compiler's beside it. A search
+                // that met no figure and walked to the end of what this writes has nothing for a
+                // reader to raise, and an empty account of what it met is what says so.
                 case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) -> {
                     return Attempt.no(why, detail);
                 }
-                // The figure's word, and beside it what the offer was short of. A figure being
-                // reached and a rule that gave no value are two things an author acts on, and the
-                // one that decides what they do first is the word.
+                // The figure's word, and beside it both what the offer was short of and what the
+                // search met. A figure being reached and a rule that gave no value are two things
+                // an author acts on, and the one that decides what they do first is the word.
                 case Outcome.Stopped stopped -> {
-                    return Attempt.no(stopped.why(), stopped.detail(), stopped.offered());
+                    return Attempt.no(stopped.why(), stopped.detail(), stopped.offered(),
+                            CompositionShortfall.of(stopped.by(), stopped.notAllOf()));
                 }
                 case Outcome.Unexhausted some -> {
-                    return Attempt.no(some.why(), some.detail(), some.offered());
+                    return Attempt.no(some.why(), some.detail(), some.offered(),
+                            CompositionShortfall.writing(some.notAllOf()));
                 }
                 // The word for an offer that was not everything, and beside it which rule of the
                 // position none of the values came from. Carried rather than folded into the word:
@@ -4588,16 +4682,22 @@ public final class Generator {
                             UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                             detail, offered);
                 }
+                // The word the search came to, and beside it the figure that made what it was
+                // handed short of the position. Neither half follows from the other — a search that
+                // refused everything it was given did so over less than there was — so a reader is
+                // told both what happened and that a number of this compiler's is why it happened
+                // over so little.
                 case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
-                                     java.util.Set<CompositionBudget> _) -> {
-                    return Attempt.no(why, detail);
+                                     java.util.Set<CompositionBudget> by) -> {
+                    return Attempt.no(why, detail, new LinkedHashMap<>(),
+                            CompositionShortfall.of(by));
                 }
-                // A value nothing planned, which this route says in the word for a reading no
-                // search could be made of. It carries no figure for the same reason none of the
-                // others does here.
-                case Outcome.Unplanned _ -> {
+                // A value nothing planned, in the word for a reading no search could be made of,
+                // with the figure that left the plan unable to reach what was asked for.
+                case Outcome.Unplanned(java.util.Set<CompositionBudget> by) -> {
                     return Attempt.no(UnresolvedCombination.Reason
-                            .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null);
+                            .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null, new LinkedHashMap<>(),
+                            CompositionShortfall.of(by));
                 }
             }
         }

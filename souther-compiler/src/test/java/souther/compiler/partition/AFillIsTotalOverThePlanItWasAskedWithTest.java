@@ -55,9 +55,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(ANOTHER);
 
-    private static final Generator.UnresolvedCombination NOTHING_CAME_OF_IT =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NOTHING_CAME_OF_IT =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
     @Test
     void aClassTheRunDidNotAnswerForIsRefused() {
@@ -172,6 +172,34 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         Map.of(), Map.of()));
 
         assertEquals(1, filled.rows().size(), "one line, offered for both");
+    }
+
+    /**
+     * And what each place a row was looked for came to is one answer per word.
+     *
+     * <p>The runs of one plan are folded through here, and two of them come back with one word
+     * having got different distances on the way to it. Held apart by whether the whole answer was
+     * equal, a reader would meet the same place twice with half the figures apiece — which is the
+     * law the value itself carries, held to where the list becomes the value that travels
+     * ({@link CameToNothing#joined}).
+     */
+    @Test
+    void whatEachPlaceCameToIsOneAnswerPerWord() {
+        CameToNothing stoppedAtOne = new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+        CameToNothing stoppedAtAnother = new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+
+        FillResult filled = new FillResult(planOver(List.of(A_CLASS), List.of()),
+                new LinkedHashMap<>(), List.of(stoppedAtOne, stoppedAtAnother), List.of(),
+                new Discharge(Map.of(A_CLASS, new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
+                        Map.of(), Map.of(), Map.of()));
+
+        assertEquals(List.of(new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                        CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                filled.unresolved(),
+                "one word, with what both searches met under it");
     }
 
     private static GenerationPlan planOver(List<ClassOfAPosition> classes,

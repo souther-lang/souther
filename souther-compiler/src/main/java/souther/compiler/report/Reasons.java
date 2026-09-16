@@ -2,6 +2,14 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.CompositionShortfall;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * What a reason reads as to a person.
@@ -91,6 +99,101 @@ final class Reasons {
                     "the observation at `%s` was stopped by a limit, so which class it is in is"
                             + " unknown", subject);
         };
+    }
+
+    /**
+     * What a budget of this compiler's is called where a reader meets one.
+     *
+     * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
+     * the code that reads it; what a reader wants is what this compiler declined to do, in a phrase
+     * they can act on — and a budget added arrives here as a compile error rather than as a name
+     * nobody wrote a sentence for.
+     */
+    static String said(CanonicalSelection<CompositionBudget> budgets) {
+        List<String> out = new ArrayList<>();
+        for (CompositionBudget each : budgets.written()) {
+            out.add(switch (each) {
+                case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
+                case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
+                case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
+                case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
+                        "how many elements a total is spread over";
+                case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+                case WAYS_DOWN_TO_A_TOTAL_TRIED ->
+                        "how many ways down to what a total adds up are tried";
+                case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
+                case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
+                case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
+                case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
+                        "how many values of an unbounded progression are tried";
+                case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
+                case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
+                case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
+                        "how many values a position on the way is tried at";
+                case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
+                case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
+                case PATHS_OF_A_DECISION_READ ->
+                        "how many paths through one body a decision is read for";
+                case NUMBERS_OF_A_SET_TRIED ->
+                        "how many of the numbers a class admits are tried";
+            });
+        }
+        return String.join(", ", out);
+    }
+
+    /**
+     * What a population this compiler writes some of is called where a reader meets one.
+     *
+     * <p>Its own sentence and not one of the figures'. Nothing here is a number, so what a reader
+     * is told is what this compiler writes rather than how much of it — and a population added
+     * arrives here as a compile error rather than as a name nobody wrote a sentence for.
+     */
+    static String writes(CanonicalSelection<CompositionRepertoire> repertoires) {
+        List<String> out = new ArrayList<>();
+        for (CompositionRepertoire each : repertoires.written()) {
+            out.add(switch (each) {
+                case WAYS_A_TOTAL_IS_SPREAD ->
+                        "the ways a total may be spread over what adds up to it";
+                case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
+                        "the places on a line between two positions a pair is tried at";
+                case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
+                        "the places inside one run a value is named at";
+            });
+        }
+        return String.join(", ", out);
+    }
+
+    /**
+     * What a search that came to nothing met of this compiler's, said before what it came to.
+     *
+     * <p>Before, because it is what the word after it is worth. A reader who has been told that
+     * this compiler stopped reads the word as the answer of a search that did not finish; a reader
+     * given the word first has already made what they were going to make of it.
+     *
+     * <p>Two clauses and not one list. A figure is a number somebody raises and reaching it is why
+     * the search went no further; a population this writes some of is work nobody has done, and no
+     * number anybody raises reaches the rest of it. Run together, an author reads the second as
+     * something to raise and finds that raising it changes nothing.
+     *
+     * <p>Empty where nothing of this compiler's was met, which is a search that came back about the
+     * model and has no opening of this kind to make.
+     */
+    static String met(CompositionShortfall shortfall) {
+        if (shortfall.nothing()) {
+            return "";
+        }
+        List<String> out = new ArrayList<>();
+        if (!shortfall.figures().isEmpty()) {
+            out.add("this compiler stopped at "
+                    + said(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures())));
+        }
+        if (!shortfall.populations().isEmpty()) {
+            out.add("this compiler writes some of "
+                    + writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                            shortfall.populations()))
+                    + " rather than all of them");
+        }
+        return String.join(", and ", out) + ": ";
     }
 
     private Reasons() {}

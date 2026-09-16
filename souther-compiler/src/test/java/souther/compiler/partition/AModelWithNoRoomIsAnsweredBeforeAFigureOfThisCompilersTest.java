@@ -105,12 +105,12 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
      */
     @Test
     void theCombinationWithNoRoomIsAnsweredByTheModel() {
-        List<Generator.UnresolvedCombination> made = unresolved();
+        List<CameToNothing> made = unresolved();
 
         assertFalse(made.isEmpty(), "the combination is one no row was written for");
-        for (Generator.UnresolvedCombination each : made) {
+        for (CameToNothing each : made) {
             assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                    each.reason(),
+                    each.why().reason(),
                     () -> "the model settles it, whatever the search then did: " + each);
         }
     }
@@ -118,8 +118,8 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     /** And every one of them says which collection, how many it needs, and how many it may hold. */
     @Test
     void theAnswerSaysWhatTheRulesLeaveRoomFor() {
-        for (Generator.UnresolvedCombination each : unresolved()) {
-            String said = each.detail();
+        for (CameToNothing each : unresolved()) {
+            String said = each.why().detail();
 
             assertNotNull(said, () -> "the answer says what it is about: " + each);
             assertTrue(said.contains("box.xs") && said.contains("hold 1")
@@ -182,7 +182,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     }
 
     /** The combinations no row was written for, as the filling records them. */
-    private static List<Generator.UnresolvedCombination> unresolved() {
+    private static List<CameToNothing> unresolved() {
         Adequacy.Filling filling = measured().db()
                 .ask(new Adequacy.Generated("example.placing", "placing")).value();
         assertNotNull(filling, "rows are asked for");

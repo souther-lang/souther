@@ -53,7 +53,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
                 List.of(), REFUSED, Budgets.generation());
         assertFalse(filled.unresolved().isEmpty(), "nothing was written and nothing said why");
-        return filled.unresolved().get(0).reason();
+        return filled.unresolved().get(0).why().reason();
     }
 
     private static final String NEWTYPE = """
