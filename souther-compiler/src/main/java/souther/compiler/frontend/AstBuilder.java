@@ -1180,8 +1180,10 @@ public final class AstBuilder {
     }
 
     private Ast.Expr newData(SyntaxNode n) {
-        SyntaxToken head = identTokens(n).get(0);
-        Ast.Name typeName = Ast.Name.written(nameOf(head));
+        // The whole of the head, which is one name however many dots it is written with. The
+        // field names are inside their own nodes, so what stands directly under this node is the
+        // type and nothing else.
+        Ast.Name typeName = Ast.Name.written(joined(identTokens(n)));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<Ast.Var> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction

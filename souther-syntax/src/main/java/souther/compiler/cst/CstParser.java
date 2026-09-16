@@ -1588,8 +1588,12 @@ public final class CstParser {
      * left to resolution, which knows the bindings in force.
      */
     private void identExpr() {
-        if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
-            // construction `Type { ... }` (unless suppressed, as in a match scrutinee)
+        if (!noConstruct && nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
+            // construction `Type { ... }` (unless suppressed, as in a match scrutinee). The type is
+            // named the way a type is named anywhere — bare, through an alias, or through the
+            // module that declares it — so the name is read past its dots before the brace decides
+            // what this is. Whether the name reaches a type is resolution's answer: a dotted name
+            // here is read as one name and not as a field taken of something.
             newDataExpr();
         } else {
             start(SyntaxKind.VAR_EXPR);
@@ -1601,6 +1605,7 @@ public final class CstParser {
     private void newDataExpr() {
         start(SyntaxKind.NEW_DATA_EXPR);
         bump();   // Type
+        dottedTail();   // written through its module or an alias, as a type is named anywhere
         expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
         if (!at(SyntaxKind.RBRACE)) {
             initElem();
