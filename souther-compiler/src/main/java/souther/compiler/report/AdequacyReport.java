@@ -2861,6 +2861,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                     new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
                             + " is an arm the branch count is made without");
+            // In the words the proof was said in, which are the model's. The other two here are
+            // read off the rules before anything is composed and have nothing of a search to say;
+            // this one is a search's answer about the model, so what it came back with is what a
+            // reader is shown.
+            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(var why) ->
+                    new Said(6, PublicationOrders.positionOf(why.reason()),
+                            GeneratedRows.beside(whyUnresolved(why), why, rendering, places));
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
                             "a rule owed a row is said as the finding it is");
@@ -5069,6 +5076,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
                     "the_way_needs_one_position_to_be_two";
             case RuleRequirement.Excluded.AnArmNothingReaches _ -> "an_arm_nothing_reaches";
+            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+                    "the_rules_leave_no_value_for_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _ ->

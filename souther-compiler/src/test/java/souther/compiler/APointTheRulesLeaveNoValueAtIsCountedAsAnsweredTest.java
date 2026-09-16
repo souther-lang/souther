@@ -87,6 +87,23 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     }
 
     /**
+     * And the rules of the decision the same proof reaches are said the same way.
+     *
+     * <p>The other account of the same body. A rule of the decision is owed a row where something
+     * can stand in it, and the search for one comes back with the same word — so a rule it proves
+     * the rules leave nothing for is one no row is owed at, and not one this compiler had nothing
+     * to try.
+     */
+    @Test
+    void theRulesOfTheDecisionThatProofReachesAreSaidAsAnsweredToo() {
+        assertTrue(report().contains("· no row is owed at 2 decision rules"),
+                () -> "the two ways the guards close between them are owed no row:\n" + report());
+        assertFalse(report().contains("nothing could show a row can be written at 2 decision"),
+                () -> "nothing was composed because there is nothing to compose, which is the"
+                        + " model's answer and not this compiler's:\n" + report());
+    }
+
+    /**
      * The control: the border ahead of that guard is said exactly as it was.
      *
      * <p>Its four points are on the same pair of positions and are searched for the same way; what

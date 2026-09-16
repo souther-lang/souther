@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 
@@ -18,12 +19,19 @@ import souther.compiler.partition.RulesTaken;
  * excluded however the rows are written — the two questions are orthogonal, and a sentence here
  * that said "no row takes it" would put the coverage answer in the requirement's mouth.
  *
- * <p><b>What answers this is not one thing.</b> A search answers the first and the last, and it
- * cannot answer the middle: what a search came back with is always this compiler having looked, and
- * a model refusing a way is a fact the readings already hold. So the middle is its own shape here
- * rather than a word a search comes back with — written the other way round, a reader would have to
- * open a search's reason to find out whether the model said anything, and a reason added to that
+ * <p><b>What answers this is not one thing, and most of what a search says is not the model's.</b>
+ * Almost everything a search comes back with is this compiler having looked, and a model refusing a
+ * way is mostly a fact the readings already hold. So the middle is its own shape here rather than a
+ * word lifted out of a search's reason — written the other way round, a reader would have to open a
+ * search's reason to find out whether the model said anything, and a reason added to that
  * vocabulary would change what the account means.
+ *
+ * <p>The exception is a search that proves it. A walk of the whole of what the rules leave that
+ * reaches nothing, and rules shown to leave nothing before anything was walked, are statements
+ * about the model that a search is where they turn up
+ * ({@link souther.compiler.partition.Generator.UnresolvedCombination.Reason#provesInfeasible}). One
+ * of those is the middle and is written as the middle, and it is told from the rest by asking that
+ * question rather than by a reader reading the word.
  *
  * <p><b>And a witness is not a row anybody is owed.</b> What a search built is evidence that the
  * rule can be reached; whether the rows written for the behavior reach it is the other question,
@@ -86,6 +94,32 @@ public sealed interface RuleRequirement {
             public AnArmNothingReaches {
                 if (arm == null) {
                     throw new IllegalArgumentException("an arm nothing reaches is some arm");
+                }
+            }
+        }
+
+        /**
+         * The rules of the way to the rule leave no value that takes it, and a search is what
+         * proved it.
+         *
+         * <p>Beside the two above rather than under them, and it is the one of the three a search
+         * establishes. What the search came back with is the theorem and not the route it came by,
+         * so the word is kept as it was said
+         * ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what tells it from
+         * the rest).
+         *
+         * <p>Every way of standing the dependencies in has to say it. A search is composed in the
+         * region one of those leaves, so a proof from one of them is about that region — a rule
+         * with a proof under one way and a row under another is a rule something stands in.
+         *
+         * @param why the search's own word, which is what a reader is shown under the rule
+         */
+        record TheRulesLeaveNoValueForIt(Generator.UnresolvedCombination why) implements Excluded {
+
+            public TheRulesLeaveNoValueForIt {
+                if (why == null || !why.reason().provesInfeasible()) {
+                    throw new IllegalArgumentException(
+                            "a rule the rules leave no value for says which proof says so: " + why);
                 }
             }
         }
