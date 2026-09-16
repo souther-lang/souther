@@ -98,7 +98,8 @@ class WhereALineWasReadIsTheWholeTargetTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<BorderObligationPointAssessment> points = compilation.db()
-                .ask(new Adequacy.Obligations("probe.twice", new GenerationScope.Module())).value();
+                .ask(new Adequacy.Obligations("probe.twice", new GenerationScope.Module(),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
         assertNotNull(points, "the model under test is read to the end");
         return points;
     }

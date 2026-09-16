@@ -17,6 +17,8 @@ import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmSummary;
+import souther.compiler.query.HowALineIsRead;
+import souther.compiler.query.RowObservation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -395,8 +397,36 @@ public final class Analyzer {
      * every change.
      */
     private Compilation compileOf(ModuleGraph graph) {
-        Sorted sorted = sorted(graph);
+        return compileOf(graph, sorted(graph));
+    }
+
+    /** The same, for a request that has already read which documents can join a compile. */
+    private Compilation compileOf(ModuleGraph graph, Sorted sorted) {
         return compileOf(graph, pathCompiledAgainst(), sorted.joining(), sorted.broken());
+    }
+
+    /**
+     * A compile of the same documents whose rows record where each of them went.
+     *
+     * <p>Its own and not the workspace's. What a run records is settled before a row runs and holds
+     * for every reader of it, so asking the workspace compile for it would put the cost of the
+     * instrumented classes on every keystroke — and asking this one for anything else would be a
+     * second reading of the same documents where the workspace already has one.
+     *
+     * <p>Handed the documents rather than sorting them again: which of them can join a compile is
+     * one answer per request, and the workspace compile beside this one was built from it.
+     *
+     * <p>Kept for nothing after the block is written. What it is for happens once, when somebody
+     * takes the offer, and a compile held between two of those would answer from the documents as
+     * they were when the first one was taken.
+     */
+    private Compilation composingRowsOf(Sorted sorted) {
+        Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
+                pathCompiledAgainst());
+        composing.observe(RowObservation.RECORD_ARMS);
+        composing.measure(measure);
+        composing.abandonWhen(abandonment);
+        return composing;
     }
 
     /** The workspace as a compile takes it: what can join one, and the modules of what cannot. */
@@ -961,7 +991,8 @@ public final class Analyzer {
                                              String behavior) {
         List<souther.compiler.query.BorderObligationPointAssessment> owed = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Obligations(module,
-                        new souther.compiler.query.GenerationScope.Behavior(behavior))).value();
+                        new souther.compiler.query.GenerationScope.Behavior(behavior),
+                        HowALineIsRead.THE_RULES_ALONE)).value();
         if (owed == null) {
             return false;
         }
@@ -990,7 +1021,11 @@ public final class Analyzer {
         if (graph == null || text == null) {
             return null;
         }
-        Compilation compilation = compileOf(graph);
+        // Which documents can join a compile, read once for this request: the compile that says
+        // whether the offer still stands and the compile that composes the rows are of the same
+        // workspace, and two readings of that are free to differ.
+        Sorted sorted = sorted(graph);
+        Compilation compilation = compileOf(graph, sorted);
         // The whole of what the offer names, and not the part of it a module happens to answer. An
         // offer is about a behavior of a module written in a document, and a document can be given
         // another module's header while a behavior of that name goes on existing somewhere else —
@@ -1006,13 +1041,24 @@ public final class Analyzer {
                         && isWrittenIn(each, offer.uri(), graph))) {
             return null;   // what the offer was made about is not there any more
         }
+        // Composed against a compile of its own, whose rows record where each of them went. What a
+        // row is offered for includes the meetings of a body that no row makes, and finding those
+        // out takes the classes having recorded it — which the workspace compile does not do,
+        // because every keystroke would pay for it.
+        //
+        // A second compile of the same documents and not a second run inside this one. The rows of
+        // a compile run once and what they recorded is settled before they do, so a block built
+        // half from each would hold this compile's readings beside that one's account of the arms.
+        // Everything the block is made of comes from the compile below.
+        //
         // An id stands for itself here: a workspace compilation is keyed on the document URIs this
         // server was given, so what identifies a source is already what this server calls it.
+        Compilation composing = composingRowsOf(sorted);
         souther.compiler.report.GeneratedRows.Block block =
-                souther.compiler.report.GeneratedRows.of(compilation, offer.module(),
+                souther.compiler.report.GeneratedRows.of(composing, offer.module(),
                         offer.behavior(),
                         souther.compiler.diag.SourceRendering.namedByIdentity(
-                                compilation.texts()));
+                                composing.texts()));
         if (block.rowCount() == 0) {
             return null;
         }

@@ -713,7 +713,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
         Map<String, Measure<List<BorderAssessment>>> lines =
-                compilation.db().ask(new Adequacy.BoundaryReadings(name)).value();
+                compilation.db().ask(new Adequacy.BoundaryReadings(name,
+                        Adequacy.linesAskedOf(compilation.db()))).value();
         // What each behavior is owed at those lines, once per point: the behaviors' projection of
         // the module's one relation, which the findings and the verdict read as well.
         Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
