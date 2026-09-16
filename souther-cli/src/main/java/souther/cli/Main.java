@@ -390,6 +390,10 @@ public final class Main {
                 // Beside it rather than in it where the report is JSON: the rows are source, and
                 // source in the middle of a JSON document is not a document.
                 if (generate) {
+                    // Composed against classes that recorded where each row went, which this
+                    // command's compile has because the report it writes is measured over them. A
+                    // row is offered for a meeting of the body's decisions no row makes, and
+                    // nothing can say a meeting was missed of a run that recorded nothing.
                     String rows = GeneratedRows.of(compilation, module, behavior, rendering).text();
                     (render.json() ? System.err : System.out).print(rows);
                 }

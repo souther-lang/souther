@@ -350,7 +350,8 @@ public record Settlements(List<ObligationIdentity> requested,
             // resolving its own points beside that would be one search made twice, free to come to
             // two answers about one row.
             List<BorderObligationPointAssessment> points = db.ask(
-                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior)))
+                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior),
+                            Adequacy.OFFERED_ROWS_READ_AS))
                     .value();
             for (BorderObligationPointAssessment point
                     : points == null ? List.<BorderObligationPointAssessment>of() : points) {

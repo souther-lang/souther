@@ -11,6 +11,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
@@ -802,7 +803,8 @@ class AMeasureWithNoNumberSaysWhyTest {
             boundaryReadings() {
         Compilation compilation = compiled();
         return compilation.db()
-                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0))).value();
+                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
     }
 
     private static List<Adequacy.Finding> findings(String behavior, Adequacy.Kind kind) {

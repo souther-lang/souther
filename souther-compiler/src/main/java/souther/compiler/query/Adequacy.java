@@ -265,16 +265,65 @@ public final class Adequacy {
     }
 
     /**
-     * What this compilation's rows have to record as they run.
+     * What this compilation was asked to observe of its rows. Absent is {@link RowObservation#NONE}.
      *
-     * <p>Derived from the level rather than being the level, because what changes the bytecode is
-     * only whether the arms are wanted. Two levels that want the same thing are then one evaluation,
-     * and asking for a wider report does not re-run the rows.
+     * <p>Its own input and not a reading of {@link Requested}. What a build asked to be told about
+     * is one question and what its rows are observed with is another, and the second is settled
+     * before a row runs: a caller that needs the rows read and their arms recorded for something
+     * other than the report — somebody asking for rows — has to be able to say so without asking
+     * for a measurement it did not want.
+     *
+     * <p>Every consumer of one compilation gets one answer, because the rows run once. So what is
+     * held here is what they need between them, and a caller says what it needs rather than what
+     * the compilation should do ({@link Compilation#observe}).
      */
-    static ArmObservation armsAsked(Db db) {
-        return levelOf(db).runsInstrumentedRows()
-                ? ArmObservation.RECORD : ArmObservation.OMIT;
+    public record Observing() implements Input<RowObservation> {}
+
+    /**
+     * What this compilation observes of its rows.
+     *
+     * <p>Read where a question about the run is put, and nowhere a reading of one is held. What the
+     * rows were observed with is the compilation's own arrangement; what a reading of them may say
+     * is the reading's ({@link RowReading#recordedArms}).
+     */
+    static RowObservation observationAsked(Db db) {
+        RowObservation asked = db.ask(new Observing()).value();
+        return asked == null ? RowObservation.NONE : asked;
     }
+
+    /** What this compilation's rows have to record as they run. */
+    static ArmObservation armsAsked(Db db) {
+        return observationAsked(db).arms();
+    }
+
+    /**
+     * How a measurement of this compilation reads the lines.
+     *
+     * <p>The one place a level becomes a reading, as {@link #armsAsked} is the one place it becomes
+     * an observation. Below this nothing asks the level: what a query is answering is which reading
+     * it was put, and a query that read the level to find out would answer one caller's question
+     * with another caller's budget.
+     *
+     * <p>About a measurement and about nothing else. What a caller asking for rows reads the lines
+     * as is {@link #OFFERED_ROWS_READ_AS}, which follows from what an offering is.
+     */
+    public static HowALineIsRead linesAskedOf(Db db) {
+        return levelOf(db).composesValues()
+                ? HowALineIsRead.VALUES_COMPOSED : HowALineIsRead.THE_RULES_ALONE;
+    }
+
+    /**
+     * How the lines are read where a row is offered at them.
+     *
+     * <p>Composing, whatever the build asked to be told. A request for rows is answered with the
+     * rows, and a reading that composed none has none to hand over.
+     *
+     * <p>One constant and not two callers agreeing. The account of what is owed and the settling of
+     * what the offered rows answer read the same lines, and read apart they hold one point as a row
+     * this model is owed and as one nothing showed anything about — which is two answers about one
+     * row.
+     */
+    static final HowALineIsRead OFFERED_ROWS_READ_AS = HowALineIsRead.VALUES_COMPOSED;
 
     /**
      * One answer for every behavior a module declares, which is what a measure of a module answers.
@@ -1046,7 +1095,6 @@ public final class Adequacy {
             if (!met.present()) {
                 return Answer.absent();
             }
-            boolean instrumented = levelOf(db).runsInstrumentedRows();
             // A module whose bodies were not elaborated is answered all the same, with nothing to
             // number. The reading above already says what such a module's behaviors meet — nothing,
             // there being no body to read — and that is an answer rather than an absence. Left
@@ -1067,7 +1115,7 @@ public final class Adequacy {
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
                                 read.interactions(), subject.axes().axes(), cells);
-                out.put(behavior, whatTheRowsMade(behavior, asked, instrumented,
+                out.put(behavior, whatTheRowsMade(behavior, asked,
                         RowReadings.readingFor(byTarget, behavior), numbering));
             });
             return Answer.of(Ordered.map(out));
@@ -1083,9 +1131,9 @@ public final class Adequacy {
          * source nothing could evaluate.
          */
         private static InteractionEvidence whatTheRowsMade(String behavior,
-                souther.compiler.partition.InteractionRequirements asked, boolean instrumented,
+                souther.compiler.partition.InteractionRequirements asked,
                 RowReading observed, Optional<SiteNumbering> numbering) {
-            if (!instrumented) {
+            if (!observed.recordedArms()) {
                 return new InteractionEvidence(asked,
                         new Measurement.NotMeasured<>(InteractionEvidence.NotAsked.NOT_ASKED));
             }
@@ -1186,7 +1234,6 @@ public final class Adequacy {
             if (!read.present() || !checked.present()) {
                 return Answer.absent();
             }
-            boolean instrumented = levelOf(db).runsInstrumentedRows();
             Optional<SiteNumbering> numbering =
                     Optional.of(SiteNumbering.of(checked.value().numberingIdentity()));
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
@@ -1195,7 +1242,7 @@ public final class Adequacy {
             Map<String, DecisionEvidence> out = new LinkedHashMap<>();
             read.value().forEach((behavior, rules) -> out.put(behavior, new DecisionEvidence(rules,
                     whatTheRowsTook(name, rules,
-                            placed == null ? null : placed.get(behavior), instrumented,
+                            placed == null ? null : placed.get(behavior),
                             RowReadings.readingFor(byTarget, behavior), numbering))));
             return Answer.of(Ordered.map(out));
         }
@@ -1216,9 +1263,9 @@ public final class Adequacy {
          */
         private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String module,
                 souther.compiler.partition.DecisionReading rules,
-                souther.compiler.partition.RulesTaken against, boolean instrumented,
+                souther.compiler.partition.RulesTaken against,
                 RowReading observed, Optional<SiteNumbering> numbering) {
-            if (!instrumented) {
+            if (!observed.recordedArms()) {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
             }
             if (against == null) {
@@ -1517,7 +1564,11 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, RowReading>> compute(Db db) {
-            if (!levelOf(db).readsRows()) {
+            // Whether anything is asked of the rows at all, which is what this compilation observes
+            // of them and not what its report says. A caller that needs to know which rows are
+            // already written asks for them to be read, and a build writing no report about them
+            // still answers it.
+            if (!observationAsked(db).readsRows()) {
                 Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
                 if (!prepared.present()) {
@@ -1563,10 +1614,6 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            // Whether anything was asked of the rows at all. Read here rather than at whoever wants
-            // the answer: what the level decides is what work to do, and the work this measure does
-            // is reading every row of the module (issue #955).
-            boolean asked = levelOf(db).readsRows();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
@@ -1592,7 +1639,6 @@ public final class Adequacy {
                                 evidenceOf(behavior.name(), sig,
                                         Shapes.publishedDeclarations(db),
                                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
-                                        asked,
                                         RowReadings.readingFor(byTarget, behavior.name()),
                                         InputPositions.of(input),
                                         InputCaseExclusions.of(input),
@@ -1638,7 +1684,6 @@ public final class Adequacy {
                 return Answer.absent();
             }
             db.ask(new Bodies.Checked(name));
-            Level level = levelOf(db);
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -1651,7 +1696,7 @@ public final class Adequacy {
             db.ask(new Bodies.StatedContracts(name));
 
             Map<String, Measure<List<BorderAssessment>>> lines =
-                    db.ask(new BoundaryReadings(name)).value();
+                    db.ask(new BoundaryReadings(name, linesAskedOf(db))).value();
             if (lines == null) {
                 return Answer.absent();
             }
@@ -1670,8 +1715,7 @@ public final class Adequacy {
                     case BoundaryForMeasurement.NotDerived why ->
                             PartitionEvidence.notMeasurable(why, spec.name());
                     case BoundaryForMeasurement.Derived(Sig _, InputForMeasurement _) ->
-                            measured(db, name, spec, level,
-                                    byTarget, lines.get(spec.name()));
+                            measured(db, name, spec, byTarget, lines.get(spec.name()));
                 };
             });
         }
@@ -1679,7 +1723,6 @@ public final class Adequacy {
         /** What one behavior whose boundary was worked out reaches of what its model divides it
          *  into. */
         private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec,
-                                           Level level,
                                            Map<String, RowReading> byTarget,
                                            Measure<List<BorderAssessment>> lines) {
             // A behavior whose signature and input were both read is one the model divides
@@ -1726,7 +1769,7 @@ public final class Adequacy {
                             ? null
                             : souther.compiler.partition.PairFallbackPositions.of(
                                     met.get(spec.name()), subject.axes().axes());
-            return Coverages.of(subject, seen, level,
+            return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), decided);
         }
     }
@@ -2489,13 +2532,13 @@ public final class Adequacy {
      * The lines each behavior was measured at, as the measurement read them.
      *
      * <p>{@link BoundaryReadings} without the measure beside each answer, for a caller asking what
-     * the lines are rather than how far the reading that found them got. Which of the two questions
-     * this is answers whether values were composed as well: a build that composes them is measured
-     * at the searched lines, and this is those.
+     * the lines are rather than how far the reading that found them got. The measurement's reading
+     * of them, which is what the name says: the level becomes a reading here, where the question is
+     * put, and what a caller wanting the other one asks for is {@link #searchedBoundariesOf}.
      */
     public static Map<String, List<BorderAssessment>> readingsOf(Db db, String module) {
         Map<String, Measure<List<BorderAssessment>>> lines =
-                db.ask(new BoundaryReadings(module)).value();
+                db.ask(new BoundaryReadings(module, linesAskedOf(db))).value();
         if (lines == null) {
             return null;
         }
@@ -2631,7 +2674,7 @@ public final class Adequacy {
      */
     public static BorderAccount accountFor(Db db, String module, GenerationScope scope) {
         List<BorderObligationPointAssessment> points =
-                db.ask(new Obligations(module, scope)).value();
+                db.ask(new Obligations(module, scope, OFFERED_ROWS_READ_AS)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
                 BorderAccount.Answer> resolved = new LinkedHashMap<>();
         RuleReadingSource ruleReading = Shapes.ruleReading(db, module).value();
@@ -2887,12 +2930,13 @@ public final class Adequacy {
      * accounts for a border's four points whosever they are, which is a different question from
      * whose debt each of them is.
      *
-     * <p>Whether the values are composed is the build's to ask for, and it is asked here rather than
-     * inside either key below. A level says how much work to do; what a search does when it is asked
-     * is not a thing it may decide, which is the reading that put the composing inside the
-     * measurement in the first place.
+     * <p>Which reading of the lines this is is the caller's to state and is part of what identifies
+     * the question ({@code reading}). The two answer differently about the same point — one holds it
+     * as something nothing has shown anything about, the other as a row this model is owed — so a
+     * key that left it out would be one question with two answers, settled by whatever the build
+     * happened to be measuring at.
      */
-    public record BoundaryReadings(String name)
+    public record BoundaryReadings(String name, HowALineIsRead reading)
             implements Key<Map<String, Measure<List<BorderAssessment>>>> {
 
         @Override
@@ -2908,11 +2952,9 @@ public final class Adequacy {
             if (!prepared.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            Level level = levelOf(db);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             return answerEveryBehavior(prepared.value(),
-                    behavior -> linesReadIn(db, name, behavior, sigs.value(), readInputs,
-                            level.composesValues()));
+                    behavior -> linesReadIn(db, name, behavior, sigs.value(), readInputs, reading));
         }
     }
 
@@ -2922,15 +2964,15 @@ public final class Adequacy {
      * <p>What a reading is, asked of one behavior rather than of a map over the module, so that a
      * caller may ask about the behaviors its question is about.
      *
-     * <p>{@code composes} says whether to put values through this module's decoders at the lines,
-     * which is a decoder run at every point and the whole cost of a search. Which lines there are
-     * does not turn on it: a point is read wherever the model carries the rule whether or not
-     * anybody composed a value there. That is what lets a caller learn that a point has a reading in
-     * a behavior it is not going to search — and a caller that skipped the behavior instead would be
-     * told the point has one reading and that its walk of it saw everything.
+     * <p>{@code reading} says which of the two answers about the lines is wanted, and composing one
+     * is a decoder run at every point and the whole cost of a search. Which lines there are does not
+     * turn on it: a point is read wherever the model carries the rule whether or not anybody composed
+     * a value there. That is what lets a caller learn that a point has a reading in a behavior it is
+     * not going to search — and a caller that skipped the behavior instead would be told the point
+     * has one reading and that its walk of it saw everything.
      */
     static Measure<List<BorderAssessment>> linesReadIn(Db db, String name, Hir.BehaviorDef behavior,
-            Map<String, Sig> sigs, Map<String, InputDomain> readInputs, boolean composes) {
+            Map<String, Sig> sigs, Map<String, InputDomain> readInputs, HowALineIsRead reading) {
         if (!(behavior instanceof Hir.SpecBehavior spec)) {
             return BoundaryDerivation.noSubject();   // measured at its stages, not here
         }
@@ -2946,9 +2988,10 @@ public final class Adequacy {
             throw new IllegalStateException("`" + spec.name() + "` has a signature and a reading"
                     + " of its input, and no reading of what the model divides it into");
         }
-        List<BorderAssessment> read = composes
-                ? db.ask(new BoundarySearch(name, spec.name())).value()
-                : db.ask(new Boundaries(name, spec.name())).value();
+        List<BorderAssessment> read = switch (reading) {
+            case VALUES_COMPOSED -> db.ask(new BoundarySearch(name, spec.name())).value();
+            case THE_RULES_ALONE -> db.ask(new Boundaries(name, spec.name())).value();
+        };
         if (read == null) {
             throw new IllegalStateException("`" + spec.name() + "` has a reading of what"
                     + " the model divides it into, and no answer about the lines that"
@@ -3020,17 +3063,17 @@ public final class Adequacy {
             }
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say. And whether anything was
-            // measured against the rows at all, which is what `off` answers.
-            Level level = levelOf(db);
+            // measured against the rows at all. Both are answered by the reading below, which came
+            // out of the run it is a reading of.
             return Answer.of(assess(subject,
-                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level,
+                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior),
                     // The numbering the rows' recordings are read under, which is this module's own.
                     numberingOf(db, name)));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
         private static LineReadings assess(souther.compiler.partition.MeasuredInput subject,
-                                           RowReading observed, Level level,
+                                           RowReading observed,
                                            Optional<SiteNumbering> numbering) {
             souther.compiler.partition.Partitions.Partitioning partitioning = subject.partitioning();
             // Two sources and not one. A line drawn at a count of a position comes off that position's
@@ -3044,11 +3087,11 @@ public final class Adequacy {
                 // state belongs to the lines between two positions, where the question is not put at
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
-                out.addAll(Coverages.assess(partitioning.along(axis), subject, observed, level,
+                out.addAll(Coverages.assess(partitioning.along(axis), subject, observed,
                         ItemAssessment.WritabilityProjection.ofReading(
                                 partitioning.edgeIsKnownWritable(axis.term())), numbering));
             }
-            out.addAll(Coverages.assessBetween(subject, observed, level, numbering));
+            out.addAll(Coverages.assessBetween(subject, observed, numbering));
             return new LineReadings(out);
         }
 
@@ -3352,7 +3395,6 @@ public final class Adequacy {
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            boolean instrumented = levelOf(db).runsInstrumentedRows();
             // Asked whatever the level is. The plan is read off the checked bodies and nothing in it
             // waits on a run, so taking `Plan.NONE` where the build did not ask for the instrumented
             // classes bought nothing and left a body that owes no arm looking like a body nobody
@@ -3398,7 +3440,7 @@ public final class Adequacy {
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
                 BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
-                        bodiesRead, arms, arrives, instrumented, observed);
+                        bodiesRead, arms, arrives, observed);
                 if (absent != null) {
                     return absent;
                 }
@@ -3442,7 +3484,7 @@ public final class Adequacy {
                 boolean bodiesRead,
                 List<CoverageSites.ArmSite> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
-                boolean instrumented, RowReading observed) {
+                RowReading observed) {
             if (!writesItsOwnBody) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
@@ -3457,7 +3499,7 @@ public final class Adequacy {
             if (BranchEvidence.owed(arms, arrives).isEmpty()) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_ARM_OBLIGATIONS);
             }
-            if (!instrumented) {
+            if (!observed.recordedArms()) {
                 return BranchEvidence.notAsked(BranchEvidence.NotAsked.NOT_ASKED);
             }
             if (observed.armsUnseen()) {
@@ -3539,7 +3581,7 @@ public final class Adequacy {
      * given measure is still that measure's own answer; what has changed is that they all read one
      * thing, and that whatever none of them takes is still carried here.
      */
-    public record RowReading(Measurement<Observed> measured) {
+    public record RowReading(Measurement<Observed> measured, ArmObservation arms) {
 
         /**
          * A reading that read no rows and went without nothing: this behavior has none written.
@@ -3551,14 +3593,42 @@ public final class Adequacy {
          * one where the map did not answer is deciding what the producer said from what it did not
          * say. {@link RowReadings#readingFor} is how a caller gets one. What is left here is
          * building a fixture, which has no producer to ask.
+         *
+         * <p>Written as a reading of instrumented classes, which is what a fixture standing in for
+         * one wants: a fixture that said the arms were not recorded would be measuring what this
+         * build went without rather than what the model holds.
          */
         public static final RowReading NONE =
-                new RowReading(new Measurement.Complete<>(Observed.NONE));
+                new RowReading(new Measurement.Complete<>(Observed.NONE), ArmObservation.RECORD);
 
         /** Nothing was asked of a behavior's rows, which is not a reading that found none. An
-         *  answer, for the reason {@link #NONE} is. */
+         *  answer, for the reason {@link #NONE} is. Nothing ran, so nothing recorded an arm. */
         public static final RowReading NOT_ASKED =
-                new RowReading(new Measurement.NotMeasured<>(RowReading.NotAsked.ROWS_NOT_ASKED));
+                new RowReading(new Measurement.NotMeasured<>(RowReading.NotAsked.ROWS_NOT_ASKED),
+                        ArmObservation.OMIT);
+
+        /**
+         * Whether the classes these rows ran against recorded where each row went.
+         *
+         * <p>The reading's own answer and never the build's. What a measure may say about the arms
+         * turns on the run the rows came from, and a measure that asked the build instead said the
+         * arms were not recorded of rows that had recorded them — wherever somebody asks for the
+         * instrumented classes without the build having been measuring.
+         */
+        public boolean recordedArms() {
+            return arms == ArmObservation.RECORD;
+        }
+
+        /**
+         * Whether anything was asked of these rows at all.
+         *
+         * <p>Read off the reading rather than off the level, for the reason above. A reading nobody
+         * made is a state this already holds, so a caller deciding it from the build is a second
+         * answer to a question the reading gives.
+         */
+        public boolean rowsWereRead() {
+            return !(measured instanceof Measurement.NotMeasured<Observed>);
+        }
 
         /** Why a reading was not made. Its own enum: what the level did not ask for is not one of
          *  the ways a reading that was made came out. */
@@ -3588,9 +3658,10 @@ public final class Adequacy {
          * <p>The one place the states are chosen between, so that no caller pairs rows with an
          * account of them they do not go with.
          */
-        public static RowReading of(List<RowOutcome> rows, List<Incompleteness> gaps) {
+        public static RowReading of(List<RowOutcome> rows, List<Incompleteness> gaps,
+                                    ArmObservation arms) {
             if (gaps.isEmpty()) {
-                return new RowReading(new Measurement.Complete<>(new Observed(rows)));
+                return new RowReading(new Measurement.Complete<>(new Observed(rows)), arms);
             }
             Set<Weakening> by = new LinkedHashSet<>();
             for (Incompleteness gap : gaps) {
@@ -3599,7 +3670,7 @@ public final class Adequacy {
             WeakeningSet went = WeakeningSet.ofAll(by);
             return new RowReading(rows.isEmpty()
                     ? new Measurement.FailedToMeasure<>(Unavailable.ROWS_UNAVAILABLE, went)
-                    : new Measurement.Partial<>(new Observed(rows), went));
+                    : new Measurement.Partial<>(new Observed(rows), went), arms);
         }
 
         /**
@@ -3678,8 +3749,8 @@ public final class Adequacy {
         // row a measure reads and is not one it may pass over either: what it would have covered is
         // unknown, which is what the gaps beside it say.
         read.byBehavior().forEach((behavior, its) ->
-                out.put(behavior, RowReading.of(its.ran(), read.gapsFor(behavior))));
-        return new WithFallback(out, read.everywhere());
+                out.put(behavior, RowReading.of(its.ran(), read.gapsFor(behavior), read.arms())));
+        return new WithFallback(out, read.everywhere(), read.arms());
     }
 
     /** The map above, answering for a behavior nothing named with whatever stopped every source. A
@@ -3690,10 +3761,11 @@ public final class Adequacy {
         private final RowReading fallback;
         private final boolean nothingEverywhere;
 
-        WithFallback(Map<String, RowReading> known, List<Incompleteness> everywhere) {
+        WithFallback(Map<String, RowReading> known, List<Incompleteness> everywhere,
+                     ArmObservation arms) {
             this.known = known;
             this.nothingEverywhere = everywhere.isEmpty();
-            this.fallback = RowReading.of(List.of(), everywhere);
+            this.fallback = RowReading.of(List.of(), everywhere, arms);
         }
 
         @Override
@@ -3905,6 +3977,10 @@ public final class Adequacy {
             if (meetings == null) {
                 return Answer.absent();
             }
+            // What this behavior's rows came to, and what the classes they ran against recorded.
+            // Read once and handed on: what a generation may make of the arms is a fact about the
+            // run it is working from, which the reading carries.
+            RowReading observed = RowReadings.readingFor(byTarget, behavior);
             souther.compiler.partition.FillResult composed;
             try {
                 composed = rowsFor(spec, sig, meetings, asked,
@@ -3919,7 +3995,7 @@ public final class Adequacy {
                                 new souther.compiler.check.ResolvedFieldTypes(
                                         symbols, Shapes.newtypeInners(db))),
                         numbering,
-                        RowReadings.readingFor(byTarget, behavior),
+                        observed,
                         constructing(db, name),
                         runningRowsOf(trialling(db, name), behavior, sig, numbering,
                                 RequiredDependencies.of(db, name, behavior)),
@@ -3927,7 +4003,6 @@ public final class Adequacy {
                         // before the search so that a candidate is run in the environment the row
                         // it becomes goes out with.
                         supplying(db, name, behavior, subject),
-                        levelOf(db).runsInstrumentedRows(),
                         db.ask(new Front.Adequacy()).value().generation());
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out
@@ -4684,7 +4759,7 @@ public final class Adequacy {
                 List<Generator.Baseline> baselines,
                 Optional<SiteNumbering> numbering, RowReading observed,
                 BoundaryValues building,
-                Generator.Trial trial, List<AnswersStoodIn> stood, boolean recording,
+                Generator.Trial trial, List<AnswersStoodIn> stood,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
@@ -4707,7 +4782,11 @@ public final class Adequacy {
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
                             InputClassifications.of(row.inputs(), axes),
-                            watched(row, recording, numbering)))
+                            // What the row's run recorded, which is the row's own answer. A build
+                            // that records nothing leaves every row with no account of where it
+                            // went, so asking the build again would be the same answer from
+                            // somewhere it is easier to get wrong.
+                            ObservedInputs.of(row, numbering).watched()))
                     .toList();
             // One search per way of standing the dependencies in, and their union. What a way
             // leaves open about a union answer is part of what is searched: a case decides which of
@@ -4918,19 +4997,22 @@ public final class Adequacy {
     /**
      * A way to run rows against this module's own classes, or nothing where none can be run.
      *
-     * <p>Nothing where the compile is not measuring, which is the one condition worth stating
-     * outright. Classes emitted without the calls that record where a run went give a run nothing
-     * was recorded of, and that reads exactly like a run that went nowhere — so a search told to
-     * confirm its candidates against them would find every one of them missing and offer nothing at
-     * all. Where they are absent the search says its rows went unconfirmed, which is what happened.
+     * <p>Nothing where this compilation's rows record nothing, which is the one condition worth
+     * stating outright. Classes emitted without the calls that record where a run went give a run
+     * nothing was recorded of, and that reads exactly like a run that went nowhere — so a search
+     * told to confirm its candidates against them would find every one of them missing and offer
+     * nothing at all. Where they are absent the search says its rows went unconfirmed, which is
+     * what happened.
+     *
+     * <p>Asked of the arrangement and not of the report. Which classes there are to try against is
+     * what the compilation was built to record, and a build that reports nothing about the arms
+     * still has them wherever something asked for them.
      *
      * <p>A budget is installed here, unlike where values are only built. A row this composed is a
      * row nobody wrote, so a model that does not finish on one is this search's to stop.
      */
     static RowTrials trialling(Db db, String module) {
-        // Whether this compile is measuring at all is read here and not there: it is what the build
-        // was asked to be held to, which is not a question about running anything.
-        if (!levelOf(db).runsInstrumentedRows()) {
+        if (armsAsked(db) != ArmObservation.RECORD) {
             return null;
         }
         ExampleExecution asked = ExampleExecutions.of(db, module);
@@ -5731,10 +5813,11 @@ public final class Adequacy {
 
         @Override
         public Answer<DeclaredBoundaries> compute(Db db) {
+            HowALineIsRead reading = linesAskedOf(db);
             Map<String, Measure<List<BorderAssessment>>> lines =
-                    db.ask(new BoundaryReadings(name)).value();
+                    db.ask(new BoundaryReadings(name, reading)).value();
             List<BorderObligationPointAssessment> points =
-                    db.ask(new Obligations(name, new GenerationScope.Module())).value();
+                    db.ask(new Obligations(name, new GenerationScope.Module(), reading)).value();
             if (lines == null || points == null) {
                 // Nobody read this module's lines, so what its declarations are owed was not
                 // measured either. Answered as an account with no debts, that would be this module
@@ -5757,9 +5840,9 @@ public final class Adequacy {
             // Where a declaration is, which is what an owner is named by and is no part of what the
             // points are. Asked here, once, and its absence is this measure having no answer rather
             // than a debt built without it.
-            RuleReadingSource reading = Shapes.ruleReading(db, name).value();
+            RuleReadingSource ruleReading = Shapes.ruleReading(db, name).value();
             souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-            if (reading == null || policy == null) {
+            if (ruleReading == null || policy == null) {
                 return Answer.absent();
             }
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
@@ -5785,7 +5868,8 @@ public final class Adequacy {
                 }
                 out.add(new DeclaredDebt(debt,
                         axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                Shapes.declarationCitations(db), reading, policy, db.readings()),
+                                Shapes.declarationCitations(db), ruleReading, policy,
+                                db.readings()),
                         owners));
             }
             return Answer.of(new DeclaredBoundaries(out, went));
@@ -5846,10 +5930,11 @@ public final class Adequacy {
      * readings of one point are what a search of it walks and a report's occurrences are, and two
      * gatherings of them are two answers to how much work there is.
      *
-     * <p>The scope says where values are composed, and never which lines are read. Every reading of
-     * a point is gathered whatever the scope, because how many there are is what says whether a walk
-     * of them saw everything; what a narrower scope buys is not paying for a decoder run at the
-     * points of a behavior it was not asked about.
+     * <p>The scope says which behaviors this is about, and the reading says how far each of their
+     * points is settled. The two are asked separately because they are separate questions: every
+     * reading of a point is gathered whatever the scope, because how many there are is what says
+     * whether a walk of them saw everything, and what a narrower scope buys is not paying for a
+     * behavior it was not asked about.
      *
      * <p>Whose each point is is carried through rather than asked here
      * ({@link souther.compiler.partition.PointAttribution}), which is what makes this one gathering
@@ -5862,7 +5947,7 @@ public final class Adequacy {
      * everybody pays for is the reading, and a request about one behavior spends nothing on the
      * rest.
      */
-    public record Obligations(String name, GenerationScope scope)
+    public record Obligations(String name, GenerationScope scope, HowALineIsRead reading)
             implements Key<List<BorderObligationPointAssessment>> {
 
         @Override
@@ -5878,13 +5963,18 @@ public final class Adequacy {
             if (!prepared.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            Level level = levelOf(db);
             List<BorderAssessment> readings = new ArrayList<>();
-            // Every behavior's lines, and values composed at the ones the scope admits. How many
+            // Every behavior's lines, read as asked at the ones the scope admits. How many
             // readings a point has is a fact about the model, so a scope that left the other
             // behaviors' lines unread would hand back a point that has one reading — and a walk of
             // that one would be a walk of everything there is, which is the reading that says a row
             // cannot be written at the line.
+            //
+            // The reading asked for is spent where the scope admits the behavior, and the rest are
+            // read by the rules alone — which costs nothing and still says how many readings the
+            // point has. What the scope decides is whose points this is about; how far a point it
+            // is about is settled is the reading's, and a caller asking either of them got both
+            // while the two were one condition.
             //
             // Every reading, also because which account a point falls in is a question about the
             // point and not about the lines it was found on. A line another module wrote can be
@@ -5897,7 +5987,8 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
-                        level.composesValues() && scope.admits(behavior.name()))
+                        scope.admits(behavior.name())
+                                ? reading : HowALineIsRead.THE_RULES_ALONE)
                         .made().orElseGet(List::of));
             }
             if (readings.isEmpty()) {
@@ -5934,10 +6025,11 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Measure<List<BorderObligationPointAssessment>>>> compute(Db db) {
+            HowALineIsRead reading = linesAskedOf(db);
             Map<String, Measure<List<BorderAssessment>>> lines =
-                    db.ask(new BoundaryReadings(name)).value();
+                    db.ask(new BoundaryReadings(name, reading)).value();
             List<BorderObligationPointAssessment> points =
-                    db.ask(new Obligations(name, new GenerationScope.Module())).value();
+                    db.ask(new Obligations(name, new GenerationScope.Module(), reading)).value();
             if (lines == null || points == null) {
                 return Answer.absent();
             }
@@ -7058,7 +7150,6 @@ public final class Adequacy {
     static SignatureEvidence evidenceOf(String name, Sig sig,
                                         PublishedDeclarations published, DeclarationKinds kinds,
                                         souther.compiler.check.NewtypeInners inners,
-                                        boolean asked,
                                         RowReading seen,
                                         InputPositions layout,
                                         InputCaseExclusions excluded,
@@ -7094,9 +7185,9 @@ public final class Adequacy {
         }
 
         // What the model declares is settled above and holds whether or not anybody measured; what
-        // the rows made of it is below. A build that asked for nothing gets the first and says so
-        // about the second, in each measure and not in the one above them.
-        if (!asked) {
+        // the rows made of it is below. A reading nobody made gets the first and says so about the
+        // second, in each measure and not in the one above them.
+        if (!seen.rowsWereRead()) {
             List<InputCaseEvidence> none = new ArrayList<>(ins.size());
             for (int i = 0; i < ins.size(); i++) {
                 none.add(InputCaseEvidence.notAsked(i, declaredIn.get(i), inExcluded.get(i)));
@@ -7231,20 +7322,4 @@ public final class Adequacy {
      * account, the difference is gone by the time anything acts on it, and a combination the row
      * may well fill reads as one it was shown not to.
      */
-    private static souther.compiler.partition.Generator.Watched watched(RowOutcome row,
-                                                                        boolean recording,
-                                                                        Optional<SiteNumbering>
-                                                                                numbering) {
-        if (!recording) {
-            // The row ran — every row of an evaluated source does — and nothing was recording it.
-            // Answered as having no account rather than as a run with an empty one, which is what a
-            // row that reached nothing leaves and is a different thing to have found out.
-            return new souther.compiler.partition.Generator.Watched.NoAccount();
-        }
-        // What the row's own run came to, which is one reading and is made where a tuple of values
-        // is read. Whether this build was recording is the question above and is this caller's: it
-        // follows from what was asked for rather than from the row.
-        return ObservedInputs.of(row, numbering).watched();
-    }
-
 }
