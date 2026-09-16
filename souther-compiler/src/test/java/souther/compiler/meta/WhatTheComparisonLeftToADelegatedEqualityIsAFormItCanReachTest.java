@@ -6,7 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
-import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -87,8 +87,9 @@ class WhatTheComparisonLeftToADelegatedEqualityIsAFormItCanReachTest {
      *
      * <p>Without it the check above is an emptiness passing for an agreement — a reading connected
      * to nothing reports no form met, and no form met is contained in anything. The witness is one
-     * form this model is certain to cross by: what a field's type is declared by is a declaration
-     * of a module, and the comparison holds two of those by a delegated equality.
+     * form this model is certain to cross by: every field of it holds a primitive of the language,
+     * and one of those is a case of a closed set with nothing to take apart, so the comparison
+     * hands two of them to an equality.
      */
     @Test
     void andTheReadingIsConnectedToTheWalkThatDecides() {
@@ -97,9 +98,9 @@ class WhatTheComparisonLeftToADelegatedEqualityIsAFormItCanReachTest {
         assertFalse(handedOver.isEmpty(),
                 "a reading that saw the comparison hand nothing over is a reading of nothing, and"
                         + " what it would then say about the census is true of any census at all");
-        assertTrue(handedOver.contains(TypeSymbol.AtModule.class),
-                "a field's type is declared somewhere, and which declaration that is crosses as the"
-                        + " identity it is, compared by the equality of that identity");
+        assertTrue(handedOver.contains(Type.Prim.class),
+                "a field holds a primitive, and which primitive it is crosses as one case of a"
+                        + " closed set, compared by the equality of that case");
     }
 
     /** Which forms one crossing of this model handed to a delegated equality. */

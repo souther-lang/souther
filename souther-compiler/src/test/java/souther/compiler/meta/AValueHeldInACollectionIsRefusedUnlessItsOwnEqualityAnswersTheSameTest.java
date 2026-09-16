@@ -352,13 +352,13 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
      */
     @Test
     void andOneSomebodyHasSpokenForGoesThrough() {
-        assertFalse(StructuralParts.areHandedOver(TypeSymbol.AtModule.class),
+        assertFalse(StructuralParts.areHandedOver(Type.Prim.class),
                 "the walk stops at it, as it stops at the one refused above");
         assertDoesNotThrow(
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
-                        Set.of(TypeSymbols.declared(new TypeKey("demo", "Amount")))),
-                "and it names the address its equality is over, which is a pair of words this"
-                        + " comparison reads as the words they are");
+                        Set.of(Type.Prim.DECIMAL)),
+                "and it says for itself that what a set makes of it is what this comparison would,"
+                        + " which is what the one refused above does not say");
     }
 
     /** Stands for a value the walk stops at, keeping something it would have read its own way. */

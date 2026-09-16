@@ -79,9 +79,47 @@ class AFormTheWalkGoesInsideHandsOverEverythingItKeepsTest {
                         + refused.getMessage());
     }
 
+    /**
+     * And a form of the grammar that kept one back is refused when it is asked whether it hands its
+     * parts over at all.
+     *
+     * <p>Where the sweep above would otherwise never arrive. Whether parts can be read off a form
+     * decides how it is compared, so a form keeping one back is a form nothing can take apart — and
+     * for one of the grammar's own kinds that is not an answer but a refusal, the walk going inside
+     * those whatever they hold. Asked only where the parts are read, such a form would be passed
+     * over as a leaf, the walk would never reach it, and the sweep would go green over it.
+     */
+    @Test
+    void andAFormOfTheGrammarThatKeptOneBackIsRefusedWhenItIsAskedAtAll() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> StructuralParts.areHandedOver(AShapeKeepingOneBack.class),
+                "a shape a node holds is one the walk goes inside, so keeping a part back is"
+                        + " refused rather than making it a form the walk stops at");
+        assertTrue(refused.getMessage().contains("hands it to"),
+                "and it says which part, as it does where the parts are read: "
+                        + refused.getMessage());
+
+        assertFalse(StructuralParts.areHandedOver(KeepsOneBack.class),
+                "while the same shape written outside the grammar is a form nothing here takes"
+                        + " apart, which is an answer and not a refusal");
+    }
+
     /** Stands for a form that keeps a part behind an equality that would read it. */
     @SuppressWarnings("unused")
     private static final class KeepsOneBack {
+
+        private final String handedOver = "read";
+
+        private final String kept = "unread";
+
+        public String handedOver() {
+            return handedOver;
+        }
+    }
+
+    /** And the same, written as one of the shapes a node of the grammar holds. */
+    @SuppressWarnings("unused")
+    private static final class AShapeKeepingOneBack implements Hir.Shape {
 
         private final String handedOver = "read";
 

@@ -20,10 +20,10 @@ package souther.compiler.crossing;
  * asked for, and a value held in a collection is asked a different one — which is a second claim,
  * about a second equality, and is not this.
  *
- * <p>A value whose claim rests on a representation it can name says the stronger thing instead
- * ({@link DelegatedEqualityIsRepresentedByWhatItStandsFor}), and is held to it. A value with
- * nothing inside — one of a closed set of cases, written as an enum — has no such representation,
- * and naming one for it would be inventing something to be checked against.
+ * <p>Every value saying it has nothing inside — each is one of a closed set of cases, written as an
+ * enum, or a type the platform declares and this comparison speaks for. A value with a
+ * representation to name is taken apart instead, that being what having one means, so the claim
+ * made here is never the one standing between a comparison and parts somebody could have read.
  */
 public interface DelegatedEqualityIsTheCrossingAnswer {
 }
