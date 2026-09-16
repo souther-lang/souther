@@ -11,8 +11,14 @@ import java.util.function.Function;
  * declarations' are two projections of one relation and are printed in two blocks, and a block that
  * worked its own groups out could count what the other names and name what the other counts. The
  * denominator here is {@link #counted()} and every obligation is in exactly one of {@link #met()},
- * {@link #unmet()} and {@link #undecided()}, so a block that prints the number and then walks the
- * last two has said which obligations the difference is.
+ * {@link #unmet()}, {@link #refuted()} and {@link #undecided()}, so a block that prints the number
+ * and then walks the last three has said which obligations the difference is.
+ *
+ * <p><b>The numerator is {@link #met()} alone.</b> What a block prints is how many of the
+ * obligations it counts a row is at, and a point the rules leave no value at has no row at it — so
+ * counting it in the numerator would make the number mean something else while reading the same. It
+ * is said beside the fraction instead, which is what makes the difference walkable: three things
+ * the two numbers differ by, and each of them named under the block.
  *
  * <p><b>Nothing is left out.</b> Every obligation handed to this is one the model owes a row at, and
  * what this compiler could not read, compose or represent is news about the point rather than about
@@ -25,17 +31,19 @@ import java.util.function.Function;
  * @param <T> what carries an obligation here — a point of a behavior's account, or one of a
  *            declaration's debts with the declarations that owe it
  */
-public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> undecided) {
+public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> refuted,
+                                   List<T> undecided) {
 
     public ObligationSummary {
         met = List.copyOf(met);
         unmet = List.copyOf(unmet);
+        refuted = List.copyOf(refuted);
         undecided = List.copyOf(undecided);
     }
 
     /** How many obligations the count holds, which is the denominator a block prints. */
     public int counted() {
-        return met.size() + unmet.size() + undecided.size();
+        return met.size() + unmet.size() + refuted.size() + undecided.size();
     }
 
     /** The undecided ones this question is open about, in the order they were given. */
@@ -52,14 +60,16 @@ public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> undecided
     public static <T> ObligationSummary<T> of(List<T> items, Function<T, ObligationAssessment> owed) {
         List<T> met = new ArrayList<>();
         List<T> unmet = new ArrayList<>();
+        List<T> refuted = new ArrayList<>();
         List<T> undecided = new ArrayList<>();
         for (T each : items) {
             switch (owed.apply(each).disposition()) {
                 case ObligationDisposition.Met _ -> met.add(each);
                 case ObligationDisposition.Unmet _ -> unmet.add(each);
+                case ObligationDisposition.Refuted _ -> refuted.add(each);
                 case ObligationDisposition.Undecided _ -> undecided.add(each);
             }
         }
-        return new ObligationSummary<>(met, unmet, undecided);
+        return new ObligationSummary<>(met, unmet, refuted, undecided);
     }
 }

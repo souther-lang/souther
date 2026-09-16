@@ -1199,8 +1199,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
         if (!debts.isEmpty()) {
-            out.append(String.format("  declarations   obligations %d/%d%n",
-                    account.met().size(), account.counted()));
+            out.append(String.format("  declarations   obligations %d/%d%s%n",
+                    account.met().size(), account.counted(), refuted(account)));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -1210,6 +1210,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // reader does is walk from a number to the work it names, so an obligation inside the
         // denominator with no line under it is a difference nothing can be done about — which holds
         // of a point nobody read as much as of one nothing could show writable.
+        // And the declarations' own points the rules leave no value at, said the same way as a
+        // behavior's: counted, answered, and nothing for anybody to write.
+        for (Adequacy.DeclaredDebt each : account.refuted()) {
+            out.append(String.format("      · %s%n", cannotBeWritten(pointOf(each,
+                    RuleHandleProse.said(each.debt().describe(places), rendering, null)))));
+            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+                    at.owedAt(each.debt().at()).searches(),
+                    module.owedByDeclarations().conditionPlaces(), rendering, null));
+        }
         for (Adequacy.DeclaredDebt each : account.undecided()) {
             for (String said : undecidedBecause(each.debt().owed().disposition(),
                     pointOf(each, RuleHandleProse.said(each.debt().describe(places),
@@ -1964,6 +1973,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * How many of the obligations a block counts no row can be written at, where any are, and
+     * nothing where none are.
+     *
+     * <p>Beside the fraction and never inside it. What the numerator says is how many of the
+     * obligations a row is at, and there is no row at a point the rules leave no value at — added
+     * to it, the number would go on reading as rows and stand for something else. So the difference
+     * between the two numbers is walkable in three pieces, and this is the one nobody has work to
+     * do about.
+     *
+     * <p>Empty where there are none, because a number that is nearly always zero printed on every
+     * block is a word a reader learns to skip.
+     */
+    private static String refuted(ObligationSummary<?> owed) {
+        return owed.refuted().isEmpty() ? "" : "   refuted " + owed.refuted().size();
+    }
+
+    /**
+     * What a reader is told about a point no row can be written at.
+     *
+     * <p>Said as what the model settles, which is what it is. No figure of this compiler's is named
+     * and no work is handed to anybody: the rules on the way to the point leave it no value, and
+     * which rules those are is under the point, one line per reading.
+     */
+    private static String cannotBeWritten(String point) {
+        return "no row can stand at the " + point + " — the rules leave no value there";
+    }
+
+    /**
      * How a finding names what nothing did, given how far its measure got.
      *
      * <p>Where some rows could not be read, a case nothing here claims is a case nothing *seen*
@@ -2171,13 +2208,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%n",
-                    lines.size(), owed.met().size(), owed.counted(),
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
+                    lines.size(), owed.met().size(), owed.counted(), refuted(owed),
                     inFull(bounded.status())));
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
+        // And the ones the rules leave no value at, which are counted and are nobody's work. Under
+        // the same block and beside the questions, because both are the difference between the two
+        // numbers — what differs is that this one is answered.
+        for (BorderObligationPointAssessment point : owed.refuted()) {
+            out.append(String.format("      · %s%n", cannotBeWritten(point.role() + " point ("
+                    + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
+            readings(out, point, _ -> true, at -> whatWasTried(
+                    at.owedAt(point.at()).searches(), behavior.conditionPlaces(), rendering,
+                    declaredIn));
+        }
         for (BorderObligationPointAssessment point : owed.undecided()) {
             for (String said : undecidedBecause(point.owed().disposition(),
                     point.role() + " point ("
@@ -6108,6 +6155,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (disposition) {
             case ObligationDisposition.Met _ -> "met";
             case ObligationDisposition.Unmet _ -> "unmet";
+            case ObligationDisposition.Refuted _ -> "refuted";
             case ObligationDisposition.Undecided _ -> "undecided";
         };
     }

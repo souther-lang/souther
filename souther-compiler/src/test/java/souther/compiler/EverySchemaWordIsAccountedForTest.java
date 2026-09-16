@@ -734,6 +734,7 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
+                new ObligationDisposition.Refuted(),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                                 ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),

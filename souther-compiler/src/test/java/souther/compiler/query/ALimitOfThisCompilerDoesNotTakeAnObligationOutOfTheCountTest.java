@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -146,17 +147,31 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         List<String> reached = new ArrayList<>();
         for (ObligationCoverage coverage : everyCoverage()) {
             for (WritabilityKnowledge knowledge : everyKnowledge()) {
+                // One pair of the table is a pair nothing builds: a row read at the point is a
+                // ground, so a point whose rules leave no value at it never comes back with a row
+                // at it. Asserted rather than skipped — what makes the pair impossible is a rule
+                // somewhere else, and a check that walked past it would go on passing if that rule
+                // went away.
+                if (coverage instanceof ObligationCoverage.Witnessed
+                        && knowledge instanceof WritabilityKnowledge.Refuted) {
+                    assertThrows(IllegalStateException.class,
+                            () -> ObligationDisposition.of(coverage, knowledge),
+                            "a row at a point the rules leave no value at is not a state to"
+                                    + " answer for");
+                    continue;
+                }
                 ObligationDisposition it = ObligationDisposition.of(coverage, knowledge);
                 reached.add(it.getClass().getSimpleName());
                 assertTrue(it instanceof ObligationDisposition.Met
                                 || it instanceof ObligationDisposition.Unmet
+                                || it instanceof ObligationDisposition.Refuted
                                 || it instanceof ObligationDisposition.Undecided,
                         () -> coverage + " with " + knowledge + " is " + it
-                                + ", which is not one of the three an owed point stands in");
+                                + ", which is not one of the four an owed point stands in");
             }
         }
         assertTrue(reached.contains("Met") && reached.contains("Unmet")
-                        && reached.contains("Undecided"),
+                        && reached.contains("Refuted") && reached.contains("Undecided"),
                 "every state is reached by the table: " + reached);
     }
 
@@ -190,7 +205,10 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     private static boolean weakensTo(ObligationDisposition before, ObligationDisposition after) {
         return switch (before) {
-            case ObligationDisposition.Met _, ObligationDisposition.Unmet _ ->
+            // And a point the rules leave no value at is a claim of the same kind: it stands, or
+            // what is left when the proof is not in hand is the state that claims nothing.
+            case ObligationDisposition.Met _, ObligationDisposition.Unmet _,
+                 ObligationDisposition.Refuted _ ->
                     after.equals(before) || after instanceof ObligationDisposition.Undecided;
             case ObligationDisposition.Undecided it ->
                     after instanceof ObligationDisposition.Undecided then
@@ -209,7 +227,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     }
 
     private static List<WritabilityKnowledge> everyKnowledge() {
-        return List.of(established(), prevented(), new WritabilityKnowledge.NoEvidence());
+        return List.of(established(), new WritabilityKnowledge.Refuted(), prevented(),
+                new WritabilityKnowledge.NoEvidence());
     }
 
     private static WritabilityKnowledge established() {
