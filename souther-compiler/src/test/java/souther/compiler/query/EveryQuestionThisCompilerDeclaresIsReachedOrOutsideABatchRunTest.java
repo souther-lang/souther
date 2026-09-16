@@ -102,7 +102,17 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     private static final Map<String, String> NO_BATCH_CONSUMER = Map.of(
             Sites.Authored.class.getName(),
             "where a module's source was written, occurrence by occurrence — a projection for a"
-                    + " reader outside the compiler, and no answer of a batch compilation reads it");
+                    + " reader outside the compiler, and no answer of a batch compilation reads it",
+            Bodies.DeclaredParameters.class.getName(),
+            "what a module's behaviors declare their parameters to be, worked out once per"
+                    + " revision so that the answers an editor asks about one buffer share it. What"
+                    + " a batch compile reads a parameter's type through is the reading of the body"
+                    + " it is in, and nothing it produces rests on this list",
+            Bodies.DeclaredParameterBindings.class.getName(),
+            "the same facts under the binding each is for, which is the table the walk that says"
+                    + " what an expression is declared to be looks a name up in. That walk is"
+                    + " reached from the editor's snapshot, and no answer of a batch compilation"
+                    + " reads it");
 
     /** What the scan counted, whether or not it read everything it found. */
     private static Set<String> declared() throws Exception {
@@ -182,7 +192,48 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         // And the same operation over a model that reads a module this compile holds no source for,
         // which is the other world this compiler works in.
         into(readingWhatIsPublished(), out);
+        // And over a model stating a rule this compiler cannot carry whole, which is the third.
+        into(readingARuleThisCannotCarry(), out);
         return out;
+    }
+
+    /**
+     * Analysing a model one of whose rules this compiler has no words for, and writing the report.
+     *
+     * <p><b>A world and not a stimulus.</b> Every source of the corpus is written so that what it
+     * says is read, which leaves out everything a report does when a rule arrives and the reading
+     * stops on it: where an author is sent is the part of the clause they wrote rather than the
+     * rule, and a condition met on the way to a point is placed where it stands rather than where
+     * the reading met it. Both are ordinary report paths over an ordinary model, and no corpus
+     * source reaches either — so the model is written here, the way the published one is.
+     *
+     * <p>The rule is a conditional standing as one part of a clause. It is a shape this reading
+     * has no words for, and it is not a comparison or a call, so what an author is sent to is the
+     * part it stands in; the comparison beside it is one a search meets on the way to a border
+     * point and declines, and that one the module that wrote it places.
+     */
+    private static Compilation readingARuleThisCannotCarry() {
+        Compilation compilation = Compilation.ofSource("""
+                module unreadable
+
+                data Flagged = { on: Bool, n: Int }
+                    invariant (if n > 0 then on else on) && n > 0
+
+                data Res = { m: Int }
+
+                behavior act : (f: Flagged) -> Res
+                    constructs Res
+
+                let act (f) = Res { m = f.n }
+
+                example act
+                    | "one" : (Flagged { on = true, n = 3 }) -> Res { m = 3 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        return compilation;
     }
 
     /**

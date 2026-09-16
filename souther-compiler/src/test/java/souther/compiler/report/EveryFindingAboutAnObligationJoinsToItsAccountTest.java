@@ -10,16 +10,22 @@ import souther.compiler.query.Compilation;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A finding about something a row is owed for names it the way its account names it.
+ * A finding that names something a row is owed for names it the way its account names it.
  *
  * <p>What a consumer does with a finding is act on the thing it is about, which means finding that
  * thing in the account the numbers are counted in. The words a reader is shown do not do it: two
@@ -30,8 +36,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Asked of the document rather than of the writer. The rule the writer keeps is that a subject
  * carrying an identity says so by its type, which closes the question locally; what that cannot say
- * is that a shape which should carry one does. Here the two ends are compared: every finding of a
- * kind that is about an obligation, against the array that account publishes.
+ * is that the identity lands anywhere. Here the two ends are compared: every identity the document
+ * publishes on a finding, against the array that account publishes.
+ *
+ * <p><b>What this does not hold.</b> That a finding of a kind the model calls an obligation
+ * publishes an identity at all. Whether something is owed has two answers — {@link Adequacy.Kind}
+ * answers per kind, and {@link souther.compiler.query.About.OfAnObligation} per subject, which is
+ * what makes the writer publish one — and they are at different grains: a kind can be about
+ * obligations while a subject of it carries nothing to key. So the two directions here are the ones
+ * that are true of every document: an identity that is published lands on one entry, and a kind
+ * about nothing a row is owed for publishes none. Holding a kind to publishing one is a claim about
+ * the two answers agreeing, which they do not, and a check written as though they did would be a
+ * proposition already known to be false standing green on a corpus that has not reached it.
  */
 @Tag("population")
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
@@ -154,37 +170,47 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                 | "yes" : (Yes) -> Res { n = 1 }
             """;
 
-    /** The kinds that are about something a row is owed for, and the account each is counted in. */
-    private static final List<String> ABOUT_AN_OBLIGATION =
-            List.of("boundary_unmet", "domain_point_uncovered", "arm_unreached",
-                    "axis_class_uncovered", "decision_rule_uncovered", "input_case_unspecified");
+    /**
+     * The kinds whose findings are about nothing a row is owed for, asked of the kind.
+     *
+     * <p>Derived and not listed. Whether a finding names an obligation is the subject's own answer
+     * ({@link souther.compiler.query.About.OfAnObligation}) and which kinds are about one is
+     * {@link Adequacy.Kind}'s, so a list written here is a third table beside those two — and a
+     * kind added to them and not to it is a finding this walks past while saying the document is
+     * whole.
+     */
+    private static Set<String> kindsAboutNoObligation() {
+        Set<String> out = new LinkedHashSet<>();
+        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
+            if (!kind.isAboutAnObligation()) {
+                out.add(AdequacyReport.word(kind));
+            }
+        }
+        return out;
+    }
 
+    /**
+     * Every obligation identity the document publishes lands on exactly one entry of its account.
+     *
+     * <p>The population is the findings that carry an identity, which is what the document writes
+     * wherever the subject is one. Taken off a list of kinds instead, the sweep is as wide as
+     * whoever last edited the list — and a kind whose findings the account has no entry for is
+     * exactly what such a list hides.
+     */
     @Test
-    void everyFindingAboutAnObligationNamesOneEntryOfItsAccount() {
+    void everyObligationIdentityThatIsPublishedJoinsToOneEntryOfItsAccount() {
         List<String> wrong = new ArrayList<>();
         int joined = 0;
-        for (JsonNode document : documents()) {
+        for (JsonNode document : DOCUMENTS) {
             for (JsonNode module : document.get("modules")) {
                 for (JsonNode behavior : module.get("behaviors")) {
                     for (JsonNode finding : behavior.get("findings")) {
-                        String kind = finding.get("kind").asString();
-                        if (!ABOUT_AN_OBLIGATION.contains(kind)) {
-                            // The other half of the same rule. A finding about something no account
-                            // counts has no such thing to name, and a key written there would be a
-                            // consumer's join landing on nothing.
-                            if (finding.has("obligationId")) {
-                                wrong.add(behavior.get("name").asString() + ": a " + kind
-                                        + " finding names an obligation");
-                            }
+                        JsonNode id = finding.get("obligationId");
+                        if (id == null) {
                             continue;
                         }
                         joined++;
-                        JsonNode id = finding.get("obligationId");
-                        if (id == null) {
-                            wrong.add(behavior.get("name").asString() + ": a " + kind
-                                    + " finding names no obligation");
-                            continue;
-                        }
+                        String kind = finding.get("kind").asString();
                         long found = entriesOf(behavior, module, kind).stream()
                                 .filter(entry -> id.equals(entry.get("obligationId"))).count();
                         if (found != 1) {
@@ -195,8 +221,37 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                 }
             }
         }
-        assertEquals(List.of(), wrong, "a finding about an obligation joins to it");
-        assertTrue(joined > 0, "and the corpus reaches such findings");
+        assertEquals(List.of(), wrong, "a published obligation identity joins to its account");
+        assertTrue(joined > 0, "and the corpus reaches findings that publish one");
+    }
+
+    /**
+     * And a finding about anything else names none.
+     *
+     * <p>The other direction, and the one that is about the kinds. A finding about something no
+     * account counts has no such thing to name, and a key written there would be a consumer's join
+     * landing on nothing — so this is asked of the kinds the model says are about nothing a row is
+     * owed for, which is the side of that answer the subjects do not contradict.
+     */
+    @Test
+    void andAFindingAboutAnythingElseNamesNone() {
+        Set<String> aboutNone = kindsAboutNoObligation();
+        List<String> wrong = new ArrayList<>();
+        for (JsonNode document : DOCUMENTS) {
+            for (JsonNode module : document.get("modules")) {
+                for (JsonNode behavior : module.get("behaviors")) {
+                    for (JsonNode finding : behavior.get("findings")) {
+                        String kind = finding.get("kind").asString();
+                        if (aboutNone.contains(kind) && finding.has("obligationId")) {
+                            wrong.add(behavior.get("name").asString() + ": a " + kind
+                                    + " finding names an obligation");
+                        }
+                    }
+                }
+            }
+        }
+
+        assertEquals(List.of(), wrong, "a finding about nothing a row is owed for names one");
     }
 
     /**
@@ -210,7 +265,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     @Test
     void twoArmsATableCannotTellApartAreToldApartByTheirIdentity() {
         JsonNode behavior = onlyBehaviorOf(reportOf(TWO_RULES_AT_ONE_FORK));
-        java.util.Map<String, List<JsonNode>> shownAlike = new java.util.LinkedHashMap<>();
+        Map<String, List<JsonNode>> shownAlike = new LinkedHashMap<>();
         for (JsonNode finding : behavior.get("findings")) {
             if ("arm_unreached".equals(finding.get("kind").asString())) {
                 shownAlike.computeIfAbsent(
@@ -317,6 +372,20 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static List<JsonNode> entriesOf(JsonNode behavior, JsonNode module, String kind) {
         List<JsonNode> out = new ArrayList<>();
+        // A combination of two classes, where the body's decisions meet nowhere and the pair space
+        // is what the behavior is held to. Made here for the reason a class of a position is: the
+        // axes carry every class of every position and the pairs carry which two positions each
+        // relation is between, so a cell is those two read together and an array beside them would
+        // be the same membership declared twice.
+        if ("pair_uncovered".equals(kind)) {
+            return pairCellsOf(behavior);
+        }
+        // The combinations of the body's own decisions, which the account publishes one entry of
+        // per combination the body has a path to.
+        if ("interaction_uncovered".equals(kind)) {
+            behavior.get("interaction").get("obligations").forEach(out::add);
+            return out;
+        }
         // A class of a position is kept as the axis it is a class of and the string that axis
         // lists, so the entry a finding joins to is that pair. Made here rather than published as
         // a third array, because the axes already carry every class of every position and an array
@@ -349,7 +418,9 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         }
         JsonNode from = switch (kind) {
             case "decision_rule_uncovered" -> behavior.get("decision").get("obligations");
-            case "arm_unreached" -> behavior.get("branch").get("obligations");
+            // A row waiting for its answer is owed at the arm it was written at, which is the entry
+            // an arm nothing reaches is owed at. One account and two things to do about it.
+            case "arm_unreached", "unanswered_row" -> behavior.get("branch").get("obligations");
             case "boundary_unmet", "domain_point_uncovered" ->
                     behavior.get("partition").get("obligations");
             default -> throw new IllegalStateException(kind);
@@ -359,6 +430,49 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         // so a finding about one joins there rather than in the behavior it was read at.
         for (JsonNode declared : module.get("declarations")) {
             declared.get("obligations").forEach(out::add);
+        }
+        return out;
+    }
+
+    /**
+     * Every combination of two classes the pair space holds, as this document has them.
+     *
+     * <p>Which two positions each relation is between is under {@code pairs}, and what each of them
+     * divides into is under {@code axes}: a cell is one class of the one and one class of the
+     * other. Written in the order the identity is written in, since the two classes are a set and a
+     * consumer joining on them reads whatever order the document spelled.
+     */
+    private static List<JsonNode> pairCellsOf(JsonNode behavior) {
+        JsonNode partition = behavior.get("partition");
+        Map<String, List<String>> classesOf = new LinkedHashMap<>();
+        for (JsonNode axis : partition.get("axes")) {
+            List<String> classes = new ArrayList<>();
+            axis.get("classes").forEach(each -> classes.add(each.asString()));
+            classesOf.put(axis.get("axis").asString(), classes);
+        }
+        List<JsonNode> out = new ArrayList<>();
+        for (JsonNode pair : partition.get("pairs").get("between")) {
+            String one = pair.get("one").asString();
+            String other = pair.get("other").asString();
+            for (String first : classesOf.getOrDefault(one, List.of())) {
+                for (String second : classesOf.getOrDefault(other, List.of())) {
+                    ObjectNode entry = JSON.createObjectNode();
+                    ObjectNode id = entry.putObject("obligationId");
+                    id.put("behavior", behavior.get("name").asString());
+                    List<List<String>> both = new ArrayList<>();
+                    both.add(List.of(one, first));
+                    both.add(List.of(other, second));
+                    both.sort(Comparator.<List<String>, String>comparing(each -> each.get(0))
+                            .thenComparing(each -> each.get(1)));
+                    ArrayNode of = id.putArray("classes");
+                    for (List<String> each : both) {
+                        ObjectNode at = of.addObject();
+                        at.put("axis", each.get(0));
+                        at.put("class", each.get(1));
+                    }
+                    out.add(entry);
+                }
+            }
         }
         return out;
     }
@@ -378,6 +492,14 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         return JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
+
+    /**
+     * The documents both sweeps read, written once for the class that asks.
+     *
+     * <p>Both questions are about the same models and the compiling is nearly all of what they
+     * cost. Asked per question, the corpus would be analysed again for each.
+     */
+    private static final List<JsonNode> DOCUMENTS = documents();
 
     private static List<JsonNode> documents() {
         List<JsonNode> out = new ArrayList<>();
