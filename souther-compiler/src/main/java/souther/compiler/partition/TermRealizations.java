@@ -33,6 +33,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -310,38 +311,33 @@ final class TermRealizations {
         // those values is what reading that value comes to — so the candidates are that demand's
         // and the rest of the group is read off each of them.
         if (itself != null) {
-            return new JointRealization.Supported(
-                    new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(itself, takenOfIt));
+            RealizationTarget stands = itself;
+            List<RealizationTarget> owned = new ArrayList<>(takenOfIt);
+            owned.add(stands);
+            return wholly(targets, owned,
+                    () -> new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(stands, takenOfIt));
         }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
         // the second is what a total is composed by anyway.
-        if (manyItHolds != null && whatItComesTo != null && targets.size() == 2) {
-            return new JointRealization.Supported(
-                    new JointBuilder.HoldingThatManyAndAddingUpToThat(manyItHolds, whatItComesTo));
+        if (manyItHolds != null && whatItComesTo != null) {
+            RealizationTarget many = manyItHolds;
+            RealizationTarget total = whatItComesTo;
+            return wholly(targets, List.of(many, total),
+                    () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
         }
+        // A quotient of a place beside a part of it is a value that is both a number and a moment,
+        // and what would write one is neither arm here.
         if (!quotients.isEmpty()) {
-            // Quotients and nothing else. A quotient of a place beside a part of it is a value that
-            // is both a number and a moment, and what would write one is neither arm here.
-            return quotients.size() == targets.size()
-                    ? new JointRealization.Supported(
-                            new JointBuilder.SolvingForTheirQuotients(quotients))
-                    : nothingSolvesAGroup();
+            return wholly(targets, quotients.keySet(),
+                    () -> new JointBuilder.SolvingForTheirQuotients(quotients));
         }
-        // A value spelled in parts is written at the parts it is spelled in, so a group holding a
-        // number of any other kind is not a value this spells — and what is left once the arms
-        // above have had theirs is the population. Two totals of one container are in it: filling a
-        // container spreads one total over what it holds, and two of them at once is a spreading
-        // nobody has written.
-        if (times.size() + dates.size() != targets.size()) {
-            return nothingSolvesAGroup();
-        }
-        // Two asks at one part are two asks for one number and are the same target, so a group
-        // holding a part twice is a group somebody built by hand. Not a population this compiler
-        // writes none of: read as that, a caller handed a malformed group is told about the
-        // repertoire and goes looking for the solving nobody wrote.
-        assert Set.copyOf(times.values()).size() + Set.copyOf(dates.values()).size()
-                == targets.size() : "one part of one root is one number and one target";
+        // A value spelled in parts is written at the parts it is spelled in. Two asks at one part
+        // are two asks for one number and are the same target, so a group holding a part twice is a
+        // group somebody built by hand — not a population this compiler writes none of.
+        assert Set.copyOf(times.values()).size() == times.size()
+                && Set.copyOf(dates.values()).size() == dates.size()
+                : "one part of one root is one number and one target";
         // The parts of a time beside the parts of a date are a value spelled two ways, and what
         // writes one is a builder for that spelling. Said as a group nobody wrote the solving for,
         // because that is what it is: the day an operation answers a part of each, the group is
@@ -349,9 +345,35 @@ final class TermRealizations {
         if (!times.isEmpty() && !dates.isEmpty()) {
             return nothingSolvesAGroup();
         }
-        return new JointRealization.Supported(times.isEmpty()
-                ? new JointBuilder.OnThoseDateParts(dates)
-                : new JointBuilder.AtThoseTimeParts(times));
+        if (times.isEmpty() && dates.isEmpty()) {
+            return nothingSolvesAGroup();
+        }
+        return wholly(targets, times.isEmpty() ? dates.keySet() : times.keySet(),
+                () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates)
+                        : new JointBuilder.AtThoseTimeParts(times));
+    }
+
+    /**
+     * That way of writing one value, where the numbers it is a way for are the whole group.
+     *
+     * <p><b>One place asks it, because it is one contract.</b> What comes back of a group is a way
+     * of writing a value for every number in it, and an arm that answered for some of them would
+     * hand a caller a builder that leaves the rest unanswered — a row put at what half the group
+     * asks for, offered as a row for all of it. Asked by each arm for itself, the arithmetic is
+     * written as many times as there are arms and an arm added is a place for it to be left out:
+     * which is what happened when a number taken over a run became one of the numbers a container
+     * is composed for, and the arm above it went on answering for groups holding one.
+     *
+     * <p>So a group this bucketed into no arm's numbers is the population, and it gets there
+     * without an arm having to notice. Which is the answer that is safe to reach by accident: a
+     * way nobody wrote is a way nobody wrote, and the only thing lost is a builder somebody has yet
+     * to write.
+     */
+    private static JointRealization wholly(Collection<RealizationTarget> group,
+                                           Collection<RealizationTarget> owned,
+                                           Supplier<JointBuilder> way) {
+        return Set.copyOf(owned).equals(Set.copyOf(group))
+                ? new JointRealization.Supported(way.get()) : nothingSolvesAGroup();
     }
 
     /**

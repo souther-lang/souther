@@ -386,6 +386,43 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 missing.notAllOf(), "and says which population it wrote none of");
     }
 
+    /**
+     * And the way that comes back is a way for every number of the group, never for some of them.
+     *
+     * <p>The value of a container beside a total taken over what it holds is one location asked for
+     * two numbers, and the values the first admits are not read for the second — nothing here reads
+     * a number of a run off one value. A way for the first alone would be a builder that answers
+     * what half the group asked and is offered as the answer to all of it, and the row would stand
+     * at a class of the total nothing put it in.
+     */
+    @Test
+    void aWayForSomeOfAGroupIsNotOfferedAsAWayForTheGroup() {
+        Model model = new Model(TWO_TOTALS_OF_ONE_CONTAINER);
+
+        assertInstanceOf(TermRealizations.JointRealization.Missing.class,
+                TermRealizations.jointRealizationOf(
+                        List.of(model.theContainerItself(), model.aTotalOver("a"))),
+                "the value of the container and a total over what it holds");
+    }
+
+    /**
+     * And a group the arm owns part of is not the arm's either.
+     *
+     * <p>Beside the one above and not a shape of it: there the arm holds one number of two, here it
+     * holds two of three and what is built for them would be offered as a value for all three. A
+     * way chosen by what it recognises rather than by what the group is would take this one, and
+     * the number it never saw is the one the row is put at a class of.
+     */
+    @Test
+    void aWayForMostOfAGroupIsNotOfferedEither() {
+        Model model = new Model(TWO_TOTALS_OF_ONE_CONTAINER);
+
+        assertInstanceOf(TermRealizations.JointRealization.Missing.class,
+                TermRealizations.jointRealizationOf(List.of(model.theContainerItself(),
+                        model.howManyItHolds(), model.aTotalOver("a"))),
+                "the value of the container, how many it holds and a total over what it holds");
+    }
+
     /** One model, read and divided, with the numbers its classes are of in hand. */
     private static final class Model {
 
@@ -458,6 +495,26 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.inputs().typeAtWrittenPath(demands.firstEntry().getKey().writeRoot()),
                     demands, subject.quantities(), subject.quantities().region(),
                     subject.ruleReading());
+        }
+
+        /** The value the container itself stands at, which is one number of its location. */
+        private RealizationTarget theContainerItself() {
+            return RealizationTarget.of(new NumericTerm.ValueOf(theContainer()));
+        }
+
+        /** How many that container holds, which is a number read off the value standing there. */
+        private RealizationTarget howManyItHolds() {
+            NumericTerm.TakenOf many = NumericTerm.TakenOf.of(
+                    ValueName.Stdlib.operation("List", "length"), theContainer(),
+                    subject.inputs().typeAtWrittenPath(theContainer()),
+                    subject.ruleReading().source().inners(),
+                    subject.ruleReading().source().symbols());
+            assertNotNull(many, "how many a list holds is a number taken of the list");
+            return RealizationTarget.of(many);
+        }
+
+        private static TermPath theContainer() {
+            return TermPath.of("slot").then("held");
         }
 
         /**
