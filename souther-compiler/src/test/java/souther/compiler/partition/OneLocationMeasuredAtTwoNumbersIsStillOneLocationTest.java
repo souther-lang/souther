@@ -12,6 +12,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -171,8 +172,14 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      *
      * <p>Two quotients of one whole number are two numbers of one location that nothing here
      * composes a value for together: which value answers both is solving for one from two of its
-     * numbers, which is not what putting the parts of a time side by side does. So the answer is
-     * that nothing composed one — and not a row standing at one of the two.
+     * numbers, which is not what putting the parts of a time side by side does. So no row stands
+     * at either class.
+     *
+     * <p>And what is said of it is the population this compiler writes none of, carried beside the
+     * word. Values answering both numbers are there — every sixth number is one — so an answer in
+     * the words of a walk that looked everywhere would be this reader telling an author that no
+     * such value exists, and the word alone would be a search that left something untried with
+     * nothing of this compiler's to say why.
      */
     @Test
     void twoClassesOfOneLocationNoValueAnswersTogetherComposeNoRow() {
@@ -180,8 +187,14 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
 
         assertEquals(List.of(), filled.rows(), "neither class is answered by a row");
         assertTrue(filled.unresolved().stream().anyMatch(left -> left.why().reason()
-                        == Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                        == Generator.UnresolvedCombination.Reason
+                                .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                 filled.unresolved().toString());
+        assertEquals(List.of(Set.of(CompositionRepertoire
+                        .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                filled.unresolved().stream().map(left -> left.met().populations()).distinct()
+                        .toList(),
+                () -> "and which values it writes none of: " + filled.unresolved());
     }
 
     /** The rows a fill of that model's classes comes to. */

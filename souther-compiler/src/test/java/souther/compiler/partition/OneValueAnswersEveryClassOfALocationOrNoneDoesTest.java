@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -66,6 +67,25 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
      */
     private static final String ANY_MONTH_BUT_JANUARY = A_MONTH_AND_A_DAY
             .replace("Date.month(slot.on) >= 2", "Date.month(slot.on) /= 1");
+
+    /**
+     * Two numbers of one place that are no parts of a moment: a half and a third of a whole number.
+     *
+     * <p>Values answering both are there — every sixth number is one — and working out which is
+     * solving for a value out of its numbers, which nothing here does. So what this is for is the
+     * other answer a group comes back with: not that no value stands at both, but that this
+     * compiler writes none of the values that answer several of their own numbers.
+     */
+    private static final String A_HALF_AND_A_THIRD = """
+            module example.quotient
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            behavior gate : (x: Int) -> When
+            let gate (x) = if x / 2 >= 10 && x / 3 >= 10 then Late else Early
+            """;
 
     /** Parts that do not constrain each other, which is the pair that worked before. */
     private static final String AN_HOUR_AND_A_MINUTE = """
@@ -181,6 +201,29 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         assertEquals(List.of("Time(\"09:30:00\")"),
                 built.stream().map(FixtureTemplate::text).toList());
         model.readsBackIntoEveryClass(built, model.upperClasses());
+    }
+
+    /**
+     * And a group nothing here solves a value out of says that, and not that no value answers it.
+     *
+     * <p>The invariant the whole of this rests on, read at the one place that decides it. A half
+     * and a third of a whole number are both numbers of one place, and nothing walked anything
+     * before the answer came back — so an answer in the words of a walk that looked everywhere is
+     * a statement about the model made by a reader that has no standing to make one. What it says
+     * instead is which population this compiler writes none of.
+     */
+    @Test
+    void aGroupNothingSolvesAValueOutOfIsSaidAsThePopulationAndNotAsNothing() {
+        Model model = new Model(A_HALF_AND_A_THIRD);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
+
+        assertEquals(2, asked.size(), () -> "a half and a third of one place: " + asked.keySet());
+        TermRealizations.Realization made = model.answering(asked);
+        TermRealizations.Realization.Unexhausted some = assertInstanceOf(
+                TermRealizations.Realization.Unexhausted.class, made,
+                () -> "nothing here solves a value out of several of its numbers: " + made);
+        assertEquals(Set.of(CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS),
+                some.notAllOf(), "and says which population it wrote none of");
     }
 
     /** One model, read and divided, with the numbers its classes are of in hand. */
