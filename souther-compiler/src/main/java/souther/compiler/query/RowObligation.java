@@ -16,7 +16,9 @@ import java.util.Objects;
  * was read and is true whatever becomes of the evaluation, so this account stands for a behavior
  * whose rows nobody ran — which is why it is not one of the things a measurement can go without.
  *
- * @param at where the answer stands, which is where a reader is pointed
+ * @param at where the row is written, which is where a reader is sent whichever way it stands.
+ *           Not where the answer goes: {@link souther.compiler.ast.Hir.Expected} holds that, and a
+ *           reader told to write an answer is told about the row it belongs to
  */
 public record RowObligation(RowRef rowRef, SourcePos at, RowDisposition disposition) {
 

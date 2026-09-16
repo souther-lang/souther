@@ -535,7 +535,8 @@ public sealed interface About {
      * is discharged by any row going through it, and this one only by an answer written where this
      * row is.
      *
-     * @param at where the answer stands, which is where a reader is pointed
+     * @param at where the row is written, which is where a reader is sent. Not where the answer
+     *           goes: an author told to answer this row is told about the row
      */
     record AnUnansweredRow(RowRef rowRef, SourcePos at) implements OfAnObligation {
 

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -192,6 +193,28 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             """;
 
     /**
+     * A row awaiting its answer in a body with no arms at all.
+     *
+     * <p>What a row is owed is owed whether or not the behavior branches, and the arm account this
+     * one has no entry in is not published at all. A reader that took the account from the kind
+     * would come here looking for an arm account and find no section to look in — so the case
+     * belongs in the corpus rather than in a comment saying it is handled.
+     */
+    private static final String A_ROW_AWAITING_ITS_ANSWER_WITH_NO_ARMS = """
+            module example.straight
+
+            data Res = { n: Int }
+
+            behavior double : (n: Int) -> Res
+                constructs Res
+
+            let double (n) = Res { n = n * 2 }
+
+            example double
+                | "two" : (2) -> <?>
+            """;
+
+    /**
      * Every obligation identity the document publishes lands on exactly one entry of its account.
      *
      * <p>The population is the findings that carry an identity, which is what the document writes
@@ -212,12 +235,12 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                             continue;
                         }
                         joined++;
-                        String kind = finding.get("kind").asString();
-                        long found = entriesOf(behavior, module, kind).stream()
+                        long found = everyEntryOf(behavior, module).stream()
                                 .filter(entry -> id.equals(entry.get("obligationId"))).count();
                         if (found != 1) {
-                            wrong.add(behavior.get("name").asString() + ": a " + kind
-                                    + " finding joins " + found + " entries");
+                            wrong.add(behavior.get("name").asString() + ": a "
+                                    + finding.get("kind").asString() + " finding joins "
+                                    + found + " entries");
                         }
                     }
                 }
@@ -263,43 +286,50 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     /**
-     * And the findings of one kind agree about whether they name an obligation.
+     * And a finding is about something owed exactly where it names it.
      *
-     * <p>The direction that used to be false. Whether a row is owed was answered twice — once per
-     * subject, which is what makes the writer publish a key, and once per kind, which is what a
-     * build's refusal and the offering read — and a kind is a coarsening of the subjects, so the
-     * two could disagree and did: one kind covered a subject that named an obligation and a subject
-     * that named nothing, and a consumer acting on the second had nothing to look up while a build
-     * refused over it.
+     * <p>The universal direction, and the one this could not hold before. Whether a row is owed is
+     * the subject's answer: it is what makes the writer publish a key, and it is what
+     * {@code disposition} says, since a finding a build refuses over or holds a verdict open for is
+     * one whose subject names an obligation and no other. So the two are one fact written in two
+     * fields, and either without the other is the defect this is about — a build acting on
+     * something a consumer cannot look up, or a key on a finding no account is keeping.
      *
-     * <p>Asked of the document rather than of the types. That a subject carrying an identity says
-     * so by its type closes the question where the finding is made; this says the document that
-     * comes out of it does not put two answers under one word, which is the form a consumer meets
-     * the defect in.
+     * <p><b>Nothing here is asked of the kind.</b> Whether a row is owed is not a kind's to answer:
+     * a kind is a coarsening of the subjects, and one of them covers a row waiting for its answer
+     * and the arm it stands at. Held as "the findings of one kind agree", this would promise that
+     * the subjects go on being sorted so that the coarser word can answer — which is the
+     * arrangement the classifier was removed to end.
      */
     @Test
-    void andTheFindingsOfOneKindAgreeAboutNamingAnObligation() {
-        Map<String, Boolean> named = new LinkedHashMap<>();
+    void andAFindingIsAboutSomethingOwedExactlyWhereItNamesIt() {
         List<String> wrong = new ArrayList<>();
+        int owed = 0;
+        int reported = 0;
         for (JsonNode document : DOCUMENTS) {
             for (JsonNode module : document.get("modules")) {
                 for (JsonNode behavior : module.get("behaviors")) {
                     for (JsonNode finding : behavior.get("findings")) {
-                        String kind = finding.get("kind").asString();
-                        boolean names = finding.has("obligationId");
-                        Boolean said = named.putIfAbsent(kind, names);
-                        if (said != null && said != names) {
-                            wrong.add(kind + ": one finding of this kind names an obligation and"
-                                    + " another names none");
+                        boolean actedOn =
+                                !"reported".equals(finding.get("disposition").asString());
+                        if (actedOn) {
+                            owed++;
+                        } else {
+                            reported++;
+                        }
+                        if (actedOn != finding.has("obligationId")) {
+                            wrong.add(finding.get("kind").asString() + ": a build "
+                                    + (actedOn ? "acts on this and it names nothing"
+                                            : "acts on nothing here and it names an obligation"));
                         }
                     }
                 }
             }
         }
 
-        assertEquals(List.of(), wrong, "one kind, two answers about what a row is owed");
-        assertTrue(named.containsValue(true) && named.containsValue(false),
-                () -> "and the corpus reaches kinds on both sides of it: " + named);
+        assertEquals(List.of(), wrong, "what a build acts on and what it names have come apart");
+        String reached = owed + " acted on, " + reported + " reported";
+        assertTrue(owed > 0 && reported > 0, () -> "and the corpus reaches both: " + reached);
     }
 
     /**
@@ -335,8 +365,8 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         // above holds of every finding — said here of the pair a reader cannot tell apart, since
         // that is the pair a consumer would land on twice.
         for (JsonNode arm : together) {
-            assertEquals(1, entriesOf(behavior, onlyModuleOf(reportOf(TWO_RULES_AT_ONE_FORK)),
-                            "arm_unreached").stream()
+            assertEquals(1, everyEntryOf(behavior, onlyModuleOf(reportOf(TWO_RULES_AT_ONE_FORK)))
+                            .stream()
                             .filter(entry -> arm.get("obligationId").equals(
                                     entry.get("obligationId"))).count(),
                     () -> "and lands on one arm of the account: " + arm);
@@ -370,7 +400,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         .map(f -> String.valueOf(f.get("obligationId"))).distinct().count(),
                 () -> "told apart by which position's axis: " + classes);
         for (JsonNode each : classes) {
-            assertEquals(1, entriesOf(behavior, onlyModuleOf(document), "axis_class_uncovered")
+            assertEquals(1, everyEntryOf(behavior, onlyModuleOf(document))
                             .stream()
                             .filter(entry -> each.get("obligationId")
                                     .equals(entry.get("obligationId"))).count(),
@@ -412,7 +442,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         + behavior.get("findings"));
         assertEquals(classes.get(0).get("obligationId"), cases.get(0).get("obligationId"),
                 () -> "the two measures reached one obligation: " + cases + " / " + classes);
-        assertEquals(1, entriesOf(behavior, onlyModuleOf(document), "axis_class_uncovered").stream()
+        assertEquals(1, everyEntryOf(behavior, onlyModuleOf(document)).stream()
                         .filter(entry -> cases.get(0).get("obligationId")
                                 .equals(entry.get("obligationId"))).count(),
                 () -> "which the account holds once: " + behavior.get("partition"));
@@ -445,7 +475,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         .map(each -> String.valueOf(each.get("obligationId"))).distinct().count(),
                 () -> "told apart by what each is owed at: " + owed);
         for (JsonNode each : owed) {
-            assertEquals(1, entriesOf(behavior, onlyModuleOf(document), "unanswered_row").stream()
+            assertEquals(1, everyEntryOf(behavior, onlyModuleOf(document)).stream()
                             .filter(entry -> each.get("obligationId")
                                     .equals(entry.get("obligationId"))).count(),
                     () -> "and each lands on one entry of the account it is owed at: " + each);
@@ -458,28 +488,65 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         + behavior.get("rowObligations"));
     }
 
-    private static List<JsonNode> entriesOf(JsonNode behavior, JsonNode module, String kind) {
+    /**
+     * And a row awaiting its answer where the body has no arms joins all the same.
+     *
+     * <p>Said here as well as in the sweep, because what it is about is a section that is not
+     * there: this behavior publishes no arm account, and the row account is where the one finding
+     * lands. The sweep holds it too, and holds nothing here if no model in the corpus writes such
+     * a row.
+     */
+    @Test
+    void aRowAwaitingItsAnswerJoinsWhereTheBodyHasNoArms() {
+        JsonNode document = reportOf(A_ROW_AWAITING_ITS_ANSWER_WITH_NO_ARMS);
+        JsonNode behavior = onlyBehaviorOf(document);
+
+        assertFalse(behavior.has("branch") && behavior.get("branch").has("obligations"),
+                () -> "this body has no arm account: " + behavior.get("branch"));
+        List<JsonNode> owed = new ArrayList<>();
+        for (JsonNode finding : behavior.get("findings")) {
+            if ("unanswered_row".equals(finding.get("kind").asString())) {
+                owed.add(finding);
+            }
+        }
+
+        assertEquals(1, owed.size(),
+                () -> "the row is owed an answer and no arm is owed a row: "
+                        + behavior.get("findings"));
+        assertEquals(1, everyEntryOf(behavior, onlyModuleOf(document)).stream()
+                        .filter(entry -> owed.getFirst().get("obligationId")
+                                .equals(entry.get("obligationId"))).count(),
+                () -> "and lands on the row account: " + behavior.get("rowObligations"));
+    }
+
+    /**
+     * Every entry of every account this behavior and its module publish.
+     *
+     * <p><b>Not chosen by the kind.</b> Which account an obligation is an entry of is what its
+     * identity is — the shapes are distinct and closed, so an identity that is a class of an axis
+     * cannot be read as an arm and there is nothing here to decide. A reader that picked the array
+     * from the finding's kind would be the second classifier this document exists without: one kind
+     * covers a row waiting for its answer and the arm it stands at, and it would put both against
+     * whichever of the two accounts that reader had written down.
+     *
+     * <p>So the join below is over all of them at once, and holding that an identity lands on
+     * exactly one says both halves: that its own account has it, and that no other account has
+     * anything a consumer could reach by the same key.
+     *
+     * <p>Every array is asked for rather than assumed. A measure that did not run publishes no
+     * section, and a behavior with no arms publishes no arm account while a row of it can be
+     * waiting for its answer all the same.
+     */
+    private static List<JsonNode> everyEntryOf(JsonNode behavior, JsonNode module) {
         List<JsonNode> out = new ArrayList<>();
-        // A combination of two classes, where the body's decisions meet nowhere and the pair space
-        // is what the behavior is held to. Made here for the reason a class of a position is: the
-        // axes carry every class of every position and the pairs carry which two positions each
-        // relation is between, so a cell is those two read together and an array beside them would
-        // be the same membership declared twice.
-        if ("pair_uncovered".equals(kind)) {
-            return pairCellsOf(behavior);
-        }
-        // The combinations of the body's own decisions, which the account publishes one entry of
-        // per combination the body has a path to.
-        if ("interaction_uncovered".equals(kind)) {
-            behavior.get("interaction").get("obligations").forEach(out::add);
-            return out;
-        }
-        // A class of a position is kept as the axis it is a class of and the string that axis
-        // lists, so the entry a finding joins to is that pair. Made here rather than published as
-        // a third array, because the axes already carry every class of every position and an array
-        // beside them would be the same membership declared twice.
-        if ("axis_class_uncovered".equals(kind)) {
-            for (JsonNode axis : behavior.get("partition").get("axes")) {
+        // The points of the lines this behavior's positions meet, and the classes its positions
+        // divide into. A class is kept as the axis it is a class of and the string that axis lists,
+        // so the entry is that pair, made here rather than published as a third array — the axes
+        // already carry every class of every position.
+        JsonNode partition = behavior.get("partition");
+        if (partition != null) {
+            obligationsOf(partition, out);
+            for (JsonNode axis : partition.get("axes")) {
                 for (JsonNode cls : axis.get("classes")) {
                     ObjectNode entry = JSON.createObjectNode();
                     ObjectNode id = entry.putObject("obligationId");
@@ -488,54 +555,39 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                     out.add(entry);
                 }
             }
-            return out;
+            // And the cells of the pair space, where the body's decisions meet nowhere. Made here
+            // for the same reason a class is.
+            out.addAll(pairCellsOf(behavior));
         }
-        // A case of an input is owed at one of two entries, and which is not this reader's to
-        // decide: where the behavior has a position of its own the case and the class its position
-        // divides into are one thing a row is owed for and the axes publish it; where it has none
-        // the signature publishes the case itself. So both are in hand and the identity on the
-        // finding says which it lands on.
-        if ("input_case_unspecified".equals(kind)) {
-            out.addAll(entriesOf(behavior, module, "axis_class_uncovered"));
-            if (behavior.has("signature")) {
-                for (JsonNode input : behavior.get("signature").get("inputs")) {
-                    input.get("obligations").forEach(out::add);
-                }
+        obligationsOf(behavior.get("branch"), out);
+        obligationsOf(behavior.get("decision"), out);
+        obligationsOf(behavior.get("interaction"), out);
+        // What the rows themselves owe, which stands whether or not anything was measured.
+        behavior.get("rowObligations").forEach(out::add);
+        JsonNode signature = behavior.get("signature");
+        if (signature != null) {
+            obligationsOf(signature.get("output"), out);
+            for (JsonNode input : signature.get("inputs")) {
+                obligationsOf(input, out);
             }
-            return out;
         }
-        // A row waiting for its answer is owed at one of two entries, and which is not this
-        // reader's to decide. The arm such a row stands at is owed a row and the arm account holds
-        // that; the row itself is owed an answer and the row account holds that — two obligations
-        // about one piece of text, and the identity on the finding says which it is about.
-        if ("unanswered_row".equals(kind)) {
-            // A behavior with no arms has no arm account to publish, and a row of one is waiting
-            // for its answer all the same.
-            JsonNode arms = behavior.get("branch").get("obligations");
-            if (arms != null) {
-                arms.forEach(out::add);
-            }
-            behavior.get("rowObligations").forEach(out::add);
-            return out;
-        }
-        JsonNode from = switch (kind) {
-            case "decision_rule_uncovered" -> behavior.get("decision").get("obligations");
-            // A case of the output, whose account is under the output itself. No second place to
-            // look: an axis is of an input, so nothing else has an entry this could land on.
-            case "output_case_unspecified" ->
-                    behavior.get("signature").get("output").get("obligations");
-            case "arm_unreached" -> behavior.get("branch").get("obligations");
-            case "boundary_unmet", "domain_point_uncovered" ->
-                    behavior.get("partition").get("obligations");
-            default -> throw new IllegalStateException(kind);
-        };
-        from.forEach(out::add);
         // A line a declaration drew is owed once for the module and is kept under the declaration,
         // so a finding about one joins there rather than in the behavior it was read at.
         for (JsonNode declared : module.get("declarations")) {
-            declared.get("obligations").forEach(out::add);
+            obligationsOf(declared, out);
         }
         return out;
+    }
+
+    /** The {@code obligations} of one section, where the section and the array are both there. */
+    private static void obligationsOf(JsonNode section, List<JsonNode> into) {
+        if (section == null) {
+            return;
+        }
+        JsonNode owed = section.get("obligations");
+        if (owed != null) {
+            owed.forEach(into::add);
+        }
     }
 
     /**
@@ -555,7 +607,13 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             classesOf.put(axis.get("axis").asString(), classes);
         }
         List<JsonNode> out = new ArrayList<>();
-        for (JsonNode pair : partition.get("pairs").get("between")) {
+        // A behavior whose pair space nobody worked out publishes none, and has no cell to be an
+        // entry of.
+        JsonNode pairs = partition.get("pairs");
+        if (pairs == null) {
+            return out;
+        }
+        for (JsonNode pair : pairs.get("between")) {
             String one = pair.get("one").asString();
             String other = pair.get("other").asString();
             for (String first : classesOf.getOrDefault(one, List.of())) {
@@ -617,6 +675,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         out.add(reportOf(TWO_RULES_ONE_ARM));
         out.add(reportOf(A_CASE_AND_ITS_CLASS));
         out.add(reportOf(A_ROW_AWAITING_ITS_ANSWER));
+        out.add(reportOf(A_ROW_AWAITING_ITS_ANSWER_WITH_NO_ARMS));
         return out;
     }
 }
