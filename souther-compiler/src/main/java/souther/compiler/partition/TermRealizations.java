@@ -13,6 +13,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.semantics.Arithmetic;
@@ -1031,12 +1032,29 @@ final class TermRealizations {
      * <p>Where an end is open there is nothing to step from, so the carrier names a place the way
      * it does for a run — and what comes back says this wrote one of them, since raising nothing
      * reaches a second.
+     *
+     * <p><b>Held to what the place can hold before a step is taken, and not after.</b> A number the
+     * carrier does not reach is a number no row writes, so it is no candidate — and the figure
+     * counts candidates. Left to the writing to turn down, the numbers a divisor as wide as the
+     * order itself puts below the order's own end would take the whole figure, and the numbers the
+     * place does hold would never be reached: an answer saying a figure of this compiler's stopped
+     * it, of a place with a value in it, and a figure nobody can raise far enough to reach one.
+     *
+     * <p><b>And it bounds the walking without being said to the carrier.</b> What the demands leave
+     * is what a place is named inside, and the ends of that are theirs: handed the order's own end
+     * as though a rule had written it, a run open below is a run starting at the smallest whole
+     * number there is, and every row for a number below something is written at it. So the ends a
+     * place is named inside are the demands' and the window stepped through is the meet.
      */
     private static Tried numbersInside(NumericDomain.Bounds lies, Carrier on,
                                        Predicate<Place> holds) {
-        if (lies.min() != null && lies.min().at() instanceof Count low
-                && lies.max() != null && lies.max().at() instanceof Count high) {
-            return wholeNumbers(lies, holds, low.at(), high.at(),
+        OrderedInterval reaches = on.extent();
+        NumericDomain.Bounds within =
+                lies.meet(new NumericDomain.Bounds(reaches.low(), reaches.high()));
+        if (lies.min() != null && lies.max() != null
+                && within.min().at() instanceof Count low
+                && within.max().at() instanceof Count high) {
+            return wholeNumbers(within, holds, low.at(), high.at(),
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         }
         Place found = on.somethingInside(lies.min(), lies.max());

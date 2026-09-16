@@ -113,6 +113,28 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 if List.length(slot.held) >= 2 && List.sum(slot.held) >= 10 then Late else Early
             """;
 
+    /**
+     * Two quotients by divisors as wide as the order the place is counted on.
+     *
+     * <p>Where the run a pair of them leaves falls mostly outside what a whole number can be. The
+     * numbers whose quotient by the largest of them is minus one run from below twice that to the
+     * number itself, and only the two at the top of it are numbers a row can write.
+     */
+    private static final String TWO_WIDE_DIVISORS = """
+            module example.wide
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { n: Int }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if slot.n / 9223372036854775807 >= 0 && slot.n / 9223372036854775806 >= 0
+                    then Late else Early
+            """;
+
     /** Parts that do not constrain each other, which is the pair that worked before. */
     private static final String AN_HOUR_AND_A_MINUTE = """
             module example.dated
@@ -268,6 +290,28 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 "a half below ten beside a third from ten up");
         assertInstanceOf(TermRealizations.Realization.None.class, model.answering(asked),
                 () -> "no number has both: " + model.answering(asked));
+    }
+
+    /**
+     * And the run is looked in where the place can hold a number, however wide the divisors are.
+     *
+     * <p>Both quotients at minus one is a run of the place that starts below twice the largest
+     * whole number there is and ends at it, and the numbers a row can write are the two at the top.
+     * Walked from the arithmetic's own end, the figure this compiler holds the walk to is spent on
+     * numbers no row writes and the two that answer are never reached — which comes back as a
+     * figure somebody should raise, of a place that has a value in it, and no figure reaches it.
+     */
+    @Test
+    void theRunIsLookedInWhereThePlaceCanHoldANumber() {
+        Model model = new Model(TWO_WIDE_DIVISORS);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.at(-1, -1);
+
+        assertEquals(2, asked.size(), () -> "a quotient by each wide divisor: " + asked.keySet());
+        List<FixtureTemplate> built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, model.answering(asked),
+                () -> "a number the place holds whose quotients are both minus one: "
+                        + model.answering(asked)).values();
+        model.quotientsReadBackIntoEveryClass(built, asked);
     }
 
     /**
