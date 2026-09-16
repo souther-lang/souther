@@ -44,7 +44,8 @@ public sealed interface Realization {
      * The rules leave nothing at this item, and that is proved rather than searched for.
      *
      * <p>What a report counts as excluded and what a build is not refused over. Only a proof reaches
-     * here: two ends that have crossed, an order with nothing past its last value.
+     * here: two ends that have crossed, an order with nothing past its last value, a region that
+     * leaves the item's quantity no value the item asks for.
      */
     record Impossible() implements Realization {}
 

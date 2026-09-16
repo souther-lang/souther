@@ -31,9 +31,13 @@ import java.util.function.Supplier;
  * <p>What it is handed is a {@link Standing} — a constraint, not a shape of line — so a quantity
  * added later brings work here only where it needs a kind of search that is not already written.
  *
- * <p>Nothing here decides that an item cannot be reached. A refusal is a refusal of what was tried,
- * and {@link Realization} keeps that apart from a proof: read as one, a search that ran out said the
- * model refuses an edge it merely could not compose (ADR-0091).
+ * <p>No search here decides that an item cannot be reached. A refusal is a refusal of what was
+ * tried, and {@link Realization} keeps that apart from a proof: read as one, a search that ran out
+ * said the model refuses an edge it merely could not compose (ADR-0091). What does decide it are the
+ * proofs the rules themselves make, and they are asked for before anything is looked for — a region
+ * shown to hold nothing, and a region that leaves the item's quantity no value the item asks for
+ * ({@link StandingImpossibility}). A walk of the whole of what is left is the third, and the only
+ * one of the three a search has any part in.
  */
 public final class LevelRealizer {
 
@@ -103,14 +107,12 @@ public final class LevelRealizer {
         if (within.emptiness().isPresent()) {
             return new Realization.Impossible();
         }
-        // A form is one question, and asking its positions one at a time is a different question
-        // with a weaker answer. What a rule spanning two of them leaves is a fact about the sum, and
-        // every position of it can run somewhere while the sum runs nowhere — which is the whole
-        // reason a form is projected out of the rules rather than assembled out of per-position
-        // answers. So the form is asked as itself, before it is taken apart below.
-        if (standing instanceof Standing.OfAForm over
-                && within.projectionOf(over.form())
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+        // The item's own quantity, asked of the region before its positions are. A rule spanning
+        // two of them leaves a fact about the pair, and every position can run somewhere while what
+        // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
+        // for, which is what the rules on the way to a border and the border itself say between
+        // them. Neither is readable off the positions one at a time.
+        if (StandingImpossibility.provesImpossible(within, standing)) {
             return new Realization.Impossible();
         }
         for (NumericTerm term : termsOf(standing)) {
