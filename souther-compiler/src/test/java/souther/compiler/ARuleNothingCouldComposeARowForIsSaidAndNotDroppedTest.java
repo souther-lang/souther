@@ -324,12 +324,42 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
     @Test
     void aRuleThatCannotHoldAtOneCallLeavesTheOtherCallsWaysOwed() {
         for (String first : List.of("never", "ever")) {
-            List<String> said = requirementsOf(eachWithItsOwnRule(first));
+            List<String> owedWhereTheRuleCanHold = new ArrayList<>();
+            List<String> saidWhereItCannot = new ArrayList<>();
+            for (JsonNode rule : rulesOf(eachWithItsOwnRule(first))) {
+                (heldAt("age", rule) ? owedWhereTheRuleCanHold : saidWhereItCannot)
+                        .add(rule.get("requirement") == null ? "nothing said"
+                                : rule.get("requirement").stringValue());
+            }
 
-            assertFalse(said.contains("excluded"),
+            assertFalse(owedWhereTheRuleCanHold.contains("excluded"),
                     () -> "the call handing the second rule reaches the arm, so nothing shows the"
-                            + " ways down it out of reach (" + first + " first): " + said);
+                            + " ways down it out of reach (" + first + " first): "
+                            + owedWhereTheRuleCanHold);
+            // And the ways the first call's rule cannot hold on are excluded, which is what makes
+            // the sentence above about attribution. Asked of the same pair of runs: a reading that
+            // excluded nothing at all would pass the line above by having nothing to say.
+            assertEquals(List.of("excluded", "excluded"), saidWhereItCannot,
+                    () -> "a value the invariant refuses is what those ways need, which is the"
+                            + " model's answer and not a search that fell short (" + first
+                            + " first): " + saidWhereItCannot);
         }
+    }
+
+    /**
+     * Whether the way this rule is takes the branch its condition on {@code position} holds at.
+     *
+     * <p>Read off the condition the way names rather than off where it was written: what tells the
+     * two calls apart is which position the rule handed in is applied to, and both of them are the
+     * same authored fork.
+     */
+    private static boolean heldAt(String position, JsonNode rule) {
+        for (JsonNode condition : rule.get("obligationId").get("conditions")) {
+            if (condition.get("condition").stringValue().contains(position + "=")) {
+                return "held".equals(condition.get("outcome").stringValue());
+            }
+        }
+        throw new IllegalStateException("no condition of this way is over " + position + ": " + rule);
     }
 
     @Test
@@ -343,11 +373,16 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
                         + " function of");
     }
 
-    /** What the document says a row is owed at, rule by rule. */
-    private static List<String> requirementsOf(String model) {
-        JsonNode rules = JSON.readTree(json(model))
+    /** The ways of the one behavior's decision, as the document writes them. */
+    private static JsonNode rulesOf(String model) {
+        return JSON.readTree(json(model))
                 .get("modules").get(0).get("behaviors").get(0)
                 .get("decision").get("obligations");
+    }
+
+    /** What the document says a row is owed at, rule by rule. */
+    private static List<String> requirementsOf(String model) {
+        JsonNode rules = rulesOf(model);
         List<String> said = new ArrayList<>();
         rules.forEach(rule -> said.add(rule.get("requirement") == null ? "nothing said"
                 : rule.get("requirement").stringValue()));

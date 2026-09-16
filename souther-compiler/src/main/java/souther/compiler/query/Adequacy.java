@@ -2018,12 +2018,12 @@ public final class Adequacy {
                 Set<CoverageSites.AsWritten> unreachedArms) {
             CoverageSites.AsWritten unreached = armNothingReaches(ruled, unreachedArms);
             if (unreached != null) {
-                return RuleSettlement.of(new RuleRequirement.Excluded.AnArmNothingReaches(
+                return RuleSettlement.read(new RuleRequirement.Excluded.AnArmNothingReaches(
                         unreached));
             }
             return switch (souther.compiler.partition.Reachability.of(ruled.states(), declared)) {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
-                        RuleSettlement.of(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
+                        RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
                                 nothing.why()));
                 case souther.compiler.partition.Reachability.Reaching reaching ->
                         whatASearchFinds(ruled, probe, taken, reaching);
@@ -2074,6 +2074,12 @@ public final class Adequacy {
          * for a dependency, a way that wants a table, a budget that stopped the composing. Folded
          * to one word, an author reading the rule was told a search came to nothing and not what it
          * came to nothing on.
+         *
+         * <p><b>One word a search comes back with is the model's, and it is the one exception.</b>
+         * A composing that proves the rules leave no value for the rule has settled the rule, and
+         * it takes every way of standing the dependencies in to say so — a proof is about the
+         * region the search that made it was composed in, and a way that stood a row in the rule
+         * says more about the rule than a proof about another region does.
          */
         private static RuleSettlement whatASearchFinds(
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
@@ -2082,9 +2088,18 @@ public final class Adequacy {
             // Every way of standing the dependencies in, and what each of them established. Which
             // case a row carries where the way names none decides where the row goes, so a row
             // that went elsewhere says that of the case it carried and not of the rule.
+            List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
+                    reaching, ruled.demands());
+            // The proof, where every way of standing the dependencies in came back with one. Asked
+            // of the ways together and before the fold below: what that fold joins on is how much
+            // one way established about the rule, and a proof is not more of that — it is the one
+            // answer that is the rule's only where no way found anything else.
+            RuleSearch.CameToNothing proved = provedByEveryWay(ways);
+            if (proved != null) {
+                return RuleSettlement.provedNothingTakesIt(proved);
+            }
             RuleSettlement established = null;
-            for (Generator.BoundaryAttempt made : probe.attempt("a rule of the decision", Map.of(),
-                    reaching, ruled.demands())) {
+            for (Generator.BoundaryAttempt made : ways) {
                 RuleSettlement here = switch (made) {
                     // What the composing came to, said on the axis it is about. The rule is left
                     // where it was and nothing here is a word about the model: the way may be the
@@ -2104,6 +2119,39 @@ public final class Adequacy {
                     : RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
                             List.of("a rule of the decision"),
                             Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
+        }
+
+        /**
+         * The rule's own answer where every way of standing the dependencies in proved it, and
+         * null where any of them did not.
+         *
+         * <p>Universal, because a search is composed in the region one standing leaves and a proof
+         * is about that region. A rule with a proof under one standing and a row under another is
+         * a rule something stands in, and reading the proof as the rule's would report a way this
+         * compiler did reach as one the model refuses.
+         *
+         * <p>Null for no ways at all, which is the classes not linking: a universal over nothing is
+         * true, and true here would be a rule nobody searched coming back as one the model refuses.
+         *
+         * <p>Asked of the attempts and not of what they were folded to, so that the question can be
+         * put to a pair of ways directly. Which words prove it is the search's own answer
+         * ({@link Generator.UnresolvedCombination.Reason#provesInfeasible}).
+         *
+         * <p>What comes back is every word, and not the one that proved first. More than one word
+         * proves, so the ways of one rule may be proved by two of them — and a reader shown
+         * whichever came first is shown what the walk did. The order is the selection's
+         * ({@link RuleSearch.CameToNothing#of}) and not this walk's.
+         */
+        static RuleSearch.CameToNothing provedByEveryWay(List<Generator.BoundaryAttempt> ways) {
+            List<Generator.UnresolvedCombination> proofs = new ArrayList<>();
+            for (Generator.BoundaryAttempt way : ways) {
+                if (!(way instanceof Generator.BoundaryAttempt.NoRow none)
+                        || !none.why().reason().provesInfeasible()) {
+                    return null;
+                }
+                proofs.add(none.why());
+            }
+            return proofs.isEmpty() ? null : RuleSearch.CameToNothing.of(proofs);
         }
 
         /**

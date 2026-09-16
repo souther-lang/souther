@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReachabilityGap;
 
 import java.util.ArrayList;
@@ -108,6 +109,39 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
             }
         }
         return out;
+    }
+
+    /**
+     * Whether the model itself leaves no value at the point, over every search that was made for
+     * it.
+     *
+     * <p>Asked here and not of one outcome, for the reason {@link #prevented()} is: a point is
+     * searched once per way of standing the dependencies in, and what the point comes to is what
+     * they all came to. One search proving there is nothing to find proves it of the region that
+     * search was composed in, and another caller's region is another region — so a point with a
+     * proof beside a search a budget ended has not been shown to be one no row can be written at,
+     * and a reader taking the proof for the point's answer would be reading one search as all of
+     * them.
+     *
+     * <p>So the quantifier is universal, and it is this type's to own. Left to a caller, the
+     * plurality would be folded again at every place that asks, and an {@code anyMatch} written at
+     * one of them is the answer of whichever search a walk reached first.
+     *
+     * <p>A search nobody could make is not a proof and neither is a walk that stopped, so a point
+     * holding one of those is not this whatever else it holds. Which words prove it is the search's
+     * own answer ({@link Generator.UnresolvedCombination.Reason#provesInfeasible}), and false is
+     * the searches not settling it rather than the rules leaving a value there.
+     *
+     * <p>Kept inside this package with the one caller that reads it
+     * ({@link WritabilityKnowledge#of}).
+     */
+    boolean provesInfeasible() {
+        // Nothing was searched, so nothing proved anything. Said before the quantifier rather than
+        // left to it: a universal over no outcomes is true, and true here would be a point nobody
+        // looked at coming back as one the rules refuse.
+        return ran() && each.stream().allMatch(it ->
+                it instanceof ItemAssessment.Attempt.Unresolved unresolved
+                        && unresolved.why().reason().provesInfeasible());
     }
 
     /**

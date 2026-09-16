@@ -837,10 +837,11 @@
             }
           },
           "disposition": {
-            "description": "What became of this obligation, which the evidence beside it is why. All three are in the count: whether a row is owed at a point is the model's answer, and nothing this compiler failed to read, compose or represent changes it. `unmet` says the absence is established, so it is a finding; what a build does about that finding is a separate question and is answered under `findings[].disposition`. `undecided` says nobody could decide it and names the open questions under `undecidedAbout`. Every document this compiler writes carries this. Not in `required`: a document written before this field existed is still a document of this version.",
+            "description": "What became of this obligation, which the evidence beside it is why. All four are in the count: whether a row is owed at a point is the model's answer, and nothing this compiler failed to read, compose or represent changes it. `unmet` says the absence is established, so it is a finding; what a build does about that finding is a separate question and is answered under `findings[].disposition`. `refuted` says the rules of the way to the point leave it no value, so there is no row to write and nothing to raise — it is the model's own answer and never a search that came back empty, and it is no finding. `undecided` says nobody could decide it and names the open questions under `undecidedAbout`. Every document this compiler writes carries this. Not in `required`: a document written before this field existed is still a document of this version.",
             "enum": [
               "met",
               "unmet",
+              "refuted",
               "undecided"
             ]
           },
@@ -2456,10 +2457,11 @@
                 ]
               },
               "because": {
-                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Two are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, and `an_arm_nothing_reaches` a way through an arm no value arrives at. The rest are about the inquiry — a row was composed and took another rule, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. That last says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
+                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Three are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, and `the_rules_leave_no_value_for_it` a search proving the rules leave no value that takes the rule — the one of the three a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. That last says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
                 "enum": [
                   "the_way_needs_one_position_to_be_two",
                   "an_arm_nothing_reaches",
+                  "the_rules_leave_no_value_for_it",
                   "a_composed_row_went_elsewhere",
                   "the_rule_the_row_took_could_not_be_told",
                   "nothing_watched_the_row",

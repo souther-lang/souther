@@ -62,6 +62,7 @@ import souther.compiler.query.Measure;
 import souther.compiler.query.Sites;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.Weakening;
@@ -1199,8 +1200,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
         if (!debts.isEmpty()) {
-            out.append(String.format("  declarations   obligations %d/%d%n",
-                    account.met().size(), account.counted()));
+            out.append(String.format("  declarations   obligations %d/%d%s%n",
+                    account.met().size(), account.counted(), refuted(account)));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -1210,6 +1211,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // reader does is walk from a number to the work it names, so an obligation inside the
         // denominator with no line under it is a difference nothing can be done about — which holds
         // of a point nobody read as much as of one nothing could show writable.
+        // And the declarations' own points the rules leave no value at, said the same way as a
+        // behavior's: counted, answered, and nothing for anybody to write.
+        for (Adequacy.DeclaredDebt each : account.refuted()) {
+            out.append(String.format("      · %s%n", cannotBeWritten(pointOf(each,
+                    RuleHandleProse.said(each.debt().describe(places), rendering, null)))));
+            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+                    at.owedAt(each.debt().at()).searches(),
+                    module.owedByDeclarations().conditionPlaces(), rendering, null));
+        }
         for (Adequacy.DeclaredDebt each : account.undecided()) {
             for (String said : undecidedBecause(each.debt().owed().disposition(),
                     pointOf(each, RuleHandleProse.said(each.debt().describe(places),
@@ -1964,6 +1974,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * How many of the obligations a block counts no row can be written at, where any are, and
+     * nothing where none are.
+     *
+     * <p>Beside the fraction and never inside it. What the numerator says is how many of the
+     * obligations a row is at, and there is no row at a point the rules leave no value at — added
+     * to it, the number would go on reading as rows and stand for something else. So the difference
+     * between the two numbers is walkable in three pieces, and this is the one nobody has work to
+     * do about.
+     *
+     * <p>Empty where there are none, because a number that is nearly always zero printed on every
+     * block is a word a reader learns to skip.
+     */
+    private static String refuted(ObligationSummary<?> owed) {
+        return owed.refuted().isEmpty() ? "" : "   refuted " + owed.refuted().size();
+    }
+
+    /**
+     * What a reader is told about a point no row can be written at.
+     *
+     * <p>Said as what the model settles, which is what it is. No figure of this compiler's is named
+     * and no work is handed to anybody: the rules on the way to the point leave it no value, and
+     * which rules those are is under the point, one line per reading.
+     */
+    private static String cannotBeWritten(String point) {
+        return "no row can stand at the " + point + " — the rules leave no value there";
+    }
+
+    /**
      * How a finding names what nothing did, given how far its measure got.
      *
      * <p>Where some rows could not be read, a case nothing here claims is a case nothing *seen*
@@ -2171,13 +2209,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%n",
-                    lines.size(), owed.met().size(), owed.counted(),
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
+                    lines.size(), owed.met().size(), owed.counted(), refuted(owed),
                     inFull(bounded.status())));
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
+        // And the ones the rules leave no value at, which are counted and are nobody's work. Under
+        // the same block and beside the questions, because both are the difference between the two
+        // numbers — what differs is that this one is answered.
+        for (BorderObligationPointAssessment point : owed.refuted()) {
+            out.append(String.format("      · %s%n", cannotBeWritten(point.role() + " point ("
+                    + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
+            readings(out, point, _ -> true, at -> whatWasTried(
+                    at.owedAt(point.at()).searches(), behavior.conditionPlaces(), rendering,
+                    declaredIn));
+        }
         for (BorderObligationPointAssessment point : owed.undecided()) {
             for (String said : undecidedBecause(point.owed().disposition(),
                     point.role() + " point ("
@@ -2814,10 +2862,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                     new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
                             + " is an arm the branch count is made without");
+            // In the words the composings were said in, which are the model's. The other two here
+            // are read off the rules before anything is composed and have nothing of a search to
+            // say; this one is what the composings themselves proved, so what they came back with
+            // is what a reader is shown.
+            //
+            // Every word of them and not one, in the order the search holds them in. Two ways of
+            // standing the dependencies in may prove it with different words, and a sentence that
+            // said one of them would be saying whichever the walk met first.
+            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+                    proved(((RuleSearch.CameToNothing) came.search()), rendering, places);
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
                             "a rule owed a row is said as the finding it is");
         };
+    }
+
+    /**
+     * What a rule the composings proved the rules leave no value for is said as.
+     *
+     * <p>A clause per word and never one per way. How many ways came back with a word is how many
+     * ways of standing the dependencies in there were, which is no part of what the rule says; what
+     * differs between two words is what a reader is told, so each of them is said once.
+     *
+     * <p>Where the sentence sits among the others is the first word's place, which is the same
+     * place whichever order the ways were walked in.
+     */
+    private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
+                               PublishedRuleHandle.WhereARuleIs places) {
+        List<String> clauses = new ArrayList<>();
+        for (Generator.UnresolvedCombination why : proofs.ways()) {
+            String clause = GeneratedRows.beside(whyUnresolved(why), why, rendering, places);
+            if (!clauses.contains(clause)) {
+                clauses.add(clause);
+            }
+        }
+        return new Said(6, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
+                String.join("; ", clauses));
     }
 
     /**
@@ -5022,6 +5103,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
                     "the_way_needs_one_position_to_be_two";
             case RuleRequirement.Excluded.AnArmNothingReaches _ -> "an_arm_nothing_reaches";
+            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+                    "the_rules_leave_no_value_for_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _ ->
@@ -6108,6 +6191,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (disposition) {
             case ObligationDisposition.Met _ -> "met";
             case ObligationDisposition.Unmet _ -> "unmet";
+            case ObligationDisposition.Refuted _ -> "refuted";
             case ObligationDisposition.Undecided _ -> "undecided";
         };
     }

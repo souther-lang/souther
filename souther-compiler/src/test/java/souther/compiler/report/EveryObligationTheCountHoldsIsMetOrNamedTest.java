@@ -25,10 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * between the two numbers is made of is under that block.
  *
  * <p>What a reader does with the report is walk from a number to the work it names, so a number
- * whose difference is unaccounted for is a number nothing can be done about. There are two ways to
- * be counted and not met — a gap, and a point nobody could decide — and they are told apart because
- * what an author does about them differs: one is a row to write, and the other is a question this
- * build could not put.
+ * whose difference is unaccounted for is a number nothing can be done about. There are three ways
+ * to be counted and not met — a gap, a point the rules leave no value at, and a point nobody could
+ * decide — and they are told apart because what an author does about them differs: the first is a
+ * row to write, the second is nothing anybody can do anything about, and the third is a question
+ * this build could not put.
  *
  * <p>Asked of the report's own model and not of its text. What a block prints is a rendering of the
  * account, and the law is about the account: a gap carries exactly one finding, a point left
@@ -133,11 +134,34 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 | (Draft { cost = Amount(50) }) -> Ok { n = 50 }
             """;
 
+    /**
+     * Two guards that close between them, whose border behind the second has points no row can be
+     * written at.
+     *
+     * <p>Beside the models above rather than instead of them. They reach a row at a point, a point
+     * read to the end and missed, and a point nobody could decide; what reaches the fourth is a
+     * model whose own rules leave a point of a line it owes no value at all.
+     */
+    private static final String GUARDS_THAT_CLOSE = """
+            module example.closed
+
+            behavior f : (x: Int, y: Int) -> Bool
+
+            let f (x, y) = {
+                guard y <= x else false
+                guard y >= x + 1 else false
+                guard y >= 100 else false
+
+                true
+            }
+            """;
+
     @Test
     void everyObligationCountedAndNotMetIsNamedByTheBlockThatCountsIt() {
         List<String> wrong = new ArrayList<>();
         int met = 0;
         int unmet = 0;
+        int refuted = 0;
         int undecided = 0;
         int armsMet = 0;
         int armsUnmet = 0;
@@ -147,11 +171,15 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
             // Which block each obligation nobody could decide belongs to, so that what is checked is
             // the block naming its own and not the page holding the right number somewhere.
             java.util.SequencedMap<String, Integer> openIn = new java.util.LinkedHashMap<>();
+            // And which block each point the rules leave no value at belongs to, which is the
+            // other half of the difference between the two numbers and is named the same way.
+            java.util.SequencedMap<String, Integer> refusedIn = new java.util.LinkedHashMap<>();
             for (AdequacyReport.ModuleReport module : reported.report().modules()) {
                 ObligationSummary<Adequacy.DeclaredDebt> declared =
                         ObligationSummary.of(module.debts(), each -> each.debt().owed());
                 met += declared.met().size();
                 unmet += declared.unmet().size();
+                refuted += declared.refuted().size();
                 undecided += declared.undecided().size();
                 for (Adequacy.DeclaredDebt gap : declared.unmet()) {
                     long found = module.declarations().stream()
@@ -164,6 +192,15 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                     }
                 }
                 openIn.put(module.module() + "/declarations", declared.undecided().size());
+                refusedIn.put(module.module() + "/declarations", declared.refuted().size());
+                for (Adequacy.DeclaredDebt answered : declared.refuted()) {
+                    carriesNoFinding(wrong, reported.name(), answered.debt(),
+                            module.declarations().stream()
+                                    .filter(f -> f.about()
+                                            instanceof About.APointOfADeclaredBorder(var at)
+                                            && at.debt().point().equals(answered.debt().point()))
+                                    .count());
+                }
                 for (Adequacy.DeclaredDebt open : declared.undecided()) {
                     carriesNoFinding(wrong, reported.name(), open.debt(),
                             module.declarations().stream()
@@ -178,7 +215,12 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                     BorderObligationPointAssessment::owed);
                     met += account.met().size();
                     unmet += account.unmet().size();
+                    refuted += account.refuted().size();
                     undecided += account.undecided().size();
+                    for (BorderObligationPointAssessment answered : account.refuted()) {
+                        carriesNoFinding(wrong, reported.name(), answered,
+                                findingsAbout(behavior, answered));
+                    }
                     for (BorderObligationPointAssessment gap : account.unmet()) {
                         long found = findingsAbout(behavior, gap);
                         if (found != 1) {
@@ -233,16 +275,23 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                     }
                     openIn.put(module.module() + "/" + behavior.name(),
                             account.undecided().size() + openArms);
+                    refusedIn.put(module.module() + "/" + behavior.name(),
+                            account.refuted().size());
                 }
             }
-            saidUnderEachBlock(wrong, reported.name(), page, openIn);
+            saidUnderEachBlock(wrong, reported.name(), page, openIn,
+                    "? undecided whether a row");
+            saidUnderEachBlock(wrong, reported.name(), page, refusedIn,
+                    "· no row can stand at");
         }
 
-        String reached = "met " + met + ", unmet " + unmet + ", undecided " + undecided
+        String reached = "met " + met + ", unmet " + unmet + ", refuted " + refuted
+                + ", undecided " + undecided
                 + "; arms met " + armsMet + ", unmet " + armsUnmet
                 + ", undecided " + armsUndecided;
         assertEquals(List.of(), wrong, "an obligation the count holds is met, marked or named");
-        assertTrue(met > 0 && unmet > 0 && undecided > 0, "every state is reached: " + reached);
+        assertTrue(met > 0 && unmet > 0 && refuted > 0 && undecided > 0,
+                "every state is reached: " + reached);
         // The arms reach three of their four states here. The fourth is a fork whose declaration
         // says the caller decides and whose rule nothing worked out, and a model of that shape has
         // no rows to read at all — its arms come back unavailable, so no report holds one. What the
@@ -261,7 +310,8 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
     }
 
     /**
-     * As many `?` lines under each block as that block counted obligations nobody could decide.
+     * As many lines of one opening under each block as that block counted obligations of the state
+     * that opening is written for.
      *
      * <p>Per block and counted, rather than looked for on the page. A block owing ten of them and
      * printing one says the sentence a reader searches for and answers for one of the ten; a page
@@ -273,9 +323,10 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
      * treated as a beginning, so the declaration names inside the last block stay inside it.
      */
     private static void saidUnderEachBlock(List<String> wrong, String source, String page,
-                                           java.util.SequencedMap<String, Integer> undecided) {
+                                           java.util.SequencedMap<String, Integer> owed,
+                                           String opening) {
         java.util.Map<String, Integer> said = new java.util.LinkedHashMap<>();
-        undecided.keySet().forEach(block -> said.put(block, 0));
+        owed.keySet().forEach(block -> said.put(block, 0));
         String module = null;
         String block = null;
         for (String line : page.lines().toList()) {
@@ -284,16 +335,16 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 block = null;
             } else if (line.startsWith("  ") && !line.startsWith("   ") && module != null) {
                 String named = module + "/" + line.strip().split("\\s+")[0];
-                block = undecided.containsKey(named) ? named : block;
-            } else if (block != null
-                    && line.strip().startsWith("? undecided whether a row")) {
+                block = owed.containsKey(named) ? named : block;
+            } else if (block != null && line.strip().startsWith(opening)) {
                 said.merge(block, 1, Integer::sum);
             }
         }
-        undecided.forEach((where, owed) -> {
-            if (!owed.equals(said.get(where))) {
-                wrong.add(source + " " + where + ": " + owed + " obligations nobody could decide"
-                        + " and " + said.get(where) + " lines saying so under that block");
+        owed.forEach((where, counted) -> {
+            if (!counted.equals(said.get(where))) {
+                wrong.add(source + " " + where + ": " + counted + " obligations the count holds as"
+                        + " `" + opening + "` and " + said.get(where) + " lines saying so under"
+                        + " that block");
             }
         });
     }
@@ -342,6 +393,11 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         gate.answerEverything();
         out.add(new Reported("example.gate", AdequacyReport.of(gate),
                 SourceRendering.namedByIdentity(gate.texts())));
+        Compilation closed = Compilation.ofSource(GUARDS_THAT_CLOSE, "Main");
+        closed.measure(Adequacy.Asked.fullReport());
+        closed.answerEverything();
+        out.add(new Reported("example.closed", AdequacyReport.of(closed),
+                SourceRendering.namedByIdentity(closed.texts())));
         return out;
     }
 }

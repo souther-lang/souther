@@ -87,7 +87,10 @@ class ABorderTheWayToItContradictsIsRefusedAndNotSearchedForTest {
         List<String> out = new java.util.ArrayList<>();
         boolean under = false;
         for (String line : report().lines().map(String::strip).toList()) {
-            if (line.startsWith("·")) {
+            // A point of its own and not a sentence under one, which is what a point the rules
+            // leave no value at is said as. What is under it is the reading that proved it, so the
+            // line begins a point rather than continuing the one before.
+            if (line.startsWith("·") && !line.contains("no row can stand at")) {
                 if (under || line.contains(comparison)) {
                     out.add(line);
                 }
