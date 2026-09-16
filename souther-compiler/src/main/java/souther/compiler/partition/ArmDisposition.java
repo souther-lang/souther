@@ -62,7 +62,11 @@ public sealed interface ArmDisposition {
     record Unresolved(List<CameToNothing> why) implements ArmDisposition {
 
         public Unresolved {
-            why = List.copyOf(why);
+            // Each word once, with what the searches that came back with it met added up
+            // ({@link CameToNothing#joined}). An arm stands in several places and is looked for at
+            // each, so one word arrives from more than one of them — and two answers under one
+            // word would be one arm reported twice with half the figures apiece.
+            why = CameToNothing.joined(why);
             if (why.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an arm with no row and no reason for it is one nothing answered for");
@@ -161,12 +165,19 @@ public sealed interface ArmDisposition {
          *
          * <p>Held as a set, so that what the runs came to does not depend on the order they came in
          * while the order a reader is shown them in stays the one they were first met in.
+         *
+         * <p>Put together before it is held, and not by being held. What each run met under one
+         * word is added up ({@link CameToNothing#joined}) and what is left is one answer per word,
+         * which a set then holds without anything of a run's to lose. Held first and joined by
+         * whether the whole answer was equal, two runs that met different figures on the way to one
+         * word would be two answers, and a reader would act on half the figures twice.
          */
         record Unresolved(SequencedSet<CameToNothing> why)
                 implements AcrossRuns {
 
             public Unresolved {
-                why = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(why));
+                why = Collections.unmodifiableSequencedSet(
+                        new LinkedHashSet<>(CameToNothing.joined(why)));
                 if (why.isEmpty()) {
                     throw new IllegalArgumentException(
                             "an arm with no row and no reason for it is one nothing answered for");
@@ -230,7 +241,7 @@ public sealed interface ArmDisposition {
             throw new IllegalArgumentException("no run was asked about this arm");
         }
         List<AcrossRuns.Witness> witnesses = new ArrayList<>();
-        SequencedSet<CameToNothing> why = new LinkedHashSet<>();
+        List<CameToNothing> why = new ArrayList<>();
         ArmDisposition.NoWayIn nowhere = null;
         for (int run = 0; run < runs.size(); run++) {
             switch (runs.get(run)) {
@@ -261,7 +272,7 @@ public sealed interface ArmDisposition {
             return new AcrossRuns.Built(witnesses);
         }
         return nowhere == null
-                ? new AcrossRuns.Unresolved(why)
+                ? new AcrossRuns.Unresolved(new LinkedHashSet<>(why))
                 : new AcrossRuns.NoWayIn(nowhere.access());
     }
 }

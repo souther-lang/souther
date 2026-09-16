@@ -1,5 +1,11 @@
 package souther.compiler.partition;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.SequencedMap;
+
 /**
  * What a search that composed nothing came back with.
  *
@@ -27,6 +33,35 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
             throw new IllegalArgumentException(
                     "a search says what of this compiler's it met, or that it met none: " + why);
         }
+    }
+
+    /**
+     * These as the answers they are: each word once, with what every search that came back with it
+     * met added up under it.
+     *
+     * <p><b>The one law for putting two of these together, and every carrier of them applies it.</b>
+     * The two halves join differently — a word is what makes two answers one answer, and what was
+     * met is information that adds up — and a caller that let the container decide had them joined
+     * by whether the whole value was equal. Two searches that came back with one word having met
+     * two different figures were then two answers about one thing, and a reader met the same class
+     * twice with half the figures apiece.
+     *
+     * <p>Held to at construction rather than asked of whoever puts a list together. A carrier that
+     * holds two of these under one word is a state nothing downstream can read correctly, so it is
+     * not a state anything can build — which is what keeps the law from being one more thing a new
+     * caller has to know.
+     *
+     * <p>In the order the words were first met, which is the order a search met them in.
+     */
+    public static List<CameToNothing> joined(Collection<CameToNothing> all) {
+        SequencedMap<Generator.UnresolvedCombination, CompositionShortfall> under =
+                new LinkedHashMap<>();
+        for (CameToNothing each : all) {
+            under.merge(each.why(), each.met(), CompositionShortfall::and);
+        }
+        List<CameToNothing> out = new ArrayList<>();
+        under.forEach((why, met) -> out.add(new CameToNothing(why, met)));
+        return List.copyOf(out);
     }
 
     /**

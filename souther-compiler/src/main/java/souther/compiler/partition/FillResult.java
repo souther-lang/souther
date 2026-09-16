@@ -51,7 +51,11 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
 
     public FillResult {
         composed = Ordered.copyOf(composed);
-        unresolved = List.copyOf(unresolved);
+        // Each word once, with what the searches that came back with it met added up
+        // ({@link CameToNothing#joined}). A run of this plan is asked the same thing more than
+        // once — the runs of one plan are folded through here — and two answers under one word
+        // would reach a reader as two classes with half the figures apiece.
+        unresolved = CameToNothing.joined(unresolved);
         reasons = List.copyOf(reasons);
         if (!discharge.classes().keySet().equals(new LinkedHashSet<>(plan.classesOwed()))) {
             throw new IllegalStateException(
@@ -194,7 +198,12 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             meetings.put(owed,
                     offering(ClassDisposition.acrossRuns(runs), searched, composed, named));
         }
-        Set<CameToNothing> unresolved = new LinkedHashSet<>();
+        // Every run's, in the order the runs were made, and put together where this is built: the
+        // runs of one plan meet what they meet, so a word two of them came back with is one answer
+        // and what each met on the way to it is the other's as much as its own. Held apart by
+        // whether the whole answer was equal — which is what a set of them does — a figure one run
+        // reached would be offered as a second class for a reader to act on.
+        List<CameToNothing> unresolved = new ArrayList<>();
         Set<GenerationReason> reasons = new LinkedHashSet<>();
         for (FillResult each : searched) {
             unresolved.addAll(each.unresolved());

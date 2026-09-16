@@ -71,7 +71,11 @@ public sealed interface GenerationOutcome {
     record CannotGenerate(List<CameToNothing> why) implements GenerationOutcome {
 
         public CannotGenerate {
-            why = List.copyOf(why);
+            // Each word once, with what the searches that came back with it met added up
+            // ({@link CameToNothing#joined}). What is carried here is every attempt, and the same
+            // attempt reached from two places is one attempt — held apart by whether the whole
+            // answer was equal, a finding would be printed twice with half the figures apiece.
+            why = CameToNothing.joined(why);
             if (why.isEmpty()) {
                 throw new IllegalArgumentException("nothing came of something that was tried");
             }

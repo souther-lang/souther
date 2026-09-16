@@ -142,30 +142,28 @@ public sealed interface ClassDisposition {
             throw new IllegalArgumentException("no run was asked about this class");
         }
         List<AcrossRuns.Witness> witnesses = new ArrayList<>();
-        Generator.UnresolvedCombination agreed = null;
-        CompositionShortfall met = CompositionShortfall.NONE;
+        List<CameToNothing> came = new ArrayList<>();
         for (int run = 0; run < runs.size(); run++) {
             switch (runs.get(run)) {
                 case ClassDisposition.Built built ->
                         witnesses.add(new AcrossRuns.Witness(run, built));
-                case ClassDisposition.Unresolved none -> {
-                    if (agreed != null && !agreed.equals(none.why())) {
-                        throw new IllegalStateException(
-                                "two runs of one plan give a class different reasons for having no"
-                                        + " row: " + agreed + " and " + none.why());
-                    }
-                    agreed = none.why();
-                    // What each run met is the run's own and nothing the runs have to agree about.
-                    // A way of standing the dependencies in reaches what it reaches, and a figure
-                    // one run met is a figure somebody can raise whether or not the next run got
-                    // that far — so they are added up rather than held to agreeing, which is a
-                    // rule about the model and not about how far this compiler went.
-                    met = met.and(none.came().met());
-                }
+                case ClassDisposition.Unresolved none -> came.add(none.came());
             }
         }
-        return witnesses.isEmpty()
-                ? new AcrossRuns.Unresolved(new CameToNothing(agreed, met))
-                : new AcrossRuns.Built(witnesses);
+        if (!witnesses.isEmpty()) {
+            return new AcrossRuns.Built(witnesses);
+        }
+        // The one law for putting two of these together, and the reason a class holds the runs to
+        // one answer where an arm does not: what a class came to is one answer about the model, so
+        // the words have to agree — and once they do, this is the law joining them
+        // ({@link CameToNothing#joined}), which adds up what each run met rather than making a
+        // second answer of it.
+        List<CameToNothing> agreed = CameToNothing.joined(came);
+        if (agreed.size() > 1) {
+            throw new IllegalStateException(
+                    "two runs of one plan give a class different reasons for having no row: "
+                            + agreed.stream().map(CameToNothing::why).toList());
+        }
+        return new AcrossRuns.Unresolved(agreed.getFirst());
     }
 }
