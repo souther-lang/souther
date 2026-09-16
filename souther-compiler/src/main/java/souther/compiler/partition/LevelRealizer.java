@@ -103,14 +103,12 @@ public final class LevelRealizer {
         if (within.emptiness().isPresent()) {
             return new Realization.Impossible();
         }
-        // A form is one question, and asking its positions one at a time is a different question
-        // with a weaker answer. What a rule spanning two of them leaves is a fact about the sum, and
-        // every position of it can run somewhere while the sum runs nowhere — which is the whole
-        // reason a form is projected out of the rules rather than assembled out of per-position
-        // answers. So the form is asked as itself, before it is taken apart below.
-        if (standing instanceof Standing.OfAForm over
-                && within.projectionOf(over.form())
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+        // The item's own quantity, asked of the region before its positions are. A rule spanning
+        // two of them leaves a fact about the pair, and every position can run somewhere while what
+        // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
+        // for, which is what the rules on the way to a border and the border itself say between
+        // them. Neither is readable off the positions one at a time.
+        if (StandingImpossibility.cannotSatisfy(within, standing)) {
             return new Realization.Impossible();
         }
         for (NumericTerm term : termsOf(standing)) {
