@@ -51,12 +51,14 @@ public enum CompositionRepertoire {
     /**
      * The values that answer several of their own numbers at once.
      *
-     * <p>A location asked for two numbers is one value to write, and which values have both is
-     * solved for rather than put together. What is written here is the parts a moment is spelled
-     * in: the parts of a time and the parts of a date are places in the spelling, so a value with
-     * all of them asked for is built by writing each place. Every other group is solved for out of
-     * the numbers, and nothing here does that — a whole number whose halves and thirds are both
-     * asked for is a value this compiler names none of.
+     * <p>A location asked for two numbers is one value to write, and how a value with both is come
+     * by depends on how its numbers are reached: a number that is a place in the spelling of what
+     * stands there is written at, one whose values come of a run of the place's own is solved for,
+     * and one read off a value the group already asks for is read off the values that demand
+     * admits. Which groups those are is the realizer's to say and is not spelled out here; what
+     * this names is the values left over, whose numbers are reached none of those ways — the length
+     * of a list beside what it comes to is one value to compose out of both, and nothing here
+     * composes it.
      *
      * <p>So a group nothing built a value for is not a group no value answers. Raising anything
      * reaches none of them; what would is somebody writing the solving.
