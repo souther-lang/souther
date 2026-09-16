@@ -90,7 +90,8 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
 
         List<String> offeredAnyway = new ArrayList<>();
         for (Adequacy.Finding finding : findings) {
-            if (finding.weakenedBy().isEmpty() || !finding.kind().isAboutAnObligation()) {
+            if (finding.weakenedBy().isEmpty()
+                    || !(finding.about() instanceof About.OfAnObligation)) {
                 continue;
             }
             souther.compiler.partition.GenerationPlan plan =
@@ -112,7 +113,7 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
 
         assertTrue(findings != null && findings.stream()
                         .anyMatch(each -> !each.weakenedBy().isEmpty()
-                                && each.kind().isAboutAnObligation()),
+                                && each.about() instanceof About.OfAnObligation),
                 () -> "nothing here is undecided, so the rule is not exercised: " + findings);
     }
 

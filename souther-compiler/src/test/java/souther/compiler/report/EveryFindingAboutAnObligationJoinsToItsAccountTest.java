@@ -16,10 +16,8 @@ import tools.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,15 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is that the identity lands anywhere. Here the two ends are compared: every identity the document
  * publishes on a finding, against the array that account publishes.
  *
- * <p><b>What this does not hold.</b> That a finding of a kind the model calls an obligation
- * publishes an identity at all. Whether something is owed has two answers — {@link Adequacy.Kind}
- * answers per kind, and {@link souther.compiler.query.About.OfAnObligation} per subject, which is
- * what makes the writer publish one — and they are at different grains: a kind can be about
- * obligations while a subject of it carries nothing to key. So the two directions here are the ones
- * that are true of every document: an identity that is published lands on one entry, and a kind
- * about nothing a row is owed for publishes none. Holding a kind to publishing one is a claim about
- * the two answers agreeing, which they do not, and a check written as though they did would be a
- * proposition already known to be false standing green on a corpus that has not reached it.
+ * <p><b>And that one word carries one answer.</b> Whether a row is owed is the subject's, and a
+ * kind is a coarsening of the subjects — so a document can put a finding that names an obligation
+ * and a finding that names none under one word, and a consumer acting on the second has nothing to
+ * look up. That is what the second test below refuses. It was false when it was written: the two
+ * kinds it would have caught are the ones this class now reaches on purpose.
  */
 @Tag("population")
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
@@ -198,25 +192,6 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             """;
 
     /**
-     * The kinds whose findings are about nothing a row is owed for, asked of the kind.
-     *
-     * <p>Derived and not listed. Whether a finding names an obligation is the subject's own answer
-     * ({@link souther.compiler.query.About.OfAnObligation}) and which kinds are about one is
-     * {@link Adequacy.Kind}'s, so a list written here is a third table beside those two — and a
-     * kind added to them and not to it is a finding this walks past while saying the document is
-     * whole.
-     */
-    private static Set<String> kindsAboutNoObligation() {
-        Set<String> out = new LinkedHashSet<>();
-        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            if (!kind.isAboutAnObligation()) {
-                out.add(AdequacyReport.word(kind));
-            }
-        }
-        return out;
-    }
-
-    /**
      * Every obligation identity the document publishes lands on exactly one entry of its account.
      *
      * <p>The population is the findings that carry an identity, which is what the document writes
@@ -253,32 +228,78 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     /**
-     * And a finding about anything else names none.
+     * And a finding a build acts on carries the code it is told under.
      *
-     * <p>The other direction, and the one that is about the kinds. A finding about something no
-     * account counts has no such thing to name, and a key written there would be a consumer's join
-     * landing on nothing — so this is asked of the kinds the model says are about nothing a row is
-     * owed for, which is the side of that answer the subjects do not contradict.
+     * <p>The other half of being able to refuse over something. What a build does about a finding
+     * is its subject's answer and which code it is told under is its kind's, and the two used to be
+     * held in step by asking one enum both questions. Asked here of the document, where what a
+     * build does and what it prints are both written: a finding a build refuses over or holds a
+     * verdict open for and no code beside it is a gap a report prints and a build is never told
+     * about.
      */
     @Test
-    void andAFindingAboutAnythingElseNamesNone() {
-        Set<String> aboutNone = kindsAboutNoObligation();
+    void andAFindingABuildActsOnCarriesItsCode() {
         List<String> wrong = new ArrayList<>();
+        int acted = 0;
         for (JsonNode document : DOCUMENTS) {
             for (JsonNode module : document.get("modules")) {
                 for (JsonNode behavior : module.get("behaviors")) {
                     for (JsonNode finding : behavior.get("findings")) {
-                        String kind = finding.get("kind").asString();
-                        if (aboutNone.contains(kind) && finding.has("obligationId")) {
-                            wrong.add(behavior.get("name").asString() + ": a " + kind
-                                    + " finding names an obligation");
+                        if ("reported".equals(finding.get("disposition").asString())) {
+                            continue;
+                        }
+                        acted++;
+                        if (!finding.has("code")) {
+                            wrong.add(finding.get("kind").asString()
+                                    + ": a build acts on this and is told nothing");
                         }
                     }
                 }
             }
         }
 
-        assertEquals(List.of(), wrong, "a finding about nothing a row is owed for names one");
+        assertEquals(List.of(), wrong, "a finding a build acts on has no code to be told under");
+        assertTrue(acted > 0, "and the corpus reaches findings a build acts on");
+    }
+
+    /**
+     * And the findings of one kind agree about whether they name an obligation.
+     *
+     * <p>The direction that used to be false. Whether a row is owed was answered twice — once per
+     * subject, which is what makes the writer publish a key, and once per kind, which is what a
+     * build's refusal and the offering read — and a kind is a coarsening of the subjects, so the
+     * two could disagree and did: one kind covered a subject that named an obligation and a subject
+     * that named nothing, and a consumer acting on the second had nothing to look up while a build
+     * refused over it.
+     *
+     * <p>Asked of the document rather than of the types. That a subject carrying an identity says
+     * so by its type closes the question where the finding is made; this says the document that
+     * comes out of it does not put two answers under one word, which is the form a consumer meets
+     * the defect in.
+     */
+    @Test
+    void andTheFindingsOfOneKindAgreeAboutNamingAnObligation() {
+        Map<String, Boolean> named = new LinkedHashMap<>();
+        List<String> wrong = new ArrayList<>();
+        for (JsonNode document : DOCUMENTS) {
+            for (JsonNode module : document.get("modules")) {
+                for (JsonNode behavior : module.get("behaviors")) {
+                    for (JsonNode finding : behavior.get("findings")) {
+                        String kind = finding.get("kind").asString();
+                        boolean names = finding.has("obligationId");
+                        Boolean said = named.putIfAbsent(kind, names);
+                        if (said != null && said != names) {
+                            wrong.add(kind + ": one finding of this kind names an obligation and"
+                                    + " another names none");
+                        }
+                    }
+                }
+            }
+        }
+
+        assertEquals(List.of(), wrong, "one kind, two answers about what a row is owed");
+        assertTrue(named.containsValue(true) && named.containsValue(false),
+                () -> "and the corpus reaches kinds on both sides of it: " + named);
     }
 
     /**

@@ -193,7 +193,8 @@ public final class Adequacy {
      * both would be the same news twice.
      *
      * <p>What a build is held to is not here, because it is not asked for: every obligation the
-     * account derives is a row the model asks for ({@link Kind#isAboutAnObligation}). A measure a build did not ask
+     * account derives is a row the model asks for ({@link About.OfAnObligation}). A measure a build
+     * did not ask
      * for is one that was not made rather than one that is outside the question, so a level that
      * measures less leaves a verdict of {@code undetermined} rather than a shorter list of what is
      * owed.
@@ -226,7 +227,8 @@ public final class Adequacy {
          *
          * <p>{@code souther examples} asks for this. That command chooses no measurement — its
          * output is the report, so everything is measured — and what the report marks as a gap is
-         * the account's ({@link Kind#isAboutAnObligation}) rather than a word the caller wrote: a report answering
+         * the account's ({@link About.OfAnObligation}) rather than a word the caller wrote: a report
+         * answering
          * a narrower question than the build beside it is how {@code souther examples --strict}
          * came to exit 0 on a model a compile refused, with the gaps printed in the report that had
          * just called it satisfied.
@@ -4096,7 +4098,7 @@ public final class Adequacy {
                 // established rather than from a finding, so it was searched for and the search's
                 // own word for what stopped it is the better answer.
                 if (none == null && !finding.weakenedBy().isEmpty()
-                        && finding.kind().isAboutAnObligation()
+                        && finding.about() instanceof About.OfAnObligation
                         && !(finding.about() instanceof About.APointOfABorder)
                         && !(finding.about() instanceof About.AClassNoRowIsIn)) {
                     none = new GenerationOutcome.NotApplicable(
@@ -5083,11 +5085,13 @@ public final class Adequacy {
     /**
      * What one measure found and nothing filled.
      *
-     * <p>What a kind is, is what a measure found. Whether it is about something the model owes a row
-     * at is {@link #isAboutAnObligation}, and what a build then does about it is decided where a
-     * build is — a kind about an obligation has to carry a diagnostic code, or a build would fail
-     * over something it never printed; the agreement is held by a test rather than by reading one
-     * off the other.
+     * <p>What a kind is, is what a measure found. Whether the model owes a row at it is not asked
+     * here and cannot be: a kind is a coarsening of what the finding is about, and two subjects
+     * this puts under one word are not both obligations — so the answer lives with the subject
+     * ({@link About.OfAnObligation}) and every surface reads it there. What a build then does is
+     * decided where a build is — a kind about an obligation has to carry a diagnostic code, or a
+     * build would fail over something it never printed; the agreement is held by a test rather than
+     * by reading one off the other.
      */
     public enum Kind {
         /** A case of the output no row expects. */
@@ -5228,41 +5232,6 @@ public final class Adequacy {
         /** The code a build is told this under, where it is told at all. */
         public Optional<DiagnosticCode> code() {
             return Optional.ofNullable(code);
-        }
-
-        /**
-         * Whether a finding of this kind is about something the model owes a row at.
-         *
-         * <p>The one division everything else is a projection of. A report marks these, a block
-         * offers rows against them and a build refuses over the ones a measure established — three
-         * surfaces reading one answer, none of them deciding it.
-         *
-         * <p>Said as what the kind is and not as what a build does with it, which is the shape the
-         * bars left behind. What a build refuses over was a word the caller wrote, so the table
-         * that survived them was named for the refusal; read that way, refusing is the primitive
-         * and being owed is derived from it, which is backwards. Whether the model owes a row is
-         * the model's answer, and a build refusing is one of the things that follow.
-         *
-         * <p>An exhaustive switch, so a kind added later does not compile until somebody has said
-         * which of the three it is.
-         */
-        public boolean isAboutAnObligation() {
-            return switch (this) {
-                // Every obligation the model derives, whichever derivation states it: a case of a
-                // signature, a point of a border, an arm of a body, a class of a position, a rule
-                // of the decision, and a row whose answer is owed. One account, so one answer.
-                case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED,
-                     UNANSWERED_ROW, DOMAIN_POINT_UNCOVERED, AXIS_CLASS_UNCOVERED,
-                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED, PAIR_UNCOVERED -> true;
-                // An observation: what was seen rather than what is owed. A case nothing was
-                // observed producing is the rows' own account of themselves.
-                case OUTPUT_CASE_UNVERIFIED -> false;
-                // And this compiler's own shortfall: what a measure could not establish, and what
-                // it established about the model rather than about the rows. Neither is a row
-                // somebody owes, and nothing can make one of them into one.
-                case PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED -> false;
-            };
         }
 
         /**
@@ -5517,8 +5486,8 @@ public final class Adequacy {
          * <p>What that does not say is whether a build refuses. Being read rather than measured and
          * being refused over are different questions, and folding them left a finding read straight
          * off the source with no way to be a gap: a row written {@code <?>} is as certain as a fact
-         * gets and is exactly the work a build should stop for. Which kinds a build refuses over is
-         * {@link Kind#isAboutAnObligation} and is asked there.
+         * gets and is exactly the work a build should stop for. What a build refuses over is a
+         * finding whose subject is an {@link About.OfAnObligation} and is asked of the subject.
          */
         public static Finding noticed(String behavior, About about) {
             return noticed(new FindingSubject.OfABehavior(behavior), about);
@@ -5605,7 +5574,7 @@ public final class Adequacy {
          * apart.
          */
         public Finding.Disposition disposition() {
-            if (!kind().isAboutAnObligation()) {
+            if (!(about instanceof About.OfAnObligation)) {
                 return Finding.Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
@@ -6631,25 +6600,20 @@ public final class Adequacy {
     }
 
     /**
-     * The findings a build held to {@code held} could be warned about, and no more of the account.
+     * The findings a build could be warned about, which is the whole account.
      *
-     * <p><b>Not the account.</b> A warning is said about a finding a build refuses over, so the
-     * kinds nothing refuses over are kinds this surface will say nothing about whatever they hold —
-     * and what answers those kinds is work this build would pay for and never read. Which
-     * questions those are is not decided here: each kind says which question answers it, and the
-     * ones about an obligation name the questions this asks.
+     * <p>Every question of it, because both of them answer about obligations: the decision's rules
+     * and everything the measures count. This used to work that out by asking each kind whether it
+     * was about an obligation and collecting the questions those name — an answer that came to the
+     * whole account on every input there is, spelled as a choice.
      *
-     * <p>So the laziness is about which queries are demanded and never about what an account
-     * means. A caller that wants the account asks {@link #accountOf}, which asks all of them.
+     * <p>Beside {@link #accountOf} and not instead of it. The two ask the same questions today and
+     * say different things: this is what a build may be warned about, and that is the account a
+     * report writes. A question added that answers about nothing a row is owed for is where they
+     * part, and where this gets something to leave out.
      */
     public static List<Finding> whatAWarningCouldBeAbout(Db db, String module) {
-        EnumSet<AccountPart> asked = EnumSet.noneOf(AccountPart.class);
-        for (Kind kind : Kind.values()) {
-            if (kind.isAboutAnObligation()) {
-                asked.add(kind.answeredBy());
-            }
-        }
-        return partsOfTheAccount(db, module, asked);
+        return partsOfTheAccount(db, module, EnumSet.allOf(AccountPart.class));
     }
 
     /**

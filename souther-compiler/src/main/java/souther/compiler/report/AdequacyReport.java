@@ -169,7 +169,8 @@ import java.util.stream.Stream;
  * nothing, and the difference is not visible in the numbers.
  *
  * <p>Nothing the request decides is carried. What a report marks as a gap is every obligation the
- * account derives ({@link Adequacy.Kind#isAboutAnObligation}), and how much was measured is not held either: what a
+ * account derives ({@link souther.compiler.query.About.OfAnObligation}), and how much was measured
+ * is not held either: what a
  * measure came to is the measure's own answer, and a report that kept the level beside the evidence
  * could read a measure's silence as something other than what the measure said (issue #955).
  */
@@ -1604,15 +1605,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * The measures of the model this verdict rests on: the ones that could find a gap a build
      * refuses over.
      *
-     * <p>Two questions and each asked of the one thing that answers it. Whether a measure was made,
-     * and how much of it, is the measurement's own answer and is read from it. Which kinds of gap a
-     * verdict needs an answer about is {@link Adequacy.Kind#isAboutAnObligation}, and is read from there — so a
-     * measure that finds only what nobody is held to cannot leave the verdict undetermined for want
-     * of an answer, and a measure that finds what they are held to cannot be left out.
+     * <p>Whether a measure was made, and how much of it, is the measurement's own answer and is
+     * read from it. Which measures are here is this list: every one of them finds something a row
+     * is owed at, so a verdict rests on all of them.
      *
-     * <p>Which is why each entry below names the kind it can find. Read as "everything that was
-     * measured" instead, a verdict was undetermined for a position nobody had classified where no
-     * row was owed at one, and settled while a position it did owe rows at went unread.
+     * <p>Each entry used to be guarded by asking a kind whether it was about an obligation, which
+     * answered yes for every kind anybody asked — the guard was the list said twice, and the second
+     * saying was a classification kept beside the subjects that own it. Read as "everything that
+     * was measured" instead, a verdict was undetermined for a position nobody had classified where
+     * no row was owed at one, and settled while a position it did owe rows at went unread; what
+     * keeps that from coming back is that a measure finding nothing anybody is held to has no entry
+     * written here.
      *
      * <p>Whether a measure applies at all is the measure's own answer, and never the shape of what
      * came back. A behavior with no body has no arms, and a position whose rules the walk never
@@ -1625,13 +1628,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 // The cases of the signature.
-                if (behavior.signature() != null
-                        && (owesARowAt(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)
-                                || owesARowAt(Adequacy.Kind.INPUT_CASE_UNSPECIFIED))) {
+                if (behavior.signature() != null) {
                     add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                             MeasureWord.SIGNATURE), behavior.signature().counted());
                 }
-                if (behavior.branch() != null && owesARowAt(Adequacy.Kind.ARM_UNREACHED)) {
+                if (behavior.branch() != null) {
                     add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                             MeasureWord.BRANCH), behavior.branch().measured());
                 }
@@ -1639,8 +1640,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // the rows has every rule of the
                 // body left as one a row may already take, and a verdict resting on the findings
                 // alone would call the model satisfied over exactly the rules nothing read.
-                if (behavior.evidence().decision() != null
-                        && owesARowAt(Adequacy.Kind.DECISION_RULE_UNCOVERED)) {
+                if (behavior.evidence().decision() != null) {
                     add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                             MeasureWord.DECISION), behavior.evidence().decision().took());
                 }
@@ -1657,11 +1657,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // ordinary shape whose boundary measure is made in full, and holding the verdict
                 // open for it would say a model was unmeasured on the strength of the one measure
                 // that was.
-                if (owesARowAt(Adequacy.Kind.BOUNDARY_UNMET)
-                        || owesARowAt(Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
-                    add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
-                            MeasureWord.BOUNDARY), behavior.boundaryReadings());
-                }
+                add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
+                        MeasureWord.BOUNDARY), behavior.boundaryReadings());
                 // What the rows reach of each position, which finds a class no row is in.
                 //
                 // The derivation as well as the positions it produced, the way the lines are asked
@@ -1672,13 +1669,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // nobody had found yet. A behavior the reading proved
                 // divides nothing answers {@code NotApplicable} and is dropped below, so this holds
                 // nothing open that was never going to be measured.
-                if (owesARowAt(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
-                    add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
-                            MeasureWord.PARTITION), behavior.partition().partitioned());
-                    behavior.partition().axes().forEach(axis -> add(measures,
-                            new Subject.OfAnAxisMeasure(module.module(), behavior.name(),
-                                    axis.at()), axis.reached()));
-                }
+                add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
+                        MeasureWord.PARTITION), behavior.partition().partitioned());
+                behavior.partition().axes().forEach(axis -> add(measures,
+                        new Subject.OfAnAxisMeasure(module.module(), behavior.name(),
+                                axis.at()), axis.reached()));
                 // And of what this behavior is owed a row for, which is every point of it. A line
                 // the declarations are owed is answered once for the module below, from every
                 // reading of it, and is no part of this account: weighed here as well, a row
@@ -1735,12 +1730,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return owed;
-    }
-
-    /** Whether {@code kind} is about something the model owes a row at, which is what puts the
-     *  measure that finds one among the answers a verdict needs. */
-    private boolean owesARowAt(Adequacy.Kind kind) {
-        return kind.isAboutAnObligation();
     }
 
     /**
