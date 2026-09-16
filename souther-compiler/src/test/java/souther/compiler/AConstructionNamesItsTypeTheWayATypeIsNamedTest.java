@@ -81,11 +81,68 @@ class AConstructionNamesItsTypeTheWayATypeIsNamedTest {
         assertEquals(formatted, Formatter.format(formatted), "and formatting it again moves nothing");
     }
 
+    private static final String LEFT = """
+            module example.left exposing ( Thing )
+
+            data Thing = { left: Int }
+            """;
+
+    private static final String RIGHT = """
+            module example.right exposing ( Thing )
+
+            data Thing = { right: String }
+            """;
+
+    /**
+     * Two modules declaring one name, with one of them imported bare.
+     *
+     * <p>The fields differ, so what each construction reaches is decided by whether the qualifier
+     * is read: a head taken as its last segment alone names the bare import, and the fields written
+     * under it belong to the other type.
+     */
+    private static final String BETWEEN_TWO = """
+            module example.carrying
+
+            import example.left ( Thing )
+            import example.right as Right
+
+            let bare: Thing = Thing { left = 1 }
+            let byAlias: Right.Thing = Right.Thing { right = "r" }
+            let byModule: example.right.Thing = example.right.Thing { right = "m" }
+            """;
+
+    /**
+     * The qualifier says which type is built, where two modules declare the name.
+     *
+     * <p>This is what the whole spelling is for, and the reason a construction was the one place
+     * that could not say it: a module naming two {@code Thing}s could build only whichever of them
+     * it had imported bare. Written against fields the other type does not declare, a head that
+     * lost its qualifier reaches the wrong declaration and says so.
+     */
+    @Test
+    void theQualifierSaysWhichOfTwoDeclarationsIsBuilt() {
+        assertEquals(List.of(), errorsBetweenTwo(BETWEEN_TWO),
+                "each construction builds the type its own name reaches");
+    }
+
     /** What this compiler refuses {@code carrying} over, which is nothing where it compiles. */
     private static List<String> errorsIn(String carrying) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("parts.sou", DECLARING);
         byId.put("carrying.sou", carrying);
+        return errorsAcross(byId);
+    }
+
+    /** The same, over the two modules that declare one name apiece. */
+    private static List<String> errorsBetweenTwo(String carrying) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("left.sou", LEFT);
+        byId.put("right.sou", RIGHT);
+        byId.put("carrying.sou", carrying);
+        return errorsAcross(byId);
+    }
+
+    private static List<String> errorsAcross(Map<String, String> byId) {
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         compilation.answerEverything();
         List<String> out = new ArrayList<>();
