@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A finding about something a row is owed for names it the way its account names it.
+ * A finding that names something a row is owed for names it the way its account names it.
  *
  * <p>What a consumer does with a finding is act on the thing it is about, which means finding that
  * thing in the account the numbers are counted in. The words a reader is shown do not do it: two
@@ -36,8 +36,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Asked of the document rather than of the writer. The rule the writer keeps is that a subject
  * carrying an identity says so by its type, which closes the question locally; what that cannot say
- * is that a shape which should carry one does. Here the two ends are compared: every finding of a
- * kind that is about an obligation, against the array that account publishes.
+ * is that the identity lands anywhere. Here the two ends are compared: every identity the document
+ * publishes on a finding, against the array that account publishes.
+ *
+ * <p><b>What this does not hold.</b> That a finding of a kind the model calls an obligation
+ * publishes an identity at all. Whether something is owed has two answers — {@link Adequacy.Kind}
+ * answers per kind, and {@link souther.compiler.query.About.OfAnObligation} per subject, which is
+ * what makes the writer publish one — and they are at different grains: a kind can be about
+ * obligations while a subject of it carries nothing to key. So the two directions here are the ones
+ * that are true of every document: an identity that is published lands on one entry, and a kind
+ * about nothing a row is owed for publishes none. Holding a kind to publishing one is a claim about
+ * the two answers agreeing, which they do not, and a check written as though they did would be a
+ * proposition already known to be false standing green on a corpus that has not reached it.
  */
 @Tag("population")
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
@@ -180,7 +190,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     /**
-     * Every finding that names an obligation lands on exactly one entry of its account.
+     * Every obligation identity the document publishes lands on exactly one entry of its account.
      *
      * <p>The population is the findings that carry an identity, which is what the document writes
      * wherever the subject is one. Taken off a list of kinds instead, the sweep is as wide as
@@ -188,7 +198,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
      * exactly what such a list hides.
      */
     @Test
-    void everyFindingAboutAnObligationNamesOneEntryOfItsAccount() {
+    void everyObligationIdentityThatIsPublishedJoinsToOneEntryOfItsAccount() {
         List<String> wrong = new ArrayList<>();
         int joined = 0;
         for (JsonNode document : DOCUMENTS) {
@@ -211,15 +221,17 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                 }
             }
         }
-        assertEquals(List.of(), wrong, "a finding about an obligation joins to it");
-        assertTrue(joined > 0, "and the corpus reaches such findings");
+        assertEquals(List.of(), wrong, "a published obligation identity joins to its account");
+        assertTrue(joined > 0, "and the corpus reaches findings that publish one");
     }
 
     /**
      * And a finding about anything else names none.
      *
-     * <p>The other half of the same rule. A finding about something no account counts has no such
-     * thing to name, and a key written there would be a consumer's join landing on nothing.
+     * <p>The other direction, and the one that is about the kinds. A finding about something no
+     * account counts has no such thing to name, and a key written there would be a consumer's join
+     * landing on nothing — so this is asked of the kinds the model says are about nothing a row is
+     * owed for, which is the side of that answer the subjects do not contradict.
      */
     @Test
     void andAFindingAboutAnythingElseNamesNone() {
