@@ -3883,6 +3883,183 @@ public final class Adequacy {
         }
     }
 
+    /**
+     * What a generation of one behavior would look for rows for.
+     *
+     * <p>Asked ahead of composing anything, because two surfaces put it and only one of them is
+     * about to compose. An offer standing beside a declaration is asked on every cursor move and
+     * has to answer without a decoder run; the block behind it is composed once, by somebody who
+     * took the offer. Held as two questions, the offer read the findings and the lines while the
+     * plan took its classes off the partition measure and its rules off the half of the account the
+     * offer never asked for — and a behavior whose only work was the classes was offered nothing
+     * and had a block written for it.
+     *
+     * <p>So the criterion is one criterion. The plan a search walks and the rules it settles are
+     * built from this, the points say a boundary search is worth making and leave what it finds to
+     * it, and what an offer is made on is whether any of them holds something.
+     */
+    public record RowsOwed(String name, String behavior) implements Key<RowWork> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<RowWork> compute(Db db) {
+            // The whole account, which is where the arms, the pairs, the meetings and the rules
+            // were established. The classes are the partition measure's and the points are the
+            // obligations', both below. Read through the one way in, so that the half a surface
+            // forgets to ask for is not a half this one can forget either.
+            List<Finding> account = accountOf(db, name);
+            Map<String, PartitionEvidence> coverage = db.ask(new Coverage(name)).value();
+            if (account == null || coverage == null) {
+                return Answer.absent();
+            }
+            // Only the findings the account can say are missing. A measurement that went without
+            // something leaves the thing it names as one a row may already take, and work offered
+            // against an obligation that is not established hands a person a row that may be in
+            // the file in front of them.
+            //
+            // Here and not at each gathering below. The rule is one rule: a kind added to this
+            // inherits it now rather than being the next place it is forgotten.
+            List<Finding> owed = account.stream()
+                    .filter(each -> each.subject().isBehavior(behavior))
+                    .filter(each -> each.weakenedBy().isEmpty())
+                    .toList();
+            // The measure of this behavior's positions. Absent where the coverage holds none,
+            // which is a name this module declares no behavior of: the coverage answers for every
+            // behavior it prepared, so there is no such thing as a behavior it measured nothing
+            // about. Read as owing no class, a question about nothing would reach the generation
+            // as a behavior with nothing to write.
+            PartitionEvidence measured = coverage.get(behavior);
+            if (measured == null) {
+                return Answer.absent();
+            }
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            CoverageSites.Plan sites = checked == null ? CoverageSites.Plan.NONE : checked.plan();
+
+            // Every place a run through an owed arm is recorded at, and not the one the finding
+            // named. A helper carrying a fork is spliced into each call site, so what steers a row
+            // into one splice is not what steers it into another — and asked at a single
+            // occurrence the answer was whichever the walk wrote first.
+            //
+            // In the order the findings were established, which is the order this build raised
+            // them in. Handed over as a list rather than as the set that kept them once apiece:
+            // what a plan is asking for is the order, and this is where what the order means is
+            // known.
+            LinkedHashMap<CoverageSites.Obligation, List<ArmProbe>> arms = new LinkedHashMap<>();
+            List<ObligationIdentity.OfAFallbackPairCell> pairs = new ArrayList<>();
+            List<ObligationIdentity.OfACombinationOfDecisions> meetings = new ArrayList<>();
+            Set<DecisionRule> rules = new LinkedHashSet<>();
+            for (Finding finding : owed) {
+                switch (finding.about()) {
+                    // A combination the body settles together is where an arm is looked for and is
+                    // not itself owed a row — nothing reports one — so what is searched follows
+                    // from the findings rather than from the shape of the search space.
+                    case About.AnArmNoRowGoesThrough(CoverageSites.ArmSite arm) ->
+                            arms.computeIfAbsent(arm.obligation(), of -> everyPlaceOf(sites, of));
+                    case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                            pairs.add(combination);
+                    // A meeting is not an arm — rows through every arm of a body can leave one
+                    // unmade — so it is asked for in its own right and not reached through the
+                    // arms it claims.
+                    case About.ACombinationNoRowMakes(var combination) -> meetings.add(combination);
+                    case About.ARuleNoRowTakes(var _, var ruled) -> rules.add(ruled.rule());
+                    // A class is read off the measure below and not off its finding. A finding is
+                    // a gap something established, and a behavior no row names has none — which is
+                    // not the same as having nothing to write, and is the case this walk would
+                    // leave out.
+                    case About.AClassNoRowIsIn _ -> { }
+                    // A line is owed one row however many positions read it, so a coordinate of
+                    // one is a finding standing over nothing to write. What is owed is asked of
+                    // the points below.
+                    case About.APointOfABorder _, About.APointOfADeclaredBorder _ -> { }
+                    // A row is written here and what is left is its answer, which is the author's
+                    // to write and nothing a search composes.
+                    case About.AnUnansweredRow _, About.ARowAtAnArmAwaitsItsAnswer _ -> { }
+                    // What the rows were seen doing, and the cases of an answer. A row composed
+                    // for a class may apply an input case and the account says so where the rows
+                    // are read; nothing is composed for one.
+                    case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
+                         About.ACaseNoRowAppliesItTo _ -> { }
+                    // What this compiler could not read, and what it read to the end and found the
+                    // model says nothing at. Neither is work a row does anything about.
+                    case About.APositionNoLineDivides _, About.ARuleWithoutALine _,
+                         About.ARuleNothingClassified _, About.APositionThisCouldNotRead _,
+                         About.APositionReadWiderThanItsRules _,
+                         About.APositionWhoseRulesWereNotReached _,
+                         About.AQuestionNothingAnswered _ -> { }
+                }
+            }
+            return Answer.of(new RowWork(classesOwed(measured),
+                    arms.values().stream().map(Generator.ArmOwed::new).toList(),
+                    pairs, meetings, rules, pointsOwed(db, name, behavior)));
+        }
+
+        /**
+         * The classes this behavior is owed a row at, in the words a plan is asked in.
+         *
+         * <p>The measure's own answer ({@link PartitionEvidence#classesOwed()}) and no reading of
+         * it here. Reading the written rows a second time would be a list derived from something
+         * other than the evidence, which is the arrangement this replaces.
+         */
+        private static List<ClassOfAPosition> classesOwed(PartitionEvidence evidence) {
+            // Gathered once apiece and handed over in the order the measure holds the positions
+            // and their classes in. The set keeps the once-apiece; the list is what says what the
+            // order is.
+            Set<ClassOfAPosition> out = new LinkedHashSet<>();
+            for (PartitionEvidence.AxisClass owed : evidence.classesOwed()) {
+                out.add(new ClassOfAPosition(owed.axis().at(), owed.name()));
+            }
+            return List.copyOf(out);
+        }
+
+        /**
+         * The points of the lines a row written for this behavior would settle.
+         *
+         * <p>Asked of what is owed rather than of the findings that stand at it. A report counts a
+         * line once per coordinate it was read at and a row is owed once for the line, so the two
+         * answer different questions.
+         *
+         * <p>This behavior's lines and its declarations' alike. A line an {@code invariant} drew is
+         * not this behavior's finding — what a carried type says is the same wherever it is carried
+         * — and a row written for a behavior carrying the type is what discharges it.
+         *
+         * <p>And only the lines this module answers for
+         * ({@link BorderObligationPointAssessment#keptBy}). A module that carries an imported type
+         * reads its lines and owes rows at none of them: the row belongs where the declaration is.
+         */
+        private static List<BorderObligationPointAssessment> pointsOwed(Db db, String module,
+                                                                       String behavior) {
+            List<BorderObligationPointAssessment> owed = db.ask(new Obligations(module,
+                    new GenerationScope.Behavior(behavior),
+                    HowALineIsRead.THE_RULES_ALONE)).value();
+            return owed == null ? List.of()
+                    : owed.stream().filter(point -> point.carriedBy(behavior)
+                            && point.keptBy(module)
+                            && point.owed().worthSearching()).toList();
+        }
+
+        /**
+         * Every place a run through one arm of the model is recorded at.
+         *
+         * <p>Asked of the plan that numbered them, which is where a construct of the model and the
+         * places it stands in the running tree are already related. The arm the finding named is
+         * one of these, so the list is never empty for an arm anything was measured about.
+         */
+        private static List<ArmProbe> everyPlaceOf(CoverageSites.Plan plan,
+                                                   CoverageSites.Obligation arm) {
+            List<ArmProbe> out = new ArrayList<>();
+            for (CoverageSites.ArmSite site : plan.arms(arm.behavior())) {
+                if (site.obligation().equals(arm)) {
+                    out.add(site.index());
+                }
+            }
+            return out;
+        }
+    }
+
     public record Generated(String name, String behavior) implements Key<Filling> {
 
         @Override
@@ -3941,7 +4118,6 @@ public final class Adequacy {
             // The whole account. A generation is a surface with a reader: what it offers rows for
             // is everything the model is owed, and a rule of a decision is one of those.
             List<Finding> findings = accountOf(db, name);
-            Map<String, PartitionEvidence> partitions = coverage.value();
 
             Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
             souther.compiler.partition.Partitions.Partitioning divided =
@@ -3981,10 +4157,16 @@ public final class Adequacy {
                 return Answer.absent();
             }
             // What this run is asked for, settled before the search and before anything that can
-            // stop it. Every way out of the generation below holds this same list.
+            // stop it. Every way out of the generation below holds this same list, and the offer an
+            // editor makes in front of it is made on the same criterion: what a row would be
+            // written for is settled by RowsOwed and read here rather than gathered again.
+            RowWork work = db.ask(new RowsOwed(name, behavior)).value();
+            if (work == null) {
+                return Answer.absent();
+            }
             souther.compiler.partition.GenerationPlan asked =
-                    planFor(subject, owed, partitions.get(behavior),
-                            checked == null ? CoverageSites.Plan.NONE : checked.plan());
+                    new souther.compiler.partition.GenerationPlan(subject, work.classes(),
+                            work.arms(), work.pairs(), work.meetings());
             // The meetings of this body, read once for the module. A behavior with no entry is one
             // whose body was not lowered, which is nothing to search in rather than a search that
             // found nothing — and is the same condition the guards above answer for.
@@ -4039,7 +4221,7 @@ public final class Adequacy {
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
             // composing a value, running it and asking what rule the run took, and a value that
             // came back certified is a row an author can be handed.
-            RowsForRules rules = rowsForRules(db, name, behavior, owed,
+            RowsForRules rules = rowsForRules(db, name, behavior, work.rules(),
                     RowReadings.readingFor(byTarget, behavior),
                     db.ask(new Front.Adequacy()).value().generation(), composed.rows().size());
             return Answer.of(new Filling(composed, offeredHere(behavior, edges), rules,
@@ -4196,27 +4378,16 @@ public final class Adequacy {
          * certified to take the way, which is the whole of what a row for one is. Composed a second
          * time here, the two searches would be free to come to different values for one rule, and
          * the block would offer a row the account had settled nothing with.
+         *
+         * <p>Which rules those are is handed in ({@link RowsOwed}) rather than read off the
+         * findings here. It is the same list the offer in front of the block is made on, and read
+         * a second time here the two would be free to disagree about what this behavior owes.
          */
         private static RowsForRules rowsForRules(
-                Db db, String module, String behavior, List<Finding> owed, RowReading observed,
+                Db db, String module, String behavior, Set<DecisionRule> asked,
+                RowReading observed,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget,
                 int alreadyOffered) {
-            // The rules this behavior is owed a row for, which is what the findings say. Read off
-            // the search instead, a row would be offered for a rule nothing reported — and a rule
-            // goes unreported where the reading could not place every row, which is exactly where
-            // a row handed to a person may be one already written.
-            Set<DecisionRule> asked = new LinkedHashSet<>();
-            for (Finding finding : owed) {
-                // Only where the account can say the rule is missing. A finding whose measurement
-                // went without something says a row may take the rule already, and a proposal is
-                // work offered against an obligation established as missing — offered against one
-                // that is not, the block hands a person a row that may be in the file in front of
-                // them.
-                if (finding.about() instanceof About.ARuleNoRowTakes(var _, var ruled)
-                        && finding.weakenedBy().isEmpty()) {
-                    asked.add(ruled.rule());
-                }
-            }
             if (asked.isEmpty()) {
                 return new RowsForRules(asked, Map.of(), null);
             }
@@ -4816,167 +4987,6 @@ public final class Adequacy {
             return souther.compiler.partition.FillResult.acrossRuns(searched);
         }
 
-        /**
-         * What this build is asking the generator for, settled before anything that can stop it.
-         *
-         * <p>The classes off the partition measure and the arms off the findings, which is where
-         * each of them was established. Made here rather than inside the search so that the ways a
-         * generation ends without searching — the rows could not be read, the classes would not
-         * link — hold the same list as the search does. Made there, each of them answered with a
-         * reason about the run and no word about the thing a reader was asking after.
-         */
-        private static souther.compiler.partition.GenerationPlan planFor(
-                souther.compiler.partition.MeasuredInput subject, List<Finding> said,
-                PartitionEvidence evidence, CoverageSites.Plan plan) {
-            // Only the findings the account can say are missing. A measurement that went without
-            // something leaves the thing it names as one a row may already take, and a proposal is
-            // work offered against an obligation established as missing — offered against one that
-            // is not, the block hands a person a row that may be in the file in front of them.
-            //
-            // Here and not at each gathering below. The rule is one rule, and it was written at one
-            // of them: the rows for the rules of a decision kept it, and everything else asked only
-            // what shape the finding was. A kind added to the plan inherits it now rather than
-            // being the next place it is forgotten.
-            List<Finding> owed = said.stream()
-                    .filter(finding -> finding.weakenedBy().isEmpty())
-                    .toList();
-            // The arms this build is owed a row at, which the measure established and this reads.
-            // A combination the body settles together is where one is looked for and is not itself
-            // owed a row — nothing reports one — so what is searched follows from the findings
-            // rather than from the shape of the search space.
-            // In the order the findings were established, which is the order this build raised
-            // them in. Handed over as a list rather than as the set that kept them once apiece:
-            // what the plan is asking for is the order, and this is where what the order means is
-            // known.
-            //
-            // Every place a run through the arm is recorded at, and not the one the finding named.
-            // A helper carrying a fork is spliced into each call site, so what steers a row into
-            // one splice is not what steers it into another — and asked at a single occurrence the
-            // answer was whichever the walk wrote first: one body with its two call sites swapped
-            // offered a row for the arm in one order and said nothing could steer one in the other.
-            LinkedHashMap<CoverageSites.Obligation, List<ArmProbe>> arms = new LinkedHashMap<>();
-            for (Finding finding : owed) {
-                if (finding.about()
-                        instanceof About.AnArmNoRowGoesThrough(CoverageSites.ArmSite arm)) {
-                    arms.computeIfAbsent(arm.obligation(), of -> everyPlaceOf(plan, of));
-                }
-            }
-            // And the combinations of two classes, where the pair space is what this behavior is
-            // held to. Read off the findings like the arms above: what a run is asked for is what
-            // the account says is missing, and a plan that walked the space itself would ask for
-            // work the account does not.
-            List<ObligationIdentity.OfAFallbackPairCell> pairs = new ArrayList<>();
-            for (Finding finding : owed) {
-                if (finding.about()
-                        instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                    pairs.add(combination);
-                }
-            }
-            // And the combinations the body settles a value by, where those are the criterion. The
-            // same rule again: what a run is asked for is what the account says is missing. A
-            // meeting is not an arm — rows through every arm of a body can leave one unmade — so
-            // it is asked for in its own right and not reached through the arms it claims.
-            List<ObligationIdentity.OfACombinationOfDecisions> meetings = new ArrayList<>();
-            for (Finding finding : owed) {
-                if (finding.about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                    meetings.add(combination);
-                }
-            }
-            return new souther.compiler.partition.GenerationPlan(subject, classesOwed(evidence),
-                    arms.values().stream().map(Generator.ArmOwed::new).toList(), pairs, meetings);
-        }
-
-        /**
-         * Every place a run through one arm of the model is recorded at.
-         *
-         * <p>Asked of the plan that numbered them, which is where a construct of the model and the
-         * places it stands in the running tree are already related. The arm the finding named is
-         * one of these, so the list is never empty for an arm anything was measured about.
-         */
-        private static List<ArmProbe> everyPlaceOf(CoverageSites.Plan plan,
-                                                   CoverageSites.Obligation arm) {
-            List<ArmProbe> out = new ArrayList<>();
-            for (CoverageSites.ArmSite site : plan.arms(arm.behavior())) {
-                if (site.obligation().equals(arm)) {
-                    out.add(site.index());
-                }
-            }
-            return out;
-        }
-
-        /**
-         * The classes this build is owed a row at, off the partition measure's own reading.
-         *
-         * <p>The same evidence a class finding is made from, taken a second way. Where the measure
-         * reached a class, nothing is owed there; where it did not, a row is. What separates the two
-         * projections is that a finding is a gap and needs the rows to have been measured to be one
-         * — a behavior nothing wrote a row for has no gaps, which is not the same as having nothing
-         * to write. So a behavior with no rows is owed a row at every class of it, and the report's
-         * own line about it is said elsewhere.
-         *
-         * <p>A behavior the coverage query holds nothing for arrives as {@link
-         * PartitionEvidence#NONE} and is owed nothing. Reading the written rows a second time here
-         * would be a plan derived from something other than the evidence, which is the arrangement
-         * this replaces — and it would be one no test covers, the query answering every behavior
-         * the generator reaches.
-         */
-        private static List<ClassOfAPosition> classesOwed(PartitionEvidence evidence) {
-            // Gathered once apiece and handed over in the order the measure holds the positions
-            // and their classes in, which is the order this walk reached them. The set keeps the
-            // once-apiece; the list is what says what the order is.
-            Set<ClassOfAPosition> out = new LinkedHashSet<>();
-            for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
-                for (String cls : owedAt(axis)) {
-                    out.add(new ClassOfAPosition(axis.at(), cls));
-                }
-            }
-            return List.copyOf(out);
-        }
-
-        /**
-         * Which classes of one position a row is owed at.
-         *
-         * <p><b>Read over the states rather than through the value.</b> Two of them carry no set of
-         * covered classes and they mean opposite things here: a behavior nobody wrote a row for is
-         * owed one at every class it has, and a position this build never looked at is owed nothing
-         * anybody can act on. Projected to the value and an absent one read as an empty set, the two
-         * are one answer — and the second of them hands an author a specific row for every class of
-         * a behavior whose file may already hold them.
-         *
-         * <p>Which is the reading the measurement's own states are for, and the same one a point of
-         * a line gets ({@link ObligationAssessment#worthSearching}). A state added to
-         * {@link Measurement} arrives here as a compile error rather than as a silent nothing.
-         */
-        private static List<String> owedAt(PartitionEvidence.AxisCoverage axis) {
-            return switch (axis.reached()) {
-                // Read to the end, or as far as it got: either way the classes it did not reach are
-                // classes no row sits in.
-                case Measurement.Complete<PartitionEvidence.AxisCoverage.Reached> it ->
-                        unreached(axis, it.value());
-                case Measurement.Partial<PartitionEvidence.AxisCoverage.Reached> it ->
-                        unreached(axis, it.value());
-                // No row names the behavior, so every class of the position is one nothing sits in.
-                // Any other reason is this build not having asked, and a question nobody put is not
-                // work to hand to an author.
-                case Measurement.NotMeasured<PartitionEvidence.AxisCoverage.Reached> it ->
-                        it.why() == PartitionEvidence.AxisCoverage.NoRows.NO_ROWS
-                                ? axis.classes() : List.of();
-                // Nothing to read the classes against, which a composed row would not settle.
-                case Measurement.FailedToMeasure<PartitionEvidence.AxisCoverage.Reached> _ ->
-                        List.of();
-            };
-        }
-
-        private static List<String> unreached(PartitionEvidence.AxisCoverage axis,
-                                              PartitionEvidence.AxisCoverage.Reached reached) {
-            List<String> out = new ArrayList<>();
-            for (String cls : axis.classes()) {
-                if (!reached.covered().contains(cls)) {
-                    out.add(cls);
-                }
-            }
-            return out;
-        }
     }
 
     /**

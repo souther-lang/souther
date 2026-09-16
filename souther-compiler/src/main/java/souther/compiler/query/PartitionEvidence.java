@@ -533,6 +533,21 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     }
 
     /**
+     * Every class of every position this behavior is owed a row at.
+     *
+     * <p>The measure's own answer, and the one thing that reads it is what a generation is asked
+     * for ({@link Adequacy.RowsOwed}). The block a generation writes and the offer standing in
+     * front of it are both made from that, so they cannot part over what a position is short of —
+     * which they did, the block taking its classes from here and the offer from the findings.
+     *
+     * <p>In the order the measure holds the positions and their classes in, which is the order the
+     * walk reached them.
+     */
+    public List<AxisClass> classesOwed() {
+        return axes().stream().flatMap(axis -> axis.owed().stream()).toList();
+    }
+
+    /**
      * How many two-class combinations the rows reach, taken between the two positions each is
      * between.
      *
@@ -982,10 +997,53 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             // Empty where nothing was measured here. An absence of evidence is not a set of gaps:
             // the classes nothing sits in are not classes nothing reaches, and the measurement
             // beside this says which of the two a reader is looking at.
-            return reached.made()
-                    .map(it -> classes.stream().filter(c -> !it.covered().contains(c))
-                            .map(c -> new AxisClass(this, c)).toList())
-                    .orElseGet(List::of);
+            return reached.made().map(this::notIn).orElseGet(List::of);
+        }
+
+        /**
+         * The classes of this position a row is owed at, which is not the classes no row is in.
+         *
+         * <p>The two part over a position nothing was measured at. {@link #uncovered()} is what a
+         * measurement established and says nothing where there was none; a behavior no row names
+         * has no gaps, which is not the same as having nothing to write, and what it is owed is a
+         * row at every class it has.
+         *
+         * <p><b>Read over the states rather than through the value.</b> Two of them carry no set of
+         * covered classes and they mean opposite things here: a behavior nobody wrote a row for is
+         * owed one at every class, and a position this build never looked at is owed nothing
+         * anybody can act on. Projected to the value and an absent one read as an empty set, the
+         * two are one answer — and the second of them hands an author a specific row for every
+         * class of a behavior whose file may already hold them.
+         *
+         * <p>Which is the reading a point of a line gets as well
+         * ({@link ObligationAssessment#worthSearching}). A state added to {@link Measurement}
+         * arrives here as a compile error rather than as a silent nothing.
+         */
+        public List<AxisClass> owed() {
+            return switch (reached) {
+                // Read to the end, or as far as it got: either way the classes it did not reach
+                // are classes no row sits in.
+                case Measurement.Complete<Reached> it -> notIn(it.value());
+                case Measurement.Partial<Reached> it -> notIn(it.value());
+                // No row names the behavior, so every class of the position is one nothing sits
+                // in. Any other reason is this build not having asked, and a question nobody put
+                // is not work to hand to an author.
+                case Measurement.NotMeasured<Reached> it ->
+                        it.why() == NoRows.NO_ROWS ? every() : List.of();
+                // Nothing to read the classes against, which a composed row would not settle.
+                case Measurement.FailedToMeasure<Reached> _ -> List.of();
+            };
+        }
+
+        /** The classes of this position the rows did not reach, where they were counted. */
+        private List<AxisClass> notIn(Reached counted) {
+            return classes.stream().filter(name -> !counted.covered().contains(name))
+                    .map(name -> new AxisClass(this, name)).toList();
+        }
+
+        /** And all of them, for a position no row was placed at. */
+        private List<AxisClass> every() {
+            return classes.stream().map(name -> new AxisClass(this, name)).toList();
         }
     }
 

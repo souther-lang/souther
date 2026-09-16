@@ -5,12 +5,14 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What one run of the generator is asked for, and the only place it is said.
+ * What one run of the generator searches for, in the search's own words.
  *
- * <p>A class of a position no row sits in and an arm of the body no row goes through are the two
- * things a row can be owed for. Which of them a run is asked about is established by whoever read
- * the rows, and this carries that reading whole — so a search does not work the list out a second
- * time, and nothing downstream decides from what a search happened to touch.
+ * <p>A class of a position no row sits in, an arm of the body no row goes through, a combination of
+ * two classes no row is in, a meeting of the body's decisions no row makes. Which of them a run is
+ * asked about is established by whoever read the rows ({@code Adequacy.RowsOwed}) and handed here
+ * whole — so a search does not work the list out a second time, and nothing downstream decides from
+ * what a search happened to touch. What is owed at the lines a behavior's rules draw is owed too
+ * and is not here: those rows are composed by the boundary search, which is asked in its own right.
  *
  * <p><b>Settled before anything that can stop the run.</b> The classes would not link, the rows
  * could not be read: each of those ends a generation, and each used to end it somewhere that had
