@@ -260,7 +260,7 @@ public sealed interface AnotherLineTheRowsAllow {
             partings(boundary, other, cut, values, along, moves, false, elsewhere, found);
         }
         return found.stream()
-                .min(java.util.Comparator.comparing((Parting each) -> each.reached() ? 0 : 1)
+                .min(java.util.Comparator.comparingInt((Parting each) -> each.reached() ? 0 : 1)
                         .thenComparing(Parting::steps))
                 .map(Parting::at).orElse(null);
     }
