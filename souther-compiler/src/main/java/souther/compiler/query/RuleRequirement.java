@@ -99,30 +99,21 @@ public sealed interface RuleRequirement {
         }
 
         /**
-         * The rules of the way to the rule leave no value that takes it, and a search is what
-         * proved it.
+         * The rules of the way to the rule leave no value that takes it, and the composings are
+         * what proved it.
          *
          * <p>Beside the two above rather than under them, and it is the one of the three a search
-         * establishes. What the search came back with is the theorem and not the route it came by,
-         * so the word is kept as it was said
-         * ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what tells it from
-         * the rest).
+         * establishes ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what
+         * tells such a word from the rest).
          *
-         * <p>Every way of standing the dependencies in has to say it. A search is composed in the
-         * region one of those leaves, so a proof from one of them is about that region — a rule
-         * with a proof under one way and a row under another is a rule something stands in.
-         *
-         * @param why the search's own word, which is what a reader is shown under the rule
+         * <p><b>The conclusion and no proof beside it.</b> What each composing said is the search's
+         * to hold ({@link RuleSearch.CameToNothing}), where all of them are; a word copied here
+         * would be one of them standing for the rule, and which one would follow the order the ways
+         * were walked in. It is also a claim this value could not make: what makes the rule's
+         * answer is every way of standing the dependencies in having proved it, and a value holding
+         * one proof says nothing about the ways it does not hold.
          */
-        record TheRulesLeaveNoValueForIt(Generator.UnresolvedCombination why) implements Excluded {
-
-            public TheRulesLeaveNoValueForIt {
-                if (why == null || !why.reason().provesInfeasible()) {
-                    throw new IllegalArgumentException(
-                            "a rule the rules leave no value for says which proof says so: " + why);
-                }
-            }
-        }
+        record TheRulesLeaveNoValueForIt() implements Excluded {}
     }
 
     /**

@@ -2018,12 +2018,12 @@ public final class Adequacy {
                 Set<CoverageSites.AsWritten> unreachedArms) {
             CoverageSites.AsWritten unreached = armNothingReaches(ruled, unreachedArms);
             if (unreached != null) {
-                return RuleSettlement.of(new RuleRequirement.Excluded.AnArmNothingReaches(
+                return RuleSettlement.read(new RuleRequirement.Excluded.AnArmNothingReaches(
                         unreached));
             }
             return switch (souther.compiler.partition.Reachability.of(ruled.states(), declared)) {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
-                        RuleSettlement.of(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
+                        RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
                                 nothing.why()));
                 case souther.compiler.partition.Reachability.Reaching reaching ->
                         whatASearchFinds(ruled, probe, taken, reaching);
@@ -2094,9 +2094,9 @@ public final class Adequacy {
             // of the ways together and before the fold below: what that fold joins on is how much
             // one way established about the rule, and a proof is not more of that — it is the one
             // answer that is the rule's only where no way found anything else.
-            RuleRequirement.Excluded proved = provedByEveryWay(ways);
+            RuleSearch.CameToNothing proved = provedByEveryWay(ways);
             if (proved != null) {
-                return RuleSettlement.of(proved);
+                return RuleSettlement.provedNothingTakesIt(proved);
             }
             RuleSettlement established = null;
             for (Generator.BoundaryAttempt made : ways) {
@@ -2136,18 +2136,22 @@ public final class Adequacy {
          * <p>Asked of the attempts and not of what they were folded to, so that the question can be
          * put to a pair of ways directly. Which words prove it is the search's own answer
          * ({@link Generator.UnresolvedCombination.Reason#provesInfeasible}).
+         *
+         * <p>What comes back is every word, and not the one that proved first. More than one word
+         * proves, so the ways of one rule may be proved by two of them — and a reader shown
+         * whichever came first is shown what the walk did. The order is the selection's
+         * ({@link RuleSearch.CameToNothing#of}) and not this walk's.
          */
-        static RuleRequirement.Excluded provedByEveryWay(List<Generator.BoundaryAttempt> ways) {
-            Generator.UnresolvedCombination proof = null;
+        static RuleSearch.CameToNothing provedByEveryWay(List<Generator.BoundaryAttempt> ways) {
+            List<Generator.UnresolvedCombination> proofs = new ArrayList<>();
             for (Generator.BoundaryAttempt way : ways) {
                 if (!(way instanceof Generator.BoundaryAttempt.NoRow none)
                         || !none.why().reason().provesInfeasible()) {
                     return null;
                 }
-                proof = proof == null ? none.why() : proof;
+                proofs.add(none.why());
             }
-            return proof == null ? null
-                    : new RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(proof);
+            return proofs.isEmpty() ? null : RuleSearch.CameToNothing.of(proofs);
         }
 
         /**

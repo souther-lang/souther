@@ -62,6 +62,7 @@ import souther.compiler.query.Measure;
 import souther.compiler.query.Sites;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.Weakening;
@@ -2861,17 +2862,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                     new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
                             + " is an arm the branch count is made without");
-            // In the words the proof was said in, which are the model's. The other two here are
-            // read off the rules before anything is composed and have nothing of a search to say;
-            // this one is a search's answer about the model, so what it came back with is what a
-            // reader is shown.
-            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(var why) ->
-                    new Said(6, PublicationOrders.positionOf(why.reason()),
-                            GeneratedRows.beside(whyUnresolved(why), why, rendering, places));
+            // In the words the composings were said in, which are the model's. The other two here
+            // are read off the rules before anything is composed and have nothing of a search to
+            // say; this one is what the composings themselves proved, so what they came back with
+            // is what a reader is shown.
+            //
+            // Every word of them and not one, in the order the search holds them in. Two ways of
+            // standing the dependencies in may prove it with different words, and a sentence that
+            // said one of them would be saying whichever the walk met first.
+            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+                    proved(((RuleSearch.CameToNothing) came.search()), rendering, places);
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
                             "a rule owed a row is said as the finding it is");
         };
+    }
+
+    /**
+     * What a rule the composings proved the rules leave no value for is said as.
+     *
+     * <p>A clause per word and never one per way. How many ways came back with a word is how many
+     * ways of standing the dependencies in there were, which is no part of what the rule says; what
+     * differs between two words is what a reader is told, so each of them is said once.
+     *
+     * <p>Where the sentence sits among the others is the first word's place, which is the same
+     * place whichever order the ways were walked in.
+     */
+    private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
+                               PublishedRuleHandle.WhereARuleIs places) {
+        List<String> clauses = new ArrayList<>();
+        for (Generator.UnresolvedCombination why : proofs.ways()) {
+            String clause = GeneratedRows.beside(whyUnresolved(why), why, rendering, places);
+            if (!clauses.contains(clause)) {
+                clauses.add(clause);
+            }
+        }
+        return new Said(6, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
+                String.join("; ", clauses));
     }
 
     /**
