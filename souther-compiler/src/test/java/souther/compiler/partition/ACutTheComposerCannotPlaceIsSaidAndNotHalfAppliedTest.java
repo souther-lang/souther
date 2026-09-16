@@ -17,8 +17,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
-import souther.compiler.semantics.TakenAs;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,11 +38,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the answer, because a row composed without it may not arrive and nothing else would say why.
  *
  * <p><b>What a location holds and what is measured there are two things.</b> A row writes one value
- * where a location is, and a location may have more than one number taken at it — how many a list
- * holds beside what it comes to. Whether one value answers them is the realizer's answer, and both
- * of its sides are below: keyed by the location alone, the second number is dropped for the first,
- * and a condition above the line dropped without a word is the composer having been handed the way
- * and quietly not using it.
+ * where a location is, and a location may have more than one number taken at it — a string beside
+ * how long it is, a list beside how many it holds. Whether one value answers them is
+ * the realizer's answer, and a group it answers is placed and written once, which is what the case
+ * below asserts. What the composer does with a group nothing writes a value for is the other half,
+ * and is asked where that answer is made rather than here: no group of the models this file builds
+ * reaches it.
  *
  * <p>Held here rather than against a model, because what is under test is the rule and not which
  * models happen to reach it. Naming the terms directly says which case is which, where a search for
@@ -59,9 +58,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 invariant value >= 0 && value <= 100
             data Code = String
                 invariant String.length(value) >= 4
-            data Amounts = List<Int>
-                invariant spread = List.length(value) >= 2
-            data Req = { cost: Amount, code: Code, ns: Amounts }
+            data Req = { cost: Amount, code: Code }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -89,34 +86,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     /**
-     * A cut naming another number taken at a location the item already writes is on it too.
-     *
-     * <p>The item fixes how many the list holds; the condition above the line is about what they
-     * come to. One location, two numbers, and the one value a row writes there would have to answer
-     * both — which is a container composed to hold them and is not something this composes.
-     * Dropped for sharing a location with the item's own number, the condition would go unmet by a
-     * row nothing said anything about.
-     */
-    @Test
-    void aCutNamingAnotherNumberAtALocationTheItemWritesIsSaidToo() {
-        Axis many = axisAt("r.ns");
-        assertInstanceOf(TakenAs.HowManyItHolds.class,
-                ((NumericTerm.TakenOf) many.term()).takenAs(),
-                "the item's own number here is how many the list holds");
-
-        Generator.BoundaryAttempt attempt = composing(many, Count.of(2),
-                cut(theTotalOfTheList()));
-
-        assertEquals(1, attempt.unrepresented().size(),
-                "one location, two numbers, and nothing composes a value to both: "
-                        + attempt.unrepresented());
-        assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
-                assertInstanceOf(ReachabilityGap.Uncomposed.class,
-                        attempt.unrepresented().get(0)).why(),
-                "said as what it is, and not as a position nothing could build at");
-    }
-
-    /**
      * And a cut naming a number of a location whose own value the item writes is placed.
      *
      * <p>The other side of the same question, because the answer turns on the group and not on
@@ -136,20 +105,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         assertTrue(attempt.unrepresented().isEmpty(),
                 "the value of the location and a number taken of it are written together: "
                         + attempt.unrepresented());
-    }
-
-    /**
-     * What the list at {@code r.ns} comes to, named here rather than read off a rule.
-     *
-     * <p>No rule of the model draws a line on it, and this is about a cut the composer is handed
-     * rather than about which rules reach one. What a value answering it and the item's own number
-     * together would be is a container composed to hold both, which is the group nothing here
-     * writes a value for.
-     */
-    private static NumericTerm.TakenOf theTotalOfTheList() {
-        TermPath ns = TermPath.of("r").then("ns");
-        return NumericTerm.TakenOf.of(ValueName.Stdlib.operation("List", "sum"), ns,
-                subject().inputs().typeAtWrittenPath(ns), rules().inners(), rules().symbols());
     }
 
     /**

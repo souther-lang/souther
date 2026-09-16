@@ -6,6 +6,10 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
@@ -19,7 +23,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -92,12 +95,12 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             """;
 
     /**
-     * Two numbers of one place that nothing here solves a value out of: how many a list holds and
-     * what it adds up to.
+     * Two numbers of one place a value is composed out of: how many a list holds and what it adds
+     * up to.
      *
-     * <p>Values answering both are there — two elements adding up to ten is five and five — and
-     * what would find one is solving for a container out of its length and its total, which is
-     * work nobody has done. So this is the group that still comes back with the population.
+     * <p>Neither is a place in the spelling of a list and neither is read off a value the other
+     * asks for — two elements adding up to ten is five and five, and what finds one is filling a
+     * container of a size the first number leaves until its elements come to the second.
      */
     private static final String A_LENGTH_AND_A_TOTAL = """
             module example.dated
@@ -111,6 +114,30 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             behavior gate : (slot: Slot) -> When
             let gate (slot) =
                 if List.length(slot.held) >= 2 && List.sum(slot.held) >= 10 then Late else Early
+            """;
+
+    /**
+     * Two totals of one container, over two paths inside what it holds.
+     *
+     * <p>A container filled to one total is filled by spreading that total over as many elements as
+     * it holds, and there is one spreading. Two totals of one container are two spreadings of one
+     * list of elements at once — which is neither the composing below nor a number read off what it
+     * composed, and is the group this still writes none of.
+     */
+    private static final String TWO_TOTALS_OF_ONE_CONTAINER = """
+            module example.totals
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Line = { a: Int, b: Int }
+            data Slot = { held: List<Line> }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if List.sum(List.map(l -> l.a, slot.held)) >= 10
+                    && List.sum(List.map(l -> l.b, slot.held)) >= 20 then Late else Early
             """;
 
     /**
@@ -324,17 +351,39 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
      * What it says instead is which population this compiler writes none of.
      */
     @Test
-    void aGroupNothingSolvesAValueOutOfIsSaidAsThePopulationAndNotAsNothing() {
+    void aContainerIsComposedOutOfHowManyItHoldsAndWhatItComesTo() {
         Model model = new Model(A_LENGTH_AND_A_TOTAL);
         SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
 
         assertEquals(2, asked.size(), () -> "a length and a total of one place: " + asked.keySet());
         TermRealizations.Realization made = model.answering(asked);
-        TermRealizations.Realization.Unexhausted some = assertInstanceOf(
-                TermRealizations.Realization.Unexhausted.class, made,
-                () -> "nothing here solves a value out of several of its numbers: " + made);
-        assertEquals(Set.of(CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS),
-                some.notAllOf(), "and says which population it wrote none of");
+        TermRealizations.Realization.Built built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, made,
+                () -> "a container holding that many and coming to that is composed: " + made);
+        model.aContainerReadsBackIntoBothClasses(built.values(), asked);
+    }
+
+    /**
+     * And a group nothing here composes a value for says that, and not that no value answers it.
+     *
+     * <p>Two totals of one container are two spreadings of one list of elements, which is neither
+     * the composing above nor a number read off what it composed. Nothing walked anything before
+     * the answer came back, so an answer in the words of a walk that looked everywhere is a
+     * statement about the model made by a reader with no standing to make one. What it says instead
+     * is which population this compiler writes none of.
+     */
+    @Test
+    void aGroupNothingComposesAValueForIsSaidAsThePopulationAndNotAsNothing() {
+        Model model = new Model(TWO_TOTALS_OF_ONE_CONTAINER);
+
+        TermRealizations.JointRealization way = TermRealizations.jointRealizationOf(
+                List.of(model.aTotalOver("a"), model.aTotalOver("b")));
+
+        TermRealizations.JointRealization.Missing missing = assertInstanceOf(
+                TermRealizations.JointRealization.Missing.class, way,
+                () -> "nothing here composes a value out of both totals: " + way);
+        assertEquals(CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                missing.notAllOf(), "and says which population it wrote none of");
     }
 
     /** One model, read and divided, with the numbers its classes are of in hand. */
@@ -412,6 +461,25 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         }
 
         /**
+         * The total of what stands at {@code field} in each element of the container, named here
+         * rather than read off a rule.
+         *
+         * <p>No rule of the model draws a line on one of these, and what is under test is the
+         * classification rather than which rules reach it. Built through the one way a term of a
+         * run is made, so the account is the operation's own answer and not this test's.
+         */
+        private RealizationTarget aTotalOver(String field) {
+            TermPath each = TermPath.of("slot").then("held").element().then(field);
+            NumericTerm.TakenOver over = NumericTerm.TakenOver.of(
+                    ValueName.Stdlib.operation("List", "sum"),
+                    RunSource.overTheOccurrencesAt(each), Type.INT,
+                    subject.ruleReading().source().inners(),
+                    subject.ruleReading().source().symbols());
+            assertNotNull(over, "a total over the occurrences of a path is a number of the run");
+            return RealizationTarget.of(over);
+        }
+
+        /**
          * Every value built reads back as a number each class it was asked for admits.
          *
          * <p>The whole of what a realization owes, asked of the sets rather than of a number: a
@@ -472,6 +540,48 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             }
             assertEquals(List.of(), elsewhere,
                     "every value built reads back as a number the class it was built for admits");
+        }
+
+        /**
+         * Every container built holds as many as one class asked for and comes to a number the
+         * other asked for.
+         *
+         * <p>Read out of what was written and put back to each class's own answer about
+         * membership, the way the other two read-backs here are: the elements are counted and
+         * added up out of the text, so a container that was composed against one of the two
+         * numbers and offered for both does not pass.
+         */
+        private void aContainerReadsBackIntoBothClasses(
+                List<FixtureTemplate> built, SequencedMap<RealizationTarget, NumericSet> asked) {
+            List<String> elsewhere = new ArrayList<>();
+            for (FixtureTemplate value : built) {
+                List<BigDecimal> held = elementsOf(value.text());
+                BigDecimal total = held.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+                int i = 0;
+                for (Map.Entry<RealizationTarget, NumericSet> each : asked.entrySet()) {
+                    TakenAs how = ((NumericTerm.TakenOf) each.getKey().term()).takenAs();
+                    Place read = how instanceof TakenAs.HowManyItHolds
+                            ? Count.of(BigDecimal.valueOf(held.size())) : Count.of(total);
+                    if (!each.getValue().holds(read, carrierOf(asked, i))) {
+                        elsewhere.add(value.text() + " reads " + read + " where "
+                                + each.getValue() + " was asked for");
+                    }
+                    i++;
+                }
+            }
+            assertEquals(List.of(), elsewhere,
+                    "every container built holds as many and comes to as much as was asked for");
+        }
+
+        /** The numbers a written container holds, in the order it holds them. */
+        private static List<BigDecimal> elementsOf(String written) {
+            List<BigDecimal> out = new ArrayList<>();
+            java.util.regex.Matcher each = java.util.regex.Pattern
+                    .compile("-?\\d+(\\.\\d+)?").matcher(written);
+            while (each.find()) {
+                out.add(new BigDecimal(each.group()));
+            }
+            return out;
         }
 
         private souther.compiler.check.Carrier carrierOf(

@@ -79,6 +79,26 @@ final class ContainersAddingUp {
     static TermRealizations.Realization to(Place answer, Type container,
                                            TermOrders orders, SearchRegion within,
                                            RuleReadingContext reading) {
+        return to(answer, container, orders, within, reading, null);
+    }
+
+    /**
+     * The same, where how many the container holds is asked for as well as what it comes to.
+     *
+     * <p><b>One more thing that says how many, and the counts are where they meet.</b> What the
+     * declarations leave the container, what the rules leave it on the way, and what a group of
+     * numbers at one location asks of it are three answers to one question, and a container is
+     * written where all three admit its size. Read anywhere but the counts — as a filter on what
+     * was built, say — a count the group refuses would be walked, filled and thrown away, and the
+     * figure the walk holds to would be spent on sizes nobody asked for.
+     *
+     * @param alsoHolding how many it is asked to hold beside the total, or null where nothing but
+     *                    the total is asked for
+     */
+    static TermRealizations.Realization to(Place answer, Type container,
+                                           TermOrders orders, SearchRegion within,
+                                           RuleReadingContext reading,
+                                           HowManyIsAskedFor alsoHolding) {
         RuleReadingSource ruleSource = reading.source();
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
@@ -103,7 +123,8 @@ final class ContainersAddingUp {
         // to place. Both numbers are asked — how many the container holds and where its occurrences
         // run — because either of them left nothing settles the item, and said as a range either
         // would be the widest answer there is out of rules that admit none.
-        DeclaredBounds.CountRange howMany = howMany(view, target.writeRoot(), within, reading);
+        DeclaredBounds.CountRange howMany =
+                howMany(view, target.writeRoot(), within, reading, alsoHolding);
         if (howMany == null
                 || !(within.projectionOf(new NumericTerm.ValueOf(occurrences(target)))
                         instanceof NumericDomain.FormProjection.Within(
@@ -144,7 +165,8 @@ final class ContainersAddingUp {
         // Every count the rules leave, which are all the counts there are: what the container may
         // hold is what the rules say, so a walk that runs out of them has run out of the population
         // and not only of what this compiler writes.
-        asFarAs(countsAdmitted(howMany), new HowManyElements(makings, offered, left), left);
+        asFarAs(countsAdmitted(howMany, alsoHolding),
+                new HowManyElements(makings, offered, left), left);
         List<FixtureTemplate> built = offered.built();
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, left.refused(), left.notAllOf());
@@ -267,7 +289,8 @@ final class ContainersAddingUp {
      * the top runs to the largest count there is, and what stops the walk before then is the
      * consumer having no room, as it is at every other length.
      */
-    private static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany) {
+    private static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany,
+                                                    HowManyIsAskedFor alsoHolding) {
         int from = Math.max(howMany.least(), 0);
         return () -> new Iterator<>() {
 
@@ -275,6 +298,13 @@ final class ContainersAddingUp {
 
             @Override
             public boolean hasNext() {
+                // Past the sizes the group asks for as well as past the ones the rules leave. A
+                // size some other number of the same location refuses is no candidate at all, so
+                // it is stepped over here rather than handed on and refused — the figure below
+                // counts what it was handed, and a count nobody asked for would spend it.
+                while (at <= howMany.most() && !asked(at)) {
+                    at++;
+                }
                 return at <= howMany.most();
             }
 
@@ -285,7 +315,40 @@ final class ContainersAddingUp {
                 }
                 return at++;
             }
+
+            private boolean asked(int many) {
+                return alsoHolding == null || alsoHolding.holds(many);
+            }
         };
+    }
+
+    /**
+     * How many a container is asked to hold, where that is asked beside what it comes to.
+     *
+     * <p>The set and the order it is a set of places on, because membership is the set's to answer
+     * and it answers it against the order — {@link NumericSet#holds}. Held as a pair for that
+     * reason: a caller passing the set alone would leave every reader of it choosing an order, and
+     * the one they would choose is the one in front of them.
+     *
+     * @param wanted  the numbers the rules leave how many it holds
+     * @param counted the order those numbers are places of
+     */
+    record HowManyIsAskedFor(NumericSet wanted, Carrier counted) {
+
+        HowManyIsAskedFor {
+            Objects.requireNonNull(wanted, "how many it is asked to hold is a set of counts");
+            Objects.requireNonNull(counted, "a count is a place on the order it is counted by");
+        }
+
+        /** Whether holding that many is one of the numbers asked for. */
+        boolean holds(int many) {
+            return wanted.holds(new Count(BigDecimal.valueOf(many)), counted);
+        }
+
+        /** As ends, for the walk that steps the counts. */
+        NumericDomain.Bounds extent() {
+            return wanted.extent();
+        }
     }
 
     /**
@@ -450,9 +513,10 @@ final class ContainersAddingUp {
      */
     private static DeclaredBounds.CountRange howMany(TypeView container, TermPath root,
                                                      SearchRegion within,
-                                                     RuleReadingContext reading) {
-        DeclaredBounds.CountRange declared =
-                DeclaredBounds.countsHeld(container, reading, null);
+                                                     RuleReadingContext reading,
+                                                     HowManyIsAskedFor alsoHolding) {
+        DeclaredBounds.CountRange declared = narrowed(
+                DeclaredBounds.countsHeld(container, reading, null), alsoHolding);
         NumericTerm.FromOnePosition term = countTaken(container, root, reading);
         if (term == null) {
             return declared;
@@ -469,6 +533,25 @@ final class ContainersAddingUp {
                             Math.max(declared.least(), CountDomain.leastFrom(runs.min())),
                             Math.min(declared.most(), CountDomain.mostFrom(runs.max())));
         };
+    }
+
+    /**
+     * The same range, no wider than the ends of what a group of numbers asks of the size.
+     *
+     * <p>The ends only. Which sizes inside them are asked for is the set's answer and is asked of
+     * each count as it is stepped, the way every walk here narrows first and decides after
+     * ({@link NumericSet#extent()} beside {@link NumericSet#holds}) — a set with holes in it has no
+     * pair of ends that says which they are.
+     */
+    private static DeclaredBounds.CountRange narrowed(DeclaredBounds.CountRange range,
+                                                      HowManyIsAskedFor alsoHolding) {
+        if (alsoHolding == null) {
+            return range;
+        }
+        NumericDomain.Bounds asked = alsoHolding.extent();
+        return new DeclaredBounds.CountRange(
+                Math.max(range.least(), CountDomain.leastFrom(asked.min())),
+                Math.min(range.most(), CountDomain.mostFrom(asked.max())));
     }
 
     /** The number the rules count this container by, or null where nothing counts it. */

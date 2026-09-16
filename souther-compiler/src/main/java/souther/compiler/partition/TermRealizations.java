@@ -205,7 +205,7 @@ final class TermRealizations {
      * <p><b>A capability of this compiler's and not a proposition about the model.</b> What this
      * answers is which way of writing one value there is for a group of numbers taken like these —
      * so a group it has no way for is a group nobody has written the solving for, and never a group
-     * no value answers. Said as the second, a list whose length and total are both asked for comes
+     * no value answers. Said as the second, a container asked for two of the totals inside it comes
      * back as a value that does not exist, which is a sentence about the model this has no standing
      * to say.
      *
@@ -226,8 +226,10 @@ final class TermRealizations {
      * of the place's own is solved for out of the demands, which is what a quotient by a written
      * number is. A number read off a value the group already asks for is read off the values that
      * demand admits, which is what any number taken of a place is once the place's own value is
-     * asked for beside it. A group whose numbers are reached none of those ways is the population,
-     * and a way of writing one is work nobody has done.
+     * asked for beside it. A number what stands there is composed out of is composed for, which is
+     * what how many a container holds and what it comes to are — a size the one leaves, filled to
+     * the other. A group whose numbers are reached none of those ways is the population, and a way
+     * of writing one is work nobody has done.
      *
      * <p>So a reader wanting to know what this compiler writes reads the arms and not this: a way
      * added is an arm, and a sentence here listing the ways would be a second answer that nothing
@@ -256,6 +258,10 @@ final class TermRealizations {
         // place, so a second value asked for is a second place and is another group's.
         RealizationTarget itself = null;
         List<RealizationTarget> takenOfIt = new ArrayList<>();
+        // How many the container holds and what it comes to, which are the two numbers a container
+        // is composed out of rather than read for.
+        RealizationTarget manyItHolds = null;
+        RealizationTarget whatItComesTo = null;
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
@@ -263,10 +269,14 @@ final class TermRealizations {
             switch (target.term()) {
                 case NumericTerm.ValueOf _ -> itself = target;
                 // A number taken over the values a walk came to is a number of a run, and a value
-                // standing at one place is not a run. So there is nothing here to read it off and
-                // nothing to solve it out of either.
-                case NumericTerm.TakenOver _ -> {
-                    return nothingSolvesAGroup();
+                // standing at one place is not a run — so there is nothing here to read it off.
+                // What is added up over a run is still a number the container it runs through is
+                // composed to have, though, and that is the arm below.
+                case NumericTerm.TakenOver over -> {
+                    if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+                        return nothingSolvesAGroup();
+                    }
+                    whatItComesTo = target;
                 }
                 case NumericTerm.TakenOf taken -> {
                     takenOfIt.add(target);
@@ -285,11 +295,12 @@ final class TermRealizations {
                             }
                             quotients.put(target, divisor);
                         }
-                        // How much a container holds. Read off a value and solved for out of
-                        // nothing here: what answers a length and a total together is a container
-                        // composed to hold both, which is a value made out of the numbers rather
-                        // than one of them offered and read.
-                        case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> { }
+                        // How much a container holds, which is what a container is composed out of
+                        // rather than a place in the spelling of one: what answers a length and a
+                        // total together is a container built to have both, and the arm below is
+                        // where the two meet.
+                        case TakenAs.HowManyItHolds _ -> manyItHolds = target;
+                        case TakenAs.TheSumOfWhatItHolds _ -> whatItComesTo = target;
                     }
                 }
             }
@@ -302,6 +313,13 @@ final class TermRealizations {
             return new JointRealization.Supported(
                     new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(itself, takenOfIt));
         }
+        // How many a container holds beside what it comes to, which is one container to compose:
+        // the sizes it may be are the ones the first number leaves, and filling one of those to
+        // the second is what a total is composed by anyway.
+        if (manyItHolds != null && whatItComesTo != null && targets.size() == 2) {
+            return new JointRealization.Supported(
+                    new JointBuilder.HoldingThatManyAndAddingUpToThat(manyItHolds, whatItComesTo));
+        }
         if (!quotients.isEmpty()) {
             // Quotients and nothing else. A quotient of a place beside a part of it is a value that
             // is both a number and a moment, and what would write one is neither arm here.
@@ -311,9 +329,10 @@ final class TermRealizations {
                     : nothingSolvesAGroup();
         }
         // A value spelled in parts is written at the parts it is spelled in, so a group holding a
-        // number of any other kind is not a value this spells. Which is the group a length and a
-        // total are in: what answers both is a container composed to hold them, and nothing here
-        // composes one.
+        // number of any other kind is not a value this spells — and what is left once the arms
+        // above have had theirs is the population. Two totals of one container are in it: filling a
+        // container spreads one total over what it holds, and two of them at once is a spreading
+        // nobody has written.
         if (times.size() + dates.size() != targets.size()) {
             return nothingSolvesAGroup();
         }
@@ -611,6 +630,57 @@ final class TermRealizations {
         }
 
         /**
+         * A container holding one of those many, whose elements come to one of those totals.
+         *
+         * <p><b>Composed out of both numbers, and read for neither.</b> How many a container holds
+         * and what it comes to are no places in the spelling of one — a list is not written by
+         * writing its length beside its total — and neither is read off a value the group already
+         * asks for. What has both is built: a size the first number leaves, filled so that the
+         * elements come to the second.
+         *
+         * <p><b>Which is the composing a total already does.</b> Filling a container to a total is
+         * choosing how many elements it holds and what each of them holds, so the sizes are walked
+         * there and a second number about the size is one more thing that says which sizes there
+         * are — beside what the declarations leave the container and what the rules leave it on the
+         * way. So this hands the size demand over rather than filtering what came back: a size the
+         * demand refuses is no candidate, and a walk that filled one would spend a figure of this
+         * compiler's on a container nobody asked for.
+         */
+        record HoldingThatManyAndAddingUpToThat(RealizationTarget manyItHolds,
+                                                RealizationTarget whatItComesTo)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                TermOrders counted = measuring.ordersOf(manyItHolds.term());
+                TermOrders adds = measuring.ordersOf(whatItComesTo.term());
+                NumericSet many = demands.get(manyItHolds);
+                NumericSet total = demands.get(whatItComesTo);
+                if (counted == null || counted.answered() == null || adds == null
+                        || many == null || total == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                // Where the rules leave the size on the way, which the container's own walk asks
+                // of the region already. What is handed over here is the group's demand and not
+                // the way, so neither reading stands in for the other.
+                if (within != null && within.projectionOf(manyItHolds.term())
+                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                ContainersAddingUp.HowManyIsAskedFor holding =
+                        new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
+                return firstThatBuilds(onTheOrder(total, adds, null, within),
+                        at -> ContainersAddingUp.to(at, sourceType, adds, within, reading,
+                                holding));
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -648,9 +718,9 @@ final class TermRealizations {
      *
      * <p><b>A group nothing writes a value for is said as the population it is part of.</b> That
      * nothing here writes a value for several numbers of one place is a fact about this compiler
-     * and never one about the model: the length and the total of a list are both asked for by
-     * models that have such a list in them, and a word for a walk that looked everywhere would
-     * tell their author no value exists. Nothing looked. So what comes back is a walk that offered
+     * and never one about the model: two totals of one container are both asked for by models that
+     * have such a container in them, and a word for a walk that looked everywhere would tell their
+     * author no value exists. Nothing looked. So what comes back is a walk that offered
      * none of a population, which is the answer a reader may conclude nothing from.
      */
     static Realization allSatisfying(Type sourceType,
