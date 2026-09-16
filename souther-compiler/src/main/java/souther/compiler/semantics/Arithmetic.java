@@ -2,6 +2,7 @@ package souther.compiler.semantics;
 
 import souther.compiler.types.BinOp;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -110,6 +111,24 @@ public sealed interface Arithmetic {
         @Override
         public BinOp writtenAs() {
             return BinOp.DIV;
+        }
+
+        /**
+         * What dividing {@code value} by {@code by} answers: the whole number left by truncating
+         * toward zero.
+         *
+         * <p><b>Here because it is this arithmetic's own answer, and every direction reads it.</b>
+         * Reading a row's value off an observation and solving for a value that answers a number
+         * are the same division asked twice, and a second spelling of "toward zero" is two
+         * roundings somebody keeps in step by hand — which is a row offered at a number it reads
+         * back as something else, the day they part.
+         *
+         * <p>Said of the arithmetic rather than of the account that takes it. Which numbers an
+         * operation's answer names and which of its arguments is the divisor are the account's;
+         * what the operator computes is written down once, here, where the operator is named.
+         */
+        public static BigDecimal quotientOf(BigDecimal value, BigDecimal by) {
+            return value.divideToIntegralValue(by);
         }
     }
 

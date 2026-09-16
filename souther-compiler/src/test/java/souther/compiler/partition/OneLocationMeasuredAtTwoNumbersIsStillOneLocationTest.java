@@ -174,23 +174,23 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
      * written twice. Each class of each quotient is a run of the place, and a row stands where the
      * runs a pair of them leaves holds a number.
      *
-     * <p>The pair that holds none is here beside them. A half below ten is a number below twenty
-     * and a third from ten up is a number from thirty up, so that pair of classes is answered by
-     * nothing — which is a statement about the model and the reason the rows below are read off the
-     * classes they name rather than counted.
+     * <p>Every class of both quotients is answered, which is what the runs leaving a number means
+     * here: nineteen halves to nine and thirds to six, twenty halves to ten, thirty thirds to ten.
+     * Read off the classes each row names rather than counted, so a row standing somewhere else is
+     * a failure and not a different arrangement of the same answer.
      */
     @Test
     void twoClassesOfOneLocationAreAnsweredByOneNumberSolvedOutOfBoth() {
         FillResult filled = filled(TWO_QUOTIENTS);
 
-        assertEquals(List.of("slot.n=10 <= x", "slot.n=x < 10", "slot.n=10 <= x"),
+        assertEquals(List.of("slot.n=x < 10", "slot.n=10 <= x", "slot.n=x < 10", "slot.n=10 <= x"),
                 filled.rows().stream().flatMap(row -> row.purposes().stream())
                         .flatMap(purpose -> purpose.labels().stream()).toList(),
                 () -> "a row for every class a number of the place answers: " + filled.rows());
-        assertEquals(List.of("Slot { n = 20 }", "Slot { n = 20 }", "Slot { n = 30 }"),
+        assertEquals(List.of("Slot { n = 19 }", "Slot { n = 20 }", "Slot { n = 19 }",
+                        "Slot { n = 30 }"),
                 filled.rows().stream().map(row -> row.inputs().get(0).text()).toList(),
-                "and each row's number reads back into the class it was built for: twenty halves"
-                        + " to ten and thirds to six, thirty thirds to ten");
+                "and each row's number reads back into the class it was built for");
     }
 
     /** The rows a fill of that model's classes comes to. */

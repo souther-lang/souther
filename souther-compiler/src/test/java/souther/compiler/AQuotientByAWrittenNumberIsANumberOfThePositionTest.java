@@ -199,10 +199,18 @@ class AQuotientByAWrittenNumberIsANumberOfThePositionTest {
         // What is left is the region between the lines, where the pairs of numbers this compiler
         // tries run out before one of them is a pair some value has. Said as the figure it is,
         // which is a number somebody raises — so whatever stopped short here says so.
-        assertTrue(report.lines()
-                        .filter(line -> line.contains("nothing could show a row can be written"))
+        //
+        // Counted as well as read, because every one of them saying so is true of none of them:
+        // a point that stops saying it is a point this compiler settled, which is a change to
+        // look at here rather than a check that quietly stops checking.
+        List<String> stoppedShort = report.lines()
+                .filter(line -> line.contains("nothing could show a row can be written"))
+                .toList();
+        assertEquals(1, stoppedShort.size(),
+                () -> "one point is left, which is the region between the lines: " + report);
+        assertTrue(stoppedShort.stream()
                         .allMatch(line -> line.contains("a figure of this compiler's is why")),
-                report);
+                () -> "and a figure of this compiler's is what it says: " + stoppedShort);
     }
 
     /**

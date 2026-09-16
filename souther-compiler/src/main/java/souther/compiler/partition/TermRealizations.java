@@ -15,6 +15,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -990,12 +991,20 @@ final class TermRealizations {
     /**
      * The numbers of a place whose quotient by {@code by} lies between {@code quotients}.
      *
-     * <p><b>The account's own arithmetic, and wide rather than exact.</b> Truncation is not a
-     * bijection: a run of numbers answers each quotient, so a set of quotients is a run of the
-     * place. These ends are where that run can lie and the membership is asked separately, so an
-     * end this puts further out than the truth costs a number tried and can offer nothing that
-     * does not read back. Read as the answer instead, the sign cases below would each be a row
-     * standing at a number it is not.
+     * <p><b>Exactly that run.</b> Truncation is not a bijection: a run of numbers answers each
+     * quotient, so a run of quotients is a run of the place — ten and eleven are the numbers whose
+     * half is five. Every number these ends hold has its quotient between the ones asked for, and
+     * every number that does is between them.
+     *
+     * <p>Which the walk over them rests on. A figure of this compiler's counts the numbers a walk
+     * admits, so a pair of ends holding numbers the demands turn down is a walk that steps without
+     * spending anything — and the numbers between an end and the truth are as many as the divisor
+     * is wide. Read as one quotient further out for the sake of a simpler reading of exclusivity,
+     * a model whose divisor is a billion would step through billions of them.
+     *
+     * <p>The membership is asked all the same, and not as a repair of this: what a builder owes is
+     * that the value it writes reads back as the number it was asked for, and reading it back is
+     * the only thing that says so.
      */
     static NumericDomain.Bounds numbersWhoseQuotientLiesIn(NumericDomain.Bounds quotients,
                                                            BigDecimal by) {
@@ -1014,10 +1023,14 @@ final class TermRealizations {
      * The whole numbers inside these ends that {@code holds} admits, in the order to try them, or
      * the one place the carrier names where the ends do not close.
      *
-     * <p>Stepped where both ends are written down, because that is a handful of numbers: the ones
-     * whose quotient is a given number are as many as the divisor. Where an end is open there is
-     * nothing to step from, so the carrier names a place the way it does for a run — and what comes
-     * back says this wrote one of them, since raising nothing reaches a second.
+     * <p>Stepped where both ends are written down. The ends are exactly the run the demands leave
+     * ({@link #numbersWhoseQuotientLiesIn}), so every number stepped is one the demands admit and
+     * the figure that counts them counts the work — a wide divisor makes the run wide and the
+     * figure stops the walk in it, rather than leaving a walk that steps without spending.
+     *
+     * <p>Where an end is open there is nothing to step from, so the carrier names a place the way
+     * it does for a run — and what comes back says this wrote one of them, since raising nothing
+     * reaches a second.
      */
     private static Tried numbersInside(NumericDomain.Bounds lies, Carrier on,
                                        Predicate<Place> holds) {
@@ -1051,7 +1064,7 @@ final class TermRealizations {
         for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
             NumericSet wanted = asked.get(each.getKey());
             Place quotient = observed.onTheGrid(new Count(
-                    TakenAs.TheTruncatingQuotient.quotientOf(count.at(), each.getValue())));
+                    Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())));
             if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
                 return false;
             }
@@ -1067,33 +1080,37 @@ final class TermRealizations {
     }
 
     /**
-     * The smallest number whose quotient by {@code size} is at that end, or null where the end
-     * names no whole number.
+     * The smallest number whose quotient by {@code size} is at or above that end, or null where
+     * the end names no whole number.
      *
-     * <p>Wide by a whole quotient's worth at an open end, which is what keeps this from being a
-     * second reading of exclusivity: a number this admits and the rules do not is one the
-     * membership turns down.
+     * <p><b>The number itself and not one a whole quotient below it.</b> What a walk between two
+     * of these steps is every number the ends hold, so an end further out than the truth is work
+     * nobody asked for — and however wide a divisor is, the numbers between an end and the truth
+     * are that many. The figure the walk holds to counts the numbers it admits, so it is no bound
+     * on a walk that admits none of what it steps.
+     *
+     * <p>Which is why the quotient is read to the whole number the end admits first: the ends of a
+     * run of quotients are read the way every walk of whole numbers here reads an end
+     * ({@link #startOf}), and the run of the place is then exactly what those quotients answer.
      */
     private static Place lowestWhoseQuotientIs(Endpoint end, BigDecimal size) {
         if (!(end.at() instanceof Count count)) {
             return null;
         }
-        BigDecimal at = count.at().setScale(0, java.math.RoundingMode.FLOOR);
-        BigDecimal quotient = end.inclusive() ? at : at.subtract(BigDecimal.ONE);
+        BigDecimal quotient = startOf(end, count.at());
         return new Count(quotient.signum() < 0
                 ? quotient.multiply(size).subtract(size).add(BigDecimal.ONE)
                 : quotient.signum() == 0 ? size.negate().add(BigDecimal.ONE)
                         : quotient.multiply(size));
     }
 
-    /** The largest number whose quotient by {@code size} is at that end, as wide as the smallest
-     *  is at the other. */
+    /** The largest number whose quotient by {@code size} is at or below that end, read as exactly
+     *  as the smallest is at the other. */
     private static Place highestWhoseQuotientIs(Endpoint end, BigDecimal size) {
         if (!(end.at() instanceof Count count)) {
             return null;
         }
-        BigDecimal at = count.at().setScale(0, java.math.RoundingMode.CEILING);
-        BigDecimal quotient = end.inclusive() ? at : at.add(BigDecimal.ONE);
+        BigDecimal quotient = endOf(end, count.at());
         return new Count(quotient.signum() > 0
                 ? quotient.multiply(size).add(size).subtract(BigDecimal.ONE)
                 : quotient.signum() == 0 ? size.subtract(BigDecimal.ONE)

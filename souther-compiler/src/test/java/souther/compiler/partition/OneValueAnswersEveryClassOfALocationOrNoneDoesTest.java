@@ -10,6 +10,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
@@ -417,7 +418,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                                     each.getKey().term()).takenAs();
                     souther.compiler.check.Carrier on =
                             subject.quantities().ordersOf(each.getKey().term()).answered();
-                    Place read = Count.of(TakenAs.TheTruncatingQuotient.quotientOf(at,
+                    Place read = Count.of(Arithmetic.ATruncatingQuotient.quotientOf(at,
                             how.read(((NumericTerm.TakenOf) each.getKey().term()).arguments())));
                     if (!each.getValue().holds(read, on)) {
                         elsewhere.add(value.text() + " reads " + read + " where "
