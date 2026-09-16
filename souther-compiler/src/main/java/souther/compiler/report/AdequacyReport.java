@@ -170,9 +170,9 @@ import java.util.stream.Stream;
  *
  * <p>Nothing the request decides is carried. What a report marks as a gap is every obligation the
  * account derives ({@link souther.compiler.query.About.OfAnObligation}), and how much was measured
- * is not held either: what a
- * measure came to is the measure's own answer, and a report that kept the level beside the evidence
- * could read a measure's silence as something other than what the measure said (issue #955).
+ * is not held either: what a measure came to is the measure's own answer, and a report that kept
+ * the level beside the evidence could read a measure's silence as something other than what the
+ * measure said (issue #955).
  */
 public record AdequacyReport(int schemaVersion, String compilerVersion,
                              WeakeningSet weakenedBy, List<ModuleReport> modules) {
@@ -5512,13 +5512,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * Where a finding is, for the kinds whose place is not the declaration they are under.
      *
-     * <p>An arm's, and no other's. A behavior with two {@code guard}s writes two arms labelled
+     * <p>An arm's and a row's. A behavior with two {@code guard}s writes two arms labelled
      * {@code else}, and the label is what a finding's subject is — so two findings of one behavior
      * came out identical in every field, and which of them a reader was being told about could not be
      * worked out from the document at all. The place is what {@code branch.obligations} already
-     * tells them apart by, and it is written here in the same shape, so the two join.
+     * tells them apart by, and it is written here in the same shape, so the two join. A row is the
+     * same case: a behavior's rows are as many as somebody wrote, and an unnamed one answers to
+     * nothing outside this compiler.
      *
-     * <p>The other eight are cited at the declaration the entry sits under. Writing that coordinate
+     * <p>The rest are cited at the declaration the entry sits under. Writing that coordinate
      * would say where the behavior is, under a finding about a line the model draws or a class of an
      * input — neither of which is there.
      *

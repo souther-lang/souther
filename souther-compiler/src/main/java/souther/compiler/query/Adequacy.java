@@ -194,10 +194,9 @@ public final class Adequacy {
      *
      * <p>What a build is held to is not here, because it is not asked for: every obligation the
      * account derives is a row the model asks for ({@link About.OfAnObligation}). A measure a build
-     * did not ask
-     * for is one that was not made rather than one that is outside the question, so a level that
-     * measures less leaves a verdict of {@code undetermined} rather than a shorter list of what is
-     * owed.
+     * did not ask for is one that was not made rather than one that is outside the question, so a
+     * level that measures less leaves a verdict of {@code undetermined} rather than a shorter list
+     * of what is owed.
      */
     public record Asked(Level level, boolean warn) {
 
@@ -227,11 +226,10 @@ public final class Adequacy {
          *
          * <p>{@code souther examples} asks for this. That command chooses no measurement — its
          * output is the report, so everything is measured — and what the report marks as a gap is
-         * the account's ({@link About.OfAnObligation}) rather than a word the caller wrote: a report
-         * answering
-         * a narrower question than the build beside it is how {@code souther examples --strict}
-         * came to exit 0 on a model a compile refused, with the gaps printed in the report that had
-         * just called it satisfied.
+         * the account's ({@link About.OfAnObligation}) rather than a word the caller wrote: a
+         * report answering a narrower question than the build beside it is how {@code souther
+         * examples --strict} came to exit 0 on a model a compile refused, with the gaps printed in
+         * the report that had just called it satisfied.
          */
         public static Asked fullReport() {
             return new Asked(Level.ALL, false);

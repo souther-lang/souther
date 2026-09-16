@@ -55,8 +55,8 @@ public sealed interface About {
      */
     record ACaseNoRowExpects(String behavior, TypeSymbol missing) implements OfAnObligation {
         public ACaseNoRowExpects {
-            java.util.Objects.requireNonNull(behavior, "a case of an output is some behavior's");
-            java.util.Objects.requireNonNull(missing, "a finding is about something");
+            Objects.requireNonNull(behavior, "a case of an output is some behavior's");
+            Objects.requireNonNull(missing, "a finding is about something");
         }
 
         @Override
