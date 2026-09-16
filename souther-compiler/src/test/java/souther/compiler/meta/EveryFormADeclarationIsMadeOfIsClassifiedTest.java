@@ -72,7 +72,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
 
     @Test
     void everyFormADeclarationReachesSaysWhichOfTheThreeItIs() {
-        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
+        Set<Class<?>> reached = FormsADeclarationReaches.reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
         List<String> answeredOtherThanOnce = new ArrayList<>(new TreeSet<>(reached.stream()
@@ -155,7 +155,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
      */
     @Test
     void andTheFormsUnderAnErasedSealedTypeAreAmongThemToo() {
-        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
+        Set<Class<?>> reached = FormsADeclarationReaches.reached();
 
         assertTrue(reached.contains(QuotedFrom.ASourceThisCompileHolds.class),
                 "a text a rule was quoted from is erased, and which texts there are is not that"
@@ -182,7 +182,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     @Test
     void andWhatIsPassedOverAnswersToOneErasedKind() {
         List<String> answeringToSeveral = new ArrayList<>(new TreeSet<>(
-                FormsACrossingCanReach.taken().reached().stream()
+                FormsADeclarationReaches.reached().stream()
                         .filter(type -> erasedKindsOf(type).size() > 1)
                         .map(type -> type.getName() + " answers to " + erasedKindsOf(type))
                         .toList()));

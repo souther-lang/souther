@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.crossing.DelegatedEqualityIsRepresentedByWhatItStandsFor;
 import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeSymbol;
@@ -110,6 +111,46 @@ class TheRepresentationAFormNamesIsWhatTheComparisonWouldReadTest {
     }
 
     /**
+     * And a form naming another that names something the comparison passes over is refused.
+     *
+     * <p>The hole one name further in. A form naming what its equality is over is a claim this
+     * reading can refuse; a form naming such a form is the same claim twice, and a reading that
+     * took the inner one's say-so would stop where the refusable part begins. Nothing in either
+     * build is written this way today, and nothing would say so — the inner one is nobody's leaf,
+     * so the sweep over what a crossing hands to an equality never asks about it either.
+     */
+    @Test
+    void andAFormNamingOneThatNamesSomethingPassedOverIsRefusedToo() {
+        assertTrue(whatStopsIt(NamesSomethingPassedOver.class).stream()
+                        .anyMatch(said -> said.contains("ApplicationOrigin$Written")),
+                "the one naming it directly is refused, which is the reading working at all");
+        assertTrue(whatStopsIt(NamesWhatNamesSomethingPassedOver.class).stream()
+                        .anyMatch(said -> said.contains("ApplicationOrigin$Written")),
+                "and the one naming that one is refused for the same part, which is the reading"
+                        + " following a claim rather than counting it");
+    }
+
+    /** Stands for a form whose equality is over something the comparison passes over. */
+    private static final class NamesSomethingPassedOver
+            implements DelegatedEqualityIsRepresentedByWhatItStandsFor {
+
+        @Override
+        public ApplicationOrigin.Written standsFor() {
+            throw new UnsupportedOperationException("read for what it is declared to name");
+        }
+    }
+
+    /** And one naming that one, which is the same claim a name further in. */
+    private static final class NamesWhatNamesSomethingPassedOver
+            implements DelegatedEqualityIsRepresentedByWhatItStandsFor {
+
+        @Override
+        public NamesSomethingPassedOver standsFor() {
+            throw new UnsupportedOperationException("read for what it is declared to name");
+        }
+    }
+
+    /**
      * Whether the comparison reads what {@code form} names the way an equality over it would.
      *
      * <p>The comparison's own answers, in the order it takes them. A part it passes over is one an
@@ -160,6 +201,15 @@ class TheRepresentationAFormNamesIsWhatTheComparisonWouldReadTest {
                     for (StructuralParts.Part part : StructuralParts.of(held)) {
                         todo.addLast(part.held());
                     }
+                    continue;
+                }
+                // A form naming what its equality is over is followed and not taken at its word,
+                // wherever it is met. Read as an account and stopped at, a form naming another such
+                // form would be answered by that one's say-so, and whatever the inner one names
+                // would be reached by nobody: the claim this reading exists to be able to refuse
+                // would be safe from it by being one name further in.
+                if (DelegatedEqualityIsRepresentedByWhatItStandsFor.class.isAssignableFrom(held)) {
+                    todo.addLast(namedBy(held));
                     continue;
                 }
                 if (!DelegatedEqualityIsTheCrossingAnswer.class.isAssignableFrom(held)

@@ -303,16 +303,18 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
      */
     @Test
     void andAFormAReaderCanGoInsideIsStillRefusedForWhatNobodySaidAboutItsEquality() {
+        KeepsAWord holding = new KeepsAWord("a word");
+
         assertTrue(StructuralParts.areHandedOver(KeepsAWord.class),
-                "a reader goes inside it, and every part it finds is one a collection may hold");
+                "a reader goes inside it, and finds what it hands over");
         assertDoesNotThrow(
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
-                        Set.of("a word")),
-                "the part being that word, which a set may hold");
+                        Set.of(holding.word())),
+                "which is a word, and a set may hold one");
 
         assertThrows(IllegalStateException.class,
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
-                        Set.of(new KeepsAWord("a word"))),
+                        Set.of(holding)),
                 "and the form is refused all the same, because what its equality reads is not what"
                         + " a reader going inside it finds");
     }
