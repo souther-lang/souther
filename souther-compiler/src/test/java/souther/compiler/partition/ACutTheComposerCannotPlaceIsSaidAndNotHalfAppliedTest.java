@@ -9,6 +9,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
@@ -17,12 +18,15 @@ import souther.compiler.numeric.Place;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,7 +62,10 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 invariant value >= 0 && value <= 100
             data Code = String
                 invariant String.length(value) >= 4
-            data Req = { cost: Amount, code: Code }
+            data Line = { a: Int, b: Int }
+            data Lines = List<Line>
+                invariant spread = List.length(value) >= 2
+            data Req = { cost: Amount, code: Code, lines: Lines }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -83,6 +90,46 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         attempt.unrepresented().get(0)).why());
         assertEquals(WHERE, attempt.unrepresented().get(0).anchor(),
                 "said of the condition, which is what a reader is sent to");
+    }
+
+    /**
+     * A cut naming numbers of a location nothing composes one value for is said as that.
+     *
+     * <p><b>The boundary this file exists for.</b> What the realizer answers of a group it has no
+     * way for is a population it writes some of, and what a reader meets on the way to a point has
+     * to keep that: a row was not composed because nobody has written the composing, and never
+     * because the positions hold no value. Told as the second, an author goes looking for the rule
+     * that refuses a row nothing refuses.
+     *
+     * <p>Two totals of one container beside how many it holds, which is the group nothing composes
+     * one value for. The numbers here are named directly, because what is under test is the
+     * boundary and not which models happen to reach it — and the day this group is composed for,
+     * the fixture moves to whichever group is left rather than the claim going with it.
+     */
+    @Test
+    void aCutNamingNumbersNothingComposesOneValueForIsSaidAsThat() {
+        Generator.BoundaryAttempt attempt = composing(axisAt("r.lines"), Count.of(2),
+                cut(aTotalOver("a")), cut(aTotalOver("b")));
+
+        assertFalse(attempt.unrepresented().isEmpty(),
+                "the cuts it was handed and could not place: " + attempt.unrepresented());
+        for (ReachabilityGap gap : attempt.unrepresented()) {
+            assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
+                    assertInstanceOf(ReachabilityGap.Uncomposed.class, gap).why(),
+                    () -> "said as numbers of one location this writes no value for, and not as a"
+                            + " position nothing could build at: " + attempt.unrepresented());
+        }
+    }
+
+    /** The total of what stands at {@code field} in each of the container's elements. */
+    private static NumericTerm aTotalOver(String field) {
+        NumericTerm.TakenOver over = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                RunSource.overTheOccurrencesAt(
+                        TermPath.of("r").then("lines").element().then(field)),
+                Type.INT, rules().inners(), rules().symbols());
+        assertNotNull(over, "a total over the occurrences of a path is a number of the run");
+        return over;
     }
 
     /**
@@ -135,7 +182,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */
-    private static Generator.BoundaryAttempt composing(Axis axis, Place at, OnTheWay.TakenIn taken) {
+    private static Generator.BoundaryAttempt composing(Axis axis, Place at,
+                                                       OnTheWay.TakenIn... taken) {
         return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
                 new Reachability.Reaching(domain().quantities(rules()).region(),

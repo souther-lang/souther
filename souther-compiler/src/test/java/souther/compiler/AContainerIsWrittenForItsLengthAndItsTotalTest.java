@@ -59,11 +59,18 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
             "the values that answer several of their own numbers";
 
     /**
-     * Every class of both numbers is offered a row, and nothing says the group is one this compiler
-     * writes none of.
+     * Every class of both numbers is offered a row, and the row offered at a class of one of them
+     * answers the other.
+     *
+     * <p>One measurement for both halves, because they are two readings of one page and the page
+     * costs a full report to make. What is asserted first is that nothing was left without a row
+     * and that the group is not called one nothing writes a value for; what is asserted after is
+     * that the row put at the class of two or more elements holds that many — read off what the
+     * page says each row fills, since a row put there while holding fewer is a row the author
+     * pastes and finds the guard above the line sending it elsewhere.
      */
     @Test
-    void aContainerIsComposedForBothOfItsNumbers() {
+    void aContainerIsComposedForBothOfItsNumbersAndReadsBackIntoBoth() {
         String offered = block(measured(A_LENGTH_AND_A_TOTAL));
 
         assertFalse(offered.contains(THE_POPULATION),
@@ -73,18 +80,6 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
                 () -> "so no class of either number is left without one: " + offered);
         assertTrue(offered.contains("| ("),
                 () -> "and rows are offered: " + offered);
-    }
-
-    /**
-     * And a row offered at a class of one number is a row that answers the other.
-     *
-     * <p>Read off what the page says each row fills, because the two numbers are of one location: a
-     * row put at the class of the total while holding fewer elements than the length asks for is a
-     * row nothing would catch here, and the author pasting it would meet the guard above the line.
-     */
-    @Test
-    void theRowOfferedAtAClassOfOneNumberAnswersTheOtherAsWell() {
-        String offered = block(measured(A_LENGTH_AND_A_TOTAL));
 
         String row = offered.lines().filter(line -> line.contains("\"ns=2 <= x\"")).findFirst()
                 .orElseThrow(() -> new AssertionError(
