@@ -132,11 +132,15 @@ public sealed interface ReachabilityGap {
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer
-         * both — the length of a string beside the string. Which other number it meets is not part
-         * of it: the row may be writing that location for the item it is composed at, or for a
+         * both — how many a list holds beside what it comes to. Which other number it meets is not
+         * part of it: the row may be writing that location for the item it is composed at, or for a
          * condition on the way that was taken in before this one. Told apart from the one above
          * because only this one is about two demands meeting at a location rather than about what
          * could be built at a position.
+         *
+         * <p>Which pairs those are is the realizer's answer and not a list here. A pair it composes
+         * one value for — the length of a string beside the string — reaches this reader as a
+         * location placed and not as a gap.
          */
         record TwoNumbersAtOneLocation() implements Why {}
     }

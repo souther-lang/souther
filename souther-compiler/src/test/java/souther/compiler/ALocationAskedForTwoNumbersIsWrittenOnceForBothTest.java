@@ -12,7 +12,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A location a rule measures twice is written once, with a value answering both numbers.
@@ -29,8 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * unestablished is the statement that the value answers both numbers at once.
  *
  * <p><b>Its own content among them.</b> What a string is and how long it is are two numbers of one
- * location as much as the parts of a time are, and a row is composed holding both: the value the
- * comparison puts the string at is one of however many have the length the rule leaves.
+ * location as much as the parts of a time are, and a row is composed holding both: the string the
+ * rules leave standing there is written, and how long it is is read off it rather than solved for
+ * beside it.
  *
  * <p><b>And only where a value stands at the point.</b> Whether one does is the model's answer and
  * not this compiler's reach — two rules can leave a location nothing at all — so the last model
@@ -103,10 +103,10 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     /**
      * A location asked for its own value and for a number taken of that value.
      *
-     * <p>The comparison puts {@code b} at a place of the strings and the rule above it puts {@code
-     * b} at a place of its lengths, which is one location measured at two numbers and is not two
-     * locations. Composed for one of them at a time, the row was written at whatever the line's own
-     * edge chose and arrived only where that value happened to meet the rule that was dropped.
+     * <p>The rule above names the string {@code b} is and the line below it is drawn on how long
+     * that string is, which is one location measured at two numbers and is not two locations. The
+     * value the rule names is the candidate and its length is read off it, so a point of the length
+     * is answered where the string the rules leave has that length.
      */
     private static final String A_VALUE_AND_A_NUMBER_TAKEN_OF_IT = """
             module example.string
@@ -114,13 +114,13 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             data Yes = { v: Int }
             data No = { why: Int }
 
-            behavior cmp : (a: String, b: String) -> Yes | No
+            behavior cmp : (b: String) -> Yes | No
                 constructs Yes
                 constructs No
 
-            let cmp (a, b) = {
-                guard String.length(b) /= 1 else No { why = 0 }
-                guard a < b else No { why = 1 }
+            let cmp (b) = {
+                guard b == "xxxx" else No { why = 0 }
+                guard String.length(b) > 3 else No { why = 1 }
                 Yes { v = 1 }
             }
             """;
@@ -215,10 +215,9 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
      * say a row comes of two of them belonging to one location — and the row would be one a person
      * pastes and finds the point still uncovered.
      *
-     * <p>The page says what the composer did as well, which is a separate answer: this one is
-     * written for one number of the location and the rule about the other is a condition it was
-     * composed without. Where a value stands at the point that is what the search goes on to find,
-     * and here there is none.
+     * <p>And the page does not say the model settles it. Nothing here walked every string, so what
+     * is known is that this compiler wrote no value — an author reading it may write the row if the
+     * model has one, and a word about the rules would tell them not to look.
      */
     @Test
     void aPointNoValueStandsAtIsStillLeftOpen() {
@@ -226,9 +225,8 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
         assertFalse(whatNothingCouldShow(WHERE_NO_VALUE_STANDS_AT_THE_POINT).isEmpty(),
                 () -> "no string stands below the least one, so the point is open: " + page);
-        assertTrue(page.contains("a condition on another number taken where this row is already"
-                        + " being written for one"),
-                () -> "and the row was composed for one number of the location: " + page);
+        assertFalse(page.contains("the rules leave no value at"),
+                () -> "and nothing here showed that, so the page does not say it: " + page);
     }
 
     /**

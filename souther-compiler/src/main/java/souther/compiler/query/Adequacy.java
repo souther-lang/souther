@@ -4823,8 +4823,8 @@ public final class Adequacy {
          * reached a class, nothing is owed there; where it did not, a row is. What separates the two
          * projections is that a finding is a gap and needs the rows to have been measured to be one
          * — a behavior nothing wrote a row for has no gaps, which is not the same as having nothing
-         * to write. So a position with no reading behind it is owed a row at every class, which is
-         * what an empty {@code covered} says, and the report's own line about it is said elsewhere.
+         * to write. So a behavior with no rows is owed a row at every class of it, and the report's
+         * own line about it is said elsewhere.
          *
          * <p>A behavior the coverage query holds nothing for arrives as {@link
          * PartitionEvidence#NONE} and is owed nothing. Reading the written rows a second time here
@@ -4838,16 +4838,56 @@ public final class Adequacy {
             // once-apiece; the list is what says what the order is.
             Set<ClassOfAPosition> out = new LinkedHashSet<>();
             for (PartitionEvidence.AxisCoverage axis : evidence.axes()) {
-                Set<String> covered = axis.reached().made()
-                        .map(PartitionEvidence.AxisCoverage.Reached::covered)
-                        .orElseGet(Set::of);
-                for (String cls : axis.classes()) {
-                    if (!covered.contains(cls)) {
-                        out.add(new ClassOfAPosition(axis.at(), cls));
-                    }
+                for (String cls : owedAt(axis)) {
+                    out.add(new ClassOfAPosition(axis.at(), cls));
                 }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * Which classes of one position a row is owed at.
+         *
+         * <p><b>Read over the states rather than through the value.</b> Two of them carry no set of
+         * covered classes and they mean opposite things here: a behavior nobody wrote a row for is
+         * owed one at every class it has, and a position this build never looked at is owed nothing
+         * anybody can act on. Projected to the value and an absent one read as an empty set, the two
+         * are one answer — and the second of them hands an author a specific row for every class of
+         * a behavior whose file may already hold them.
+         *
+         * <p>Which is the reading the measurement's own states are for, and the same one a point of
+         * a line gets ({@link ObligationAssessment#worthSearching}). A state added to
+         * {@link Measurement} arrives here as a compile error rather than as a silent nothing.
+         */
+        private static List<String> owedAt(PartitionEvidence.AxisCoverage axis) {
+            return switch (axis.reached()) {
+                // Read to the end, or as far as it got: either way the classes it did not reach are
+                // classes no row sits in.
+                case Measurement.Complete<PartitionEvidence.AxisCoverage.Reached> it ->
+                        unreached(axis, it.value());
+                case Measurement.Partial<PartitionEvidence.AxisCoverage.Reached> it ->
+                        unreached(axis, it.value());
+                // No row names the behavior, so every class of the position is one nothing sits in.
+                // Any other reason is this build not having asked, and a question nobody put is not
+                // work to hand to an author.
+                case Measurement.NotMeasured<PartitionEvidence.AxisCoverage.Reached> it ->
+                        it.why() == PartitionEvidence.AxisCoverage.NoRows.NO_ROWS
+                                ? axis.classes() : List.of();
+                // Nothing to read the classes against, which a composed row would not settle.
+                case Measurement.FailedToMeasure<PartitionEvidence.AxisCoverage.Reached> _ ->
+                        List.of();
+            };
+        }
+
+        private static List<String> unreached(PartitionEvidence.AxisCoverage axis,
+                                              PartitionEvidence.AxisCoverage.Reached reached) {
+            List<String> out = new ArrayList<>();
+            for (String cls : axis.classes()) {
+                if (!reached.covered().contains(cls)) {
+                    out.add(cls);
+                }
+            }
+            return out;
         }
     }
 

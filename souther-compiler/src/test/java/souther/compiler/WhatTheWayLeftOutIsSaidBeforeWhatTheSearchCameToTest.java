@@ -23,41 +23,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * looking for a row nothing can write — where what happened is that no search of the whole thing
  * was ever made.
  *
- * <p><b>Whichever stage let the condition go.</b> A condition the walk had no words for, one it
- * stated that nothing could place a position of, and one it stated that meets a location the row
- * is already being written for are three different things to do something about, and the row was
- * composed without all three of them alike. Written for one of them, this would be a sentence
- * about the case somebody happened to be looking at.
+ * <p><b>Whichever stage let the condition go.</b> A condition the walk had no words for and one it
+ * stated that nothing could place a position of are two different things to do something about,
+ * and the row was composed without either of them alike. Written for one of them, this would be a
+ * sentence about the case somebody happened to be looking at.
  *
  * <p><b>Coverage and not cause.</b> Nothing here composed against those conditions, so what a
  * search with them in would have found is not something to say. The sentence that keeps the point
  * open stays where it was.
  */
 class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
-
-    /**
-     * A condition above the line measuring a location the comparison below it compares.
-     *
-     * <p>At a length nothing stands below, so that the row composed without the condition does not
-     * meet it by accident. The only string of no characters is the least one there is, and a point
-     * asking for a value under it is one no second value put to it would reach either.
-     */
-    private static final String A_MEASURE_OF_A_COMPARED_POSITION = """
-            module example.shared
-
-            data Yes = { v: Int }
-            data No = { why: Int }
-
-            behavior cmp : (a: String, b: String) -> Yes | No
-                constructs Yes
-                constructs No
-
-            let cmp (a, b) = {
-                guard String.length(b) < 1 else No { why = 0 }
-                guard a < b else No { why = 1 }
-                Yes { v = 1 }
-            }
-            """;
 
     /**
      * A condition above the line over positions nothing composed a value at.
@@ -141,8 +116,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
     @Test
     void whateverLetTheConditionGoIsSaidBeforeTheSearchesWord() {
         int openedOnTheClause = 0;
-        for (String model : List.of(A_MEASURE_OF_A_COMPARED_POSITION,
-                POSITIONS_NOTHING_COMPOSED_A_VALUE_AT, A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR)) {
+        for (String model : List.of(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT,
+                A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR)) {
             List<String> said = whereNothingCouldShowARow(model);
 
             assertFalse(said.isEmpty(), () -> "this model has points nothing composed a row for:\n"
@@ -174,15 +149,12 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
     /**
      * And the stages keep their own words, so a reader is still told which of them it was.
      *
-     * <p>Three models and three sentences. Put first without this, the clause could have been one
+     * <p>A model and a sentence apiece. Put first without this, the clause could have been one
      * wording for every way a condition goes unrepresented, which is the distinction the stages
      * exist to carry.
      */
     @Test
     void whichStageLetItGoIsStillSaid() {
-        assertTrue(only(A_MEASURE_OF_A_COMPARED_POSITION).contains("a condition on another number"
-                        + " taken where this row is already being written for one"),
-                () -> only(A_MEASURE_OF_A_COMPARED_POSITION));
         assertTrue(only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT).contains(
                         "a condition on positions nothing here composed a value at"),
                 () -> only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT));
@@ -199,7 +171,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      */
     @Test
     void theOrderSaysWhatWasSearchedAndNotWhyItFailed() {
-        String said = only(A_MEASURE_OF_A_COMPARED_POSITION);
+        String said = only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT);
 
         assertTrue(said.contains("which does not make it unreachable"),
                 () -> "an empty search is still not a point nothing can be written at: " + said);
