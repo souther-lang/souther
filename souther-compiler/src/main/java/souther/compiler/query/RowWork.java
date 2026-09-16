@@ -9,24 +9,29 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What a generation would compose rows for, for one behavior.
+ * Why a generation of one behavior would be worth making, for a caller that has not made one.
  *
- * <p>The one statement of it. A block is written from a plan and a rule search, and an editor
- * offering to write that block stands beside the declaration before either has run — so the two used
- * to be two lists of reasons, gathered from the same measures by different walks. The offer asked
- * the findings and the lines; the plan took its classes off the partition measure and its rules off
- * a part of the account the offer never read. A behavior whose only work was the classes was offered
- * nothing and had a block written for it.
+ * <p>The criterion, and the one statement of it. A block is written from a plan, a rule search and
+ * a boundary search, and an editor offering to write that block stands beside the declaration
+ * before any of them has run — so what is owed used to be gathered twice, from the same measures by
+ * different walks. The offer asked the findings and the lines; the plan took its classes off the
+ * partition measure and its rules off a part of the account the offer never read. A behavior whose
+ * only work was the classes of its position was offered nothing and had a block written for it.
  *
- * <p>So this is what the generation is asked for, said once. The plan is built from it, the rule
- * search is set from it, and whether an offer stands is whether it holds anything — and a reason
- * added here reaches all three or none.
+ * <p><b>The criterion and not the algorithm.</b> A search is asked for where this holds something,
+ * and what it then composes is its own answer. Four of these are handed to the search as the list
+ * it walks ({@link souther.compiler.partition.GenerationPlan}) and the rules are handed to the one
+ * that settles them; the points are not handed to anything. What is owed at a line is looked for by
+ * a search of its own, which reads the same measurement these were taken from
+ * ({@link ObligationAssessment#worthSearching}) and decides for itself where to look — so this says
+ * a boundary search is worth making and never which rows come back from one. Driven from here, the
+ * offer would have to compose at the moment an editor decides whether to draw a lightbulb, which is
+ * what standing in front of the block is for.
  *
- * <p><b>What the generation composes for, and not everything a row could settle.</b> A row composed
+ * <p><b>What a generation composes for, and not everything a row could settle.</b> A row composed
  * for a class may apply an input case the model states, and the account says so where the rows are
  * read ({@code Adequacy.atCase}); nothing is ever composed for one. Counted here, the offer would
- * stand where the block has nothing, which is the disagreement this exists to remove, pointing the
- * other way.
+ * stand where the block has nothing.
  *
  * @param classes  one class of one position apiece, off the partition measure's own reading
  * @param arms     the arms of the body nothing reaches, each with every place a run through it is
@@ -36,7 +41,9 @@ import java.util.Set;
  * @param meetings the combinations of the body's decisions no row makes
  * @param rules    the ways through the body no row takes
  * @param points   the points of the lines this behavior's rules and its declarations' draw that are
- *                 worth looking for a row at, and that this module answers for
+ *                 worth looking for a row at, and that this module answers for. What is read of
+ *                 them is that there are some: the rows at a line are the boundary search's to
+ *                 compose
  */
 public record RowWork(List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
                       List<ObligationIdentity.OfAFallbackPairCell> pairs,
@@ -58,11 +65,14 @@ public record RowWork(List<ClassOfAPosition> classes, List<Generator.ArmOwed> ar
     }
 
     /**
-     * Whether a generation asked for this would look for anything.
+     * Whether a generation asked about this behavior would look for anything.
      *
-     * <p>Every part, because each of them is a row somebody would be handed. Asked of one of them,
-     * a surface would be deciding which kinds of work are worth telling an author about — which is
-     * the decision this type exists to take away from its readers.
+     * <p>Every part, because each of them is a search worth making. Asked of one of them, a surface
+     * would be deciding which kinds of work are worth telling an author about — which is the
+     * decision this type exists to take away from its readers.
+     *
+     * <p>Empty is what an offer stands on and is not what a block comes to. A search asked for here
+     * may compose nothing, which is news about the search and not about this.
      */
     public boolean isEmpty() {
         return classes.isEmpty() && arms.isEmpty() && pairs.isEmpty() && meetings.isEmpty()

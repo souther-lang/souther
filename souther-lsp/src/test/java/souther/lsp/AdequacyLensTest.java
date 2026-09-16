@@ -798,10 +798,13 @@ class AdequacyLensTest {
                             new CodeAction.Deferred("taken unoffered", uri, moduleOf(text),
                                     behavior),
                             text, graph) != null;
-                    if (offered != written) {
+                    // One direction. A block with rows and no offer leaves an author work the
+                    // command would write and nothing to show them it is there; an offer that
+                    // composes nothing is a search that could not make the row somebody asked for,
+                    // which is news and is what the offer is allowed to say.
+                    if (written && !offered) {
                         disagreed.add(moduleOf(text) + "." + behavior
-                                + (offered ? ": offered, and the block has no rows"
-                                        : ": the block has rows, and nothing is offered"));
+                                + ": the block has rows, and nothing is offered");
                     }
                 }
             });
