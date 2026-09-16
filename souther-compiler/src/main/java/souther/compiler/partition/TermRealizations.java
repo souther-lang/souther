@@ -1222,11 +1222,14 @@ final class TermRealizations {
         RuleReadingSource ruleSource = reading.source();
         TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published());
         // A name this module cannot write leaves no value to write, which is a position nothing
-        // composes one for rather than a value written without the name. Asked of the position
-        // before anything is built for it, since it is the same answer for every value.
-        if (!(WornNames.of(holder.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+        // composes one for rather than a value written without the name. Said with the name that
+        // stopped it, and asked of the position rather than of the count, since it is the same
+        // answer for every value ({@link #namesOf}).
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
             return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
         }
         Witnesses.Sized built = Witnesses.ofSize(holder, many, reading, Set.of());
         if (built.values().isEmpty()) {
@@ -1479,14 +1482,45 @@ final class TermRealizations {
      *  runs. How far they run in the month a date is actually built in is asked of that month. */
     private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
 
-    /** One value, wearing every name the position declares, or the reason there is none. */
+    /**
+     * One value, wearing every name the position declares, or the reason there is none.
+     *
+     * <p><b>Two reasons and not one.</b> A name this module cannot write is the same answer for
+     * every value of the place and is said with the name that stopped it; nothing written down for
+     * this number is about this number. Held as one branch — a value that came back null, whichever
+     * of the two made it so — a walk asks the question about the place once per candidate and
+     * spends a figure of this compiler's on it.
+     */
     private static Realization oneValue(FixtureTemplate bare, Type sourceType, RuleReadingSource ruleSource) {
-        FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(), bare, ruleSource);
-        return standing == null
-                ? new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : Realization.Built.whole(List.of(standing));
+        if (namesOf(sourceType, ruleSource) instanceof WornNames.Unwritable cannot) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, cannot.why());
+        }
+        if (bare == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return Realization.Built.whole(List.of(WornNames.under(
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.published()).wrappers(), bare, ruleSource)));
+    }
+
+    /**
+     * How the names a place wears are written here, or the first of them that is not.
+     *
+     * <p><b>One place asks it of a place, because it is about the place.</b> The same answer holds
+     * for every number and every value of it, so what a reader of this may not do is fold it in
+     * with a value that was not built: a walk reading the two as one branch asks a question about
+     * the place once per candidate and comes back saying a figure of this compiler's stopped it, of
+     * a place where raising anything reaches nothing.
+     *
+     * <p>Nothing here asks it before a walk, because nothing gets this far with a name it cannot
+     * write: what a class of the position is made of is refused first, and said there with the name
+     * that stopped it ({@code PartitionClasses}).
+     */
+    private static WornNames namesOf(Type sourceType, RuleReadingSource ruleSource) {
+        return WornNames.of(TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.published()).wrappers(), ruleSource);
     }
 
     private TermRealizations() {}
