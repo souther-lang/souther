@@ -84,7 +84,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
         assertEquals(List.of(
                         "`domain` does not expose `BusinessClosure`, so nothing here can name it",
                         "`domain` does not expose `Dismissal`, so nothing here can name it"),
-                filled.unresolved().stream().map(u -> u.said().orElseThrow()).toList(),
+                filled.unresolved().stream().map(u -> u.why().said().orElseThrow()).toList(),
                 "each case of the position that has no name here says so");
     }
 }

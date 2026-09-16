@@ -25,9 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * all of it: a part kept back would be read by the equality and by nothing here, and the walk would
  * vouch for a form over the half it could see.
  *
- * <p>A form the walk does <em>not</em> take apart needs none of this. That one is handed to its own
- * equality, so whatever it keeps is read by the same equality on both sides — which is why what a
- * value keeps matters exactly where the walk goes inside and nowhere else.
+ * <p>A form the walk does <em>not</em> take apart is not this question. Its whole comparison is
+ * left to an equality, and whether that answers what this comparison would is said about the form
+ * by somebody rather than followed from the walk having stopped — so what such a form keeps is
+ * decided where that is said, and not here.
  */
 class AFormTheWalkGoesInsideHandsOverEverythingItKeepsTest {
 

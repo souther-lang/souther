@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -208,23 +209,23 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
     /**
      * And a container the comparison has no arm for is not read through, holding a binding or not.
      *
-     * <p>The other side of reading through one. What is read through is what the comparison reads
-     * through — an optional, a list, a set, a map — and a container it has no arm for is one it
-     * hands to its own equality whole, which is the answer a collection reaches as well. Read
-     * through here and nowhere else, a set of them would be refused for what this comparison never
-     * looks at.
+     * <p>The walk stopping at it is not a reason it may be held. That was the reason once: what the
+     * walk does not take apart goes to its own equality, so both sides ask the same thing and a set
+     * reaches the same answer. It holds for whatever the walk stops at, including this — a queue
+     * answers the equality every object is given, which is whether it is the same queue, and two
+     * builds each holding their own would never be one whatever they held.
      */
     @Test
-    void andAContainerWithNoArmIsHeldWholeTheWayThisComparisonHoldsIt() {
+    void andAContainerWithNoArmIsRefusedLikeAnythingElseNobodySpeaksFor() {
         Deque<ValueName.Local> queued = new ArrayDeque<>();
         queued.add(new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0)));
 
         assertFalse(StructuralParts.areHandedOver(queued.getClass()),
-                "the walk stops at it, which is what hands it to its own equality");
-        assertDoesNotThrow(
+                "the walk stops at it, which used to be the whole of why a set could hold one");
+        assertThrows(IllegalStateException.class,
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
                         Set.of(queued)),
-                "so what it holds is read by that equality on both sides, binding or no binding");
+                "and nobody has said what a set makes of one answers what this comparison would");
     }
 
     /**
@@ -249,40 +250,115 @@ class AValueHeldInACollectionIsRefusedUnlessItsOwnEqualityAnswersTheSameTest {
                 "and one holding a binding is refused, though the two are one type");
     }
 
-    /** A form written to hold anything, which is what its part says about what it holds. */
-    private record Holds<T>(T value) {}
+    /** A form written to hold anything, which is what its part says about what it holds. It says a
+     *  collection may hold it, which is a claim about its own equality and none about what
+     *  arrives. */
+    private record Holds<T>(T value) implements ObjectEqualityIsTheCrossingAnswer {}
 
     /**
-     * A value the walk does not take apart is handed to its own equality, so a set of them is held
-     * the way this comparison holds them.
+     * A value the walk does not take apart is refused until somebody says a collection may hold it.
      *
-     * <p>Where the walk stops, {@code ConstEval.equal} answers, and that is the value's own
-     * equality. What such a value keeps inside is read by that equality on both sides — by the
-     * collection and by this comparison alike — so keeping something this would have read its own
-     * way is not a reason to refuse one. An expansion keeps a name the comparison would have held
-     * by what it stands for, and it is still held the same either way, because neither side ever
-     * looks.
+     * <p>This is where the reading used to answer from the walk. A value the walk stops at goes to
+     * its own equality, and that was read as: both sides ask that equality, so a set reaches what
+     * this comparison reaches. The trouble is that it holds for every value the walk stops at,
+     * including one whose equality reads what this comparison cannot see — so the reading could not
+     * come out false for exactly the values whose holding rested on it.
+     *
+     * <p>The one below is that value. It keeps a use of a binding and its equality reads it, which
+     * is the spelling as well as the binding; this comparison holds two uses by what they stand
+     * for and never by the word. Two builds that renamed a local would be two here and one there,
+     * and the old reading called it safe.
      */
     @Test
-    void aValueTheWalkDoesNotTakeApartIsHeldByTheEqualityBothSidesUse() {
+    void aValueTheWalkDoesNotTakeApartIsRefusedUntilSomebodySpeaksForIt() {
         ValueName.Local aBinding =
                 new ValueName.Local("n", new BindingId(new BindingOwner.OfValue("demo", "f"), 0));
 
         assertFalse(StructuralParts.areHandedOver(KeepsABinding.class),
-                "the walk stops at it, which is what hands it to its own equality");
+                "the walk stops at it, which used to be the whole of why a set could hold one");
         assertThrows(IllegalStateException.class,
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
                         Set.of(aBinding)),
                 "the binding it keeps is one this comparison holds by what it stands for");
 
-        assertDoesNotThrow(
+        assertThrows(IllegalStateException.class,
                 () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
                         Set.of(new KeepsABinding(aBinding))),
-                "and keeping one is still held the same either way, because neither side looks");
+                "and keeping one inside is not made safe by the walk stopping outside it");
+    }
 
-        assertFalse(StructuralParts.areHandedOver(BindingOwner.Expansion.class),
-                "an expansion is such a value, which is why keeping a name inside one is no reason"
-                        + " to refuse it");
+    /**
+     * A form whose parts a reader can go inside is refused all the same, its parts being no account
+     * of what its equality reads.
+     *
+     * <p>The two questions that used to be one. What a reader can take a form apart into is what a
+     * comparison of two builds reads of it; what a set makes of the form is what its equality
+     * reads. A form written by hand can be walked into and compare by whatever its writer chose —
+     * the one below reads the word it holds, and could as easily read where the word was written —
+     * so parts that a collection may hold are no reason the form is one.
+     *
+     * <p>Which is what the whole of this is about, one question over. The reading that decides
+     * these used to take the walk's answer for the equality's; taking the parts' answer for the
+     * form's is the same purchase from the same wrong place.
+     */
+    @Test
+    void andAFormAReaderCanGoInsideIsStillRefusedForWhatNobodySaidAboutItsEquality() {
+        KeepsAWord holding = new KeepsAWord("a word");
+
+        assertTrue(StructuralParts.areHandedOver(KeepsAWord.class),
+                "a reader goes inside it, and finds what it hands over");
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(holding.word())),
+                "which is a word, and a set may hold one");
+
+        assertThrows(IllegalStateException.class,
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(holding)),
+                "and the form is refused all the same, because what its equality reads is not what"
+                        + " a reader going inside it finds");
+    }
+
+    /** A form of the grammar written by hand, holding what a collection may hold. Its equality
+     *  reads the word; nothing here says so, which is the point. */
+    private static final class KeepsAWord implements Hir.Shape {
+
+        private final String word;
+
+        private KeepsAWord(String word) {
+            this.word = word;
+        }
+
+        public String word() {
+            return word;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof KeepsAWord kept && word.equals(kept.word);
+        }
+
+        @Override
+        public int hashCode() {
+            return word.hashCode();
+        }
+    }
+
+    /**
+     * The control: a value the walk does not take apart goes through once somebody has said so.
+     *
+     * <p>Without it the refusal would be taking every such value rather than the ones nobody has
+     * spoken for, and the case above would not be about what it says it is about.
+     */
+    @Test
+    void andOneSomebodyHasSpokenForGoesThrough() {
+        assertFalse(StructuralParts.areHandedOver(TypeSymbol.AtModule.class),
+                "the walk stops at it, as it stops at the one refused above");
+        assertDoesNotThrow(
+                () -> DeclarationAgreement.refuseWhatThisComparisonAnswersDifferently(
+                        Set.of(TypeSymbols.declared(new TypeKey("demo", "Amount")))),
+                "and it names the address its equality is over, which is a pair of words this"
+                        + " comparison reads as the words they are");
     }
 
     /** Stands for a value the walk stops at, keeping something it would have read its own way. */

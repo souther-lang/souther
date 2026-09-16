@@ -92,10 +92,10 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         FillResult filled = fill(model, _ -> missed(model));
 
-        assertTrue(filled.unresolved().stream().anyMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().anyMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "the combinations were left untried: " + filled.unresolved());
-        assertTrue(filled.unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
                 "and nothing was said to be impossible: " + filled.unresolved());
     }
@@ -109,7 +109,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
 
-        assertTrue(filled.unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "nothing missed: " + filled.unresolved());
         assertFalse(filled.rows().isEmpty(), "and the rows are offered");

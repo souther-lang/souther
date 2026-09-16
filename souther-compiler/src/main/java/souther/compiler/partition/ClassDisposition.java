@@ -38,13 +38,23 @@ public sealed interface ClassDisposition {
      * a reader may act on, and sometimes because this compiler fell short, which they may not.
      * Said here as though it were always the second, a reason that settles the question would be
      * printed under a sentence denying it.
+     *
+     * <p>And where this compiler did fall short, what it fell short of travels with the word. A
+     * class told only that a search stopped leaves an author with a shortfall of this compiler's
+     * said in words they cannot act on — which is the reading the words were separated to stop,
+     * one route over from where a point says the same thing and names the figure.
      */
-    record Unresolved(Generator.UnresolvedCombination why) implements ClassDisposition {
+    record Unresolved(CameToNothing came) implements ClassDisposition {
 
         public Unresolved {
-            if (why == null) {
+            if (came == null) {
                 throw new IllegalArgumentException("a class nothing came of says what happened");
             }
+        }
+
+        /** The words the search came back with, which is what a report prints. */
+        public Generator.UnresolvedCombination why() {
+            return came.why();
         }
     }
 
@@ -88,12 +98,17 @@ public sealed interface ClassDisposition {
          * says. The runs agree here or the search has come to depend on something this says it does
          * not, which is why {@link #acrossRuns} refuses a disagreement rather than picking.
          */
-        record Unresolved(Generator.UnresolvedCombination why) implements AcrossRuns {
+        record Unresolved(CameToNothing came) implements AcrossRuns {
 
             public Unresolved {
-                if (why == null) {
+                if (came == null) {
                     throw new IllegalArgumentException("a class nothing came of says what happened");
                 }
+            }
+
+            /** The words every run came back with, which is what a report prints. */
+            public Generator.UnresolvedCombination why() {
+                return came.why();
             }
         }
 
@@ -116,6 +131,10 @@ public sealed interface ClassDisposition {
      * the dependencies in with had decided whether a value can be built, and a reader would be
      * shown whichever way the ways were enumerated.
      *
+     * <p>What the runs met of this compiler's is added up instead of held to agreeing. That is how
+     * far each run got and not what any of them says about the model, so a figure one run reached
+     * is a figure somebody can raise however far the next run went.
+     *
      * @param runs what each run did, in the order the runs were made
      */
     static AcrossRuns acrossRuns(List<ClassDisposition> runs) {
@@ -123,23 +142,28 @@ public sealed interface ClassDisposition {
             throw new IllegalArgumentException("no run was asked about this class");
         }
         List<AcrossRuns.Witness> witnesses = new ArrayList<>();
-        ClassDisposition.Unresolved agreed = null;
+        List<CameToNothing> came = new ArrayList<>();
         for (int run = 0; run < runs.size(); run++) {
             switch (runs.get(run)) {
                 case ClassDisposition.Built built ->
                         witnesses.add(new AcrossRuns.Witness(run, built));
-                case ClassDisposition.Unresolved none -> {
-                    if (agreed != null && !agreed.equals(none)) {
-                        throw new IllegalStateException(
-                                "two runs of one plan give a class different reasons for having no"
-                                        + " row: " + agreed.why() + " and " + none.why());
-                    }
-                    agreed = none;
-                }
+                case ClassDisposition.Unresolved none -> came.add(none.came());
             }
         }
-        return witnesses.isEmpty()
-                ? new AcrossRuns.Unresolved(agreed.why())
-                : new AcrossRuns.Built(witnesses);
+        if (!witnesses.isEmpty()) {
+            return new AcrossRuns.Built(witnesses);
+        }
+        // The one law for putting two of these together, and the reason a class holds the runs to
+        // one answer where an arm does not: what a class came to is one answer about the model, so
+        // the words have to agree — and once they do, this is the law joining them
+        // ({@link CameToNothing#joined}), which adds up what each run met rather than making a
+        // second answer of it.
+        List<CameToNothing> agreed = CameToNothing.joined(came);
+        if (agreed.size() > 1) {
+            throw new IllegalStateException(
+                    "two runs of one plan give a class different reasons for having no row: "
+                            + agreed.stream().map(CameToNothing::why).toList());
+        }
+        return new AcrossRuns.Unresolved(agreed.getFirst());
     }
 }

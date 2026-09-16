@@ -53,6 +53,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.ObligationIdentity;
@@ -4173,8 +4174,12 @@ public final class Adequacy {
                 throw new IllegalStateException(
                         "a rule is owed a row, nothing stood in it and nothing says why: " + rule);
             }
-            return new GenerationOutcome.CannotGenerate(new Generator.UnresolvedCombination(
-                    List.of(), rules.whyNotTheRest()));
+            // The word this search came back with, and nothing of this compiler's beside it: what
+            // a rule was owed a row for is answered by the rows already composed, so no search of
+            // this one's ran into a figure.
+            return new GenerationOutcome.CannotGenerate(
+                    CameToNothing.metNothing(new Generator.UnresolvedCombination(
+                            List.of(), rules.whyNotTheRest())));
         }
 
         /**
@@ -4313,7 +4318,7 @@ public final class Adequacy {
                 case souther.compiler.partition.ClassDisposition.Built built ->
                         new GenerationOutcome.Generated(List.of(composed.rowFor(built.rowId())));
                 case souther.compiler.partition.ClassDisposition.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.why());
+                        new GenerationOutcome.CannotGenerate(none.came());
             };
         }
 
@@ -4337,7 +4342,7 @@ public final class Adequacy {
                 case souther.compiler.partition.ClassDisposition.Built built ->
                         new GenerationOutcome.Generated(List.of(composed.rowFor(built.rowId())));
                 case souther.compiler.partition.ClassDisposition.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.why());
+                        new GenerationOutcome.CannotGenerate(none.came());
             };
         }
 
@@ -4362,7 +4367,7 @@ public final class Adequacy {
                 case souther.compiler.partition.ClassDisposition.Built built ->
                         new GenerationOutcome.Generated(List.of(composed.rowFor(built.rowId())));
                 case souther.compiler.partition.ClassDisposition.Unresolved none ->
-                        new GenerationOutcome.CannotGenerate(none.why());
+                        new GenerationOutcome.CannotGenerate(none.came());
             };
         }
 

@@ -269,12 +269,11 @@ class GeneratorTest {
 
         assertEquals(List.of(), filled.rows());
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
                 filled.unresolved().toString());
         assertEquals(List.of(List.of("a=low"), List.of("b=high")),
-                filled.unresolved().stream()
-                        .map(Generator.UnresolvedCombination::classes).toList(),
+                filled.unresolved().stream().map(each -> each.why().classes()).toList(),
                 "the class each row was owed for, and not the pair they would have made");
     }
 
@@ -291,7 +290,7 @@ class GeneratorTest {
 
         assertEquals(List.of(), filled.rows());
         assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.classes().contains("a=opaque")),
+                        .anyMatch(left -> left.why().classes().contains("a=opaque")),
                 filled.unresolved().toString());
     }
 
@@ -314,7 +313,7 @@ class GeneratorTest {
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         List<String> subjects = filled.unresolved().stream()
-                .map(Generator.UnresolvedCombination::subject).distinct().toList();
+                .map(each -> each.why().subject()).distinct().toList();
         assertEquals(List.of("a=opaque"), subjects,
                 "the class with nothing, once — not the three combinations it is in");
         assertEquals(3, filled.rows().size(),
@@ -379,11 +378,12 @@ class GeneratorTest {
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing was composed at the first position");
-        Generator.UnresolvedCombination only = filled.unresolved().getFirst();
-        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, only.reason(),
+        CameToNothing only = filled.unresolved().getFirst();
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                only.why().reason(),
                 "a value this could not compose, not one that cannot exist");
         assertEquals(Optional.of("nothing here writes a value whose value is in this range"),
-                only.said(), "the sentence the class recorded, and not one made up here");
+                only.why().said(), "the sentence the class recorded, and not one made up here");
     }
 
     /**

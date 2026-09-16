@@ -179,7 +179,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         FillResult filled = filled(TWO_QUOTIENTS);
 
         assertEquals(List.of(), filled.rows(), "neither class is answered by a row");
-        assertTrue(filled.unresolved().stream().anyMatch(left -> left.reason()
+        assertTrue(filled.unresolved().stream().anyMatch(left -> left.why().reason()
                         == Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                 filled.unresolved().toString());
     }

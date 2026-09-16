@@ -226,7 +226,7 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");
-        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.why().reason()
                         == souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                 .NO_CERTIFIED_WITNESS),
                 "nothing missed: " + filling.composed().unresolved());
