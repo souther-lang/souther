@@ -85,15 +85,23 @@ public final class Adequacy {
     /**
      * How much of this a build asked to be told.
      *
-     * <p>Off by default, and one dial rather than several. What separates the levels is what they
-     * cost: reading what the rows already established is free, and finding out which arms they went
-     * through means generating a second set of classes and running every row again. A build that did
-     * not ask for the second should not pay for it, and a report that quietly measured anyway would
-     * make every keystroke in an editor generate bytecode nobody reads.
+     * <p>Off by default, and one dial rather than several. What separates the levels is what a
+     * report at each of them needs of the rows, which is what it costs: reading what the rows
+     * already established is free, and finding out which arms they went through means generating a
+     * second set of classes and running every row again. A build that did not ask for the second
+     * should not pay for it, and a report that quietly measured anyway would make every keystroke
+     * in an editor generate bytecode nobody reads.
      *
-     * <p>Which measures a level leaves out is not read off this. A level says what work to do, and
-     * every measure says for itself how much of it was made — so a caller deciding from here what a
-     * measure's silence means is a second answer to a question the measure already answered.
+     * <p><b>What a report needs, and not what the compilation does.</b> A report is one consumer
+     * among several, and what the rows are actually observed with is the compilation's own
+     * ({@link RowObservation}, said through {@link Compilation#observe}) — so a build reporting
+     * nothing about the arms sits perfectly well on a compilation that records them, because
+     * somebody else asked. Each predicate below says what a report at this level requires; nothing
+     * reads them to find out what a run did.
+     *
+     * <p>Which measures a level leaves out is not read off this either. Every measure says for
+     * itself how much of it was made, so a caller deciding from here what a measure's silence means
+     * is a second answer to a question the measure already answered.
      */
     public enum Level {
         /** No measurement is made of the rows. What the model itself says is derived as ever — the
@@ -102,20 +110,23 @@ public final class Adequacy {
          *  not the same as saying nothing. */
         OFF,
         /** What the rows already ran established, and what the rules say without running anything.
-         *  Nothing is instrumented and no row runs a second time. */
+         *  A report here asks for nothing beyond the rows being read. */
         WITNESS,
-        /** That, and what the arms took instrumenting the classes and running every row again to
-         *  find out. */
+        /** That, and what the arms took: a report here asks for the classes to record where each
+         *  row went, which costs a second set of them and every row run again. */
         ALL;
 
         /**
-         * Whether the classes are instrumented and the rows run again to record what they went
-         * through.
+         * Whether a report at this level needs the rows to record where each of them went.
          *
          * <p>Named for the work and not for what a measure comes to. It was {@code measuresArms},
          * which reads as "nothing about the arms is available" — and the arms a body has are read
          * off the checked bodies whatever this says, so that reading is exactly what a caller
          * gating on the name went without (issue #955).
+         *
+         * <p>What the rows were actually recorded with is not this. That is the compilation's
+         * ({@link RowObservation#arms}), and a measure holding a reading of them asks the reading
+         * ({@link RowReading#recordedArms}).
          */
         public boolean runsInstrumentedRows() {
             return this == ALL;
@@ -136,7 +147,8 @@ public final class Adequacy {
          * because it was asked, and it never reads a level to find out how much. A search that
          * decided its own work from a dial is the shape this issue is about: a caller who wanted
          * the values had nowhere to say so, and one who did not still paid for the decision to be
-         * made inside.
+         * made inside. Where a caller says which reading it wants is {@link HowALineIsRead}, and
+         * this becomes one of those at {@link #linesAskedOf} and nowhere else.
          *
          * <p>About measuring, and not about a person asking for rows. What {@code souther examples
          * --generate} composes is asked for by the request rather than by the level, and it builds
@@ -152,13 +164,17 @@ public final class Adequacy {
         }
 
         /**
-         * Whether the rows this compilation already ran are read, and what the rules say derived
-         * from them.
+         * Whether a report at this level needs the rows read, and what the rules say derived from
+         * them.
          *
          * <p>Named for the work, as the one above it is. It was {@code reports}, which invited the
          * reading this issue is about: a caller that took "this level does not report" for "this
          * evidence is not wanted" was deciding what a measure's answer meant from the level again,
          * one dial down (issue #955).
+         *
+         * <p>Whether they are read is not this. Somebody asking for rows needs them read without
+         * wanting a report at all, and what the compilation does about it is
+         * {@link RowObservation#readsRows}.
          */
         public boolean readsRows() {
             return this != OFF;
@@ -299,10 +315,10 @@ public final class Adequacy {
     /**
      * How a measurement of this compilation reads the lines.
      *
-     * <p>The one place a level becomes a reading, as {@link #armsAsked} is the one place it becomes
-     * an observation. Below this nothing asks the level: what a query is answering is which reading
-     * it was put, and a query that read the level to find out would answer one caller's question
-     * with another caller's budget.
+     * <p>The one place a level becomes a reading, as {@link Compilation#measure} is the one place it
+     * becomes a requirement of the run. Below this nothing asks the level: what a query is answering
+     * is which reading it was put, and a query that read the level to find out would answer one
+     * caller's question with another caller's budget.
      *
      * <p>About a measurement and about nothing else. What a caller asking for rows reads the lines
      * as is {@link #OFFERED_ROWS_READ_AS}, which follows from what an offering is.

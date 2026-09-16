@@ -80,6 +80,53 @@ class AdequacyLensTest {
                 | "mid" : (Amount(5)) -> Ok { n = Amount(5) }
             """;
 
+    private static final String MEETINGS = "file:///meetings.sou";
+
+    /**
+     * A behavior owed a row at a line its rules draw, and owed rows at meetings of its own
+     * decisions that no row makes.
+     *
+     * <p>Both, because the two are offered on different terms. What puts the offer on the
+     * declaration is a line owed a row; what the block then holds includes the meetings, and which
+     * meetings the rows made is read off what those rows recorded. So a block written from a
+     * compile that recorded nothing holds the line's row and none of theirs.
+     */
+    private static final String A_LINE_AND_SOME_MEETINGS = """
+            module meetings
+
+            data Total = Int
+                invariant value >= 0 && value <= 10000
+            data Premium
+            data Standard
+            data Membership = Premium | Standard
+            data Express
+            data Regular
+            data Delivery = Express | Regular
+            data Fee = Int
+
+            behavior shippingFee : (total: Total, member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let shippingFee (total, member, delivery) =
+                Fee(baseFee(total, member) + expressFee(delivery))
+
+            let baseFee (total: Total, member: Membership): Int =
+                match member with
+                    | Premium -> 0
+                    | Standard -> if total.value >= 5000 then 0 else 500
+
+            let expressFee (delivery: Delivery): Int =
+                match delivery with
+                    | Express -> 500
+                    | Regular -> 0
+
+            example shippingFee
+                | (Total(0), Premium, Express)     -> Fee(500)
+                | (Total(0), Standard, Regular)    -> Fee(500)
+                | (Total(5000), Premium, Regular)  -> Fee(0)
+                | (Total(5000), Standard, Express) -> Fee(500)
+            """;
+
     private static ModuleGraph graphOf(Map<String, String> documents) {
         return ModuleGraph.of(new LinkedHashMap<>(documents));
     }
@@ -324,6 +371,45 @@ class AdequacyLensTest {
         // the block, because that is what an author is left with.
         assertEquals(List.of(),
                 errorsIn(TRIP.stripTrailing() + "\n" + taken.newText()),
+                "and the document goes on compiling with them in it");
+    }
+
+    /**
+     * Taking the offer composes what the workspace's own report cannot see.
+     *
+     * <p>What a person is offered follows from what they asked for. An editor asks for a report at
+     * whatever its workspace is set to, and a report at this level says nothing about the arms of a
+     * body — so a run made for it records nothing of where its rows went, and which meetings of the
+     * body's decisions they made cannot be read. Taking the offer says what composing rows needs
+     * instead of inheriting that, so the meetings are among the rows written in.
+     *
+     * <p>A model owed a row at a line and at meetings, because the two are what tell this apart. The
+     * line's row is composed whatever the run recorded; a block asserted on that alone would hold
+     * while the offer went back to being answered by what the workspace happened to be reporting.
+     *
+     * <p>At this level and not at the default: an editor measuring nothing is offered no rows at
+     * all, so there is nothing to take and nothing to tell apart.
+     */
+    @Test
+    void takingTheOfferComposesWhatTheWorkspacesOwnReportCannotSee() {
+        Analyzer analyzer = measuring(Adequacy.Level.WITNESS);
+        ModuleGraph graph = graphOf(Map.of(MEETINGS, A_LINE_AND_SOME_MEETINGS));
+        List<CodeAction> actions =
+                analyzer.codeActions(MEETINGS, A_LINE_AND_SOME_MEETINGS, on(12), graph);
+
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                actions.get(0), actions.toString());
+        CodeAction.Edit taken = analyzer.resolve(offered, A_LINE_AND_SOME_MEETINGS, graph);
+
+        assertNotNull(taken, "taking the offer writes rows");
+        // The value the body's own comparison turns on, which no rule of the model draws a line at.
+        // A row standing there is a row composed for a meeting, and nothing else in the block is at
+        // it — the line this behavior is owed a row at is at the end of what the invariant admits.
+        assertTrue(taken.newText().contains("Total(5000)"),
+                "the meetings the rows leave unmade are among what is written in: "
+                        + taken.newText());
+        assertEquals(List.of(),
+                errorsIn(A_LINE_AND_SOME_MEETINGS.stripTrailing() + "\n" + taken.newText()),
                 "and the document goes on compiling with them in it");
     }
 
