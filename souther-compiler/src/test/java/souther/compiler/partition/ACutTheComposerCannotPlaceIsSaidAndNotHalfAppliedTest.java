@@ -40,10 +40,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the answer, because a row composed without it may not arrive and nothing else would say why.
  *
  * <p><b>What a location holds and what is measured there are two things.</b> A row writes one value
- * where a location is, and a location may have more than one number taken at it — the length of a
- * string beside the string. Keyed by the location, the second of them is dropped for the first; and
- * a condition above the line dropped without a word is the composer having been handed the way and
- * quietly not using it.
+ * where a location is, and a location may have more than one number taken at it — how many a list
+ * holds beside what it comes to. Whether one value answers them is the realizer's answer, and both
+ * of its sides are below: keyed by the location alone, the second number is dropped for the first,
+ * and a condition above the line dropped without a word is the composer having been handed the way
+ * and quietly not using it.
  *
  * <p>Held here rather than against a model, because what is under test is the rule and not which
  * models happen to reach it. Naming the terms directly says which case is which, where a search for

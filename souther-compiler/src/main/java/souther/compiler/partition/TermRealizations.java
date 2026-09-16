@@ -170,6 +170,15 @@ final class TermRealizations {
          * total is spread are two of the many however far a search runs — and that is a thing to
          * say about an offer rather than a reason there is none.
          *
+         * <p><b>And everywhere it was going to look is not everywhere there is.</b> What a search
+         * was handed is a set, and a set of one value is two different questions written the same
+         * way: the value a rule singled out, and one value a caller picked out of a wider class to
+         * try. Nothing here can tell them apart, so a walk that ran to the end of what it was
+         * handed may have run to the end of one candidate — and this word is the one that says so
+         * rather than the one that settles the class. What licenses a sentence about the model is
+         * {@link Generator.UnresolvedCombination.Reason#THE_RULES_LEAVE_NOTHING_THERE}, and
+         * nothing reaches it by counting what a walk refused.
+         *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
          * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
          * word read for the shape of the question outlives whatever made it true, so what a reader
@@ -196,9 +205,9 @@ final class TermRealizations {
      * <p><b>A capability of this compiler's and not a proposition about the model.</b> What this
      * answers is which way of writing one value there is for a group of numbers taken like these —
      * so a group it has no way for is a group nobody has written the solving for, and never a group
-     * no value answers. Said as the second, a whole number whose halves and thirds are both asked
-     * for comes back as a value that does not exist, which is a sentence about the model this has
-     * no standing to say.
+     * no value answers. Said as the second, a list whose length and total are both asked for comes
+     * back as a value that does not exist, which is a sentence about the model this has no standing
+     * to say.
      *
      * <p><b>The way and not a yes.</b> What comes back of a group there is a way for is the way
      * itself, so the arms over what the numbers are taken as are here and the composer has none:
@@ -209,16 +218,20 @@ final class TermRealizations {
      * value where a location is, so a location asked for two numbers is answered by composing a
      * value that has both or by nothing at all.
      *
-     * <p>The parts of a time and the parts of a date are the ones a value can be built to have
-     * together. Not because they are independent — the parts of a time are and the parts of a date
-     * are not, since a day of the month runs as far as that month goes and February goes further in
-     * a leap year — but because each of them is a place in what a time and a date are spelled in,
-     * and a value can be built with those places asked for at once. Whatever the parts do to each
-     * other is the calendar's, and {@link #dateOn} is where it is answered.
+     * <p><b>Which way it is follows from how the group's numbers are reached, and the arms below
+     * are that rule rather than a list of shapes.</b> A number that is a place in the spelling of
+     * what stands there is written at: the parts of a time and the parts of a date are places, so
+     * a value can be built with all of them asked for at once — and whatever the parts do to each
+     * other is the calendar's, which {@link #dateOn} answers. A number whose values come of a run
+     * of the place's own is solved for out of the demands, which is what a quotient by a written
+     * number is. A number read off a value the group already asks for is read off the values that
+     * demand admits, which is what any number taken of a place is once the place's own value is
+     * asked for beside it. A group whose numbers are reached none of those ways is the population,
+     * and a way of writing one is work nobody has done.
      *
-     * <p>Anything else is refused here rather than tried and found wanting: how long a string is is
-     * no place in the spelling of a string, and a value answering both a length and an order is not
-     * something below builds.
+     * <p>So a reader wanting to know what this compiler writes reads the arms and not this: a way
+     * added is an arm, and a sentence here listing the ways would be a second answer that nothing
+     * makes agree with them.
      *
      * <p>One target is a number on its own, and the way of writing a value for it is the one every
      * other reader of this file asks for — so a caller need not ask whether a group has more than
@@ -327,8 +340,9 @@ final class TermRealizations {
      *
      * <p>The population and not a word about the model, which is the whole of why this file answers
      * in this vocabulary: the values that answer several of their own numbers are ones this compiler
-     * writes the parts of a moment of and none of the rest, and what reaches the rest is somebody
-     * writing the solving rather than an author writing a row.
+     * writes some of, and what reaches the rest is somebody writing the solving rather than an
+     * author writing a row. Which of them it writes is the arms of {@link #jointRealizationOf} and
+     * is not said again here.
      */
     private static JointRealization nothingSolvesAGroup() {
         return new JointRealization.Missing(
@@ -456,11 +470,13 @@ final class TermRealizations {
          * of the place — the numbers whose half is five are ten and eleven — so each demand is a
          * pair of ends and the demands together are their meet.
          *
-         * <p><b>Nothing in the run is a statement about the model.</b> Where both ends are written
-         * down this walks every whole number between them, so nothing built there is nothing to
-         * build: the halves of a number that is also its own thirds are asked for by models that
-         * have no such value, and an author is owed that answer rather than a repertoire. Where an
-         * end is open the carrier names one place and what comes back says so.
+         * <p><b>What the walk reached is what it says, and no more.</b> Where both ends are written
+         * down this walks every whole number the demands leave between them, so a run with nothing
+         * in it is a run this had the whole of — and it is still not a sentence about the model,
+         * because what the demands were is a class the rules left or one value a caller picked and
+         * nothing here can tell those apart ({@link Realization.None}). Where an end is open the
+         * carrier names one place instead and what comes back says which population that was one
+         * of.
          */
         record SolvingForTheirQuotients(SequencedMap<RealizationTarget, BigDecimal> by)
                 implements JointBuilder {
@@ -524,10 +540,12 @@ final class TermRealizations {
          * every other number of the group is a question asked of each of them.
          *
          * <p><b>Which leaves the quantifier where the value's demand put it.</b> A demand naming
-         * one value hands over that value, and a number it does not read back as is a number no
-         * value of the place has — a statement about the model, and said as one. A demand leaving a
-         * run of values hands over the place a carrier names inside it, and nothing built at that
-         * one says which population it was one of.
+         * one value hands over that value and has nothing else to hand over; a demand leaving a run
+         * of them hands over the place a carrier names inside it, and nothing built at that one
+         * says which population it was one of. Either way what a walk reached is as far as it was
+         * going to go: what a set of one value is a set of is a question nothing here can ask
+         * ({@link Realization.None}), so a value refused by a number taken of it is not read back
+         * as a class the rules leave nothing at.
          */
         record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget itself,
                                             List<RealizationTarget> takenOfIt)
@@ -629,9 +647,9 @@ final class TermRealizations {
      * are, which is what {@link #jointRealizationOf} answers and this does not.
      *
      * <p><b>A group nothing writes a value for is said as the population it is part of.</b> That
-     * nothing here solves a value out of several numbers of one place is a fact about this compiler
-     * and never one about the model: the halves and thirds of a whole number are both asked for by
-     * models that have such a value in them, and a word for a walk that looked everywhere would
+     * nothing here writes a value for several numbers of one place is a fact about this compiler
+     * and never one about the model: the length and the total of a list are both asked for by
+     * models that have such a list in them, and a word for a walk that looked everywhere would
      * tell their author no value exists. Nothing looked. So what comes back is a walk that offered
      * none of a population, which is the answer a reader may conclude nothing from.
      */
