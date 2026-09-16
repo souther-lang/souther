@@ -1247,7 +1247,7 @@ final class TermRealizations {
             if (orders == null || wanted == null
                     || !(orders.read(standing) instanceof NumericTerm.Reading.Number(Place number))
                     || !wanted.holds(number, orders.answered())
-                    || each.getValue() != null && !each.getValue().admits(number)) {
+                    || (each.getValue() != null && !each.getValue().admits(number))) {
                 return false;
             }
         }
