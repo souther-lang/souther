@@ -16,6 +16,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -237,28 +238,56 @@ final class TermRealizations {
         SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
         SequencedMap<RealizationTarget, TakenAs.DatePart> dates = new LinkedHashMap<>();
         SequencedMap<RealizationTarget, BigDecimal> quotients = new LinkedHashMap<>();
+        // What stands at the place, where the group asks for it as well as for numbers taken of
+        // it. One group has at most one of these: what a number of a place is taken of is the
+        // place, so a second value asked for is a second place and is another group's.
+        RealizationTarget itself = null;
+        List<RealizationTarget> takenOfIt = new ArrayList<>();
+        // Every target read before any of them is answered, because what the group is turns on all
+        // of them. Decided as they come, a value asked for beside a length would be the group the
+        // length is in or the group the value is in depending on which of them was read first.
         for (RealizationTarget target : targets) {
-            if (!(target.term() instanceof NumericTerm.TakenOf taken)) {
-                return nothingSolvesAGroup();
-            }
-            switch (taken.takenAs()) {
-                case TakenAs.PartOfTime part -> times.put(target, part.part());
-                case TakenAs.PartOfDate part -> dates.put(target, part.part());
-                // A quotient is not a place in the spelling of anything, and putting two of them
-                // side by side writes no value: which value has both is solved for out of them.
-                // Which is what the arm below does, and it is the account's divisor that says what
-                // there is to solve.
-                case TakenAs.TheTruncatingQuotient by -> {
-                    BigDecimal divisor = by.read(taken.arguments());
-                    if (divisor == null || divisor.signum() == 0) {
-                        return nothingSolvesAGroup();
-                    }
-                    quotients.put(target, divisor);
-                }
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
+            switch (target.term()) {
+                case NumericTerm.ValueOf _ -> itself = target;
+                // A number taken over the values a walk came to is a number of a run, and a value
+                // standing at one place is not a run. So there is nothing here to read it off and
+                // nothing to solve it out of either.
+                case NumericTerm.TakenOver _ -> {
                     return nothingSolvesAGroup();
                 }
+                case NumericTerm.TakenOf taken -> {
+                    takenOfIt.add(target);
+                    switch (taken.takenAs()) {
+                        case TakenAs.PartOfTime part -> times.put(target, part.part());
+                        case TakenAs.PartOfDate part -> dates.put(target, part.part());
+                        // A quotient is not a place in the spelling of anything, and putting two of
+                        // them side by side writes no value: which value has both is solved for out
+                        // of them. Which is what the arm below does, and it is the account's
+                        // divisor that says what there is to solve. A divisor that reads as no
+                        // number is a term this cannot solve for or read back, either way.
+                        case TakenAs.TheTruncatingQuotient by -> {
+                            BigDecimal divisor = by.read(taken.arguments());
+                            if (divisor == null || divisor.signum() == 0) {
+                                return nothingSolvesAGroup();
+                            }
+                            quotients.put(target, divisor);
+                        }
+                        // How much a container holds. Read off a value and solved for out of
+                        // nothing here: what answers a length and a total together is a container
+                        // composed to hold both, which is a value made out of the numbers rather
+                        // than one of them offered and read.
+                        case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> { }
+                    }
+                }
             }
+        }
+        // The place's own value beside numbers taken of it, which is one question about one value.
+        // What may stand there is what the place's own demand admits, and a number taken of one of
+        // those values is what reading that value comes to — so the candidates are that demand's
+        // and the rest of the group is read off each of them.
+        if (itself != null) {
+            return new JointRealization.Supported(
+                    new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(itself, takenOfIt));
         }
         if (!quotients.isEmpty()) {
             // Quotients and nothing else. A quotient of a place beside a part of it is a value that
@@ -267,6 +296,13 @@ final class TermRealizations {
                     ? new JointRealization.Supported(
                             new JointBuilder.SolvingForTheirQuotients(quotients))
                     : nothingSolvesAGroup();
+        }
+        // A value spelled in parts is written at the parts it is spelled in, so a group holding a
+        // number of any other kind is not a value this spells. Which is the group a length and a
+        // total are in: what answers both is a container composed to hold them, and nothing here
+        // composes one.
+        if (times.size() + dates.size() != targets.size()) {
+            return nothingSolvesAGroup();
         }
         // Two asks at one part are two asks for one number and are the same target, so a group
         // holding a part twice is a group somebody built by hand. Not a population this compiler
@@ -475,6 +511,76 @@ final class TermRealizations {
                         numbersInside(lies, observed,
                                 at -> readsBackIntoEveryOne(at, by, demands, observed)),
                         at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+        }
+
+        /**
+         * The value the place is asked to stand at, with the numbers taken of it read off it.
+         *
+         * <p><b>Offered and read back, not solved for.</b> A group asking what stands at a place
+         * and asking for a number taken of what stands there asks one question about one value:
+         * the place's own demand says which values may stand there, and a number taken of one of
+         * them is what reading that value comes to. So what to try is that demand's to say, and
+         * every other number of the group is a question asked of each of them.
+         *
+         * <p><b>Which leaves the quantifier where the value's demand put it.</b> A demand naming
+         * one value hands over that value, and a number it does not read back as is a number no
+         * value of the place has — a statement about the model, and said as one. A demand leaving a
+         * run of values hands over the place a carrier names inside it, and nothing built at that
+         * one says which population it was one of.
+         */
+        record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget itself,
+                                            List<RealizationTarget> takenOfIt)
+                implements JointBuilder {
+
+            public ItsOwnValueAndWhatIsTakenOfIt {
+                if (takenOfIt.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a value offered for the numbers taken of it says which numbers those"
+                                    + " are");
+                }
+                takenOfIt = List.copyOf(takenOfIt);
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading) {
+                TermOrders orders = measuring.ordersOf(itself.term());
+                NumericSet stands = demands.get(itself);
+                if (orders == null || orders.observed() == null || orders.answered() == null
+                        || stands == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                // Where the rules leave each of the taken numbers, which is about the way to the
+                // point rather than about the demand. Asked once for the group rather than of each
+                // candidate, and exhaustive over what a region answers: a region admitting no
+                // assignment leaves its number nowhere, which is a thing the rules say and not a
+                // value of the place failing to read back as one.
+                Map<RealizationTarget, NumericDomain.Bounds> leaves = new LinkedHashMap<>();
+                for (RealizationTarget each : takenOfIt) {
+                    switch (within == null ? null : within.projectionOf(each.term())) {
+                        case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                                leaves.put(each, held);
+                        case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                            return new Realization.None(Generator.UnresolvedCombination.Reason
+                                    .NOTHING_COMPOSES_ONE);
+                        }
+                        // Nothing said about this number on the way, which leaves every value of
+                        // it standing. Written down as an entry all the same, so that what the
+                        // read-back walks is the group and not the part of it a region spoke about.
+                        case null -> leaves.put(each, null);
+                    }
+                }
+                RuleReadingSource ruleSource = reading.source();
+                Carrier answered = orders.answered();
+                return firstThatBuilds(
+                        admitting(onTheOrder(stands, orders, null, within),
+                                at -> everyNumberTakenOfItReadsBack(at, orders.observed(),
+                                        demands, leaves, measuring)),
+                        at -> writtenAt(at, sourceType, answered, ruleSource));
             }
         }
 
@@ -1084,6 +1190,64 @@ final class TermRealizations {
             Place quotient = observed.onTheGrid(new Count(
                     Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())));
             if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The same numbers, less the ones a caller's question about each of them answers no to.
+     *
+     * <p><b>The reason there are no more is the walk's and is kept.</b> Whether the numbers handed
+     * over were all there were is what handed them over, and a caller dropping some of them has
+     * not learnt anything about that. Worked out here from how many are left, a walk that stopped
+     * short and a walk that ran to the end would be told apart by a count of what this refused.
+     *
+     * <p>And every number dropped here was tried, so a figure counting what a walk hands over
+     * still counts the work this does.
+     */
+    private static Tried admitting(Tried tried, Predicate<Place> holds) {
+        List<Place> out = new ArrayList<>();
+        for (Place at : tried.numbers()) {
+            if (holds.test(at)) {
+                out.add(at);
+            }
+        }
+        return new Tried(List.copyOf(out), tried.rest());
+    }
+
+    /**
+     * Whether a value standing at {@code at} reads back as one of the numbers asked for at each of
+     * the numbers taken of it.
+     *
+     * <p><b>Read through the one reader.</b> Which number a taking answers of a value is what
+     * reading that value comes to, so the value is put together and asked — the same walk down it
+     * that a class of a row and a report take. Worked out here instead, this file would hold a
+     * second account of what every operation answers, and the two would agree until one of them
+     * was edited.
+     *
+     * <p>And what the rules leave the number on the way is asked beside the demand. A value whose
+     * number is one the demand admits and the region does not is a value no row reaching the point
+     * could stand at.
+     */
+    private static boolean everyNumberTakenOfItReadsBack(
+            Place at, Carrier decoded,
+            SequencedMap<RealizationTarget, NumericSet> asked,
+            Map<RealizationTarget, NumericDomain.Bounds> leaves,
+            Quantities measuring) {
+        Place on = decoded.onTheGrid(at);
+        if (on == null) {
+            return false;
+        }
+        ObservedValue standing = decoded.valueOf(on);
+        for (Map.Entry<RealizationTarget, NumericDomain.Bounds> each : leaves.entrySet()) {
+            TermOrders orders = measuring.ordersOf(each.getKey().term());
+            NumericSet wanted = asked.get(each.getKey());
+            if (orders == null || wanted == null
+                    || !(orders.read(standing) instanceof NumericTerm.Reading.Number(Place number))
+                    || !wanted.holds(number, orders.answered())
+                    || each.getValue() != null && !each.getValue().admits(number)) {
                 return false;
             }
         }

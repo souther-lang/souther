@@ -66,10 +66,11 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
     /**
      * And a line whose positions never run out, so the figure is what ends the asking.
      *
-     * <p>The condition on the length is one the row is composed without — it is a second number of
-     * a location the comparison already writes — and nothing offered for {@code b} meets it: the
-     * only string of no characters is the least one there is, so no value stands below it. Every
-     * value the point is tried with builds a row, and every row turns back at the guard.
+     * <p>The condition on the length is one the row is composed against — how long {@code b} is is
+     * a number of the location the comparison writes, and a value put there is read for it — and
+     * the two leave nothing: the only string of no characters is the least one there is, so no
+     * value stands below it for the comparison. So each value the point is tried with comes to
+     * nothing and the asking goes on until the figure ends it.
      */
     private static final String EVERY_ROW_TURNS_BACK = """
             module example.spent
@@ -109,9 +110,15 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
             assertFalse(said.isEmpty(), () -> "this model has points nothing established a row at:\n"
                     + model);
             for (String each : said) {
-                assertTrue(each.contains("which does not make it unreachable"),
+                assertFalse(each.contains("the rules leave no value at"),
                         () -> "a point this stopped asking about is not one nothing can stand at: "
                                 + each);
+                // And the line says which of the two it was, since what an author does about them
+                // differs: a row that was composed and not seen arriving is one to look at, and a
+                // figure is a number to raise.
+                assertTrue(each.contains("which does not make it unreachable")
+                                || each.contains("how many values a point is tried with"),
+                        () -> "and what was left is on the line: " + each);
             }
         }
     }
