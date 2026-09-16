@@ -17,13 +17,13 @@ import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmSummary;
-import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.RowObservation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.ObligationAssessment;
+import souther.compiler.query.RowWork;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
@@ -875,11 +875,11 @@ public final class Analyzer {
             if (!isWrittenIn(behavior, uri, graph) || !declaredBy(lines, behavior, declaredAt)) {
                 continue;
             }
-            // Whether the model owes this behavior anything a row could answer. Asked of the
-            // findings, which the report beside this has already worked out, and not of the
-            // generator: composing a value costs a decoder run for each point it settles, and an
-            // editor asks what is available here every time the cursor moves.
-            if (!anythingARowCouldAnswer(compilation, module, behavior.name())) {
+            // Whether a generation asked about this behavior would look for anything. Asked of
+            // what it would be asked for and not of the generation itself: composing a value costs
+            // a decoder run for each point it settles, and an editor asks what is available here
+            // every time the cursor moves.
+            if (!thereAreRowsToWrite(compilation, module, behavior.name())) {
                 continue;
             }
             CodeAction.Deferred offer = new CodeAction.Deferred(
@@ -925,80 +925,30 @@ public final class Analyzer {
         return lines.offsetOf(pos) == declaredAt;
     }
 
-    /** Whether anything this behavior is short of is a thing writing a row could answer. */
-    private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
-                                                   String behavior) {
-        List<souther.compiler.query.Adequacy.Finding> findings =
-                compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
-        if (findings == null) {
-            return false;
-        }
-        // This behavior's own, and the lines its type declarations are owed that a row written here
-        // would settle. A line an `invariant` drew is not this behavior's finding — what `UserId`
-        // says is the same wherever the type is carried — and a row written for a behavior carrying
-        // the type is what discharges it, so an offer standing beside that behavior is an offer to
-        // do that work (issue #1062). Read as the behavior's own alone, the offer went quiet as
-        // soon as the only work left was a line a declaration is owed.
-        //
-        // Asked of the finding and never of what a search has composed. Whether a value has been
-        // built turns on how much the build was measuring, and an offer that read it would appear
-        // at one level and not at another for work that is there either way.
-        for (souther.compiler.query.Adequacy.Finding each : findings) {
-            if (souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) != null) {
-                continue;
-            }
-            // A finding at a point of a line is not by itself work. A line is owed one row however
-            // many positions read it, so a coordinate of a line another position answered is a
-            // finding standing over nothing to write — and counted here, an offer is made that
-            // resolves to no rows. What is owed is the point's own answer and is asked below.
-            if (each.about() instanceof souther.compiler.query.About.APointOfABorder
-                    || each.about() instanceof souther.compiler.query.About
-                            .APointOfADeclaredBorder) {
-                continue;
-            }
-            if (each.subject().isBehavior(behavior)) {
-                return true;
-            }
-        }
-        return anyLineIsOwedARow(compilation, module, behavior);
-    }
-
     /**
-     * Whether a line this behavior reads is owed a row nothing has written.
+     * Whether the generation behind this offer would look for anything.
      *
-     * <p>Asked of what is owed rather than of the findings that stand at it. A report counts a line
-     * once per coordinate it was read at and a row is owed once for the line, so the two answer
-     * different questions — and the question an offer to write rows is putting is the second one.
+     * <p>Asked of the criterion a generation is made on ({@link Adequacy.RowsOwed}) and of nothing
+     * else. The block behind this offer is composed against that same criterion, so an offer made
+     * on it stands beside every declaration a person taking it has rows to be handed. Answered here
+     * from the findings and the lines instead, the two were separate readings of one account: this
+     * one read half of it, and a behavior whose only work was the classes of its position was
+     * offered nothing and had a block written for it.
      *
-     * <p>This behavior's lines and its declarations' alike. A line an {@code invariant} drew is not
-     * this behavior's finding — what {@code UserId} says is the same wherever the type is carried —
-     * and a row written for a behavior carrying the type is what discharges it, so an offer standing
-     * beside that behavior is an offer to do that work.
+     * <p>One direction, and it is the one worth having. A search asked for here may compose
+     * nothing — which is news about the search, and what {@link #resolve} answers with none — so
+     * what this promises is that nothing worth writing goes unoffered, not that everything offered
+     * can be written.
      *
-     * <p>And only the lines this module answers for
-     * ({@link souther.compiler.query.BorderObligationPointAssessment#keptBy}). A module that carries
-     * an imported type reads its lines and owes rows at none of them: the row belongs where the
-     * declaration is. Offered here, the offer is made and the search that follows it leaves the
-     * point out, so there is nothing to hand back.
-     *
-     * <p>What is asked is whether the point is worth looking for a row at, which is the measurement
-     * saying no row stands there. Whether one can be composed is a further question and costs a
-     * decoder run to answer, so it is left to whoever takes the offer: an offer made here and
-     * resolved to nothing is a search that could not compose the row somebody asked for, which is
-     * news, and one never made would have been the same search decided in advance.
+     * <p>Asked of what is owed and never of what a search has composed. Whether a value has been
+     * built turns on how much the build was measuring, and an offer that read it would appear at
+     * one level and not at another for work that is there either way. What it costs to look for
+     * one is paid by whoever takes the offer.
      */
-    private static boolean anyLineIsOwedARow(Compilation compilation, String module,
-                                             String behavior) {
-        List<souther.compiler.query.BorderObligationPointAssessment> owed = compilation.db()
-                .ask(new souther.compiler.query.Adequacy.Obligations(module,
-                        new souther.compiler.query.GenerationScope.Behavior(behavior),
-                        HowALineIsRead.THE_RULES_ALONE)).value();
-        if (owed == null) {
-            return false;
-        }
-        return owed.stream().anyMatch(point -> point.carriedBy(behavior)
-                && point.keptBy(module)
-                && point.owed().worthSearching());
+    private static boolean thereAreRowsToWrite(Compilation compilation, String module,
+                                               String behavior) {
+        RowWork work = compilation.db().ask(new Adequacy.RowsOwed(module, behavior)).value();
+        return work != null && !work.isEmpty();
     }
 
     /**
