@@ -82,7 +82,7 @@ public final class DeclarationAgreement {
      */
     public static Agreement of(String module, String behavior, PublishedClasses ours,
                                PublishedClasses theirs, Stdlib stdlib) {
-        return of(module, behavior, ours, theirs, stdlib, NOBODY_WATCHING);
+        return of(module, behavior, ours, theirs, stdlib, NobodyIsWatching.INSTANCE);
     }
 
     /**
@@ -991,8 +991,15 @@ public final class DeclarationAgreement {
      */
     private record Walk(Bound bound, Consumer<Class<?>> handedToADelegatedEquality) {}
 
-    /** A walk nobody is watching, which is every one but a reading of what the walk decided. */
-    private static final Consumer<Class<?>> NOBODY_WATCHING = _ -> { };
+    /** What a walk nobody is watching is told, which is every walk but a reading of what one
+     *  decided. Told and dropped: what a crossing answers does not depend on anyone hearing it. */
+    private enum NobodyIsWatching implements Consumer<Class<?>> {
+        INSTANCE;
+
+        @Override
+        public void accept(Class<?> form) {
+        }
+    }
 
     /**
      * The bindings of one declaration, held to each other across the two builds.
