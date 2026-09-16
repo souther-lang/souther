@@ -1,6 +1,8 @@
 package souther.compiler.types;
 
 import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -46,7 +48,8 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
      */
     sealed interface Open extends Leaf permits Var, MetaVar {}
 
-    enum Prim implements Leaf {
+    enum Prim implements Leaf, DelegatedEqualityIsTheCrossingAnswer,
+            ObjectEqualityIsTheCrossingAnswer {
         INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type

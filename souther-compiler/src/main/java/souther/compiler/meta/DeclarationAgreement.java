@@ -8,6 +8,9 @@ import souther.compiler.ast.RowPosition;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.ApplicationOrigin;
@@ -20,7 +23,6 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Holds the declarations an answer reads a row's values by against the declarations the row is
@@ -79,7 +82,25 @@ public final class DeclarationAgreement {
      */
     public static Agreement of(String module, String behavior, PublishedClasses ours,
                                PublishedClasses theirs, Stdlib stdlib) {
-        return new Crossing(PublishedUniverse.of(ours, stdlib), PublishedUniverse.of(theirs, stdlib))
+        return of(module, behavior, ours, theirs, stdlib, NOBODY_WATCHING);
+    }
+
+    /**
+     * The same crossing, with the forms whose comparison it left to an equality told to
+     * {@code watching}.
+     *
+     * <p>For a reading of what this walk does, and open to the package for that. Which forms those
+     * are is a question about this comparison and is answered by running it: worked out instead
+     * from the rule that chooses the mode, the answer would be that rule restated, which is the
+     * reading that cannot come out false.
+     *
+     * <p>Told and not asked, so the comparison answers what it would have answered. Nothing here
+     * reads what the watcher does with it.
+     */
+    static Agreement of(String module, String behavior, PublishedClasses ours,
+                        PublishedClasses theirs, Stdlib stdlib, Consumer<Class<?>> watching) {
+        return new Crossing(PublishedUniverse.of(ours, stdlib), PublishedUniverse.of(theirs, stdlib),
+                watching)
                 .heldFrom(new ValueName.Behavior(module, behavior));
     }
 
@@ -106,9 +127,13 @@ public final class DeclarationAgreement {
         private final Deque<Reached> toCompare = new ArrayDeque<>();
         private final Set<Reached> reached = new LinkedHashSet<>();
 
-        private Crossing(PublishedUniverse mine, PublishedUniverse yours) {
+        private final Consumer<Class<?>> watching;
+
+        private Crossing(PublishedUniverse mine, PublishedUniverse yours,
+                         Consumer<Class<?>> watching) {
             this.mine = mine;
             this.yours = yours;
+            this.watching = watching;
         }
 
         /** What the two builds say about everything {@code behavior}'s crossing reaches. */
@@ -146,7 +171,8 @@ public final class DeclarationAgreement {
             List<Object> theirs = what.partsIn(there.module());
             // A name only one side has is a difference in itself: a type that was removed, a helper
             // one build's declaration is read through and the other's is not.
-            if (ours == null || theirs == null || !sameShape(ours, theirs, new Bound())) {
+            if (ours == null || theirs == null
+                    || !sameShape(ours, theirs, new Walk(new Bound(), watching))) {
                 return new Agreement.Disagree(what.module(), what.name());
             }
             // Where a behavior's body comes from is not in a declaration and does not survive as
@@ -412,28 +438,17 @@ public final class DeclarationAgreement {
      */
     private static List<Object> crossingParts(Hir.Def def) {
         return switch (def) {
-            // Everything a product is: which declaration it is, whether it is a newtype (which is
-            // what it is represented as), what it includes and holds, and what it admits. How a
-            // value of it crosses is read off exactly those, so comparing the derived
-            // representation as well would be comparing the same fact twice — and this reads
-            // declarations as resolution left them, where nothing has derived one.
-            case Hir.Data d -> List.of(d.declares(), d.newtype(), d.includes(), named(d.fields()),
-                    d.invariants());
-            // Which cases a sum has. How one is told from another is derived from that and from
-            // what each case is (`check.Boundary`), and both are reached: a case is followed to its
-            // own declaration, where a unit and a product are compared as the different forms they
-            // are. Held here as well, it would be the same fact compared twice.
-            case Hir.SumData s -> List.of(s.declares(), s.cases());
-            // A unit is the declaration it is, which is what it was looked up by.
-            case Hir.UnitData u -> List.of(u.declares());
+            case Hir.Data d -> CrossingProjection.read(CrossingProjection.OF_A_PRODUCT, d);
+            case Hir.SumData s -> CrossingProjection.read(CrossingProjection.OF_A_SUM, s);
+            case Hir.UnitData u -> CrossingProjection.read(CrossingProjection.OF_A_UNIT, u);
         };
     }
 
     /** What a value crossing into a behavior depends on: what it takes and what it answers with. */
     private static List<Object> crossingParts(Hir.BehaviorDef behavior) {
         return switch (behavior) {
-            case Hir.SpecBehavior b -> List.of(shaped(b.params()), b.ret(), b.constructs(),
-                    b.dependsOn(), b.ensures());
+            case Hir.SpecBehavior b ->
+                    CrossingProjection.read(CrossingProjection.OF_A_DECLARED_BEHAVIOR, b);
             // A composition does not arrive here. What a module publishes for one is the signature
             // its stages compute (`ModuleMetadata.signatureOf`), so what comes back from a jar is a
             // declared behavior like any other, and its stages are the module's own business. Said
@@ -445,47 +460,9 @@ public final class DeclarationAgreement {
         };
     }
 
-    /**
-     * A published helper, whole.
-     *
-     * <p>These are carried because a declaration cannot be read without them — an invariant calls
-     * them, a published value is substituted where it is named — so a helper that computes something
-     * else makes the declaration carrying it admit something else. There is no part of one that a
-     * crossing does not depend on.
-     */
+    /** What a value crossing into a published helper depends on. */
     private static List<Object> crossingParts(Hir.FnDef fn) {
-        return List.of(fn.params(), fn.declaredReturn() == null ? "" : fn.declaredReturn(),
-                fn.body(), fn.modifiers());
-    }
-
-    /**
-     * A data's fields, each as what it is called and what it holds.
-     *
-     * <p>A field's name is not a name of something else — it is what a decoder reads a value under,
-     * so it is part of what the declaration says. Every other name in a declaration reaches something
-     * and is compared as what it reaches; this one is compared as the word it is, which is why it is
-     * lifted out here rather than left to the walk.
-     */
-    private static List<Object> named(List<Hir.Field> fields) {
-        List<Object> shaped = new ArrayList<>();
-        for (Hir.Field field : fields) {
-            shaped.add(List.of(field.name(), field.type()));
-        }
-        return shaped;
-    }
-
-    /**
-     * A behavior's parameters, as the types it takes in the order it takes them.
-     *
-     * <p>What a parameter is called is not part of what crosses: arguments are handed over by
-     * position. A signature whose parameters are renamed takes what it took.
-     */
-    private static List<Object> shaped(List<Hir.Param> params) {
-        List<Object> types = new ArrayList<>();
-        for (Hir.Param param : params) {
-            types.add(param.type());
-        }
-        return types;
+        return CrossingProjection.read(CrossingProjection.OF_A_HELPER, fn);
     }
 
     /**
@@ -495,7 +472,7 @@ public final class DeclarationAgreement {
      * is whether the two sides hold the same parts; the only thing decided here is which parts a
      * crossing cannot see, and those are named in {@link #ERASED}.
      */
-    private static boolean sameShape(Object ours, Object theirs, Bound bound) {
+    private static boolean sameShape(Object ours, Object theirs, Walk walk) {
         if (ours == null || theirs == null) {
             return ours == theirs;
         }
@@ -513,42 +490,42 @@ public final class DeclarationAgreement {
         // both where a binding is introduced and where one is named, since a use carries the name it
         // was written with beside the identity that says which binding it is.
         if (ours instanceof BindingId ourBinding && theirs instanceof BindingId theirBinding) {
-            return bound.bind(ourBinding, theirBinding);
+            return walk.bound().bind(ourBinding, theirBinding);
         }
         if (ours instanceof ValueName.Local ourUse && theirs instanceof ValueName.Local theirUse) {
-            return bound.bind(ourUse.id(), theirUse.id());
+            return walk.bound().bind(ourUse.id(), theirUse.id());
         }
         // Where the front end put the answer beside the spelling, the answer is what is compared.
         // These are the forms that carry both, and each is compared by what it was settled to be:
         // the spelling beside it is how the author reached it, which two builds may write
         // differently and mean the same.
         if (ours instanceof Hir.Var.Denoting ourUse && theirs instanceof Hir.Var.Denoting theirUse) {
-            return sameShape(ourUse.denotes(), theirUse.denotes(), bound);
+            return sameShape(ourUse.denotes(), theirUse.denotes(), walk);
         }
         if (ours instanceof Hir.Name.Denoting ourType
                 && theirs instanceof Hir.Name.Denoting theirType) {
-            return sameShape(ourType.type(), theirType.type(), bound);
+            return sameShape(ourType.type(), theirType.type(), walk);
         }
         if (ours instanceof Hir.Binder ourBinding && theirs instanceof Hir.Binder theirBinding) {
-            return sameShape(ourBinding.binding(), theirBinding.binding(), bound);
+            return sameShape(ourBinding.binding(), theirBinding.binding(), walk);
         }
         if (ours instanceof Hir.TypeRef ourRef && theirs instanceof Hir.TypeRef theirRef) {
-            return sameShape(ourRef.type(), theirRef.type(), bound)
-                    && sameShape(ourRef.arg(), theirRef.arg(), bound)
-                    && sameShape(ourRef.tupleElems(), theirRef.tupleElems(), bound);
+            return sameShape(ourRef.type(), theirRef.type(), walk)
+                    && sameShape(ourRef.arg(), theirRef.arg(), walk)
+                    && sameShape(ourRef.tupleElems(), theirRef.tupleElems(), walk);
         }
         if (ours instanceof ValueName.OfType ourType && theirs instanceof ValueName.OfType theirType) {
-            return sameShape(ourType.type(), theirType.type(), bound);
+            return sameShape(ourType.type(), theirType.type(), walk);
         }
         if (ours instanceof Optional<?> mine && theirs instanceof Optional<?> yours) {
-            return sameShape(mine.orElse(null), yours.orElse(null), bound);
+            return sameShape(mine.orElse(null), yours.orElse(null), walk);
         }
         if (ours instanceof List<?> mine && theirs instanceof List<?> yours) {
             if (mine.size() != yours.size()) {
                 return false;
             }
             for (int i = 0; i < mine.size(); i++) {
-                if (!sameShape(mine.get(i), yours.get(i), bound)) {
+                if (!sameShape(mine.get(i), yours.get(i), walk)) {
                     return false;
                 }
             }
@@ -572,7 +549,7 @@ public final class DeclarationAgreement {
             refuseWhatThisComparisonAnswersDifferently(yours.keySet());
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
-                            .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()), bound));
+                            .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()), walk));
         }
         if (ours.getClass() != theirs.getClass()) {
             return false;
@@ -582,10 +559,15 @@ public final class DeclarationAgreement {
             // `1.0m` and `1.00m` are one number wherever else two of them meet, and a comparison
             // deciding otherwise here would report a stale build over a difference the model does
             // not have.
+            //
+            // Said after the decision and never before it. What is watching is told what this walk
+            // handed over, this being the one place a form's whole comparison is left to an
+            // equality; asked first, it would be a second author of which forms go that way.
+            walk.handedToADelegatedEquality().accept(ours.getClass());
             return souther.compiler.check.ConstEval.equal(ours, theirs);
         }
         for (StructuralParts.Part part : StructuralParts.of(ours.getClass())) {
-            if (!sameShape(part.of(ours), part.of(theirs), bound)) {
+            if (!sameShape(part.of(ours), part.of(theirs), walk)) {
                 return false;
             }
         }
@@ -599,7 +581,7 @@ public final class DeclarationAgreement {
      * <p>A collection compares what it holds by that thing's own equality. Where the two agree
      * there is nothing to say; where they part, the collection has settled a question this class
      * was written to settle, and settled it by a rule nobody here chose. So what is refused is the
-     * parting and not a kind of value — {@link #comparedTheSameByItsOwnEquality} is the whole of
+     * parting and not a kind of value — {@link #objectEqualityAnswersTheSame} is the whole of
      * what is asked.
      *
      * <p>Open to the package so what it refuses can be asked of it. Nothing in either build puts
@@ -609,7 +591,7 @@ public final class DeclarationAgreement {
      */
     static void refuseWhatThisComparisonAnswersDifferently(Set<?> held) {
         for (Object one : held) {
-            if (!comparedTheSameByItsOwnEquality(one)) {
+            if (!objectEqualityAnswersTheSame(one)) {
                 throw new IllegalStateException(one.getClass().getName()
                         + " is held in a set or used as a map key, and a collection compares what it"
                         + " holds by its own equality — which answers differently from this"
@@ -620,22 +602,35 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * Whether this comparison answers about {@code value} what that value's own equality does.
+     * Whether this comparison answers about {@code value} what the equality a collection asks of
+     * any object does.
      *
-     * <p>A reading of {@link #sameShape} and not a second account of it. Every arm there is one of
-     * these, in the order that one takes them: an erased part is passed over here and read by an
-     * equality; a binding is held by what it stands for across the two builds; a form carrying an
-     * answer beside a spelling is read by the answer; a container is read through, so it answers
-     * whatever what it holds answers; anything the walk does not take apart is handed to
-     * {@code ConstEval.equal}, which <em>is</em> that value's own equality but for a written number.
-     * A walk that takes a value apart answers whatever its parts answer.
+     * <p>Two things, in this order: what this comparison does about a value, and what somebody has
+     * said about what a collection does with it. The first is read off {@link #sameShape} and is
+     * every way this answers something an equality would not — a part it passes over, a binding it
+     * holds by what it stands for, a form it reads by the answer settled beside the spelling, a
+     * container it reads through. The second is the account, and there is no third: a value nobody
+     * has spoken for is refused.
+     *
+     * <p><b>What the walk does with a form is no answer here.</b> It was, and that was the defect:
+     * a form the walk does not take apart goes to an equality, so both sides ask an equality and a
+     * collection reaches what this reaches. It holds for every form the walk stops at, the one
+     * whose equality reads what this comparison cannot see included — so this could not come out
+     * false for exactly the forms whose holding rested on it. What a reader can take a form apart
+     * into is no answer either, for the same reason one step in: those are the parts this
+     * comparison reads, and what a collection reads is the equality, which a form written by hand
+     * may have written to read anything at all.
+     *
+     * <p><b>Not the equality the walk hands two written values to.</b> That one is the language's
+     * answer about them, and a decimal written two ways is one value there and two objects here.
+     * What is asked here is about a collection, and a form speaks to the two separately.
      *
      * <p>Asked of a value and not of a type, because that is what the arms dispatch on and what a
      * collection holds. A container says nothing about what it will hold, and a part declared as
      * something a reader here cannot name says nothing at all; asked of the value, there is no such
      * gap to answer across — what is in hand is what this comparison will meet.
      */
-    static boolean comparedTheSameByItsOwnEquality(Object value) {
+    static boolean objectEqualityAnswersTheSame(Object value) {
         return comparedTheSame(value, Collections.newSetFromMap(new IdentityHashMap<>()));
     }
 
@@ -647,7 +642,6 @@ public final class DeclarationAgreement {
             return true;   // already being answered above, and a cycle reaches nothing new
         }
         if (erases(value.getClass()) || value instanceof BindingId
-                || value instanceof BigDecimal
                 || readByTheAnswerBesideItsSpelling(value.getClass())) {
             return false;
         }
@@ -679,17 +673,36 @@ public final class DeclarationAgreement {
             }
             return true;
         }
-        if (!StructuralParts.areHandedOver(value.getClass())) {
-            // What the walk does not take apart it hands to its own equality, which is the answer
-            // a collection would have reached by itself.
+        // A record that says a collection may hold it is read as its components, a record being its
+        // components and nothing else. Said and not taken from being a record: one can write an
+        // equality out and read whatever its writer chose, and the components would then be
+        // answering for something the record does not do. Which of the two a record is cannot be
+        // told from the class, so what is asked of it here is the saying, and that the ones who say
+        // it have the equality a record is given is held over the compiled classes
+        // (`ARecordACrossingReachesKeepsTheEqualityARecordIsGivenTest`) — over the ones that say
+        // it, which is what arrives here.
+        if (value.getClass().isRecord() && value instanceof ObjectEqualityIsTheCrossingAnswer) {
+            for (StructuralParts.Part part : StructuralParts.of(value.getClass())) {
+                if (!comparedTheSame(part.of(value), asking)) {
+                    return false;
+                }
+            }
             return true;
         }
-        for (StructuralParts.Part part : StructuralParts.of(value.getClass())) {
-            if (!comparedTheSame(part.of(value), asking)) {
-                return false;
-            }
+        // What it names, walked by the rules the rest of this uses. The claim is that its equality
+        // is the equality of that, so what is asked of it is what would be asked of what it named.
+        if (value instanceof ObjectEqualityIsRepresentedByWhatItStandsFor named) {
+            return comparedTheSame(named.standsFor(), asking);
         }
-        return true;
+        if (value instanceof ObjectEqualityIsTheCrossingAnswer
+                || OBJECT_EQUALITY_AGREES_WITH_CROSSING.contains(value.getClass())) {
+            return true;
+        }
+        // Nobody has said so. What the walk does with a form is no answer here: read that way, a
+        // form is safe to hold because the walk stopped at it, which is true of the form whose
+        // equality reads what this comparison cannot see — and the reading could not come out
+        // false for the forms whose holding rests on it.
+        return false;
     }
 
     /**
@@ -903,6 +916,83 @@ public final class DeclarationAgreement {
     static boolean isARecordOfTheBuilding(Class<?> type) {
         return RecordOfTheBuilding.class.isAssignableFrom(type);
     }
+
+    /**
+     * The forms this comparison itself says may be left to the equality it hands them to.
+     *
+     * <p>The other half of that account. A form written here says it for itself
+     * ({@link DelegatedEqualityIsTheCrossingAnswer}), which is where such a claim belongs — beside
+     * what it is a claim about, so that a part added to the form meets it. These are not written
+     * here and cannot say anything, so what is claimed about them is claimed by the comparison that
+     * hands them over.
+     *
+     * <p>One row each and no rule they are chosen by. "A type the platform declares" is a
+     * description of these five and not a reason any of them is right: a platform type with parts
+     * whose equality read fewer of them would pass a rule like that, and what makes each of these
+     * right is written beside it.
+     *
+     * <ul>
+     *   <li>{@code String} — a word is what it spells, and there is nothing inside one to read.
+     *   <li>{@code Boolean}, {@code Integer}, {@code Long} — a part written as a primitive, boxed
+     *       on its way here. Two of them are one value exactly when the primitive was.
+     *   <li>{@code BigDecimal} — what it is handed to is the language's answer about two written
+     *       numbers, which is what a model means by one: {@code 1.0m} and {@code 1.00m} are one
+     *       value wherever else they meet, and a comparison saying otherwise would report a stale
+     *       build over a difference no model has. That is the one of these whose own
+     *       {@code equals} answers something else, and it is the delegated equality and not that
+     *       one that is claimed about.
+     * </ul>
+     */
+    private static final Set<Class<?>> THIS_COMPARISON_SAYS_SO = Set.of(
+            String.class, Boolean.class, Integer.class, Long.class, BigDecimal.class);
+
+    /**
+     * The forms this comparison says a collection may hold, of those that cannot say it themselves.
+     *
+     * <p>The same shape of account as the one above and a different claim, so a different list. A
+     * set compares what it holds by the equality the platform asks of any object, and the list
+     * above is about the equality the walk hands two written values to — which is the language's
+     * answer about them, and the two part on exactly one of these.
+     *
+     * <p>{@code BigDecimal} is that one and is not here. Two written numbers of one amount are one
+     * value to what the walk hands them to and two objects to a set, so a set of them holds apart
+     * what a crossing holds together.
+     *
+     * <p><b>What is claimed is about the equality and no more.</b> A hashed set finds what it holds
+     * by the number a value answers before it compares anything, so holding one is also a claim
+     * that the number and the equality agree — which these four keep because the platform's own
+     * values keep it, and which is not a thing this list is the place to decide about for anything
+     * else.
+     */
+    private static final Set<Class<?>> OBJECT_EQUALITY_AGREES_WITH_CROSSING = Set.of(
+            String.class, Boolean.class, Integer.class, Long.class);
+
+    /** The forms this comparison speaks for. Open to the package so a sweep over what is handed
+     *  over can ask, and can ask what is in it rather than only about one form at a time. */
+    static Set<Class<?>> saidByThisComparison() {
+        return THIS_COMPARISON_SAYS_SO;
+    }
+
+    /**
+     * What one comparison of two declarations carries as it goes.
+     *
+     * <p>The bindings held to each other so far, and whatever is watching what the walk decided.
+     * Both belong to one comparison and to no other — two crossings compared at once are two sets
+     * of bindings and two watchers — so they are carried rather than kept anywhere a second walk
+     * could reach them.
+     *
+     * <p>What is watching is told and never asked. It hears which forms this walk left to an
+     * equality, after the walk decided to; a watcher consulted about whether to would be a
+     * second author of a decision this class makes, which is the shape the reading of that decision
+     * is trying to get out of.
+     *
+     * @param bound              the two builds' bindings, held to standing for each other
+     * @param handedToADelegatedEquality told the class of every form handed to its own equality
+     */
+    private record Walk(Bound bound, Consumer<Class<?>> handedToADelegatedEquality) {}
+
+    /** A walk nobody is watching, which is every one but a reading of what the walk decided. */
+    private static final Consumer<Class<?>> NOBODY_WATCHING = _ -> { };
 
     /**
      * The bindings of one declaration, held to each other across the two builds.

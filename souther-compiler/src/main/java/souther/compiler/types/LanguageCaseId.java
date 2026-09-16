@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+
 /**
  * A case the language itself gives, and the whole of the list.
  *
@@ -19,7 +21,7 @@ package souther.compiler.types;
  * never on the arm's own name — and the JVM answers for the other four; both facts live in
  * {@code jvm.SoutherJvmAbi}.
  */
-public enum LanguageCaseId {
+public enum LanguageCaseId implements DelegatedEqualityIsTheCrossingAnswer {
 
     /** {@code Some}, written in a match arm over an {@code Option}. */
     SOME("Some"),

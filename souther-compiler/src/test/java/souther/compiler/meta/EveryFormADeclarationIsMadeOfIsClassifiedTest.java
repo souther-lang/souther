@@ -16,12 +16,10 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -72,15 +70,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryFormADeclarationIsMadeOfIsClassifiedTest {
 
-    /** What the comparison is handed: a declaration, a behavior's signature, a published helper.
-     *  Everything it reaches, it reaches from one of these. */
-    private static final List<Class<?>> ROOTS = List.of(
-            Hir.Data.class, Hir.SumData.class, Hir.UnitData.class,
-            Hir.SpecBehavior.class, Hir.PipeBehavior.class, Hir.FnDef.class);
-
     @Test
     void everyFormADeclarationReachesSaysWhichOfTheThreeItIs() {
-        Set<Class<?>> reached = walkOfDeclarations().reached();
+        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
 
         assertFalse(reached.isEmpty(), "a walk that reaches nothing would pass for any reason");
         List<String> answeredOtherThanOnce = new ArrayList<>(new TreeSet<>(reached.stream()
@@ -163,7 +155,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
      */
     @Test
     void andTheFormsUnderAnErasedSealedTypeAreAmongThemToo() {
-        Set<Class<?>> reached = walkOfDeclarations().reached();
+        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
 
         assertTrue(reached.contains(QuotedFrom.ASourceThisCompileHolds.class),
                 "a text a rule was quoted from is erased, and which texts there are is not that"
@@ -190,7 +182,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     @Test
     void andWhatIsPassedOverAnswersToOneErasedKind() {
         List<String> answeringToSeveral = new ArrayList<>(new TreeSet<>(
-                walkOfDeclarations().reached().stream()
+                FormsACrossingCanReach.taken().reached().stream()
                         .filter(type -> erasedKindsOf(type).size() > 1)
                         .map(type -> type.getName() + " answers to " + erasedKindsOf(type))
                         .toList()));
@@ -250,7 +242,7 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     void whatTheComparisonHasAnArmForIsNotAskedForAnAccount() {
         assertFalse(StructuralParts.areHandedOver(BindingId.class),
                 "the comparison does not walk a binding, so it is not one of these");
-        assertFalse(DeclarationAgreement.comparedTheSameByItsOwnEquality(
+        assertFalse(DeclarationAgreement.objectEqualityAnswersTheSame(
                         new BindingId(new BindingOwner.OfValue("demo", "f"), 0)),
                 "and what it does instead is the arm: this comparison answers about a binding what"
                         + " its own equality does not");
@@ -388,13 +380,56 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     @Test
     void andTheWalkStopsOnlyWhereTheComparisonStops() {
         List<String> readInsideAllTheSame = new ArrayList<>(new TreeSet<>(
-                walkOfDeclarations().stoppedAt().stream()
+                FormsACrossingCanReach.taken().stoppedAt().stream()
                         .filter(EveryFormADeclarationIsMadeOfIsClassifiedTest::comparisonGoesInside)
                         .map(Class::getName).toList()));
 
         assertEquals(List.of(), readInsideAllTheSame,
                 "this walk stops at these and the comparison reads what is inside them, so what a"
                         + " crossing depends on there is decided by nobody and nothing says so");
+    }
+
+    /**
+     * A part declared as a primitive is reached as the form the comparison is handed.
+     *
+     * <p>Read off the declared type and passed over, a number a literal holds and whether a set of
+     * modifiers is partial are parts no sweep here says anything about — and the comparison meets
+     * both, boxed, and decides by them. The sweep would be reaching less than the comparison and
+     * saying nothing about the difference, which is what these sweeps are for.
+     */
+    @Test
+    void andAPartDeclaredAsAPrimitiveIsReachedAsWhatTheComparisonIsHanded() {
+        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
+
+        assertTrue(reached.contains(Long.class),
+                "a literal holds its number as a `long`, and what the comparison is handed is the"
+                        + " box");
+        assertTrue(reached.contains(Boolean.class),
+                "and whether a declaration is a newtype is what it is represented as, which is a"
+                        + " part a crossing depends on");
+    }
+
+    /**
+     * A form no published declaration is read back as is not reached, and its siblings are.
+     *
+     * <p>Both halves, because either alone says nothing. A walk that reached no expression at all
+     * would leave this one out for a reason that has nothing to do with what it is; a walk that
+     * reached every one of them would be asking for an account of a form no crossing can meet,
+     * which is a crossing rule written for something that never arrives.
+     */
+    @Test
+    void andAFormNoPublishedResolutionHasIsNotAmongThem() {
+        Set<Class<?>> reached = FormsACrossingCanReach.taken().reached();
+
+        assertTrue(reached.contains(Hir.Apply.class),
+                "an application is written in a body, read back with it, and compared");
+        assertFalse(reached.contains(Hir.Expansion.class),
+                "a copy of a helper is made below resolution, so what crossed never held one and"
+                        + " there is nothing here for an account to be about");
+        assertEquals(List.of(Hir.Expansion.class, Type.MetaVar.class),
+                FormsAPublishedResolutionDoesNotHave.theOnesItCannot(),
+                "and that is said of the forms written down, so another one is another decision"
+                        + " somebody made");
     }
 
     /** Whether {@link DeclarationAgreement} holds two of them by walking their parts. */
@@ -429,64 +464,4 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
         return given;
     }
 
-    /**
-     * What the walk found: every type a published declaration reaches, and the ones it stopped at.
-     *
-     * @param reached   every type reachable from a declaration, the leaves among them
-     * @param stoppedAt the ones whose parts this walk did not go on to
-     */
-    private record Walked(Set<Class<?>> reached, Set<Class<?>> stoppedAt) {}
-
-    /**
-     * Every type reachable from a published declaration, through record components and the
-     * containers they are held in. A sealed type stands for its permitted forms.
-     *
-     * <p>Where it stops is read off the structure and off what the comparison passes over, and
-     * never off how a type was classified. Those are two questions: whether something has been
-     * decided about is one, and whether there is anything further in it to decide about is the
-     * other, and one does not follow from the other. A walk steered by the classification stops
-     * wherever an answer has been written down, so a form under one is reached by nobody and
-     * decided by nobody, and this test goes on passing over a smaller world.
-     *
-     * <p><b>Which forms there are is settled before what is done with them is asked.</b> A sealed
-     * type is not a form — its permitted ones are — so it stands for them whether or not the
-     * comparison passes over it. Asked the other way round, an erased sealed type would stop the
-     * walk at a name no value ever has, and the forms underneath it would be the ones nobody is
-     * asked about: the same policy deciding what a form is, one step further back, where it
-     * decides which forms there are to ask about at all.
-     */
-    private static Walked walkOfDeclarations() {
-        Set<Class<?>> seen = new LinkedHashSet<>();
-        Deque<Class<?>> todo = new ArrayDeque<>(ROOTS);
-        Set<Class<?>> reached = new LinkedHashSet<>();
-        Set<Class<?>> stoppedAt = new LinkedHashSet<>();
-        while (!todo.isEmpty()) {
-            Class<?> type = todo.removeFirst();
-            if (!seen.add(type) || type.isPrimitive()) {
-                continue;
-            }
-            if (type.isSealed()) {
-                for (Class<?> permitted : type.getPermittedSubclasses()) {
-                    todo.addLast(permitted);
-                }
-                continue;   // the interface itself holds nothing; its forms do
-            }
-            if (DeclarationAgreement.erases(type)) {
-                reached.add(type);
-                stoppedAt.add(type);
-                continue;   // the comparison does not go inside one, so neither does this
-            }
-            reached.add(type);
-            if (type.isInterface() || !StructuralParts.areHandedOver(type)) {
-                stoppedAt.add(type);
-                continue;   // a leaf as far as this walk is concerned
-            }
-            for (StructuralParts.Part part : StructuralParts.of(type)) {
-                for (Class<?> held : TypesAPartIsDeclaredToHold.named(part.held())) {
-                    todo.addLast(held);
-                }
-            }
-        }
-        return new Walked(reached, stoppedAt);
-    }
 }

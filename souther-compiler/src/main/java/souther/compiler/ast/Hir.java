@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
 import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
@@ -2033,7 +2034,7 @@ public interface Hir {
      * and a pass has nothing to spell that would make a construction say what it was not read as.
      * What {@link Reading} settles is which of these a construction gets, and it settles it once.
      */
-    enum Fields {
+    enum Fields implements DelegatedEqualityIsTheCrossingAnswer {
         /** Every field of the construction is written or spread — what a body writes. */
         EVERY_ONE_WRITTEN,
         /** A field the construction does not write is {@code None} where it declares an optional. */

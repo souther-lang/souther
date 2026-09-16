@@ -1,6 +1,7 @@
 package souther.compiler.types;
 
 import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 
 /**
  * Which declaration, written down: the module that declares it and the name written there.
@@ -17,7 +18,7 @@ import souther.compiler.SettledAnswer;
  * question for whatever knows the declarations.
  */
 public record TypeKey(String module, String name)
-        implements SettledAnswer, Comparable<TypeKey> {
+        implements SettledAnswer, Comparable<TypeKey>, ObjectEqualityIsTheCrossingAnswer {
 
     public TypeKey {
         if (module == null || name == null) {

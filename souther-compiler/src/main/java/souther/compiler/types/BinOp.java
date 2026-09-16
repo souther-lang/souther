@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+
 import java.util.Objects;
 
 /**
@@ -25,7 +27,7 @@ import java.util.Objects;
  * it stays where it is made and is exhaustive there. An operator added to the language is then
  * classified once, here, and decided about once in each phase that has to do something with it.
  */
-public enum BinOp {
+public enum BinOp implements DelegatedEqualityIsTheCrossingAnswer {
     EQ(Family.COMPARISON),
     NE(Family.COMPARISON),
     LT(Family.COMPARISON),
