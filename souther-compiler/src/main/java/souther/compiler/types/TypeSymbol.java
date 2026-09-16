@@ -2,7 +2,9 @@ package souther.compiler.types;
 
 import souther.compiler.Reserved;
 import souther.compiler.SettledAnswer;
-import souther.compiler.hash.SaysWhatStandsForIt;
+import souther.compiler.crossing.DelegatedEqualityIsRepresentedByWhatItStandsFor;
+import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 import souther.compiler.hash.ValueHash;
 
 /**
@@ -36,7 +38,8 @@ public sealed interface TypeSymbol extends SettledAnswer, Comparable<TypeSymbol>
      * where it stands for the declaration in the compiler's own reasoning, and one is minted from
      * the other only in {@link TypeSymbols}.
      */
-    final class AtModule implements TypeSymbol, SaysWhatStandsForIt {
+    final class AtModule implements TypeSymbol, DelegatedEqualityIsRepresentedByWhatItStandsFor,
+            ObjectEqualityIsRepresentedByWhatItStandsFor {
 
         private final TypeKey key;
 
@@ -105,7 +108,8 @@ public sealed interface TypeSymbol extends SettledAnswer, Comparable<TypeSymbol>
      * and recovering the primitive from one was already written as the inverse of writing it out for
      * exactly that reason.
      */
-    record Primitive(Type.Prim primitive) implements OfLanguage {
+    record Primitive(Type.Prim primitive)
+            implements OfLanguage, ObjectEqualityIsTheCrossingAnswer {
 
         public Primitive {
             if (primitive == null) {
