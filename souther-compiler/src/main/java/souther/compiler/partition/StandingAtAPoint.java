@@ -66,13 +66,30 @@ public final class StandingAtAPoint {
          * over another. A reader handed the case alone can say only that something went unread —
          * which is {@code Observed} from {@code TruncatedByLimit} from {@code Absent} being lost one
          * layer before anybody needs it; handed the strongest, it is lost wherever a point met both.
+         *
+         * <p><b>And a reading that was never tried is not a reading that came to nothing.</b> The
+         * readings of a row that could be looked at and the readings there are to look at are two
+         * counts, and where the second runs past what one point is tried against, a point no tried
+         * reading stands at is a point some untried one may. So {@code tried} is beside the reasons
+         * rather than among them: what stopped a reading this made is the reading's own answer, and
+         * what stopped this making the rest is an answer about the search. Both can be true of one
+         * point, and a state holding one of them would have to choose.
+         *
+         * @param why   what the readings that were made came to nothing by, which is empty where
+         *              every one of them was read and the search is what stopped
+         * @param tried whether every reading the row's steps allow was one this tried
          */
-        record CouldNotTell(Set<ReadingGap> why) implements Met {
+        record CouldNotTell(Set<ReadingGap> why, ReadingsTried tried) implements Met {
 
             public CouldNotTell {
-                if (why == null || why.isEmpty()) {
+                if (why == null || tried == null) {
                     throw new IllegalArgumentException(
                             "a point nothing could be told about says what stopped the telling");
+                }
+                if (why.isEmpty() && tried instanceof ReadingsTried.EveryOne) {
+                    throw new IllegalArgumentException("a reading that went without nothing and"
+                            + " tried every reading there is told this point apart, and this says"
+                            + " it could not");
                 }
                 // In the order they were met, for the reason a report keeps any order.
                 why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
@@ -84,6 +101,39 @@ public final class StandingAtAPoint {
         Met NOT_WATCHED = new NotWatched();
 
         Met NOT_AT_POINT = new NotAtPoint();
+    }
+
+    /**
+     * Whether every reading a row's steps allow was one a point was tried against.
+     *
+     * <p>What a bounded search may conclude turns on this. A reading standing at the point settles
+     * the point however few were tried — one is what the question asks for — and a point no reading
+     * stands at is a point nothing stands at only where there were no others to try. So a walk that
+     * stopped may say it found something and may not say it found nothing, and this is the fact that
+     * tells the two apart.
+     *
+     * <p><b>Said by the walk that stopped.</b> Which figure a walk stopped at is the walk's own
+     * answer and nothing downstream can work it out: a reading count short of the steps is short
+     * for whatever reason, and a reader deriving the reason from the shortfall names a figure
+     * wherever a walk fell short of one it never reached. So this is built where the readings are
+     * and travels from there, the way a decision reading says it stopped at a figure rather than
+     * leaving its length to be read.
+     */
+    public sealed interface ReadingsTried {
+
+        /** Every reading the steps allow was tried, so what none of them stands at, none stands
+         *  at. */
+        record EveryOne() implements ReadingsTried {}
+
+        /**
+         * The readings ran past what one point is tried against, and the rest were not tried.
+         *
+         * @param limit how many readings of one row a point is tried against, which is a figure of
+         *              this compiler's and is what a run allowing more would raise
+         */
+        record StoppedAtTheLimit(int limit) implements ReadingsTried {}
+
+        ReadingsTried EVERY_ONE = new EveryOne();
     }
 
     /**
@@ -111,6 +161,7 @@ public final class StandingAtAPoint {
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
         boolean unwatched = false;
+        boolean stoppedShort = false;
         for (ObservedInputs one : observed) {
             // A row has more than one value at a position inside a sequence, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
@@ -122,7 +173,9 @@ public final class StandingAtAPoint {
             OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             boolean stands = false;
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-            for (OneReadingOfARow reading : readings(where, one, quantity, criterion, first, held)) {
+            Readings readings = readings(where, one, quantity, criterion, first, held);
+            List<OneReadingOfARow> tried = readings.tried();
+            for (OneReadingOfARow reading : tried) {
                 switch (quantity.standsAt(criterion, reading)) {
                     // A reading that could not look. What the row wrote nothing at is not among
                     // these: the quantity answers for the row there, since it is the quantity that
@@ -151,13 +204,34 @@ public final class StandingAtAPoint {
                     case Generator.Watched.NoAccount _ -> unwatched = true;
                 }
             }
+            // And where none of them stood there, whether there were others to try. Asked of the
+            // rows that came to nothing and of no others: a row that stood at the point was answered
+            // by the reading that stood, and the readings after it are not ones this went without.
+            if (!stands) {
+                if (readings.whether() instanceof ReadingsTried.StoppedAtTheLimit) {
+                    stoppedShort = true;
+                } else if (stepsAllowMoreThan(held, tried.size())) {
+                    // The steps the readings were built from are not the steps the readings found,
+                    // which the quantity's contract does not allow: it reads every term before it
+                    // concludes anything, and that is how many elements each position holds is
+                    // known before there is anything to choose between. A walk short of the
+                    // readings for any other reason than its own figure is this compiler's two
+                    // answers about one row disagreeing, and neither of them is news about the
+                    // model.
+                    throw new IllegalStateException("the steps a row's positions take grew after"
+                            + " the readings of it were built, and the readings that were tried"
+                            + " are not all of them: " + held + " over " + tried.size());
+                }
+            }
             unreadable.addAll(stopped);
         }
         // Every reason any row met, the way one reading collects every reason its terms met. A
         // point tried against several rows is one this could not tell about for whatever stopped
         // any of them, and taking the strongest would say which row this walk began with.
-        if (!unreadable.isEmpty()) {
-            return new Met.CouldNotTell(unreadable);
+        if (!unreadable.isEmpty() || stoppedShort) {
+            return new Met.CouldNotTell(unreadable, stoppedShort
+                    ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
+                    : ReadingsTried.EVERY_ONE);
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }
@@ -266,17 +340,30 @@ public final class StandingAtAPoint {
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
      */
-    private static List<OneReadingOfARow> readings(BehaviorInputs where, ObservedInputs observed,
-                                                   BorderQuantity quantity, Criterion criterion,
-                                                   OneReadingOfARow first,
-                                                   Map<TermPath, Integer> held) {
+    private static Readings readings(BehaviorInputs where, ObservedInputs observed,
+                                     BorderQuantity quantity, Criterion criterion,
+                                     OneReadingOfARow first, Map<TermPath, Integer> held) {
         quantity.standsAt(criterion, first);
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(held)) {
             out.add(new OneReadingOfARow(where, observed, choice, held));
         }
-        return out;
+        // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out
+        // afterwards from how many readings came back, a walk that was cut short and one the steps
+        // never had more than are one answer, and whichever word is chosen for the pair is wrong
+        // about the other.
+        return new Readings(out, stepsAllowMoreThan(held, MOST_READINGS)
+                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
+                : ReadingsTried.EVERY_ONE);
     }
+
+    /**
+     * The readings of one row that were made, and whether they are all of them.
+     *
+     * @param tried   the readings, in the order the choices were taken
+     * @param whether what the walk that built them says about itself
+     */
+    private record Readings(List<OneReadingOfARow> tried, ReadingsTried whether) {}
 
     /**
      * Every reading of a row over the steps {@code held} says its positions take.
@@ -300,6 +387,32 @@ public final class StandingAtAPoint {
             out = wider;
         }
         return out;
+    }
+
+    /**
+     * Whether the steps a row's positions take allow more readings of it than {@code howMany}.
+     *
+     * <p>One question, and what it is about is the number it is asked with. Against the figure one
+     * point is tried against, it is whether a walk over the steps will be cut short — which is what
+     * the walk that does the cutting asks. Against the readings that came back, it is whether the
+     * steps the walk found are the steps it was built from, which is a fact about this compiler and
+     * not about the row.
+     *
+     * <p>A product coming to exactly the number asked about is not more than it. A walk that built
+     * as many readings as it is allowed to built either all of them or all it could, and nothing it
+     * holds tells those apart; the steps are what know how many there are.
+     */
+    private static boolean stepsAllowMoreThan(Map<TermPath, Integer> held, int howMany) {
+        long there = 1;
+        for (int cardinality : held.values()) {
+            // Asked before the multiplication rather than after it. A product that runs past what a
+            // long holds answers this by wrapping round to a number that says the opposite.
+            if (cardinality != 0 && there > howMany / cardinality) {
+                return true;
+            }
+            there *= cardinality;
+        }
+        return there > howMany;
     }
 
     /** How many readings of one row a point is tried against. */

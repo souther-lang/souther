@@ -27,6 +27,7 @@ import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
@@ -738,7 +739,8 @@ class EverySchemaWordIsAccountedForTest {
                 new ObligationDisposition.Refuted(),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE),
+                                        StandingAtAPoint.ReadingsTried.EVERY_ONE)))),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                                 UnaskedReasons.of(

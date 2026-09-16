@@ -151,7 +151,8 @@ public final class WeakeningSet {
             // The rest are their own fact: every value they hold is what a reader is told, and two
             // of them that are equal are one thing that went wrong.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BodiesNotElaborated _,
+                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.BodiesNotElaborated _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
@@ -170,7 +171,8 @@ public final class WeakeningSet {
                             alsoA(Weakening.ModelReadingIncomplete.class, also).cause()));
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BodiesNotElaborated _,
+                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.BodiesNotElaborated _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,

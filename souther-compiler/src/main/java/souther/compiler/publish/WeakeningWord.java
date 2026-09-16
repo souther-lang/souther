@@ -61,6 +61,18 @@ public enum WeakeningWord {
      */
     BORDER_OBSERVATION_UNAVAILABLE,
 
+    /**
+     * A row held more readings at one border than a point is tried against, so the readings a point
+     * was looked for in are not all the readings there are.
+     *
+     * <p>Its own word beside the three above, and the one of the four that is not about looking. A
+     * value that could not be read and a place that holds none are answers a reading came to; this
+     * is a reading nobody made. A consumer acts on it differently for the same reason it acts on
+     * {@link #PAIR_SPACE_TRUNCATED} differently: what it is short of is a figure of this compiler's,
+     * so running again allowing more is the thing to do about it.
+     */
+    BORDER_READINGS_NOT_EXHAUSTED,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

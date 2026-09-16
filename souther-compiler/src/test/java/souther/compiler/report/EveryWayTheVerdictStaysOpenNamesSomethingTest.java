@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
@@ -159,7 +160,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         Map<String, ObligationDisposition.Uncertainty> out = new LinkedHashMap<>();
         out.put("ReadingsStopped",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        ReadingReasons.of(List.of())));
+                        ReadingReasons.of(List.of(),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE)));
         out.put("NothingWasRead",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                         UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NOT_ASKED)));
