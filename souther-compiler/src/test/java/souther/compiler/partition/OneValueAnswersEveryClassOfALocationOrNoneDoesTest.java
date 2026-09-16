@@ -5,15 +5,19 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -85,6 +89,50 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
             behavior gate : (x: Int) -> When
             let gate (x) = if x / 2 >= 10 && x / 3 >= 10 then Late else Early
+            """;
+
+    /**
+     * Two numbers of one place that nothing here solves a value out of: how many a list holds and
+     * what it adds up to.
+     *
+     * <p>Values answering both are there — two elements adding up to ten is five and five — and
+     * what would find one is solving for a container out of its length and its total, which is
+     * work nobody has done. So this is the group that still comes back with the population.
+     */
+    private static final String A_LENGTH_AND_A_TOTAL = """
+            module example.dated
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { held: List<Int> }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if List.length(slot.held) >= 2 && List.sum(slot.held) >= 10 then Late else Early
+            """;
+
+    /**
+     * Two quotients by divisors as wide as the order the place is counted on.
+     *
+     * <p>Where the run a pair of them leaves falls mostly outside what a whole number can be. The
+     * numbers whose quotient by the largest of them is minus one run from below twice that to the
+     * number itself, and only the two at the top of it are numbers a row can write.
+     */
+    private static final String TWO_WIDE_DIVISORS = """
+            module example.wide
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { n: Int }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if slot.n / 9223372036854775807 >= 0 && slot.n / 9223372036854775806 >= 0
+                    then Late else Early
             """;
 
     /** Parts that do not constrain each other, which is the pair that worked before. */
@@ -204,20 +252,83 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     }
 
     /**
-     * And a group nothing here solves a value out of says that, and not that no value answers it.
+     * A half and a third of one number are answered by a number solved out of them.
      *
-     * <p>The invariant the whole of this rests on, read at the one place that decides it. A half
-     * and a third of a whole number are both numbers of one place, and nothing walked anything
-     * before the answer came back — so an answer in the words of a walk that looked everywhere is
-     * a statement about the model made by a reader that has no standing to make one. What it says
-     * instead is which population this compiler writes none of.
+     * <p>The classes are every quotient from ten up, either way. Thirty is the number: its half is
+     * fifteen and its third is ten, and what found it is the run each class leaves of the place —
+     * from twenty up for the half, from thirty up for the third — met and then walked.
      */
     @Test
-    void aGroupNothingSolvesAValueOutOfIsSaidAsThePopulationAndNotAsNothing() {
+    void twoQuotientsOfOnePlaceAreAnsweredByANumberSolvedOutOfThem() {
         Model model = new Model(A_HALF_AND_A_THIRD);
         SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
 
         assertEquals(2, asked.size(), () -> "a half and a third of one place: " + asked.keySet());
+        List<FixtureTemplate> built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, model.answering(asked),
+                () -> "a number whose half and third are both from ten up: " + model.answering(asked))
+                .values();
+        assertEquals(List.of("30"), built.stream().map(FixtureTemplate::text).toList());
+        model.quotientsReadBackIntoEveryClass(built, asked);
+    }
+
+    /**
+     * And where no number has both, that is what comes back — proved and not given up on.
+     *
+     * <p>A half below ten is a number below twenty and a third from ten up is a number from thirty
+     * up, which are two runs of the place with nothing between them. Every whole number the ends
+     * leave was walked, so this is a statement about the model: the pair of classes holds no
+     * number. Said as a population this compiler writes some of, an author would be told to wait
+     * for a compiler that writes the rest.
+     */
+    @Test
+    void twoQuotientClassesNoNumberHasTogetherAreAnsweredByNothing() {
+        Model model = new Model(A_HALF_AND_A_THIRD);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.classesAt(0, 1);
+
+        assertEquals(List.of("x < 10", "10 <= x"), model.labelsAt(0, 1),
+                "a half below ten beside a third from ten up");
+        assertInstanceOf(TermRealizations.Realization.None.class, model.answering(asked),
+                () -> "no number has both: " + model.answering(asked));
+    }
+
+    /**
+     * And the run is looked in where the place can hold a number, however wide the divisors are.
+     *
+     * <p>Both quotients at minus one is a run of the place that starts below twice the largest
+     * whole number there is and ends at it, and the numbers a row can write are the two at the top.
+     * Walked from the arithmetic's own end, the figure this compiler holds the walk to is spent on
+     * numbers no row writes and the two that answer are never reached — which comes back as a
+     * figure somebody should raise, of a place that has a value in it, and no figure reaches it.
+     */
+    @Test
+    void theRunIsLookedInWhereThePlaceCanHoldANumber() {
+        Model model = new Model(TWO_WIDE_DIVISORS);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.at(-1, -1);
+
+        assertEquals(2, asked.size(), () -> "a quotient by each wide divisor: " + asked.keySet());
+        List<FixtureTemplate> built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, model.answering(asked),
+                () -> "a number the place holds whose quotients are both minus one: "
+                        + model.answering(asked)).values();
+        model.quotientsReadBackIntoEveryClass(built, asked);
+    }
+
+    /**
+     * And a group nothing here solves a value out of says that, and not that no value answers it.
+     *
+     * <p>How many a list holds and what it adds up to are two numbers of one place that nothing
+     * here solves a value out of — the quotients above are solved for, and these are not. Nothing
+     * walked anything before the answer came back, so an answer in the words of a walk that looked
+     * everywhere is a statement about the model made by a reader with no standing to make one.
+     * What it says instead is which population this compiler writes none of.
+     */
+    @Test
+    void aGroupNothingSolvesAValueOutOfIsSaidAsThePopulationAndNotAsNothing() {
+        Model model = new Model(A_LENGTH_AND_A_TOTAL);
+        SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
+
+        assertEquals(2, asked.size(), () -> "a length and a total of one place: " + asked.keySet());
         TermRealizations.Realization made = model.answering(asked);
         TermRealizations.Realization.Unexhausted some = assertInstanceOf(
                 TermRealizations.Realization.Unexhausted.class, made,
@@ -324,6 +435,38 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     if (!sets.get(i).holds(read, carrierOf(asked, i))) {
                         elsewhere.add(value.text() + " reads " + read + " where "
                                 + sets.get(i) + " was asked for");
+                    }
+                }
+            }
+            assertEquals(List.of(), elsewhere,
+                    "every value built reads back as a number the class it was built for admits");
+        }
+
+        /**
+         * Every value built reads back into every class through the account that measures it.
+         *
+         * <p>The same thing the parts of a moment owe, asked of a number: the classes are of the
+         * quotients and the value is of the place, so what has to hold is that dividing it the way
+         * the operator divides lands in each class. Checked through the classes' own membership and
+         * the reading's own division, so a solving that agreed with itself by being wrong twice
+         * does not pass.
+         */
+        private void quotientsReadBackIntoEveryClass(
+                List<FixtureTemplate> built, SequencedMap<RealizationTarget, NumericSet> asked) {
+            List<String> elsewhere = new ArrayList<>();
+            for (FixtureTemplate value : built) {
+                BigDecimal at = new BigDecimal(value.text());
+                for (Map.Entry<RealizationTarget, NumericSet> each : asked.entrySet()) {
+                    TakenAs.TheTruncatingQuotient how =
+                            (TakenAs.TheTruncatingQuotient) ((NumericTerm.TakenOf)
+                                    each.getKey().term()).takenAs();
+                    souther.compiler.check.Carrier on =
+                            subject.quantities().ordersOf(each.getKey().term()).answered();
+                    Place read = Count.of(Arithmetic.ATruncatingQuotient.quotientOf(at,
+                            how.read(((NumericTerm.TakenOf) each.getKey().term()).arguments())));
+                    if (!each.getValue().holds(read, on)) {
+                        elsewhere.add(value.text() + " reads " + read + " where "
+                                + each.getValue() + " was asked for");
                     }
                 }
             }

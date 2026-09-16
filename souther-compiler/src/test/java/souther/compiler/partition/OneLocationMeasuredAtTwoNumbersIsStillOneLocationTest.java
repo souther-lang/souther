@@ -12,7 +12,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -170,31 +169,28 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     /**
      * And where nothing here writes one value for both numbers, no row is written for either class.
      *
-     * <p>Two quotients of one whole number are two numbers of one location that nothing here
-     * composes a value for together: which value answers both is solving for one from two of its
-     * numbers, which is not what putting the parts of a time side by side does. So no row stands
-     * at either class.
+     * <p>Two quotients of one whole number are two numbers of one location, and a row writes one
+     * value where a location is — so the value is solved for out of both numbers rather than
+     * written twice. Each class of each quotient is a run of the place, and a row stands where the
+     * runs a pair of them leaves holds a number.
      *
-     * <p>And what is said of it is the population this compiler writes none of, carried beside the
-     * word. Values answering both numbers are there — every sixth number is one — so an answer in
-     * the words of a walk that looked everywhere would be this reader telling an author that no
-     * such value exists, and the word alone would be a search that left something untried with
-     * nothing of this compiler's to say why.
+     * <p>Every class of both quotients is answered, which is what the runs leaving a number means
+     * here: nineteen halves to nine and thirds to six, twenty halves to ten, thirty thirds to ten.
+     * Read off the classes each row names rather than counted, so a row standing somewhere else is
+     * a failure and not a different arrangement of the same answer.
      */
     @Test
-    void twoClassesOfOneLocationNothingHereSolvesTogetherComposeNoRow() {
+    void twoClassesOfOneLocationAreAnsweredByOneNumberSolvedOutOfBoth() {
         FillResult filled = filled(TWO_QUOTIENTS);
 
-        assertEquals(List.of(), filled.rows(), "neither class is answered by a row");
-        assertTrue(filled.unresolved().stream().anyMatch(left -> left.why().reason()
-                        == Generator.UnresolvedCombination.Reason
-                                .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                filled.unresolved().toString());
-        assertEquals(List.of(Set.of(CompositionRepertoire
-                        .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                filled.unresolved().stream().map(left -> left.met().populations()).distinct()
-                        .toList(),
-                () -> "and which values it writes none of: " + filled.unresolved());
+        assertEquals(List.of("slot.n=x < 10", "slot.n=10 <= x", "slot.n=x < 10", "slot.n=10 <= x"),
+                filled.rows().stream().flatMap(row -> row.purposes().stream())
+                        .flatMap(purpose -> purpose.labels().stream()).toList(),
+                () -> "a row for every class a number of the place answers: " + filled.rows());
+        assertEquals(List.of("Slot { n = 19 }", "Slot { n = 20 }", "Slot { n = 19 }",
+                        "Slot { n = 30 }"),
+                filled.rows().stream().map(row -> row.inputs().get(0).text()).toList(),
+                "and each row's number reads back into the class it was built for");
     }
 
     /** The rows a fill of that model's classes comes to. */

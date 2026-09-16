@@ -5,6 +5,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
@@ -164,7 +165,8 @@ final class TermReading {
         // A quotient past the end of what a whole number holds is one no run answers: the smallest
         // of them over minus one is a number the operator aborts at rather than a number a row has.
         // Asked of the carrier, which is where what a whole number stops at is answered.
-        Place quotient = observed.onTheGrid(new Count(count.at().divideToIntegralValue(by)));
+        Place quotient = observed.onTheGrid(
+                new Count(Arithmetic.ATruncatingQuotient.quotientOf(count.at(), by)));
         return quotient == null ? new Reading.NotNumber() : new Reading.Number(quotient);
     }
 
