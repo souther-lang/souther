@@ -26,6 +26,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Where the region leaves the item's quantity no value the item asks for, the item is out of reach
@@ -118,6 +119,49 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         assertFalse(realize(oneAt(level(0)), xIsNoMoreThanNought())
                         instanceof Realization.Impossible,
                 "and of the coordinate, which the region leaves standing at nought");
+    }
+
+    /**
+     * A pair on an order that counts nothing is not asked at all.
+     *
+     * <p>The other way this proves nothing, and it is not the two runs meeting. Two strings stand no
+     * measurable distance apart, so the one level such a quantity takes is the one where they meet
+     * and a point of it asks which way round they stand — while what the region has to say about
+     * the pair is arithmetic over positions that add up. The two are not one order, and a crossing
+     * that took them for one would compare a side against a bound and read whatever came back as a
+     * proof.
+     *
+     * <p>Written against a region that does bound the pair, which is what makes the answer the
+     * shape's rather than the bounds': handed an open region, a crossing that mixed the two
+     * vocabularies would answer this correctly for the wrong reason.
+     */
+    @Test
+    void aPairOnAnOrderThatCountsNothingIsNotAsked() {
+        Standing strings = new Standing.OfTwoOnOneCarrier(term("y"), term("x"), Carrier.TEXT,
+                new Criterion.AtTheLevel(Level.ACount.of(1)));
+
+        assertFalse(realize(strings, yIsNoMoreThanX()) instanceof Realization.Impossible,
+                "what the region says of a distance is not what this item asks about a pair");
+    }
+
+    /**
+     * And every shape names a quantity, which is what the crossing is of.
+     *
+     * <p>Here because the property above rests on it: a shape whose quantity weighs no term is a
+     * question about nothing, and asked of a region it comes back as an answer about a form rather
+     * than about an item. Refused where such a shape is built, so the crossing has no case for it.
+     */
+    @Test
+    void andEveryShapeNamesAQuantity() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Standing.OfTwoOnOneCarrier(term("x"), term("x"), Carrier.WHOLE,
+                        new Criterion.AtTheLevel(Level.ACount.of(0))),
+                "a distance is between two positions");
+        assertThrows(IllegalArgumentException.class,
+                () -> new Standing.OfAForm(form(0, 0, 1), Map.of(),
+                        LevelSpace.steppingBy(BigDecimal.ONE),
+                        new Criterion.AtTheLevel(Level.ACount.of(0))),
+                "a form stands over the positions it names");
     }
 
     /** And where nothing narrowed the region at all, which is every item of a border nothing is on

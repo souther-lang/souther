@@ -7,7 +7,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Place;
 
 /**
  * Whether the rules a row passes on the way to an item leave its quantity no value the item asks
@@ -30,10 +29,10 @@ import souther.compiler.numeric.Place;
  * the region would carry a second reading of what a criterion means, free to disagree with the one
  * the search uses.
  *
- * <p>A shape of {@link Standing} says which quantity is its own and nothing else is taken from it.
- * The three differ in where that quantity is written — a coordinate, the distance between two
- * positions, a form over several — and in nothing that follows, so what is asked of it is written
- * once.
+ * <p>A shape of {@link Standing} says which quantity is its own and how that quantity's values are
+ * written, and nothing else is taken from it. The three differ in where the quantity is written — a
+ * coordinate, the distance between two positions, a form over several — and in nothing that follows,
+ * so what is asked of it is written once.
  */
 final class StandingImpossibility {
 
@@ -42,33 +41,39 @@ final class StandingImpossibility {
     /**
      * Whether the region leaves {@code standing}'s quantity no value the item asks for.
      *
-     * <p>{@code false} wherever this could not answer, which is every shape of not knowing: a
-     * quantity the arithmetic has no projection of, an end at a place that is not a number, an order
-     * whose values the region speaks of in another vocabulary. An absence of proof reported as one
-     * takes a coverage item away, so the cases that cannot be told apart are all on the side that
-     * proves nothing.
+     * <p>Named for what a {@code true} is. What this decides is that a proof exists, and a name
+     * saying whether the item can be satisfied would have {@code false} answering a question this
+     * never asks.
+     *
+     * <p>{@code false} where the two meet and {@code false} where this could not put them in one
+     * vocabulary, which is the same answer because the same thing follows from it. An absence of
+     * proof reported as one takes a coverage item away, so everything this cannot tell apart is on
+     * the side that proves nothing.
      */
-    static boolean cannotSatisfy(SearchRegion region, Standing standing) {
+    static boolean provesImpossible(SearchRegion region, Standing standing) {
         Asked asked = askedBy(standing);
-        NumericDomain.Bounds runs;
-        switch (region.projectionOf(asked.quantity())) {
-            case NumericDomain.FormProjection.NothingIsLeft _ -> {
-                return true;
-            }
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    runs = held == null ? NumericDomain.Bounds.OPEN : held;
-            case null -> {
-                return false;
-            }
-        }
-        LevelInterval possible = runOf(runs, asked.on());
-        if (possible == null) {
+        if (asked == null) {
             return false;
+        }
+        NumericDomain.Bounds runs = switch (region.projectionOf(asked.quantity())) {
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            // A form weighing no term is the one thing this answers nothing about, and an item
+            // stands on a quantity — which is what the shapes of a Standing are built refusing.
+            case null -> throw new IllegalStateException(
+                    "an item stands on a quantity, and a form weighing no term is not one: "
+                            + standing);
+        };
+        if (runs == null) {
+            return true;
         }
         // Every run the item stands for, crossed with where the quantity runs. The crossing is the
         // interval algebra's own and not arithmetic written here: a run whose ends cross holds
         // nothing on any order, which is the one thing about a pair of runs that is true whatever
-        // the order does between them.
+        // the order does between them — and it is the only half of the question that is sound in
+        // one direction, since ends that do not cross say nothing about a value between them.
+        LevelInterval possible = asked.runBetween(runs);
         for (LevelInterval part : asked.where().region().parts()) {
             if (part.intersect(possible) != null) {
                 return false;
@@ -79,48 +84,57 @@ final class StandingImpossibility {
 
     /**
      * What an item asks, as this question needs it: the quantity, the values of it the item stands
-     * for, and the order those values are written on.
+     * for, and how those values are written.
      *
-     * @param on the carrier the levels are values of, or null where they are numbers of no
-     *           position's. Which is what tells a level of a coordinate from a level of a distance,
+     * @param on the carrier the levels are values of, or null where the quantity counts its own
+     *           numbers. Which is what tells a level of a coordinate from a level of a distance,
      *           and a run built with the wrong one would compare a place against a number
      */
-    private record Asked(LinearForm<NumericTerm> quantity, Criterion where, Carrier on) {}
+    private record Asked(LinearForm<NumericTerm> quantity, Criterion where, Carrier on) {
 
-    /** The item taken apart that far, which is the whole of what a shape of {@link Standing} is
-     *  read for here. */
+        /** Where the quantity runs, in the words its own levels are written in. */
+        LevelInterval runBetween(NumericDomain.Bounds runs) {
+            return new LevelInterval(endAt(runs.min()), endAt(runs.max()));
+        }
+
+        /** One end of that run, as a level of the quantity. */
+        private Bound endAt(Endpoint end) {
+            if (end == null) {
+                return null;
+            }
+            // A number where the quantity counts and a place of the carrier where it does not, and
+            // which of the two it is was settled before anything was projected. A quantity that
+            // counts is the sum or difference of positions that count, and a position whose values
+            // do not count is only ever spoken of on its own order — so an end that is no number
+            // arrives only at the shape holding the carrier to write it on.
+            Level level = on == null ? new Level.ACount(Count.number(end.at()))
+                    : new Level.OnACarrier(on, end.at());
+            return Bound.at(level, end.inclusive());
+        }
+    }
+
+    /**
+     * The item taken apart that far, or nothing where its levels and the region's answer are not in
+     * one vocabulary.
+     *
+     * <p>Which is a pair on an order that counts nothing, and only that. Two strings stand no
+     * measurable distance apart, so the one level such a quantity takes is the one where they meet
+     * and what a point of it asks is which way round they stand — while what the region has to say
+     * about the pair is arithmetic over positions that add. Crossed as though they were one order,
+     * a sign would have been compared against a bound and whichever answer came back would have
+     * been read as a proof.
+     */
     private static Asked askedBy(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one ->
                     new Asked(LinearForm.atom(one.term()), one.where(), one.of());
-            case Standing.OfTwoOnOneCarrier two -> new Asked(
-                    LinearForm.<NumericTerm>atom(two.on()).minus(LinearForm.atom(two.against())),
-                    two.where(), null);
+            case Standing.OfTwoOnOneCarrier two -> two.of().counts()
+                    ? new Asked(LinearForm.<NumericTerm>atom(two.on())
+                            .minus(LinearForm.atom(two.against())), two.where(), null)
+                    : null;
+            // A form is arithmetic over positions that add up, so its levels are numbers of its own
+            // and the carriers its terms are written back on are no part of what it comes to.
             case Standing.OfAForm over -> new Asked(over.form(), over.where(), null);
         };
-    }
-
-    /** Where the quantity runs, as a run of its own levels, or null where an end is at no level of
-     *  it. */
-    private static LevelInterval runOf(NumericDomain.Bounds runs, Carrier on) {
-        Bound low = endOf(runs.min(), on);
-        Bound high = endOf(runs.max(), on);
-        if ((runs.min() != null && low == null) || (runs.max() != null && high == null)) {
-            return null;
-        }
-        return new LevelInterval(low, high);
-    }
-
-    /** One end of that run, or null where the place it stops at is not a level of the quantity. */
-    private static Bound endOf(Endpoint end, Carrier on) {
-        if (end == null) {
-            return null;
-        }
-        Place at = end.at();
-        if (on != null) {
-            return Bound.at(new Level.OnACarrier(on, at), end.inclusive());
-        }
-        return at instanceof Count count
-                ? Bound.at(new Level.ACount(count), end.inclusive()) : null;
     }
 }

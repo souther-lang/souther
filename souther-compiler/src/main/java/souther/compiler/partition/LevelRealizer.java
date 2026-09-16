@@ -31,9 +31,13 @@ import java.util.function.Supplier;
  * <p>What it is handed is a {@link Standing} — a constraint, not a shape of line — so a quantity
  * added later brings work here only where it needs a kind of search that is not already written.
  *
- * <p>Nothing here decides that an item cannot be reached. A refusal is a refusal of what was tried,
- * and {@link Realization} keeps that apart from a proof: read as one, a search that ran out said the
- * model refuses an edge it merely could not compose (ADR-0091).
+ * <p>No search here decides that an item cannot be reached. A refusal is a refusal of what was
+ * tried, and {@link Realization} keeps that apart from a proof: read as one, a search that ran out
+ * said the model refuses an edge it merely could not compose (ADR-0091). What does decide it are the
+ * proofs the rules themselves make, and they are asked for before anything is looked for — a region
+ * shown to hold nothing, and a region that leaves the item's quantity no value the item asks for
+ * ({@link StandingImpossibility}). A walk of the whole of what is left is the third, and the only
+ * one of the three a search has any part in.
  */
 public final class LevelRealizer {
 
@@ -108,7 +112,7 @@ public final class LevelRealizer {
         // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
         // for, which is what the rules on the way to a border and the border itself say between
         // them. Neither is readable off the positions one at a time.
-        if (StandingImpossibility.cannotSatisfy(within, standing)) {
+        if (StandingImpossibility.provesImpossible(within, standing)) {
             return new Realization.Impossible();
         }
         for (NumericTerm term : termsOf(standing)) {
