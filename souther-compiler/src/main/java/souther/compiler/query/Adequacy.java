@@ -5081,8 +5081,12 @@ public final class Adequacy {
          * <p>Beside {@link #BOUNDARY_UNMET} and {@link #DOMAIN_POINT_UNCOVERED} rather than among
          * them, and the difference is which fault a row shows. A row at a border's points shows the
          * line has not moved; a line that has turned answers alike at every one of them, and what
-         * shows it has not turned is a row the turned line answers differently at. A model can have
+         * shows one of them turned is a row that line answers differently at. A model can have
          * every point of every border met and still admit a coefficient nobody wrote.
+         *
+         * <p>Of the lines one step away, which is a fault domain stated rather than the geometry of
+         * the line pinned down ({@link FaultFamily}). A border nothing here is said about has no
+         * one-step fault left in it, and that is the whole of the claim.
          *
          * <p>Not a measure of its own. It comes off the same reading of the same rows as the points
          * against the line, so what a build refuses over is one measurement read three ways.

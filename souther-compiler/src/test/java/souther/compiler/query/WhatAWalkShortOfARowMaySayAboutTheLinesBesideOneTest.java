@@ -252,6 +252,35 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     }
 
     /**
+     * A condition over a position the border is not on does not turn every input away.
+     *
+     * <p>What a row is read at is the quantity its line is on, so an input stepped along that line
+     * holds no number at any other position — and a condition on the way over one of those cannot be
+     * read there. Read as unknown and unknown as unreachable, a border with any earlier rule
+     * mentioning a position beside it would name no input at all, and a model whose rows do leave a
+     * line standing would come back open on this compiler rather than on the rows.
+     *
+     * <p>It is decided without that number: the row passed the condition, and what the step does to
+     * it is a number the step alone gives, because the positions it does not move are the same at
+     * both ends.
+     */
+    @Test
+    void aConditionOverAPositionTheBorderIsNotOnIsStillDecided() {
+        Border border = TheLinesBesideABorder.aLineOverTwoPositions();
+
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
+                () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
+                        Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                List.of(), TheLinesBesideABorder.aWayOverAPositionTheBorderIsNotOn());
+
+        AnotherLineTheRowsAllow.OneDoes named =
+                assertInstanceOf(AnotherLineTheRowsAllow.OneDoes.class, said,
+                        () -> "the rows leave this line standing and an input still reaches: "
+                                + said);
+        assertNotNull(named.tellsApartAt(), "and the input is named");
+    }
+
+    /**
      * And a condition on the way that nothing here took in turns every input away.
      *
      * <p>What such a way leaves is not known to be what reaches the border, so an input past it is

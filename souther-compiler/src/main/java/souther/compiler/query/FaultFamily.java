@@ -24,10 +24,18 @@ import java.util.Set;
  * answers differently at one of them is what tells the two apart.
  *
  * <p><b>A family the model derives and a build does not choose.</b> One position weighed one more or
- * one less, and nothing else: that is the single fault this family is, and it is the smallest turn
- * of a line there is over positions that count in whole numbers. A family a caller could widen would
- * be a dial on what a build refuses over, and a wider one would leave every model short of an
- * adequacy nothing reaches.
+ * one less, and nothing else. A family a caller could widen would be a dial on what a build refuses
+ * over, and a wider one would leave every model short of an adequacy nothing reaches.
+ *
+ * <p><b>So what turning every one of them away establishes is that, and not that the line has not
+ * turned.</b> These are the lines one step away, and a line two steps away is not among them: over
+ * positions whose values fill, {@code 2.5} lies between the weights this enumerates and rows that
+ * turn away the weights either side of it need not turn it away. What a border that survives them
+ * has been shown is that no fault of one step in one weight is left — which is a fault domain
+ * stated, the way a fault domain always is, and never the geometry of the line pinned down. A line
+ * held against every line there is takes constraints at several places along it rather than a
+ * neighbourhood around it (White &amp; Cohen's N&#215;1), and that is a different measure from this
+ * one.
  *
  * <p>In the quantity's own weights and not the ones a rule happened to write. {@code 300 * straw +
  * 600 * choco} weighs one of them twice the other, and a line one step from it is one weighing them

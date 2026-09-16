@@ -22,11 +22,12 @@ import java.util.Set;
  * Whether the rows say where a line is, or only that it is somewhere near.
  *
  * <p>The four points of a border are met by rows standing where the line is and beside it, and a
- * border all four of whose points are met has been shown not to have moved. It has not been shown
- * not to have turned: every row can stand exactly where the model says and stand in the same place
+ * border all four of whose points are met has been shown not to have moved. Nothing about them
+ * bears on how it runs: every row can stand exactly where the model says and stand in the same place
  * under a line weighing a position differently, and then no row written answers differently under
  * either. That is what this asks, and it asks it of the lines the model's own weights put one step
- * away ({@link FaultFamily}).
+ * away ({@link FaultFamily}) — so what a border none of them survives beside has been shown is that
+ * no fault of one step in one weight is left in it, and never that the line is where it is.
  *
  * <p><b>A line the rows allow is named, and never inferred.</b> What establishes one is a threshold
  * that keeps every row on the side the model puts it on — so the answer carries the line it found,
@@ -578,32 +579,85 @@ public sealed interface AnotherLineTheRowsAllow {
                         if (java.util.Collections.disjoint(taken.terms(), moved)) {
                             continue;   // the row's answer at it, unmoved
                         }
-                        Boolean holds = holdsAt(taken, at);
+                        Boolean holds = holdsAt(taken, from, at);
                         if (holds == null || !holds) {
                             return false;
                         }
                     }
                 }
             }
-            return from != null;
+            return true;
         }
     }
 
-    /** Whether a condition holds at an input, or null where the input says nothing about some
-     *  position it is over. */
+    /**
+     * Whether a condition still holds at an input a step reached, or null where nothing here can
+     * say.
+     *
+     * <p>Where the input holds a number at every position the condition is over, it is read there
+     * and that is the answer. Where it does not, the condition is still decidable without those
+     * numbers more often than not: the row it was stepped from passed the condition, the step moves
+     * only the positions the border is over, and what the step does to the condition is a number
+     * this can work out from the step alone — the positions it does not move cancel.
+     *
+     * <p>So a condition satisfied below nought that the step moves down is still satisfied, and one
+     * satisfied at nought that the step moves at all is not. What is left unknown is a step that
+     * moves a condition the way it could break it, and a hole a step could land in.
+     */
     private static Boolean holdsAt(souther.compiler.partition.TakenConstraint taken,
-                                   Map<NumericTerm, Place> at) {
-        if (!at.keySet().containsAll(taken.terms())) {
+                                   Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
+        if (at.keySet().containsAll(taken.terms())) {
+            return switch (taken) {
+                case souther.compiler.partition.TakenConstraint.Affine(var form, var rel) ->
+                        rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
+                                .add(form.constant()).signum());
+                case souther.compiler.partition.TakenConstraint.Ordered(
+                        var term, var place, var rel) -> rel.holds(at.get(term).compareTo(place));
+                case souther.compiler.partition.TakenConstraint.AwayFrom(var term, var place) ->
+                        at.get(term).compareTo(place) != 0;
+            };
+        }
+        // A bound on one position and a hole at one are over the position they name, and a step
+        // that moves it has that position's number in hand — so the only condition that reaches
+        // here is a form over positions this input says nothing about.
+        if (!(taken instanceof souther.compiler.partition.TakenConstraint.Affine(
+                var form, var rel))) {
             return null;
         }
-        return switch (taken) {
-            case souther.compiler.partition.TakenConstraint.Affine(var form, var rel) ->
-                    rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
-                            .add(form.constant()).signum());
-            case souther.compiler.partition.TakenConstraint.Ordered(var term, var place, var rel) ->
-                    rel.holds(at.get(term).compareTo(place));
-            case souther.compiler.partition.TakenConstraint.AwayFrom(var term, var place) ->
-                    at.get(term).compareTo(place) != 0;
+        return whatAStepDoesTo(rel, moves(form.coefs(), from, at));
+    }
+
+    /** What a step does to a form: the positions it moves, weighed as the form weighs them. The
+     *  rest are the same at both ends and cancel, which is why the numbers this does not have are
+     *  not needed. */
+    private static BigDecimal moves(Map<NumericTerm, BigDecimal> coefs,
+                                    Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
+        BigDecimal by = BigDecimal.ZERO;
+        for (Map.Entry<NumericTerm, BigDecimal> each : coefs.entrySet()) {
+            Place was = from.get(each.getKey());
+            Place now = at.get(each.getKey());
+            if (was == null || now == null) {
+                continue;   // not a position the step moves, so it is the same at both ends
+            }
+            by = by.add(Count.number(now).at().subtract(Count.number(was).at())
+                    .multiply(each.getValue()));
+        }
+        return by;
+    }
+
+    /** Whether a condition that held still holds once what it is over has moved by {@code by}, or
+     *  null where the move could go either way. */
+    private static Boolean whatAStepDoesTo(souther.compiler.numeric.Rel rel, BigDecimal by) {
+        if (by.signum() == 0) {
+            return true;   // nothing moved it, so it answers what it answered
+        }
+        return switch (rel) {
+            case LE, LT -> by.signum() < 0 ? Boolean.TRUE : null;
+            case GE, GT -> by.signum() > 0 ? Boolean.TRUE : null;
+            // It held at nought and no longer stands there, which settles it the other way.
+            case EQ -> Boolean.FALSE;
+            // It held away from nought and a step of any size could land on it.
+            case NE -> null;
         };
     }
 

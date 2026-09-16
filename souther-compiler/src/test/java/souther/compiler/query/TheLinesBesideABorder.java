@@ -85,6 +85,26 @@ final class TheLinesBesideABorder {
                                 souther.compiler.numeric.Rel.GE))));
     }
 
+    /**
+     * A way holding a condition over a position the border is not on: {@code x + z <= 10}.
+     *
+     * <p>The step along {@code -2 * x + y} moves {@code x}, so the condition has to be answered at
+     * the input — and the input holds no number at {@code z}, because what a row is read at is the
+     * quantity the border is on. What settles it anyway is that the row passed the condition and the
+     * step moves it one way: down the way it is satisfied, and the condition still holds whatever
+     * {@code z} was.
+     */
+    static souther.compiler.partition.WayToTheBorder aWayOverAPositionTheBorderIsNotOn() {
+        Map<NumericTerm, BigDecimal> xAndZ = new LinkedHashMap<>();
+        xAndZ.put(X, BigDecimal.ONE);
+        xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), BigDecimal.ONE);
+        return new souther.compiler.partition.WayToTheBorder(List.of(
+                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
+                        new souther.compiler.partition.TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.valueOf(-10), xAndZ),
+                                souther.compiler.numeric.Rel.LE))));
+    }
+
     /** And one holding a condition nothing turned into something a row can be held against. */
     static souther.compiler.partition.WayToTheBorder aWayWithAConditionNobodyRead() {
         return new souther.compiler.partition.WayToTheBorder(List.of(
