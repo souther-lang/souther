@@ -241,6 +241,52 @@ public sealed interface About {
     }
 
     /**
+     * A line of a body the rows do not tell from another line the model's own weights put beside it.
+     *
+     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is what
+     * the rows failed to show. A point no row is at is a place on this line nobody stands; this is
+     * every point of the line stood at and the line still not shown to be where the model says — the
+     * rows would answer the same under a line weighing one of the positions differently. Domain
+     * testing separates the two: rows at a border's points show a line that has moved, and a line
+     * that has turned takes a row the turned line answers differently at (White &amp; Cohen, IEEE
+     * TSE SE-6(3), 1980).
+     *
+     * <p>The line as one reading of it, which is the whole reading and not a word off it. Every
+     * reading folded into one line is at one position and spells the quantity one way, so there is
+     * no representative being chosen here — and what the finding is about is that reading's rows,
+     * its line, and the line beside it that they allow.
+     */
+    record ALineTheRowsDoNotTellFromAnother(BorderAssessment line)
+            implements About, RuleCitations {
+
+        public ALineTheRowsDoNotTellFromAnother {
+            Objects.requireNonNull(line, "a finding is about something");
+            if (!(line.beside() instanceof AnotherLineTheRowsAllow.OneDoes)) {
+                throw new IllegalArgumentException("a line the rows do not tell from another names"
+                        + " the other one, and this reading has none: " + line.beside());
+            }
+        }
+
+        /** The line these rows allow beside the one the model drew. */
+        public AnotherLineTheRowsAllow.OneDoes allowed() {
+            return (AnotherLineTheRowsAllow.OneDoes) line.beside();
+        }
+
+        /** The input the two part company at, as an author would write the positions — or null
+         *  where none was worked out. */
+        public String partingSaid() {
+            return allowed().tellsApartAt() == null ? null
+                    : souther.compiler.partition.OrderedAffineBoundary.saidAt(
+                            line.border().cut().of(), allowed().tellsApartAt());
+        }
+
+        @Override
+        public Set<RuleCitation> ruleCitations() {
+            return line.ruleCitations();
+        }
+    }
+
+    /**
      * A point of a line a declaration drew, that no row anywhere in the module stands at.
      *
      * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is whose

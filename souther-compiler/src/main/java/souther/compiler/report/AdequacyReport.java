@@ -2214,6 +2214,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     lines.size(), owed.met().size(), owed.counted(), refuted(owed),
                     inFull(bounded.status())));
         }
+        // And the lines the rows stand at every point of and still do not pin down. Beside the
+        // count rather than in it: what the count measures is rows at the points of a line, and a
+        // line a row is at every point of is fully counted there — which is the whole of why this
+        // has a sentence of its own. A number that folded the two together would say a border was
+        // partly covered where every row it asks for is written.
+        for (ReportedFinding f : behavior.reported()) {
+            if (f.finding().about()
+                    instanceof About.ALineTheRowsDoNotTellFromAnother untold) {
+                String parting = untold.partingSaid();
+                out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
+                        mark(f.finding()), untold.line().border().label(),
+                        untold.allowed().label(),
+                        parting == null ? "" : ", and a row at `" + parting + "` would"));
+            }
+        }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
@@ -5467,6 +5482,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
+                    About.ALineTheRowsDoNotTellFromAnother _,
                     About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.ARuleNothingClassified _,
@@ -5561,6 +5577,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // read, so what joins this to a `partition.obligations` entry is the role, where on
             // the line, and the rule — the same three that entry is keyed on.
             case About.APointOfABorder(var point) -> point.said(places);
+            // Both lines, because what this is about is the pair: one is what the model drew and
+            // the other is what its rows leave standing beside it, and a subject naming one of them
+            // says nothing a reader could act on. Spelled the one way a form is spelled, so the
+            // line that was written joins the `boundaries` entry it came from.
+            case About.ALineTheRowsDoNotTellFromAnother untold ->
+                    words(untold.line().border().label() + " / " + untold.allowed().label());
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).

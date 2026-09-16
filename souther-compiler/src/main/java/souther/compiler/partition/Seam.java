@@ -70,6 +70,51 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
+     * Where a rule cutting {@code of} at {@code at} parts that quantity's values.
+     *
+     * <p>The one derivation of it, for the two things that need it: the reading that met the rule,
+     * and a later reader holding the line the reading drew. Written twice, a border's own account of
+     * where it parts the values would be free to differ from the one the rule was read to.
+     *
+     * <p>Found on the order the rule was written on, which is the order that knows which levels the
+     * written form attains — {@code 2 * n <= 9} cuts the even numbers and nine is not one of them,
+     * so the two sides part between eight and ten. Read back into the quantity's own units
+     * afterwards, which is exact: a level the written form attains is a multiple of how much of the
+     * quantity it wrote.
+     *
+     * @param claim what the rule states about the value it wrote. A rule that names a value parts
+     *              the quantity twice, under what it names and over it, and this is the lower of the
+     *              two — a place the values genuinely part, rather than a side chosen for a rule
+     *              that has none
+     */
+    public static Seam where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
+        Towards belongsTo = claim instanceof souther.compiler.check.ComparisonClaim.Cut order
+                ? order.valueBelongs() : Towards.ABOVE;
+        souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
+                of.direction();
+        java.math.BigDecimal per = QuantityKey.per(direction);
+        return of(of.levels(), at, belongsTo, new Scale(per, direction.coefs().size() == 1
+                ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
+    }
+
+    /**
+     * Which side of this seam a value of the quantity falls on.
+     *
+     * <p>Every value is on one side or the other, including the one the line is at: what parts the
+     * values is a place between two of them, and the value at the line belongs to whichever side the
+     * rule put it on. Which side that is is read off the seam rather than off the rule — a seam
+     * names the last value below and the first above, and the line's own value is one of those two
+     * exactly where the quantity takes it.
+     */
+    public Towards sideOf(souther.compiler.numeric.Place value) {
+        int where = at.compare(value);
+        if (where != 0) {
+            return where < 0 ? Towards.BELOW : Towards.ABOVE;
+        }
+        return below != null && at.compare(below) == 0 ? Towards.BELOW : Towards.ABOVE;
+    }
+
+    /**
      * One of the quantity's own values, from a level of the form that wrote a multiple of it.
      *
      * <p>Written back on the carrier the quantity is ordered by, where it has one. A level is

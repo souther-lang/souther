@@ -25,6 +25,13 @@ import java.util.Set;
  * the point across its readings ({@link BorderObligationPointAssessment}), which is gathered from
  * these and never read off one of them.
  *
+ * <p><b>And what the rows leave standing beside the line.</b> The points say whether a row stands
+ * where the line is and beside it, which is what shows a line has not moved; what shows it has not
+ * turned is that no other line the model's own weights put one step away answers alike at every row
+ * ({@link AnotherLineTheRowsAllow}). Both come off this one reading of these rows, so what a build
+ * refuses over is one measurement read two ways rather than two measurements made to different
+ * rules.
+ *
  * <p><b>Total over the points its border has, the way that border is.</b> A border answers at every
  * point its rule gives it and so does this, so a reader asking what one of them came to is never
  * answered by an entry that is not there. Which of the four each point is is the line's answer
@@ -32,7 +39,8 @@ import java.util.Set;
  * two points of one border can be the same one, so a measure keyed on the role would hold one entry
  * where there are two.
  */
-public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items)
+public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                               AnotherLineTheRowsAllow beside)
         implements RuleCitations {
 
     /**
@@ -48,6 +56,10 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     public BorderAssessment {
+        if (beside == null) {
+            throw new IllegalArgumentException("a border says what the rows leave standing beside"
+                    + " it, and a border that was not asked says that: " + border);
+        }
         if (items == null || !items.keySet().equals(border.answers().keySet())) {
             throw new IllegalArgumentException(
                     "a border assessed at some of its points and not others: " + items);

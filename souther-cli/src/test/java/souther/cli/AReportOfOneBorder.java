@@ -211,7 +211,13 @@ final class AReportOfOneBorder {
                     ItemAssessment.WritabilityProjection.PROVEN,
                     souther.compiler.query.SearchOutcomes.none()));
         }
-        return new BorderAssessment(border, items);
+        // No rows behind this fixture, so nothing here has been held against the lines beside it.
+        // Said as a question that was not put rather than as one that came back empty: a fixture
+        // that claimed the rows leave nothing standing would be claiming it of rows it has none of.
+        return new BorderAssessment(border, items,
+                new souther.compiler.query.AnotherLineTheRowsAllow.NotAsked(
+                        souther.compiler.query.AnotherLineTheRowsAllow.Reason
+                                .NOTHING_WAS_READ_AGAINST_THE_LINE));
     }
 
     /** A row is at every point the border owes. */

@@ -64,6 +64,11 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // says nothing about the rest, which is the whole of what a combination is about.
                 "ARuleNoRowTakes",
                 "ARowAtAnArmAwaitsItsAnswer",
+                // A border every point of which a row is at, that the rows still do not tell from
+                // a line weighing one of its positions differently. Not a combination: it is one
+                // border, and what a row shows at it is which of two lines the model draws rather
+                // than what two positions do at once.
+                "ALineTheRowsDoNotTellFromAnother",
                 "ARuleWithoutALine", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",

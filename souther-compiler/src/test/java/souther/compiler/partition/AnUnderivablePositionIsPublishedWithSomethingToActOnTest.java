@@ -180,6 +180,10 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
                  About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                  About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                  About.APointOfABorder _, About.APointOfADeclaredBorder _,
+            // And a line the rows do not tell from another, which is about the rows rather than
+            // about how far a reading of a position got: the position was read, and what is short
+            // is what the rows show of where the line falls.
+                 About.ALineTheRowsDoNotTellFromAnother _,
                  About.AnArmNoRowGoesThrough _, About.ARowAtAnArmAwaitsItsAnswer _,
             // A way through the body no row takes, and a combination of its decisions no row
             // makes: both are about the rows and not about how far any reading of a position got.

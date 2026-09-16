@@ -2546,6 +2546,12 @@ public final class Adequacy {
                             .A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER);
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
+            // A row does answer this, and it is the input the finding names — what is missing is a
+            // strategy that composes one there. Said as a strategy nobody wrote rather than as a
+            // fact about the model: the work is real and an author can do it by hand.
+            case About.ALineTheRowsDoNotTellFromAnother _ -> new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason
+                            .NO_STRATEGY_FOR_AN_INPUT_TWO_LINES_PART_AT);
             // A row stands here and the search that settled the rule composed it, so what became
             // of it is that search's answer and is read where the rows are ({@link #atRule}).
             case About.ARuleNoRowTakes _ -> null;
@@ -4033,6 +4039,7 @@ public final class Adequacy {
                             case About.APointOfADeclaredBorder _,
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
+                                    About.ALineTheRowsDoNotTellFromAnother _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -5027,6 +5034,19 @@ public final class Adequacy {
          */
         DOMAIN_POINT_UNCOVERED(DiagnosticCode.E1917),
         /**
+         * A line of a body the rows do not tell from another the model's own weights put beside it.
+         *
+         * <p>Beside {@link #BOUNDARY_UNMET} and {@link #DOMAIN_POINT_UNCOVERED} rather than among
+         * them, and the difference is which fault a row shows. A row at a border's points shows the
+         * line has not moved; a line that has turned answers alike at every one of them, and what
+         * shows it has not turned is a row the turned line answers differently at. A model can have
+         * every point of every border met and still admit a coefficient nobody wrote.
+         *
+         * <p>Not a measure of its own. It comes off the same reading of the same rows as the points
+         * against the line, so what a build refuses over is one measurement read three ways.
+         */
+        BOUNDARY_NOT_TOLD_FROM_ANOTHER(DiagnosticCode.E1938),
+        /**
          * A position the model draws no line through.
          *
          * <p>A fact about the model, and only said where the derivation ran to the end and found
@@ -5112,7 +5132,11 @@ public final class Adequacy {
                 // of the decision, and a row whose answer is owed. One account, so one answer.
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED,
                      UNANSWERED_ROW, DOMAIN_POINT_UNCOVERED, AXIS_CLASS_UNCOVERED,
-                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED, PAIR_UNCOVERED -> true;
+                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED, PAIR_UNCOVERED,
+                     // And a row at an input two lines part company at, which is as much a row the
+                     // model asks for as a row at a point of one of them: the model draws the line
+                     // where it draws it, and a row that shows so is owed.
+                     BOUNDARY_NOT_TOLD_FROM_ANOTHER -> true;
                 // An observation: what was seen rather than what is owed. A case nothing was
                 // observed producing is the rows' own account of themselves.
                 case OUTPUT_CASE_UNVERIFIED -> false;
@@ -5142,7 +5166,8 @@ public final class Adequacy {
                 case INTERACTION_UNCOVERED, PAIR_UNCOVERED -> AccountPart.THE_MEASURES;
                 case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET,
                      ARM_UNREACHED, UNANSWERED_ROW, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
-                     DOMAIN_POINT_UNCOVERED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
+                     DOMAIN_POINT_UNCOVERED, BOUNDARY_NOT_TOLD_FROM_ANOTHER,
+                     PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
                      RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
                      PARTITION_VALUES_NOT_SEPARATED -> AccountPart.THE_MEASURES;
             };
@@ -5221,7 +5246,8 @@ public final class Adequacy {
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _,
-                    About.APointOfABorder _, About.APositionNoLineDivides _,
+                    About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
+                    About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
                     About.APositionWhoseRulesWereNotReached _, About.AQuestionNothingAnswered _ ->
@@ -5383,6 +5409,21 @@ public final class Adequacy {
             return noticed(new FindingSubject.OfABehavior(behavior), about);
         }
 
+        /**
+         * The same, where what found it is a walk over the rows at one line.
+         *
+         * <p>A fifth beside the four above, for the reason there are four: what such a walk went
+         * without is neither a measure's status nor a fold of the readings of a point. It is
+         * asymmetric — reading more rows leaves fewer lines standing, never more — so it carries
+         * the condition rather than the consequence and names a line only where it read every row.
+         * Taken whole for the reason the rest are: a caller handing over a measure beside it would
+         * give this finding whatever another line of the same behavior went without.
+         */
+        public static Finding by(FindingSubject subject, AnotherLineTheRowsAllow found,
+                                 About about) {
+            return new Finding(subject, found.weakening(), about);
+        }
+
         /** The same, about whatever it was noticed of. */
         public static Finding noticed(FindingSubject subject, About about) {
             return new Finding(subject, WeakeningSet.none(), about);
@@ -5430,6 +5471,8 @@ public final class Adequacy {
                 // same technique's item and are told apart under the same two codes.
                 case About.ABorderObligation owed -> owed.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
+                case About.ALineTheRowsDoNotTellFromAnother _ ->
+                        Kind.BOUNDARY_NOT_TOLD_FROM_ANOTHER;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
@@ -5941,6 +5984,11 @@ public final class Adequacy {
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
             Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
                     db.ask(new BodyBorders(name)).value();
+            // The lines as the measurement read them, which is where what the rows leave standing
+            // beside each of them is. Asked beside the account rather than worked out from it: the
+            // account is what is owed at the points of a line, and this is the other thing one
+            // reading of one line establishes about the rows.
+            Map<String, List<BorderAssessment>> readings = readingsOf(db, name);
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
             Map<String, InteractionEvidence> meetings = db.ask(new Interacts(name)).value();
 
@@ -5961,7 +6009,9 @@ public final class Adequacy {
                         signatures == null ? null : signatures.get(behavior.name()), out);
                 partitionFindings(behavior,
                         partitions == null ? null : partitions.get(behavior.name()),
-                        accounts == null ? null : accounts.get(behavior.name()), out);
+                        accounts == null ? null : accounts.get(behavior.name()),
+                        readings == null ? List.of()
+                                : readings.getOrDefault(behavior.name(), List.of()), out);
                 BranchEvidence branch = branches == null ? null : branches.get(behavior.name());
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
@@ -6210,6 +6260,7 @@ public final class Adequacy {
          *  observation was cut short elsewhere in the same input, is not a row that missed. */
         private static void partitionFindings(Hir.BehaviorDef behavior, PartitionEvidence partition,
                                               Measure<List<BorderObligationPointAssessment>> account,
+                                              List<BorderAssessment> lines,
                                               List<Finding> out) {
             if (partition == null) {
                 return;
@@ -6243,6 +6294,7 @@ public final class Adequacy {
                 out.add(Finding.by(behavior.name(), owed.item().coverage(),
                         new About.APointOfABorder(owed)));
             }
+            linesNotToldApart(behavior.name(), lines, account, out);
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
             //
@@ -6312,6 +6364,40 @@ public final class Adequacy {
                 // them only to be overruled by every surface that printed it.
                 out.add(Finding.noticed(behavior.name(),
                         new About.AQuestionNothingAnswered(each)));
+            }
+        }
+
+        /**
+         * Each line of this behavior the rows do not tell from another beside it.
+         *
+         * <p><b>Asked of a line every point of which is met, and of no other.</b> A border with a
+         * point no row is at is already short of the rows that show where it falls, and naming a
+         * line beside it would put two sentences in front of an author about one border — the
+         * second of which the first one's row may well answer. So this is the question after that
+         * one: every point stood at, and the line still not shown to be where the model says.
+         *
+         * <p>One finding per line, which is what the reading holds one of. A line read at several
+         * positions is folded into one before this, and the rows a line is held against are the
+         * behavior's, so there is one answer to have.
+         */
+        private static void linesNotToldApart(String behavior, List<BorderAssessment> lines,
+                                              Measure<List<BorderObligationPointAssessment>> account,
+                                              List<Finding> out) {
+            java.util.Set<souther.compiler.partition.BorderObligationId> stillOwed =
+                    new LinkedHashSet<>();
+            for (BorderObligationPointAssessment owed
+                    : account == null ? List.<BorderObligationPointAssessment>of()
+                            : account.made().orElseGet(List::of)) {
+                if (!(owed.item().disposition() instanceof ObligationDisposition.Met)) {
+                    stillOwed.add(owed.point().line());
+                }
+            }
+            for (BorderAssessment line : lines) {
+                if (line.beside() instanceof AnotherLineTheRowsAllow.OneDoes
+                        && !stillOwed.contains(line.border().obligation())) {
+                    out.add(Finding.by(new FindingSubject.OfABehavior(behavior), line.beside(),
+                            new About.ALineTheRowsDoNotTellFromAnother(line)));
+                }
             }
         }
 
@@ -6593,6 +6679,14 @@ public final class Adequacy {
                         // What the sentence says is what the author called the rule, or what the
                         // rule is where they called it nothing; how a reader is sent to it is the
                         // other question, and a rule reached at two calls has an answer per call.
+                        // Both lines, and the behavior whose rows fail to tell them apart. Which
+                        // rule drew the one that was written is where the sentence is pointed, and
+                        // the line the rows leave standing beside it is no rule of anybody's — it
+                        // is the form a report spells, and there is nothing else to call it.
+                        case About.ALineTheRowsDoNotTellFromAnother untold ->
+                                new ExampleMessage.NoRowTellsThatLineFromAnother(
+                                        untold.line().border().label(),
+                                        untold.allowed().label(), finding.named());
                         case About.APointOfABorder(var point) ->
                                 switch (point.point().line().provenance()) {
                             case RuleRef.Named named ->
@@ -6665,6 +6759,15 @@ public final class Adequacy {
             switch (said) {
                 case About.ACaseNoRowExpects(var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
+                // The input the two lines part company at, where one was worked out. Said as a hint
+                // rather than in the sentence: the sentence is about the two lines, and this is the
+                // one row that settles which of them the model draws.
+                case About.ALineTheRowsDoNotTellFromAnother untold -> {
+                    String parting = untold.partingSaid();
+                    if (parting != null) {
+                        built.hint(new ExampleMessage.WriteARowAtThatInput(parting));
+                    }
+                }
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.
                 case About.APointOfADeclaredBorder(var owed) ->

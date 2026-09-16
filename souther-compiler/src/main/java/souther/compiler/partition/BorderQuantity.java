@@ -93,8 +93,14 @@ public sealed interface BorderQuantity {
 
         /** Its one position's, and nothing about any other. */
         @Override
-        public Carrier carrierOf(NumericTerm asked) {
-            return term.equals(asked) ? of.answered() : null;
+        public TermOrders ordersOf(NumericTerm asked) {
+            return term.equals(asked) ? of : null;
+        }
+
+        /** The position itself, weighed once. */
+        @Override
+        public LinearForm<NumericTerm> direction() {
+            return LinearForm.atom(term);
         }
 
         @Override
@@ -286,11 +292,17 @@ public sealed interface BorderQuantity {
 
         /** That position's own, which is what it is read off a row and written back on. */
         @Override
-        public Carrier carrierOf(NumericTerm asked) {
+        public TermOrders ordersOf(NumericTerm asked) {
             if (on.term().equals(asked)) {
-                return on.answered();
+                return on;
             }
-            return against.term().equals(asked) ? against.answered() : null;
+            return against.term().equals(asked) ? against : null;
+        }
+
+        /** Their difference, which is what standing apart is. */
+        @Override
+        public LinearForm<NumericTerm> direction() {
+            return LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term()));
         }
 
         /**
@@ -542,9 +554,14 @@ public sealed interface BorderQuantity {
         /** The order that position is read and written on, and null for a position not in the
          *  form. */
         @Override
-        public Carrier carrierOf(NumericTerm asked) {
-            TermOrders orders = on.get(asked);
-            return orders == null ? null : orders.answered();
+        public TermOrders ordersOf(NumericTerm asked) {
+            return on.get(asked);
+        }
+
+        /** The form itself, which is what it weighs its positions by. */
+        @Override
+        public LinearForm<NumericTerm> direction() {
+            return form;
         }
 
         @Override
@@ -624,22 +641,7 @@ public sealed interface BorderQuantity {
          */
         @Override
         public String left() {
-            StringBuilder out = new StringBuilder();
-            for (Map.Entry<NumericTerm, java.math.BigDecimal> each
-                    : AffineReading.ordered(form)) {
-                java.math.BigDecimal coef = each.getValue();
-                if (out.isEmpty()) {
-                    out.append(coef.signum() < 0 ? "-" : "");
-                } else {
-                    out.append(coef.signum() < 0 ? " - " : " + ");
-                }
-                java.math.BigDecimal size = coef.abs();
-                if (size.compareTo(java.math.BigDecimal.ONE) != 0) {
-                    out.append(size.stripTrailingZeros().toPlainString()).append(" * ");
-                }
-                out.append(each.getKey());
-            }
-            return out.toString();
+            return OrderedAffineBoundary.spelled(form.coefs());
         }
 
         @Override
@@ -725,7 +727,64 @@ public sealed interface BorderQuantity {
      * weighs, and with what, is settled by the arithmetic or the operation semantics that produced
      * the form; this layer does not decide that again.
      */
-    Carrier carrierOf(NumericTerm term);
+    TermOrders ordersOf(NumericTerm term);
+
+    /** The order that position's values are counted on, which is what its orders answer. Null on
+     *  the same reading: a quantity not over the position is over nothing of it. */
+    default Carrier carrierOf(NumericTerm term) {
+        TermOrders orders = ordersOf(term);
+        return orders == null ? null : orders.answered();
+    }
+
+    /**
+     * What this quantity weighs each of its positions by, as a form over them.
+     *
+     * <p>The one shape all three are read as, and the reason a reader of a line never asks which of
+     * them it is holding. One position's own values are that position weighed once; how far two
+     * positions stand apart is their difference; a form is itself. Which way the form runs is part
+     * of it — {@code a - b} and {@code b - a} order the rows opposite ways — and how much of the
+     * quantity was written is not, so a caller after the quantity itself takes
+     * {@link QuantityKey#of}.
+     */
+    LinearForm<NumericTerm> direction();
+
+    /**
+     * What this quantity's positions read as at one row, or why the row leaves it no value.
+     *
+     * <p>Every term, whatever came of any of them, for the reason {@link #standsAt} reads every
+     * term: what stopped a reading is collected over the whole quantity rather than taken from
+     * whichever position the walk began with. A row that wrote nothing at one of them leaves this
+     * quantity no value there, which is the row's own answer and outranks whatever else was met.
+     *
+     * <p>Written once for all three, because reading a position is the position's business and not
+     * the quantity's shape. What is done with the numbers afterwards — held against a criterion, or
+     * held against a line the model did not draw — is the caller's.
+     */
+    default ValuesAtARow valuesAt(Observation observation) {
+        Map<NumericTerm, Place> read = new java.util.LinkedHashMap<>();
+        Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+        boolean noValue = false;
+        for (NumericTerm term : terms()) {
+            TermOrders orders = ordersOf(term);
+            WhatATermRead met = switch (term) {
+                case NumericTerm.FromOnePosition one ->
+                        WhatATermRead.at(orders, observation.at(one.position()));
+                case NumericTerm.TakenOver over ->
+                        WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
+            };
+            switch (met) {
+                case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
+                case WhatATermRead.NoNumberOfTheValue _,
+                     WhatATermRead.NothingWrittenThere _ -> noValue = true;
+                case WhatATermRead.Number(Place value) -> read.put(term, value);
+            }
+        }
+        if (noValue) {
+            return ValuesAtARow.NONE_HERE;
+        }
+        return stopped.isEmpty() ? new ValuesAtARow.Read(read)
+                : new ValuesAtARow.CouldNotTell(stopped);
+    }
 
     /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
     static Map<NumericTerm, Carrier> answeredOn(Map<NumericTerm, TermOrders> orders) {

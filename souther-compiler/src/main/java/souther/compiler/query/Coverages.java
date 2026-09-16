@@ -848,10 +848,36 @@ final class Coverages {
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.add(assessed(each, reading(subject.at(each), projection), observed, level,
-                    numbering));
+            out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each)),
+                    observed, level, numbering));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The behavior's other lines, read as the inequalities they are.
+     *
+     * <p>For naming an input worth writing a row at. Where the model's other rules leave a row is
+     * where this line is what settles the answer, so an input the others keep is one an author can
+     * see the difference at — and one they refuse is a row two lines part company at and the
+     * behavior answers the same way either side of.
+     *
+     * <p>A preference and never a condition. Which rules a path actually consults is the decision's
+     * question and is measured there; what this does with the answer is choose between inputs that
+     * are each already an input the two lines part company at.
+     */
+    private static List<souther.compiler.partition.OrderedAffineBoundary> elsewhere(
+            List<Border> lines, Border but) {
+        List<souther.compiler.partition.OrderedAffineBoundary> out = new ArrayList<>();
+        for (Border each : lines) {
+            souther.compiler.partition.OrderedAffineBoundary read =
+                    each.sameReadingAs(but) ? null
+                            : souther.compiler.partition.OrderedAffineBoundary.of(each);
+            if (read != null) {
+                out.add(read);
+            }
+        }
+        return out;
     }
 
     /**
@@ -882,7 +908,7 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
-            out.add(new BorderAssessment(border.border(), items));
+            out.add(new BorderAssessment(border.border(), items, border.beside()));
         }
         return new LineReadings(out);
     }
@@ -922,6 +948,10 @@ final class Coverages {
 
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
         StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows);
+
+        /** Which other line those same rows leave standing beside this one, read through the same
+         *  walk over them. */
+        AnotherLineTheRowsAllow beside(List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
@@ -998,7 +1028,13 @@ final class Coverages {
                 }
             });
         }
-        return new BorderAssessment(border, items);
+        // And which other line these same rows leave standing. Read off the same rows and the same
+        // reading of the line as the points above: a row at each of the four shows the line has not
+        // moved, and nothing about the four shows it has not turned.
+        return new BorderAssessment(border, items, absent != null
+                ? new AnotherLineTheRowsAllow.NotAsked(
+                        AnotherLineTheRowsAllow.Reason.NOTHING_WAS_READ_AGAINST_THE_LINE)
+                : shape.beside(rows));
     }
 
     /**
@@ -1012,7 +1048,8 @@ final class Coverages {
      */
     private static OneShapeOfBorder reading(
             souther.compiler.partition.MeasuredInput.BorderReading line,
-            ItemAssessment.WritabilityProjection projection) {
+            ItemAssessment.WritabilityProjection projection,
+            List<souther.compiler.partition.OrderedAffineBoundary> elsewhere) {
         List<ComparisonEmissionSite> site =
                 line.border().origin().recordedAt();
         return new OneShapeOfBorder() {
@@ -1020,6 +1057,12 @@ final class Coverages {
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
                 return StandingAtAPoint.met(line, rows, criterion, site);
+            }
+
+            @Override
+            public AnotherLineTheRowsAllow beside(List<ObservedInputs> rows) {
+                return AnotherLineTheRowsAllow.of(line.border(),
+                        () -> StandingAtAPoint.valuesOf(line, rows), elsewhere);
             }
 
             @Override
@@ -1322,7 +1365,27 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
-        return new BorderAssessment(a.border(), kept);
+        return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()));
+    }
+
+    /**
+     * What two readings of one line say about the lines beside it.
+     *
+     * <p>One answer, because there is one question: which lines these rows leave standing is about
+     * the line and the rows, and two readings of one line are readings of one line by the same rows.
+     * So a reading that was asked answers for both, and two that were both asked and disagree are
+     * this compiler saying two things about one measurement.
+     */
+    private static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
+                                                   AnotherLineTheRowsAllow b) {
+        if (a instanceof AnotherLineTheRowsAllow.NotAsked) {
+            return b;
+        }
+        if (b instanceof AnotherLineTheRowsAllow.NotAsked || a.equals(b)) {
+            return a;
+        }
+        throw new IllegalStateException("two readings of one line disagreeing about which lines"
+                + " the rows leave standing beside it: " + a + " and " + b);
     }
 
     /**
@@ -1612,7 +1675,8 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(subject.at(each),
-                            ItemAssessment.WritabilityProjection.NOT_COMPUTED),
+                            ItemAssessment.WritabilityProjection.NOT_COMPUTED,
+                            elsewhere(partitioning.between(), each)),
                     observed, level, numbering));
         }
         return List.copyOf(out);
