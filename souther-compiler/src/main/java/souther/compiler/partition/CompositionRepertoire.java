@@ -55,10 +55,10 @@ public enum CompositionRepertoire {
      * by depends on how its numbers are reached: a number that is a place in the spelling of what
      * stands there is written at, one whose values come of a run of the place's own is solved for,
      * and one read off a value the group already asks for is read off the values that demand
-     * admits. Which groups those are is the realizer's to say and is not spelled out here; what
-     * this names is the values left over, whose numbers are reached none of those ways — the length
-     * of a list beside what it comes to is one value to compose out of both, and nothing here
-     * composes it.
+     * admits, and one it is composed out of is composed for. Which groups those are is the
+     * realizer's to say and is not spelled out here; what this names is the values left over, whose
+     * numbers are reached none of those ways — two totals of one container are two spreadings of
+     * one list of elements at once, and nothing here writes that.
      *
      * <p>So a group nothing built a value for is not a group no value answers. Raising anything
      * reaches none of them; what would is somebody writing the solving.
