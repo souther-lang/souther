@@ -6352,7 +6352,7 @@ public final class Adequacy {
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
                 out.add(Finding.by(behavior, output.cases(),
-                        new About.ACaseNoRowExpects(missing)));
+                        new About.ACaseNoRowExpects(behavior, missing)));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
             // them adds nothing to that. Asked of the rows rather than of the declaration: the two
@@ -6766,7 +6766,7 @@ public final class Adequacy {
             About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(placeOf(db, module, finding))
                     .say(switch (said) {
-                        case About.ACaseNoRowExpects(var missing) ->
+                        case About.ACaseNoRowExpects(var _, var missing) ->
                                 new ExampleMessage.NoRowExpectsThatCase(
                                         missing.name(), finding.named());
                         case About.ACaseNoRowAppliesItTo(var input, var missing, var _) ->
@@ -6881,7 +6881,7 @@ public final class Adequacy {
                                         "no message for " + finding.kind());
                     });
             switch (said) {
-                case About.ACaseNoRowExpects(var missing) ->
+                case About.ACaseNoRowExpects(var _, var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.

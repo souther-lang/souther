@@ -535,7 +535,12 @@ public record Settlements(List<ObligationIdentity> requested,
                 // the signature measure counts off the row's own text. Answered here as well, that
                 // would be a second reading of one relation, made from the values a row builds
                 // rather than from what it states.
+                // And a case of the output, for the same reason read the other way round: what
+                // discharges it is what a row states it expects, which the signature measure counts
+                // off the row's own text rather than from the values a row builds.
                 case ObligationIdentity.OfAnInputCase owed -> throw new IllegalStateException(
+                        "no row is offered for " + owed + ", so none is weighed against it");
+                case ObligationIdentity.OfAnOutputCase owed -> throw new IllegalStateException(
                         "no row is offered for " + owed + ", so none is weighed against it");
                 // An answer a row of the author's is waiting for. Nothing composes one: what
                 // discharges it is what the system does, written where that row is by somebody who

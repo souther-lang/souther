@@ -187,7 +187,8 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
     /** The case a signature finding names. */
     private static String caseOf(Adequacy.Finding f) {
         return switch (f.about()) {
-            case souther.compiler.query.About.ACaseNoRowExpects(var missing) -> missing.name();
+            case souther.compiler.query.About.ACaseNoRowExpects(var _, var missing) ->
+                    missing.name();
             case souther.compiler.query.About.ACaseNothingWasSeenToProduce(var missing) ->
                     missing.name();
             default -> throw new AssertionError("not a case of the output: " + f);

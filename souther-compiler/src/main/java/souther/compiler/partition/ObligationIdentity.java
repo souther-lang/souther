@@ -30,7 +30,8 @@ import java.util.Set;
  */
 public sealed interface ObligationIdentity
         permits ObligationIdentity.OfALine, ObligationIdentity.OfAnArm,
-                ObligationIdentity.OfARow, ObligationIdentity.OfADecisionRule,
+                ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
+                ObligationIdentity.OfADecisionRule,
                 ObligationIdentity.OfACombinationOfDecisions,
                 ObligationIdentity.OfAFallbackPairCell, WhereACaseOfAnInputIsOwed {
 
@@ -111,6 +112,26 @@ public sealed interface ObligationIdentity
                 throw new IllegalArgumentException(
                         "a case of an input is at one of the inputs: " + at);
             }
+        }
+    }
+
+    /**
+     * A case of the output, which is what the signature's output account is owed at.
+     *
+     * <p>The behavior and which case, and nothing about a position. An output has none — an axis is
+     * of an input — so no other account can hold this and there is no second entry for it to
+     * coincide with, which is what makes the array beside the output cases the one place it is.
+     *
+     * <p>The behavior beside the case for the reason a rule of a decision has one: two behaviors
+     * answering with the same sum owe that case separately, and an identity that left the behavior
+     * out would have one of them discharged by the other's row.
+     */
+    record OfAnOutputCase(String behavior, TypeSymbol caseOfTheOutput)
+            implements ObligationIdentity {
+
+        public OfAnOutputCase {
+            Objects.requireNonNull(behavior, "a case of an output is some behavior's");
+            Objects.requireNonNull(caseOfTheOutput, "an obligation is told apart by something");
         }
     }
 

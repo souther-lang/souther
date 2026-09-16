@@ -735,6 +735,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -1244,6 +1245,22 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "NotThisVoucher", "Redeemed", "TooManyForOneVoucher" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "NotThisVoucher"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "Redeemed"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "TooManyForOneVoucher"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -2510,6 +2527,22 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "NotOnTheList", "Seated", "TooManyForOneTicket" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "NotOnTheList"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "Seated"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "TooManyForOneTicket"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -3249,6 +3282,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -3319,6 +3353,17 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Domestic", "Overseas" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "originOf",
+              "case" : "Domestic"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "originOf",
+              "case" : "Overseas"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },

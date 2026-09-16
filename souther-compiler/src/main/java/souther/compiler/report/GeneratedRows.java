@@ -738,7 +738,7 @@ public final class GeneratedRows {
             // are two readings of one arm rather than one of them being handed the other's.
             case About.AnArmNoRowGoesThrough(var arm) -> ArmVocabulary.label(arm);
             case About.ACaseNoRowAppliesItTo(var _, var missing, var _) -> missing.name();
-            case About.ACaseNoRowExpects(var missing) -> missing.name();
+            case About.ACaseNoRowExpects(var _, var missing) -> missing.name();
             // The class and the measure it is a class of, which a class name alone does not say:
             // two parameters of one type divide into classes of the same names, and one location is
             // measured at more than one number.

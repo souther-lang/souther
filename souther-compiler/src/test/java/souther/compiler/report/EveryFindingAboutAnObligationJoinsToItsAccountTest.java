@@ -499,6 +499,10 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         }
         JsonNode from = switch (kind) {
             case "decision_rule_uncovered" -> behavior.get("decision").get("obligations");
+            // A case of the output, whose account is under the output itself. No second place to
+            // look: an axis is of an input, so nothing else has an entry this could land on.
+            case "output_case_unspecified" ->
+                    behavior.get("signature").get("output").get("obligations");
             case "arm_unreached" -> behavior.get("branch").get("obligations");
             case "boundary_unmet", "domain_point_uncovered" ->
                     behavior.get("partition").get("obligations");

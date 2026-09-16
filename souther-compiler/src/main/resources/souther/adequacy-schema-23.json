@@ -1713,15 +1713,29 @@
             }
           },
           {
-            "description": "And the place is written for the one kind whose place is its own. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice.",
+            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, and a row waiting for its answer at the row or at the arm it stands at. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice.",
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "arm_unreached"
+              "anyOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "arm_unreached"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "unanswered_row"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1968,10 +1982,62 @@
                           }
                         },
                         "else": {
-                          "not": {
+                          "if": {
+                            "properties": {
+                              "kind": {
+                                "const": "output_case_unspecified"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          "then": {
                             "required": [
                               "obligationId"
-                            ]
+                            ],
+                            "properties": {
+                              "obligationId": {
+                                "$ref": "#/$defs/outputCaseObligationId"
+                              }
+                            }
+                          },
+                          "else": {
+                            "if": {
+                              "properties": {
+                                "kind": {
+                                  "const": "unanswered_row"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ]
+                            },
+                            "then": {
+                              "description": "One of two, because one kind covers two obligations: the arm a row stands at is owed a row and the arm account holds that, and the row itself is owed an answer and the row account holds that. Which of them a finding is about is what it publishes here.",
+                              "required": [
+                                "obligationId"
+                              ],
+                              "properties": {
+                                "obligationId": {
+                                  "oneOf": [
+                                    {
+                                      "$ref": "#/$defs/armObligationId"
+                                    },
+                                    {
+                                      "$ref": "#/$defs/rowObligationId"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "else": {
+                              "not": {
+                                "required": [
+                                  "obligationId"
+                                ]
+                              }
+                            }
                           }
                         }
                       }
@@ -2013,7 +2079,7 @@
             ]
           },
           "obligationId": {
-            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, in `rowObligations` where it is a row waiting on its answer, and in `partition.axes` where it is a class of a position. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`, an axis and a class for `axis_class_uncovered`. For `input_case_unspecified` it is one of two, because that case is one obligation with the class of its position only where the behavior has a position of its own: an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike. A combination of a body's decisions is one of these too, written as the decisions a run has to have made.",
+            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, in `rowObligations` where it is a row waiting on its answer, in `signature.output.obligations` where it is a case of the output, and in `partition.axes` where it is a class of a position. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`, an axis and a class for `axis_class_uncovered`. For `input_case_unspecified` it is one of two, because that case is one obligation with the class of its position only where the behavior has a position of its own: an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike. A combination of a body's decisions is one of these too, written as the decisions a run has to have made.",
             "oneOf": [
               {
                 "$ref": "#/$defs/obligationId"
@@ -2026,6 +2092,9 @@
               },
               {
                 "$ref": "#/$defs/inputCaseObligationId"
+              },
+              {
+                "$ref": "#/$defs/outputCaseObligationId"
               },
               {
                 "$ref": "#/$defs/rowObligationId"
@@ -2278,6 +2347,25 @@
         "case": {
           "type": "string",
           "description": "The case of that input, as the model declares it."
+        }
+      }
+    },
+    "outputCaseObligationId": {
+      "type": "object",
+      "description": "What tells one case of a behavior's output from every other. The behavior and which case, and nothing about a position: an output has none, an axis is of an input, so there is no other account this could have an entry in and the array under `signature.output` is the one place it is kept. The behavior is part of it because two behaviors answering with the same sum owe that case separately.",
+      "required": [
+        "behavior",
+        "case"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "type": "string",
+          "description": "The behavior whose output it is."
+        },
+        "case": {
+          "type": "string",
+          "description": "The case of that output, as the model declares it."
         }
       }
     },
@@ -3786,12 +3874,29 @@
           "type": "object",
           "required": [
             "declared",
+            "obligations",
             "status"
           ],
           "additionalProperties": false,
           "properties": {
             "declared": {
               "$ref": "#/$defs/caseNames"
+            },
+            "obligations": {
+              "type": "array",
+              "description": "What a row is owed at here: one entry per case of the output, which is what an `output_case_unspecified` finding joins to. The only place any of them is — an axis is of an input, so an output case has no other account it could be an entry of. Beside `declared` and not instead of it: those are the words the model writes for the cases, and these are the key a consumer joins on.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "obligationId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "obligationId": {
+                    "$ref": "#/$defs/outputCaseObligationId"
+                  }
+                }
+              }
             },
             "specified": {
               "$ref": "#/$defs/caseNames",

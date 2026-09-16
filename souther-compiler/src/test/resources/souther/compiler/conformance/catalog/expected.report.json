@@ -646,6 +646,17 @@
         "status" : "complete",
         "output" : {
           "declared" : [ "Discounted", "TooCheap" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "discount",
+              "case" : "Discounted"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "discount",
+              "case" : "TooCheap"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "Discounted", "TooCheap" ],
           "observed" : [ "Discounted", "TooCheap" ],
@@ -1139,6 +1150,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -1492,6 +1504,17 @@
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "台帳へ書く",
+              "case" : "出荷済み"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "台帳へ書く",
+              "case" : "書けなかった"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった" ],
           "observed" : [ ],
@@ -1870,6 +1893,22 @@
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "出荷済み"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "書けなかった"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "重量超過"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった", "重量超過" ],
           "observed" : [ "出荷済み", "書けなかった", "重量超過" ],
@@ -3484,6 +3523,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },

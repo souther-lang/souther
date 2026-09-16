@@ -44,10 +44,24 @@ import java.util.Set;
  */
 public sealed interface About {
 
-    /** A case of the output no row expects. */
-    record ACaseNoRowExpects(TypeSymbol missing) implements About {
+    /**
+     * A case of the output no row expects.
+     *
+     * <p>One entry of the signature's output account, and it says so by being an
+     * {@link OfAnObligation}. The behavior is carried rather than read back off whichever subject
+     * the finding was filed under: what the case is owed by is settled where the finding is made,
+     * and an identity worked out from the surface a reader happened to reach it through is the
+     * bookkeeping this type exists to have none of.
+     */
+    record ACaseNoRowExpects(String behavior, TypeSymbol missing) implements OfAnObligation {
         public ACaseNoRowExpects {
+            java.util.Objects.requireNonNull(behavior, "a case of an output is some behavior's");
             java.util.Objects.requireNonNull(missing, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAnOutputCase(behavior, missing);
         }
     }
 

@@ -1928,7 +1928,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     cases.verified().size(), output.declared().size(),
                     decided ? "" : "   (partial)"));
             for (Adequacy.Finding f : behavior.findings()) {
-                if (f.about() instanceof About.ACaseNoRowExpects(var missing)) {
+                if (f.about() instanceof About.ACaseNoRowExpects(var _, var missing)) {
                     out.append(String.format("      %s %sexpects `%s`%n",
                             mark(f), noRow(f), missing.name()));
                 }
@@ -3770,6 +3770,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case RowIdentity.Unnamed unnamed -> into.put("ordinal", unnamed.ordinal());
                 }
             }
+            // The behavior and which case of its output. No `input` beside them: an output has no
+            // position, which is the whole of why the array under `signature.output` is the one
+            // place this is kept.
+            case ObligationIdentity.OfAnOutputCase(var behavior, var missing) -> {
+                into.put("behavior", behavior);
+                into.put("case", missing.name());
+            }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
             case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
@@ -4653,6 +4660,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // write — four empty arrays and a zero used to say the same as a behavior every case of
         // which went uncovered.
         names(output.putArray("declared"), signature.output().declared());
+        // What a row is owed at here. Every case the output can be answered with is one, and this
+        // array is the only place any of them is: an axis is of an input, so no other account has
+        // an entry a case of an output could coincide with. Beside `declared` and not instead of
+        // it — those are the words the model writes, and these are what a finding joins on.
+        ArrayNode owedOut = output.putArray("obligations");
+        for (TypeSymbol each : signature.output().declared()) {
+            obligationId(owedOut.addObject().putObject("obligationId"),
+                    new ObligationIdentity.OfAnOutputCase(named, each), sources);
+        }
         measured(output, signature.output().cases(), (node, cases) -> {
             names(node.putArray("specified"), cases.specified());
             names(node.putArray("observed"), cases.observed());
@@ -5604,7 +5620,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
-            case About.ACaseNoRowExpects(var missing) -> words(missing.name());
+            case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());
             case About.ACaseNothingWasSeenToProduce(var missing) -> words(missing.name());
             case About.AClassNoRowIsIn(var missing) ->
                     words(missing.name() + " (at " + missing.axis().name() + ")");

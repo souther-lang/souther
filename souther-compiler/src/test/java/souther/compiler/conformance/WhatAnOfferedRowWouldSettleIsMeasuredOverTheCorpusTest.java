@@ -129,6 +129,9 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
             // Nor for a case of an input nothing divides into classes, for the same reason: what
             // this run composes rows from is the classes of a position.
             case ObligationIdentity.OfAnInputCase _ -> "input case";
+            // Nor for a case of the output: what discharges that is what a row states it expects,
+            // counted off the row's own text.
+            case ObligationIdentity.OfAnOutputCase _ -> "output case";
             // Nor for a row waiting on its answer. What discharges that is the answer, written
             // where the row is by somebody who knows what the system does.
             case ObligationIdentity.OfARow _ -> "row";

@@ -46,8 +46,8 @@ class ACombinationIsARequirementAndNotARowEachTest {
         // Two of them twice: a rule with no line and a rule nothing classified are each reached
         // under two of the seals above, and the walk says so rather than folding what it found.
         assertEquals(List.of(
-                "ACaseNoRowExpects", "ACaseNothingWasSeenToProduce", "ACaseNoRowAppliesItTo",
-                "AClassNoRowIsIn",
+                "ACaseNothingWasSeenToProduce",
+                "ACaseNoRowExpects", "ACaseNoRowAppliesItTo", "AClassNoRowIsIn",
                 // One combination of the decisions a body settles one value by, which is a
                 // requirement of the interaction criterion.
                 "ACombinationNoRowMakes",
@@ -104,7 +104,7 @@ class ACombinationIsARequirementAndNotARowEachTest {
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfAnArm", "OfARow", "OfADecisionRule",
+                List.of("OfALine", "OfAnArm", "OfARow", "OfAnOutputCase", "OfADecisionRule",
                         "OfACombinationOfDecisions", "OfAFallbackPairCell", "OfAClass",
                         "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");

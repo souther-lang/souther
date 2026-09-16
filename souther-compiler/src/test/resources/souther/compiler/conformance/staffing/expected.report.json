@@ -408,6 +408,17 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Grant", "NotEntitled" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "grantLeave",
+              "case" : "Grant"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "grantLeave",
+              "case" : "NotEntitled"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -1635,6 +1646,17 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Over", "Within" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "judgeHours",
+              "case" : "Over"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "judgeHours",
+              "case" : "Within"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
