@@ -879,18 +879,6 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * Whether it is a form of the grammar written by hand rather than as a record.
-     *
-     * <p>What {@code StructuralParts} asks to know whether it can read parts off one, records
-     * being the case it answers for itself. A form whose own subsystem settled on writing it out
-     * keeps the shape a record has, and a reader that took it for something with no parts would
-     * hold two of them by an equality and see none of what they are made of.
-     */
-    static boolean isANodeWrittenByHand(Class<?> type) {
-        return !type.isRecord() && isAFormOfTheGrammar(type);
-    }
-
-    /**
      * Whether it is one of the front end's settled answers, whose parts are what a crossing depends
      * on.
      *

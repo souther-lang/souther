@@ -167,6 +167,28 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     }
 
     /**
+     * And a position says what it is, being passed over by the comparison all the same.
+     *
+     * <p>The two answers held side by side, on the form where they are most easily taken for one.
+     * A position hands its parts over, so a reader can go inside one; the comparison passes over it
+     * anyway, that being a decision about what a crossing can see. Neither answers the other, and
+     * what a position is — something this compile keeps about having read a source — is what is
+     * asked here.
+     */
+    @Test
+    void andAPositionSaysWhatItIsThoughTheComparisonPassesOverIt() {
+        assertTrue(StructuralParts.areHandedOver(SourcePos.class),
+                "parts can be read off one, so it is among the forms this asks about");
+        assertTrue(DeclarationAgreement.erases(SourcePos.class),
+                "and the comparison passes over it, which is what is done with one");
+        assertTrue(DeclarationAgreement.isARecordOfTheBuilding(SourcePos.class),
+                "and separately from that, where a node was placed is something this compile keeps"
+                        + " about its own reading");
+        assertEquals(1, accountsGiven(SourcePos.class),
+                "which is the one account it gives, the two questions staying two");
+    }
+
+    /**
      * And what the comparison passes over is one erased thing, not the first of several.
      *
      * <p>The same question one door along. Which erased kind a form is decides what it is held

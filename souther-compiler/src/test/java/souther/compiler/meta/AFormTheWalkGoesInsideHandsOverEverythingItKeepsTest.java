@@ -1,6 +1,8 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ConstEval;
+import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
@@ -79,9 +81,82 @@ class AFormTheWalkGoesInsideHandsOverEverythingItKeepsTest {
                         + refused.getMessage());
     }
 
+    /**
+     * And a form of the grammar that kept one back is refused when it is asked whether it hands its
+     * parts over at all.
+     *
+     * <p>Where the sweep above would otherwise never arrive. Whether parts can be read off a form
+     * decides how it is compared, so a form keeping one back is a form nothing can take apart — and
+     * for one of the grammar's own kinds that is not an answer but a refusal, the walk going inside
+     * those whatever they hold. Asked only where the parts are read, such a form would be passed
+     * over as a leaf, the walk would never reach it, and the sweep would go green over it.
+     */
+    @Test
+    void andAFormOfTheGrammarThatKeptOneBackIsRefusedWhenItIsAskedAtAll() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> StructuralParts.areHandedOver(AShapeKeepingOneBack.class),
+                "a shape a node holds is one the walk goes inside, so keeping a part back is"
+                        + " refused rather than making it a form the walk stops at");
+        assertTrue(refused.getMessage().contains("hands it to"),
+                "and it says which part, as it does where the parts are read: "
+                        + refused.getMessage());
+
+        assertFalse(StructuralParts.areHandedOver(KeepsOneBack.class),
+                "while the same shape written outside the grammar is a form nothing here takes"
+                        + " apart, which is an answer and not a refusal");
+    }
+
+    /**
+     * And a form holding nothing is read as the nothing it holds, however it is written.
+     *
+     * <p>The axis, said where the two spellings could part. Whether a form is taken apart is read
+     * off what it hands over, so a form with nothing to hand over is taken apart into nothing —
+     * which is an answer this comparison reaches by itself, two of one class being one form when
+     * there is nothing else about either. Written as a record or written out, it is the same form
+     * and gets the same answer; a class standing for many values is not one of these, its class
+     * saying which of them is in hand about as much as it says nothing.
+     *
+     * <p>Left to an equality instead, a form written without one is put to the identity two builds
+     * do not share, and a declaration is reported as disagreeing with itself.
+     */
+    @Test
+    void andAFormHoldingNothingIsReadAsTheNothingItHolds() {
+        assertTrue(StructuralParts.areHandedOver(HoldsNothing.class),
+                "there is nothing it keeps back, so nothing is left to anybody's equality");
+        assertTrue(StructuralParts.areHandedOver(HoldsNothingWrittenOut.class),
+                "and the same form written out is the same answer, which is what makes this a"
+                        + " reading of the form rather than of how it was spelt");
+        assertFalse(StructuralParts.areHandedOver(Type.Prim.class),
+                "while a class standing for one of many cases says nothing about which is in hand,"
+                        + " and reading it as nothing kept back would make two of them one");
+
+        assertFalse(ConstEval.equal(new HoldsNothingWrittenOut(), new HoldsNothingWrittenOut()),
+                "which is what handing one to an equality would come to: a form written without"
+                        + " one answers the identity two builds cannot share");
+    }
+
+    /** A form of the grammar holding nothing, written as a record. */
+    private record HoldsNothing() implements Hir.Shape {}
+
+    /** And the same form written out, which has no equality of its own. */
+    private static final class HoldsNothingWrittenOut implements Hir.Shape {}
+
     /** Stands for a form that keeps a part behind an equality that would read it. */
     @SuppressWarnings("unused")
     private static final class KeepsOneBack {
+
+        private final String handedOver = "read";
+
+        private final String kept = "unread";
+
+        public String handedOver() {
+            return handedOver;
+        }
+    }
+
+    /** And the same, written as one of the shapes a node of the grammar holds. */
+    @SuppressWarnings("unused")
+    private static final class AShapeKeepingOneBack implements Hir.Shape {
 
         private final String handedOver = "read";
 

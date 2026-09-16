@@ -21,10 +21,12 @@ import java.util.List;
  *
  * <p>A record hands over its components. Anything else hands over what it declares and lets be read
  * — a final instance field with a no-argument method of the same name answering the type the field
- * holds, which is the shape a record has and the one a form written by hand keeps. Each of those is
- * refused rather than passed over, since a part nothing can read is a part a comparison would decide
- * without and a part handed over as something else is the two readers here looking at two things.
- * Nothing reaches into what a form does not hand out.
+ * holds, which is the shape a record has and the one a form written by hand keeps. Nothing reaches
+ * into what a form does not hand out.
+ *
+ * <p>Whether one does is what decides how it is compared, and a form that hands part of itself over
+ * and keeps the rest is not half read: it is a form nothing here can take apart. A form of the
+ * grammar is refused instead, being one the walk goes inside whatever it holds.
  */
 final class StructuralParts {
 
@@ -52,13 +54,34 @@ final class StructuralParts {
     /**
      * Whether a form of this shape hands its parts over.
      *
-     * <p>How it is written and not what a crossing makes of it. A form the comparison passes over
-     * is read through all the same — the walk that goes looking for the declarations a crossing
-     * reaches has to go inside one to find what it holds — so what is asked here is whether there
-     * are parts to read.
+     * <p>Whether there is a representation to read, and not how the class happens to have been
+     * written. A form keeping its whole state in final fields it hands out is one a reader can take
+     * apart whatever the reason it was written as a class rather than as a record — and the reasons
+     * are their own: a form whose construction is closed to everyone but the world that mints it is
+     * written by hand for that, and nothing about it says how two of them are to be compared.
+     *
+     * <p>A form of the grammar is asked one thing more, and is not answered by it. It is walked into
+     * whatever it holds, so a part it keeps back is refused here rather than making it a form the
+     * walk stops at — and what comes back is still the reading, so being one of the tree's kinds is
+     * never itself the reason a form is taken apart.
+     *
+     * <p>A form holding nothing is read as the nothing it holds. Two of one class are one form,
+     * there being nothing else about either, and that is an answer this comparison reaches by
+     * itself; handed to an equality instead, a form written without one would put two builds'
+     * objects to the identity they do not share, and one declaration would disagree with itself.
      */
     static boolean areHandedOver(Class<?> type) {
-        return type.isRecord() || DeclarationAgreement.isANodeWrittenByHand(type);
+        // A kind whose class does not say which value is in hand: an enum has a constant for each
+        // of its cases, an array its elements, and an interface stands for its forms rather than
+        // being one. Read as nothing kept back, each would make two of them one.
+        if (type.isInterface() || type.isEnum() || type.isArray() || type.isPrimitive()) {
+            return false;
+        }
+        Inspection inspected = inspect(type);
+        if (DeclarationAgreement.isAFormOfTheGrammar(type)) {
+            refuseWhatIsKeptBack(type, inspected);
+        }
+        return inspected.keptBack().isEmpty();
     }
 
     /**
@@ -69,56 +92,92 @@ final class StructuralParts {
      * and an order that varies would make a comparison stop at a different part each run.
      */
     static List<Part> of(Class<?> type) {
+        Inspection inspected = inspect(type);
+        refuseWhatIsKeptBack(type, inspected);
         if (type.isRecord()) {
-            List<Part> parts = new ArrayList<>(type.getRecordComponents().length);
-            for (RecordComponent component : type.getRecordComponents()) {
-                parts.add(new Part(component.getName(), component.getGenericType(),
-                        component.getAccessor()));
-            }
-            return parts;
+            return inspected.handedOver();
         }
-        List<Part> parts = new ArrayList<>();
-        for (Field field : type.getDeclaredFields()) {
-            if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
-                continue;
-            }
-            parts.add(new Part(field.getName(), field.getGenericType(), handsOver(type, field)));
-        }
+        List<Part> parts = new ArrayList<>(inspected.handedOver());
         parts.sort(Comparator.comparing(Part::name));
         return parts;
     }
 
     /**
-     * The method a form hands one of its parts over by.
+     * What reading a class for parts found: the ones it hands over, and what it does with each of
+     * the rest.
      *
-     * <p>Held to what a record's accessor is, because the two readers here would otherwise come
-     * apart again: what a part may hold is read off the field and what it does hold is read off the
-     * method, so a method answering something else is a static reader and a walking reader looking
-     * at two things — which is what reading parts in one place was for. A part written where it can
-     * be set again is refused for the same reason, a form being compared for what it says now and
-     * asked about for what it can ever say.
+     * <p>One reading, because the two callers here would otherwise come apart. Whether parts can be
+     * read off a form decides how it is compared, and which parts those are is what the comparison
+     * then walks; worked out twice, a form would be taken apart by one rule and chosen for by
+     * another.
      */
-    private static Method handsOver(Class<?> type, Field field) {
-        String part = field.getName();
-        if (!Modifier.isFinal(field.getModifiers())) {
-            throw new IllegalStateException(type.getName() + " can write `" + part + "` again, so"
-                    + " what it is made of is not what it was made of. Hold it as written once, or"
-                    + " hold it somewhere this does not read.");
+    private record Inspection(List<Part> handedOver, List<String> keptBack) {}
+
+    /**
+     * What {@code type} hands over and what it keeps back.
+     *
+     * <p>A record hands over its components, which is what a record is. Anything else hands a part
+     * over by a final instance field with a no-argument method of the same name answering the type
+     * the field holds, which is that same shape written out. Each of the three is what it is for:
+     * what a part may hold is read off the field and what it does hold off the method, so a method
+     * answering something else is the two readers looking at two things; and a field that can be
+     * written again is a form compared for what it says now and asked about for what it can ever
+     * say.
+     */
+    private static Inspection inspect(Class<?> type) {
+        if (type.isRecord()) {
+            List<Part> components = new ArrayList<>(type.getRecordComponents().length);
+            for (RecordComponent component : type.getRecordComponents()) {
+                components.add(new Part(component.getName(), component.getGenericType(),
+                        component.getAccessor()));
+            }
+            return new Inspection(components, List.of());
         }
-        Method handedOver;
-        try {
-            handedOver = type.getMethod(part);
-        } catch (NoSuchMethodException e) {
-            throw new IllegalStateException(type.getName() + " holds `" + part + "` and hands it to"
-                    + " nobody, so a comparison over what it is made of would pass it over without"
-                    + " saying so. Hand it over, or hold it somewhere this does not read.", e);
+        List<Part> handedOver = new ArrayList<>();
+        List<String> keptBack = new ArrayList<>();
+        for (Field field : type.getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
+                continue;
+            }
+            String part = field.getName();
+            if (!Modifier.isFinal(field.getModifiers())) {
+                keptBack.add("can write `" + part + "` again, so what it is made of is not what it"
+                        + " was made of. Hold it as written once, or hold it somewhere this does"
+                        + " not read");
+                continue;
+            }
+            Method reads;
+            try {
+                reads = type.getMethod(part);
+            } catch (NoSuchMethodException e) {
+                keptBack.add("holds `" + part + "` and hands it to nobody, so a comparison over what"
+                        + " it is made of would pass it over without saying so. Hand it over, or"
+                        + " hold it somewhere this does not read");
+                continue;
+            }
+            if (!reads.getGenericReturnType().equals(field.getGenericType())) {
+                keptBack.add("hands `" + part + "` over as " + reads.getGenericReturnType()
+                        + " and holds it as " + field.getGenericType() + ", so what this walks and"
+                        + " what it reads off the class are two things");
+                continue;
+            }
+            handedOver.add(new Part(part, field.getGenericType(), reads));
         }
-        if (!handedOver.getGenericReturnType().equals(field.getGenericType())) {
-            throw new IllegalStateException(type.getName() + " hands `" + part + "` over as "
-                    + handedOver.getGenericReturnType() + " and holds it as " + field.getGenericType()
-                    + ", so what this walks and what it reads off the class are two things.");
+        return new Inspection(handedOver, keptBack);
+    }
+
+    /**
+     * Refuses a form that keeps a part back where being read is not optional.
+     *
+     * <p>Asked of a form the walk goes inside — one of the grammar's own, and whatever else a reader
+     * has already decided to take apart. A part nothing can read is a part a comparison would decide
+     * without, and saying so where the reading happens is what keeps it from being decided by
+     * nobody.
+     */
+    private static void refuseWhatIsKeptBack(Class<?> type, Inspection inspected) {
+        if (!inspected.keptBack().isEmpty()) {
+            throw new IllegalStateException(type.getName() + " " + inspected.keptBack().get(0) + ".");
         }
-        return handedOver;
     }
 
 }

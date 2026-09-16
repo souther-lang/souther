@@ -3,7 +3,6 @@ package souther.compiler.meta;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.crossing.DelegatedEqualityIsRepresentedByWhatItStandsFor;
 import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.LanguageCaseId;
@@ -16,6 +15,8 @@ import java.util.List;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every form whose whole comparison is left to an equality says, once, that this is right.
@@ -85,8 +86,7 @@ class EveryFormHandedToADelegatedEqualityIsAccountedForTest {
                         "souther.compiler.ast.Hir$Fields",
                         "souther.compiler.types.BinOp",
                         "souther.compiler.types.LanguageCaseId",
-                        "souther.compiler.types.Type$Prim",
-                        "souther.compiler.types.TypeSymbol$AtModule"),
+                        "souther.compiler.types.Type$Prim"),
                 handedOver,
                 "a form added here is one more whose comparison is an equality, and one removed is"
                         + " one the comparison now reads for itself");
@@ -128,17 +128,16 @@ class EveryFormHandedToADelegatedEqualityIsAccountedForTest {
     }
 
     /**
-     * And the two kinds of account are told apart, with the stronger one implying the weaker.
+     * And each of the two ways of saying it is one account, whichever kind of form says it.
      *
-     * <p>A form naming what its equality is over has said the weaker thing too, and counting it
-     * twice would make every one of them a form two writers spoke for.
+     * <p>What is counted is the saying and not the sayer, so a form speaking for itself and a form
+     * the comparison speaks for come to the same number — which is what makes saying both the thing
+     * the count is looking for.
      */
     @Test
-    void andNamingARepresentationIsOneAccountAndNotTwo() {
-        assertEquals(1, accountsGiven(TypeSymbol.AtModule.class),
-                "which declaration this is, named as the address it holds");
+    void andEitherWayOfSayingItCountsOnce() {
         assertEquals(1, accountsGiven(Type.Prim.class),
-                "one of a closed set of cases, with nothing inside to name");
+                "one of a closed set of cases, which says so where it is written");
         assertEquals(1, accountsGiven(BigDecimal.class),
                 "and a written number, which this comparison speaks for because the class cannot");
     }
@@ -149,9 +148,8 @@ class EveryFormHandedToADelegatedEqualityIsAccountedForTest {
     /**
      * How many accounts {@code form} has of the equality its comparison is left to.
      *
-     * <p>Counted and not asked whether there is one. The stronger claim is the weaker one said more
-     * precisely rather than a second claim, so it counts once; a form spoken for here and by this
-     * comparison counts twice, which is the one this is looking for.
+     * <p>Counted and not asked whether there is one. A form spoken for where it is written and also
+     * by this comparison counts twice, which is the one this is looking for.
      */
     private static int accountsGiven(Class<?> form) {
         int given = 0;
@@ -172,17 +170,20 @@ class EveryFormHandedToADelegatedEqualityIsAccountedForTest {
         assertEquals(LanguageCaseId.class.getName(), "souther.compiler.types.LanguageCaseId");
     }
 
-    /** The stronger account is what {@code AtModule} says, and the weaker is not enough for it. */
+    /**
+     * And a form with a representation to read is not one of these at all.
+     *
+     * <p>What leaves a form's whole comparison to an equality is having nothing to take apart, so
+     * an account of that equality is asked of forms that have nothing inside. One holding an
+     * address is read as the address, and the claim never arises.
+     */
     @Test
-    void andAFormWithSomethingInsideNamesWhatItsEqualityIsOver() {
-        assertEquals(true,
-                DelegatedEqualityIsRepresentedByWhatItStandsFor.class
-                        .isAssignableFrom(TypeSymbol.AtModule.class),
-                "it holds an address, so what its equality is over is something it can name");
-        assertEquals(false,
-                DelegatedEqualityIsRepresentedByWhatItStandsFor.class
-                        .isAssignableFrom(Type.Prim.class),
-                "and one of a closed set of cases has nothing to name, so naming one would be"
-                        + " inventing something for a check to be held to");
+    void andAFormWithSomethingInsideIsReadRatherThanHandedOver() {
+        assertTrue(StructuralParts.areHandedOver(TypeSymbol.AtModule.class),
+                "which declaration something is holds the address that says which, and this"
+                        + " comparison reads it");
+        assertFalse(FormsACrossingCanReach.handedToADelegatedEquality()
+                        .contains(TypeSymbol.AtModule.class),
+                "so it is not among the forms owing an account of an equality");
     }
 }

@@ -2,7 +2,6 @@ package souther.compiler.types;
 
 import souther.compiler.Reserved;
 import souther.compiler.SettledAnswer;
-import souther.compiler.crossing.DelegatedEqualityIsRepresentedByWhatItStandsFor;
 import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
 import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 import souther.compiler.hash.ValueHash;
@@ -38,8 +37,7 @@ public sealed interface TypeSymbol extends SettledAnswer, Comparable<TypeSymbol>
      * where it stands for the declaration in the compiler's own reasoning, and one is minted from
      * the other only in {@link TypeSymbols}.
      */
-    final class AtModule implements TypeSymbol, DelegatedEqualityIsRepresentedByWhatItStandsFor,
-            ObjectEqualityIsRepresentedByWhatItStandsFor {
+    final class AtModule implements TypeSymbol, ObjectEqualityIsRepresentedByWhatItStandsFor {
 
         private final TypeKey key;
 
