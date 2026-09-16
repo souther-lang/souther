@@ -46,9 +46,10 @@ public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watch
     /**
      * A written row read as the two things above.
      *
-     * <p>What the run recorded, and not whether this build was recording. Whether anything was
-     * watching is the caller's own — it follows from what was asked for rather than from the row —
-     * and a reading that took it in would answer differently about one row depending on who asked.
+     * <p>What the run recorded, which is the whole of it. A build that records nothing leaves every
+     * row of it with no account of where it went, so a caller that asked what the build was doing
+     * and answered from that would be saying the same thing from further away — and free to say it
+     * of a row that did carry an account.
      */
     public static ObservedInputs of(RowOutcome row,
                                     java.util.Optional<SiteNumbering> numbering) {

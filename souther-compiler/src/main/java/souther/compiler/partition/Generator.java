@@ -3554,14 +3554,20 @@ public final class Generator {
                     continue;
                 }
                 // A number this reader cannot place beside the ones already standing. What it can
-                // do is choose a value for a position ({@link NumericWitness}); what a number over a
-                // run asks for is a container built to come to it, which is a second demand to
-                // compose beside the item's own and not a value to choose. So the cut goes
-                // unrepresented for the same reason a cut whose positions nothing composed a value
-                // for does — and the reason is that two demands were asked of one row here, not
-                // that the number has nowhere to be written.
+                // do is choose a value for a position ({@link NumericWitness}); what a number over
+                // a run asks for is a container built to come to it, which is a demand to compose
+                // and not a value to choose.
+                //
+                // Whether that is a second demand at a location this row already writes is the
+                // same question as the one below, and is asked of the root the run is answered of
+                // — a run has no position and the root it runs through is where a row writes it.
+                // Left unasked, a cut naming a total of the container the item already wrote came
+                // back as a condition on positions nothing composed a value at, which is what this
+                // reader says of a position it could not build at rather than of a location it is
+                // already writing for another number.
                 NumericTerm.FromOnePosition at = term.atOnePosition();
                 if (at == null) {
+                    shared = !alsoWritingAt(out, RealizationTarget.of(term).writeRoot()).isEmpty();
                     placeable = false;
                     break;
                 }

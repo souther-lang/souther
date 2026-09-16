@@ -132,15 +132,22 @@ public sealed interface ReachabilityGap {
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer
-         * both — how many a list holds beside what it comes to. Which other number it meets is not
-         * part of it: the row may be writing that location for the item it is composed at, or for a
+         * both — two of the totals inside one container. Which other number it meets is not part
+         * of it: the row may be writing that location for the item it is composed at, or for a
          * condition on the way that was taken in before this one. Told apart from the one above
          * because only this one is about two demands meeting at a location rather than about what
          * could be built at a position.
          *
          * <p>Which pairs those are is the realizer's answer and not a list here. A pair it composes
-         * one value for — the length of a string beside the string — reaches this reader as a
-         * location placed and not as a gap.
+         * one value for reaches this reader as a location placed and not as a gap, and the pairs it
+         * composes one for are every pair the models of this repository write.
+         *
+         * <p><b>Which is why this stays.</b> What the realizer answers of a group it has no way for
+         * is a population it writes some of, and this is the word for that answer on the way to a
+         * point. Taken out, a group of a kind nobody has written the composing for would fall to
+         * the reader beside it — a condition on positions nothing composed a value at — and the
+         * author of a model whose numbers this compiler cannot put together would be told that its
+         * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
     }

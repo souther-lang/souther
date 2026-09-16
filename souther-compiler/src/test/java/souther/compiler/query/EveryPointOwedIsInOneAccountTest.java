@@ -211,7 +211,8 @@ class EveryPointOwedIsInOneAccountTest {
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage("example.both")).value();
         Map<String, Measure<List<BorderAssessment>>> lines = compilation.db()
-                .ask(new Adequacy.BoundaryReadings("example.both")).value();
+                .ask(new Adequacy.BoundaryReadings("example.both",
+                        HowALineIsRead.VALUES_COMPOSED)).value();
         Map<String, Measure<List<BorderObligationPointAssessment>>> accounts = compilation.db()
                 .ask(new Adequacy.BodyBorders("example.both")).value();
 

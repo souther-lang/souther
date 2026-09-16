@@ -236,7 +236,6 @@ final class Coverages {
      */
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
-                                souther.compiler.query.Adequacy.Level level,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
                                 Set<souther.compiler.partition.AxisId> decided) {
         List<RowOutcome> rows = observed.rowsSeen();
@@ -256,7 +255,7 @@ final class Coverages {
         // at rather than of whichever measure happens to be in hand.
         for (Readings.AtPosition at : readings.positions()) {
             for (Readings.AxisReading reading : at.axes()) {
-                axes.add(coverageOf(at, reading, readings, partitioning, level.readsRows()));
+                axes.add(coverageOf(at, reading, readings, partitioning, observed.rowsWereRead()));
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -266,7 +265,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, level.readsRows(), budget, decided),
+                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, decided),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -838,7 +837,6 @@ final class Coverages {
     static List<BorderAssessment> assess(
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level,
             ItemAssessment.WritabilityProjection projection,
             java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
@@ -850,7 +848,7 @@ final class Coverages {
         for (Border each : lines) {
             out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
                             wayTo(each, reaching)),
-                    observed, level, numbering));
+                    observed, numbering));
         }
         return List.copyOf(out);
     }
@@ -995,7 +993,6 @@ final class Coverages {
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
                                              souther.compiler.query.Adequacy.RowReading observed,
-                                             souther.compiler.query.Adequacy.Level level,
                                              java.util.Optional<SiteNumbering> numbering) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
@@ -1004,7 +1001,7 @@ final class Coverages {
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
         Measurement<ItemAssessment.Coverage> absent =
-                whyNothingWasReadAgainstTheLine(guard, observed, level);
+                whyNothingWasReadAgainstTheLine(guard, observed);
 
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
@@ -1698,7 +1695,6 @@ final class Coverages {
     static List<BorderAssessment> assessBetween(
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level,
             java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
         Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
@@ -1709,7 +1705,7 @@ final class Coverages {
             out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each), wayTo(each, reaching)),
-                    observed, level, numbering));
+                    observed, numbering));
         }
         return List.copyOf(out);
     }
@@ -1770,16 +1766,16 @@ final class Coverages {
     /**
      * Why nothing was read against a line at all, or null where the rows are what answer it.
      *
-     * <p>The gates, behind one name. Which of them a line goes through is settled by the level the
-     * build asked for and by whether a fork or an invariant drew it, and that is one decision with
-     * one owner — a caller writing the choice out again, and a check enumerating what a reading can
-     * come to, would be two more statements of it, free to say what this stopped saying.
+     * <p>The gates, behind one name. Which of them a line goes through is settled by what the
+     * reading in hand was made of and by whether a fork or an invariant drew it, and that is one
+     * decision with one owner — a caller writing the choice out again, and a check enumerating what
+     * a reading can come to, would be two more statements of it, free to say what this stopped
+     * saying.
      */
     static Measurement<ItemAssessment.Coverage> whyNothingWasReadAgainstTheLine(
             boolean drawnByAFork,
-            souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level) {
-        return drawnByAFork ? whyNoGuardLine(observed, level) : whyNoInvariantLine(observed, level);
+            souther.compiler.query.Adequacy.RowReading observed) {
+        return drawnByAFork ? whyNoGuardLine(observed) : whyNoInvariantLine(observed);
     }
 
     /**
@@ -1791,13 +1787,12 @@ final class Coverages {
      * classes that record where the row went exist and survived.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoGuardLine(
-            souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level) {
-        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
+            souther.compiler.query.Adequacy.RowReading observed) {
+        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(observed);
         if (nobodyAsked != null) {
             return nobodyAsked;
         }
-        if (!level.runsInstrumentedRows()) {
+        if (!observed.recordedArms()) {
             return new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED);
         }
         if (observed.armsUnseen()) {
@@ -1809,15 +1804,15 @@ final class Coverages {
             return new Measurement.FailedToMeasure<>(
                     ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, WeakeningSet.ofAll(by));
         }
-        return whyNoInvariantLine(observed, level);
+        return whyNoInvariantLine(observed);
     }
 
-    /** What every line of every kind says where the build asked for no measurement: the rules drew
-     *  it, and nothing was read against it. Asked before either path below, because neither of them
-     *  is about a run that did not happen. */
+    /** What every line of every kind says where nothing was asked of the rows: the rules drew it,
+     *  and nothing was read against it. Asked before either path below, because neither of them is
+     *  about a run that did not happen. */
     private static Measurement<ItemAssessment.Coverage> whyNothingWasAsked(
-            souther.compiler.query.Adequacy.Level level) {
-        return level.readsRows() ? null
+            souther.compiler.query.Adequacy.RowReading observed) {
+        return observed.rowsWereRead() ? null
                 : new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NOT_ASKED);
     }
 
@@ -1830,9 +1825,8 @@ final class Coverages {
      * that could say so would be able to say something that is not true of it.
      */
     private static Measurement<ItemAssessment.Coverage> whyNoInvariantLine(
-            souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level) {
-        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(level);
+            souther.compiler.query.Adequacy.RowReading observed) {
+        Measurement<ItemAssessment.Coverage> nobodyAsked = whyNothingWasAsked(observed);
         if (nobodyAsked != null) {
             return nobodyAsked;
         }

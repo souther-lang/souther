@@ -861,9 +861,15 @@ public final class Output {
          *
          * @param everywhere what stopped a reading in a way larger than one behavior, which counts
          *     against every behavior of the module, including the ones no entry names
+         * @param arms whether the classes these rows ran against recorded where each row went.
+         *     Carried with the rows rather than asked of the build again: what a reader of them may
+         *     say about the arms is a fact about the run they came from, and a reader that asked
+         *     the build would answer about a run it is not holding wherever somebody asked for the
+         *     instrumented classes without the build having been measuring
          */
         public record Of(Map<String, ReadRows> byBehavior,
-                         List<souther.compiler.observe.Incompleteness> everywhere) {
+                         List<souther.compiler.observe.Incompleteness> everywhere,
+                         ArmObservation arms) {
 
             /** What counts against {@code behavior}: what stopped a reading of its own rows, and
              *  what stopped one larger than any behavior. */
@@ -987,10 +993,14 @@ public final class Output {
 
         @Override
         public Answer<RowsRead.Of> compute(Db db) {
+            // Which classes the rows below are run against, settled once and carried out with them.
+            // Every source of this module is read the one way this compilation runs them, so this
+            // is the run's own answer rather than a question a reader of the rows puts again.
+            ArmObservation arms = Adequacy.armsAsked(db);
             java.util.SequencedSet<SourceId> origins =
                     db.ask(new Front.ExampleSources(name)).value();
             if (origins == null) {
-                return Answer.of(new RowsRead.Of(Map.of(), List.of()));
+                return Answer.of(new RowsRead.Of(Map.of(), List.of(), arms));
             }
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Map<String, List<ReadRow>> written = new LinkedHashMap<>();
@@ -999,7 +1009,7 @@ public final class Output {
             List<souther.compiler.observe.Incompleteness> everywhere = new ArrayList<>();
             Set<String> named = new LinkedHashSet<>();
             for (SourceId sourceId : origins) {
-                Examples.Of observed = db.ask(Examples.asked(db, name, sourceId)).value();
+                Examples.Of observed = db.ask(new Examples(name, sourceId, arms)).value();
                 // What this source wrote and what became of reading it, put together here — where
                 // both are still this source's. Flattened first and matched afterwards, a row of
                 // one source takes a reason that happened in another: two sources exampling one
@@ -1037,7 +1047,7 @@ public final class Output {
                 out.put(behavior, new ReadRows(written.getOrDefault(behavior, List.of()),
                         stopped.getOrDefault(behavior, List.of())));
             }
-            return Answer.of(new RowsRead.Of(out, distinct(everywhere)));
+            return Answer.of(new RowsRead.Of(out, distinct(everywhere), arms));
         }
 
         /**

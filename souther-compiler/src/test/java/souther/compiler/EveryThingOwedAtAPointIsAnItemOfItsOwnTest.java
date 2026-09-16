@@ -5,6 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.GenerationScope;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
@@ -96,8 +97,8 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
     void everyOpenPointIsOneItemAndNothingElseIs() {
         Compilation compilation = compiled();
         List<BorderObligationPointAssessment> points = compilation.db()
-                .ask(new Adequacy.Obligations("example.stops",
-                        new souther.compiler.query.GenerationScope.Module())).value();
+                .ask(new Adequacy.Obligations("example.stops", new GenerationScope.Module(),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
         assertNotNull(points, "the model under test is measured");
 
         Set<BorderObligationPoint> open = new LinkedHashSet<>();

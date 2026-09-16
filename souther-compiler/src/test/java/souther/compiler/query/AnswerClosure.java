@@ -499,6 +499,26 @@ final class AnswerClosure {
                     m("souther.compiler.inputs.ReadPosition", "bounds"), ELEMENT,
                     m("souther.compiler.inputs.PositionBounds", "narrowedEnds"),
                     m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            // And the same reading asked of one behavior rather than of the module. The answer is
+            // the one domain that behavior's rows are read against instead of a domain per
+            // behavior, so everything under it is reached by the same way with the step onto the
+            // map gone — one reading held twice, and the walk meets what it holds under both names.
+            new Known(at(Q + "Adequacy$InputsOf", "souther.compiler.check.LentReadings",
+                    m(ANSWER, "value"),
+                    m("souther.compiler.inputs.InputDomain", "machines")),
+                    A_LENDING_OF_READINGS, ONLY_WALKED),
+            narrowedEnd(Q + "Adequacy$InputsOf", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"),
+                    m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
+                    m("souther.compiler.inputs.ReadPosition", "bounds"), ELEMENT,
+                    m("souther.compiler.inputs.PositionBounds", "narrowedEnds"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
+            narrowedEnd(Q + "Adequacy$InputsOf", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"),
+                    m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
+                    m("souther.compiler.inputs.ReadPosition", "bounds"), ELEMENT,
+                    m("souther.compiler.inputs.PositionBounds", "narrowedEnds"),
+                    m("souther.compiler.check.NarrowedBounds$Reading", "lower")),
             // The partition's own copy. An axis carries what the reading left the position rather
             // than the names it came to, so that a border can ask whether they are about the end it
             // has — and the walk that asks each object what it is meets the end on the way.
@@ -535,6 +555,18 @@ final class AnswerClosure {
                     m("souther.compiler.values.AdmissibleSet", "approximation")),
             machineUnderALanguage(Q + "Adequacy$Inputs", walked(Scenario.THE_CORPORA),
                     m(ANSWER, "value"), VALUE,
+                    m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
+                    m("souther.compiler.inputs.ReadPosition", "admitted"),
+                    m("souther.compiler.values.AdmissibleSet", "approximation")),
+            // And both of them again on the reading asked of one behavior, which holds its
+            // positions the same two ways.
+            machineUnderALanguage(Q + "Adequacy$InputsOf", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"),
+                    m("souther.compiler.inputs.InputDomain", "positions"), ELEMENT,
+                    m("souther.compiler.inputs.ReadPosition", "admitted"),
+                    m("souther.compiler.values.AdmissibleSet", "approximation")),
+            machineUnderALanguage(Q + "Adequacy$InputsOf", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"),
                     m("souther.compiler.inputs.InputDomain", "byPath"), VALUE,
                     m("souther.compiler.inputs.ReadPosition", "admitted"),
                     m("souther.compiler.values.AdmissibleSet", "approximation")),

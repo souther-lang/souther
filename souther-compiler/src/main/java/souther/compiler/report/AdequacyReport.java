@@ -714,7 +714,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
         Map<String, Measure<List<BorderAssessment>>> lines =
-                compilation.db().ask(new Adequacy.BoundaryReadings(name)).value();
+                compilation.db().ask(new Adequacy.BoundaryReadings(name,
+                        Adequacy.linesAskedOf(compilation.db()))).value();
         // What each behavior is owed at those lines, once per point: the behaviors' projection of
         // the module's one relation, which the findings and the verdict read as well.
         Map<String, Measure<List<BorderObligationPointAssessment>>> accounts =
@@ -3352,8 +3353,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The stage first, because it is what an author would do something about: a condition this
      * reading has no words for is one to write differently, and one it read and could not compose a
      * value under is one this compiler is short of a way to build.
+     *
+     * <p>Open to this package so that every way a condition goes unrepresented can be asked for its
+     * sentence directly. Which ways there are is a seal, and what a reader is told of each of them
+     * is what these sentences are — a way added with nothing to say would be one an author meets as
+     * whichever sentence the arm beside it had.
      */
-    private static String whyLeftOut(ReachabilityGap gap) {
+    static String whyLeftOut(ReachabilityGap gap) {
         return switch (gap) {
             case ReachabilityGap.Unstated(var condition) ->
                     whyDeclined(condition.why());
