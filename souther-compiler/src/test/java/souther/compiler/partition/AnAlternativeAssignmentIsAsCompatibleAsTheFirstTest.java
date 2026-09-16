@@ -125,8 +125,9 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                 Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved().stream()
-                        .filter(each -> each.reason()
-                                == Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH)
+                        .filter(each -> each.why().reason()
+                                == Generator.UnresolvedCombination.Reason
+                                        .ONE_POSITION_CANNOT_BE_BOTH)
                         .toList(),
                 "no combination is refused for naming positions it does not name");
         assertFalse(filled.rows().isEmpty(),

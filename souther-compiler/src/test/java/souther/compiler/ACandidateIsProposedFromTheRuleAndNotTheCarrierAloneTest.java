@@ -503,7 +503,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         // happened is that this declined to build it, which is a fact about the generator. Reporting it
         // as a refusal would send a reader to look for the rule that refuses a value nothing refuses.
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .NOTHING_COMPOSES_ONE),
                 "and said as this not composing one rather than as the model refusing it: "
                         + filled.unresolved());
@@ -559,7 +559,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertEquals(List.of(), filled.rows(),
                 "no row, because the pairings ran out before one of them was tried");
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
+                                .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                 "and the pairings this did not build are said as a search that stopped: "
                         + filled.unresolved());
     }
@@ -612,7 +613,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
         assertEquals(List.of(), filled.rows(), "no key and value clearing all eight rules was found");
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                 "the pairing was built and the search for its parts is what stopped: "
                         + filled.unresolved());
@@ -696,7 +697,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
         assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
                 "refused, which is not a claim that no row can be written: "
                         + filled.unresolved());

@@ -50,11 +50,16 @@ public sealed interface GenerationOutcome {
     /**
      * A strategy applies, and it composed nothing.
      *
-     * <p>And nothing more than that. Whether a row can be written at all is what the reasons carried
-     * here answer — some of them say the model leaves no value there and a reader may act on it,
-     * most of them say this compiler fell short and a reader may not — so the attempt is carried
-     * whole and this arm claims neither. Read as always meaning the second, a run that had settled
-     * the question would be printed under a sentence taking it back.
+     * <p>And nothing more than that. Whether a row can be written at all is what the attempts
+     * carried here answer — some of them say the model leaves no value there and a reader may act
+     * on it, most of them say this compiler fell short and a reader may not — so the attempt is
+     * carried whole and this arm claims neither. Read as always meaning the second, a run that had
+     * settled the question would be printed under a sentence taking it back.
+     *
+     * <p>Whole means the words and what the search met of this compiler's. Where this compiler did
+     * fall short, which figure it stopped at is what tells an author whether there is a number to
+     * raise — and a list that held the words alone would be telling them there is work to do with
+     * nothing in it they could do.
      *
      * <p><b>All of what was tried, and not the weakest of it.</b> An arm is looked for at every
      * combination claiming it, and those come to different things — one the model refuses, one the
@@ -63,7 +68,7 @@ public sealed interface GenerationOutcome {
      * carry meant picking by the order the search happened to walk, so the answer moved when the
      * cells were reordered and nothing about the model had changed.
      */
-    record CannotGenerate(List<Generator.UnresolvedCombination> why) implements GenerationOutcome {
+    record CannotGenerate(List<CameToNothing> why) implements GenerationOutcome {
 
         public CannotGenerate {
             why = List.copyOf(why);
@@ -73,7 +78,7 @@ public sealed interface GenerationOutcome {
         }
 
         /** One attempt, which is what a search asked about one thing at one place comes to. */
-        public CannotGenerate(Generator.UnresolvedCombination why) {
+        public CannotGenerate(CameToNothing why) {
             this(List.of(why));
         }
     }

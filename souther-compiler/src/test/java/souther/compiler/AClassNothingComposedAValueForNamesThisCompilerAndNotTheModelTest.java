@@ -74,14 +74,20 @@ class AClassNothingComposedAValueForNamesThisCompilerAndNotTheModelTest {
      * <p>The order declined to name a value in this run rather than walking it to its end, so what
      * the sentence may say is that nothing was composed — and that a row can still be written by
      * hand, which is the work it leaves an author.
+     *
+     * <p>What this compiler walked part of comes first, because it is what the word after it is
+     * worth: the search ran to the end of what this compiler names inside a run, which is not the
+     * end of what there is. No number anybody raises reaches the rest, and the sentence says so
+     * rather than naming a figure.
      */
     @Test
     void theClassSaysWhatNothingHereComposed() {
         String rows = rowsOffered();
 
-        assertTrue(rows.contains("no row for `code=spring < x` in `take`: nothing here composed a"
-                        + " value whose value is in this range, which does not make one"
-                        + " unwritable"),
+        assertTrue(rows.contains("no row for `code=spring < x` in `take`: this compiler writes"
+                        + " some of the places inside one run a value is named at rather than all"
+                        + " of them: nothing here composed a value whose value is in this range,"
+                        + " which does not make one unwritable"),
                 () -> "the reason is the one about composing, said of the range the class is:\n"
                         + rows);
     }

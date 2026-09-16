@@ -36,13 +36,17 @@ import java.util.Set;
  * @param plan       what this run was asked for
  * @param composed   the rows, in the order they were composed, which is the order a reader is
  *                   offered them in
- * @param unresolved what each place a row was looked for came to, said once apiece
+ * @param unresolved what each place a row was looked for came to, said once apiece — the words and
+ *                   what of this compiler's the search met, because a reader of this list is
+ *                   reading what the class itself came to and there is no second place it is said.
+ *                   A point is the other way round and keeps its figure at its own account, which
+ *                   is why what reaches a reader from here and from there is not one list
  * @param reasons    what happened to this run as a whole, which is never an answer about one thing
  *                   the plan named
  * @param discharge  what became of each of them
  */
 public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> composed,
-                         List<Generator.UnresolvedCombination> unresolved,
+                         List<CameToNothing> unresolved,
                          List<GenerationReason> reasons, Discharge discharge) {
 
     public FillResult {
@@ -190,7 +194,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             meetings.put(owed,
                     offering(ClassDisposition.acrossRuns(runs), searched, composed, named));
         }
-        Set<Generator.UnresolvedCombination> unresolved = new LinkedHashSet<>();
+        Set<CameToNothing> unresolved = new LinkedHashSet<>();
         Set<GenerationReason> reasons = new LinkedHashSet<>();
         for (FillResult each : searched) {
             unresolved.addAll(each.unresolved());
@@ -217,8 +221,8 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                 yield new ClassDisposition.Built(naming(searched, composed, named, first.run(),
                         first.built().rowId()));
             }
-            case ClassDisposition.AcrossRuns.Unresolved(Generator.UnresolvedCombination why) ->
-                    new ClassDisposition.Unresolved(why);
+            case ClassDisposition.AcrossRuns.Unresolved(CameToNothing came) ->
+                    new ClassDisposition.Unresolved(came);
         };
     }
 
@@ -239,8 +243,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                 yield new ArmDisposition.Built(naming(searched, composed, named, first.run(),
                         first.built().rowId()), first.built().at());
             }
-            case ArmDisposition.AcrossRuns.Unresolved(
-                    SequencedSet<Generator.UnresolvedCombination> why) ->
+            case ArmDisposition.AcrossRuns.Unresolved(SequencedSet<CameToNothing> why) ->
                     new ArmDisposition.Unresolved(List.copyOf(why));
             case ArmDisposition.AcrossRuns.NoWayIn(List<PathAccess> at) ->
                     new ArmDisposition.NoWayIn(at);
@@ -294,29 +297,32 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
     public static FillResult nothingWasLookedFor(GenerationPlan plan,
                                                  Generator.UnresolvedCombination.Reason why,
                                                  List<GenerationReason> reasons) {
+        // Nothing of this compiler's was met anywhere here, because nothing was looked for. A
+        // figure is what a search ran into, and there was no search.
         Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
         for (ClassOfAPosition owed : plan.classesOwed()) {
-            classes.put(owed, new ClassDisposition.Unresolved(new Generator.UnresolvedCombination(
-                    List.of(Generator.labelOf(plan.subject(), owed)), why)));
+            classes.put(owed, new ClassDisposition.Unresolved(
+                    CameToNothing.metNothing(new Generator.UnresolvedCombination(
+                            List.of(Generator.labelOf(plan.subject(), owed)), why))));
         }
         Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
         for (Generator.ArmOwed owed : plan.armsOwed()) {
-            arms.put(owed, new ArmDisposition.Unresolved(
-                    List.of(new Generator.UnresolvedCombination(List.of(), why))));
+            arms.put(owed, new ArmDisposition.Unresolved(List.of(CameToNothing.metNothing(
+                    new Generator.UnresolvedCombination(List.of(), why)))));
         }
         Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs = new LinkedHashMap<>();
         for (ObligationIdentity.OfAFallbackPairCell owed : plan.pairsOwed()) {
             pairs.put(owed, new ClassDisposition.Unresolved(
-                    new Generator.UnresolvedCombination(
+                    CameToNothing.metNothing(new Generator.UnresolvedCombination(
                             owed.classes().stream().map(ClassOfAPosition::classId).sorted()
                                     .toList(),
-                            why)));
+                            why))));
         }
         Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
                 new LinkedHashMap<>();
         for (ObligationIdentity.OfACombinationOfDecisions owed : plan.meetingsOwed()) {
-            meetings.put(owed, new ClassDisposition.Unresolved(
-                    new Generator.UnresolvedCombination(List.of(), why)));
+            meetings.put(owed, new ClassDisposition.Unresolved(CameToNothing.metNothing(
+                    new Generator.UnresolvedCombination(List.of(), why))));
         }
         return new FillResult(plan, new LinkedHashMap<>(), List.of(), reasons,
                 new Discharge(classes, arms, pairs, meetings));

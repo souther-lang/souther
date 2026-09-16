@@ -16,6 +16,7 @@ import souther.compiler.partition.StringOfferShortfall;
 import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.query.Sites;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
@@ -573,10 +574,16 @@ public final class GeneratedRows {
                               SourceRendering rendering, Offering offering,
                               PublishedRuleHandle.WhereARuleIs places) {
         Set<String> said = new LinkedHashSet<>();
-        List<Generator.UnresolvedCombination> left =
-                new ArrayList<>(filling.composed().unresolved());
-        left.addAll(filling.boundaries().unresolved());
-        for (Generator.UnresolvedCombination each : left) {
+        // What each place a row was looked for came to, and what the search met of this compiler's
+        // where it met anything. This is where a class says what it came to, so a stop that named
+        // no figure here named one nowhere.
+        for (CameToNothing each : filling.composed().unresolved()) {
+            say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
+                    each.why().subject(), behavior, saidOf(each, rendering, places)));
+        }
+        // And the points, whose figures are said at the point's own account in the report rather
+        // than here. Written with the same clause, one figure would reach a reader twice.
+        for (Generator.UnresolvedCombination each : filling.boundaries().unresolved()) {
             say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                     each.subject(), behavior, saidOf(each, rendering, places)));
         }
@@ -593,11 +600,12 @@ public final class GeneratedRows {
                 // about the class either way; an arm's is looked for at the classes a way into it
                 // leaves, and named for those it read as the class's line — the same words twice,
                 // so the arm's news was dropped as a repeat of the class's (issue #1009).
-                case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(why ->
+                case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(came ->
                         say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                                 each.finding().about() instanceof About.AnArmNoRowGoesThrough
-                                        ? about(each.finding(), rendering, places) : why.subject(),
-                                behavior, saidOf(why, rendering, places))));
+                                        ? about(each.finding(), rendering, places)
+                                        : came.why().subject(),
+                                behavior, saidOf(came, rendering, places))));
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a finding nothing takes are different pieces of news: the
                 // first says what the attempt came to, and whether a row can be written at all is
@@ -788,6 +796,21 @@ public final class GeneratedRows {
     private static String saidOf(Generator.UnresolvedCombination left, SourceRendering rendering,
                                  PublishedRuleHandle.WhereARuleIs places) {
         return beside(left.said().orElseGet(() -> why(left.reason())), left, rendering, places);
+    }
+
+    /**
+     * The same, of a search that says what it met of this compiler's.
+     *
+     * <p>What was met comes first and the word follows it, the same way round the report opens on
+     * a point this compiler stopped at. A reader told first that a figure was reached reads the
+     * word as the answer of a search that did not finish; told the word first, they have already
+     * made what they were going to make of it — which is a shortfall of this compiler's read as
+     * something the model settles.
+     */
+    private static String saidOf(CameToNothing came,
+                                 SourceRendering rendering,
+                                 PublishedRuleHandle.WhereARuleIs places) {
+        return Reasons.met(came.met()) + saidOf(came.why(), rendering, places);
     }
 
     /**

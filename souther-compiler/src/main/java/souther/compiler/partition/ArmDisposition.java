@@ -59,7 +59,7 @@ public sealed interface ArmDisposition {
      * still be writable and the second says the model settles it — and the arm is answered by the
      * whole of what was tried rather than by whichever was walked first.
      */
-    record Unresolved(List<Generator.UnresolvedCombination> why) implements ArmDisposition {
+    record Unresolved(List<CameToNothing> why) implements ArmDisposition {
 
         public Unresolved {
             why = List.copyOf(why);
@@ -162,7 +162,7 @@ public sealed interface ArmDisposition {
          * <p>Held as a set, so that what the runs came to does not depend on the order they came in
          * while the order a reader is shown them in stays the one they were first met in.
          */
-        record Unresolved(SequencedSet<Generator.UnresolvedCombination> why)
+        record Unresolved(SequencedSet<CameToNothing> why)
                 implements AcrossRuns {
 
             public Unresolved {
@@ -230,13 +230,13 @@ public sealed interface ArmDisposition {
             throw new IllegalArgumentException("no run was asked about this arm");
         }
         List<AcrossRuns.Witness> witnesses = new ArrayList<>();
-        SequencedSet<Generator.UnresolvedCombination> why = new LinkedHashSet<>();
+        SequencedSet<CameToNothing> why = new LinkedHashSet<>();
         ArmDisposition.NoWayIn nowhere = null;
         for (int run = 0; run < runs.size(); run++) {
             switch (runs.get(run)) {
                 case ArmDisposition.Built built ->
                         witnesses.add(new AcrossRuns.Witness(run, built));
-                case ArmDisposition.Unresolved(List<Generator.UnresolvedCombination> reasons) ->
+                case ArmDisposition.Unresolved(List<CameToNothing> reasons) ->
                         why.addAll(reasons);
                 case ArmDisposition.NoWayIn none -> {
                     if (nowhere != null && !nowhere.equals(none)) {

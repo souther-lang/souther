@@ -55,9 +55,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(ANOTHER);
 
-    private static final Generator.UnresolvedCombination NOTHING_CAME_OF_IT =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NOTHING_CAME_OF_IT =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
     @Test
     void aClassTheRunDidNotAnswerForIsRefused() {

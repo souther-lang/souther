@@ -231,7 +231,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.report.AdequacyReport#said("
+            Map.entry("souther.compiler.report.Reasons#said("
                             + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
                     "what a figure is called where a reader meets one"),
             // The order. It reaches every figure and hands none of them anywhere: what it decides

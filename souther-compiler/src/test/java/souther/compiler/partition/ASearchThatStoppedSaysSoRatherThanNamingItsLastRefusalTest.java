@@ -166,12 +166,12 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     private static Generator.UnresolvedCombination.Reason reasonFor(
             FillResult filled, List<String> classes) {
         return filled.unresolved().stream()
-                .filter(each -> each.classes().equals(classes))
+                .filter(each -> each.why().classes().equals(classes))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "the combination " + classes + " is one this run looked for a row at: "
                                 + filled.unresolved()))
-                .reason();
+                .why().reason();
     }
 
     private static FillResult fill(Model model, Generator.Trial trial) {

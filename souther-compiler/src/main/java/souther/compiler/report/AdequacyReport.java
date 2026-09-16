@@ -23,7 +23,6 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.reading.Condition;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
@@ -117,7 +116,6 @@ import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.publish.RuleHandleSurface;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
@@ -3041,10 +3039,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         "nothing here settled it"
                                 + (budgets.isEmpty() ? ""
                                         : ", and a figure of this compiler's is why: "
-                                                + said(budgets))
+                                                + Reasons.said(budgets))
                                 + (repertoires.isEmpty() ? ""
                                         : ", and this compiler writes some of "
-                                                + writes(repertoires)
+                                                + Reasons.writes(repertoires)
                                                 + " rather than all of them");
             });
         }
@@ -3134,7 +3132,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // short of and only one is a number, so the second is said in its own clause rather
             // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it ->
-                    " — this compiler stopped at " + said(it.stoppedBy())
+                    " — this compiler stopped at " + Reasons.said(it.stoppedBy())
                             + andWritesSomeOf(it.notAllOf()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
@@ -3143,7 +3141,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // offer. What would change this is somebody writing the rest of what it walks, and the
             // sentence says so.
             case ItemAssessment.Attempt.Unexhausted it ->
-                    " — this compiler writes some of " + writes(it.notAllOf())
+                    " — this compiler writes some of " + Reasons.writes(it.notAllOf())
                             + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
@@ -3153,14 +3151,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
                     " — over less than the point had, which stops at "
-                            + said(it.limitedBy()) + ": "
+                            + Reasons.said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
             case ItemAssessment.Attempt.Unplanned it ->
                     " — nothing was planned for it, because this compiler stops at "
-                            + said(it.limitedBy())
+                            + Reasons.said(it.limitedBy())
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // What the search was over comes first here, and only here. Every outcome above opens
             // on something of this compiler's — a figure it stopped at, a population it writes
@@ -3271,7 +3269,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case ReachabilityGap.Why
                                 .TheWalkForItsPositionsWasStopped(var by) ->
                                 "a condition on positions this compiler stopped looking at ("
-                                        + said(by) + ")";
+                                        + Reasons.said(by) + ")";
                     };
         };
     }
@@ -3286,69 +3284,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String andWritesSomeOf(
             CanonicalSelection<CompositionRepertoire> repertoires) {
         return repertoires.isEmpty() ? ""
-                : ", and writes some of " + writes(repertoires) + " rather than all of them";
-    }
-
-    /**
-     * What a population this compiler writes some of is called where a reader meets one.
-     *
-     * <p>Its own sentence and not one of the figures'. Nothing here is a number, so what a reader
-     * is told is what this compiler writes rather than how much of it — and a population added
-     * arrives here as a compile error rather than as a name nobody wrote a sentence for.
-     */
-    private static String writes(CanonicalSelection<CompositionRepertoire> repertoires) {
-        List<String> out = new ArrayList<>();
-        for (CompositionRepertoire each : repertoires.written()) {
-            out.add(switch (each) {
-                case WAYS_A_TOTAL_IS_SPREAD ->
-                        "the ways a total may be spread over what adds up to it";
-                case PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE ->
-                        "the places on a line between two positions a pair is tried at";
-                case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
-                        "the places inside one run a value is named at";
-            });
-        }
-        return String.join(", ", out);
-    }
-
-    /**
-     * What a budget of this compiler's is called where a reader meets one.
-     *
-     * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
-     * the code that reads it; what a reader wants is what this compiler declined to do, in a phrase
-     * they can act on — and a budget added arrives here as a compile error rather than as a name
-     * nobody wrote a sentence for.
-     */
-    private static String said(CanonicalSelection<CompositionBudget> budgets) {
-        List<String> out = new ArrayList<>();
-        for (CompositionBudget each : budgets.written()) {
-            out.add(switch (each) {
-                case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
-                case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
-                case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
-                case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
-                        "how many elements a total is spread over";
-                case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
-                case WAYS_DOWN_TO_A_TOTAL_TRIED ->
-                        "how many ways down to what a total adds up are tried";
-                case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
-                case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
-                case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
-                case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
-                        "how many values of an unbounded progression are tried";
-                case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
-                case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
-                case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
-                        "how many values a position on the way is tried at";
-                case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
-                case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
-                case PATHS_OF_A_DECISION_READ ->
-                        "how many paths through one body a decision is read for";
-                case NUMBERS_OF_A_SET_TRIED ->
-                        "how many of the numbers a class admits are tried";
-            });
-        }
-        return String.join(", ", out);
+                : ", and writes some of " + Reasons.writes(repertoires)
+                        + " rather than all of them";
     }
 
     /**

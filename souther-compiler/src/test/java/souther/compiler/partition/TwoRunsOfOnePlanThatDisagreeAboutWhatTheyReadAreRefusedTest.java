@@ -45,13 +45,13 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     private static final ClassOfAPosition A_CLASS =
             new ClassOfAPosition(new AxisId("fee", "days"), "days/low");
 
-    private static final Generator.UnresolvedCombination NO_CANDIDATE =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NO_CANDIDATE =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
-    private static final Generator.UnresolvedCombination NOTHING_COMPOSES_ONE =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    private static final CameToNothing NOTHING_COMPOSES_ONE =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
 
     private static final PathAccess NOTHING_ARRIVES = new PathAccess.Unreachable(
             PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
@@ -175,9 +175,9 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
      */
     @Test
     void twoRunsGivingAClassOneReasonAgree() {
-        Generator.UnresolvedCombination said = new Generator.UnresolvedCombination(
+        CameToNothing said = CameToNothing.metNothing(new Generator.UnresolvedCombination(
                 List.of("days=low"),
-                Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+                Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
         assertNotSame(NO_CANDIDATE, said);
         assertEquals(new ClassDisposition.AcrossRuns.Unresolved(NO_CANDIDATE),
