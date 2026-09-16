@@ -50,6 +50,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
@@ -70,11 +71,13 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -5352,7 +5355,7 @@ public final class Adequacy {
             case About.APointOfADeclaredBorder(DeclaredDebt owed) ->
                     whereItIsWritten(db, owed.pointAt());
             // A row is shown where it is written, which is in this module's own source.
-            case About.AnUnansweredRow(String _, RowIdentity _, SourcePos at) -> Citation.of(at);
+            case About.AnUnansweredRow(RowRef _, SourcePos at) -> Citation.of(at);
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -6058,6 +6061,70 @@ public final class Adequacy {
     }
 
     /**
+     * What each behavior's rows owe by way of answers.
+     *
+     * <p>The one reading of the text that asks it. A row written {@code <?>} is a finding a build
+     * refuses over and an entry the document publishes, and both come from here — asked a second
+     * time where the findings are assembled, the two would be one judgement written twice, and the
+     * distinction the source makes between a row an author left open and a row a parse could not
+     * read would have to be kept true at each of them.
+     *
+     * <p>Answered from the shapes and from nothing a run produced. Every behavior a module declares
+     * has one of these, including a behavior nobody wrote a row for, whose account is empty.
+     */
+    public record RowObligations(String name) implements Key<Map<String, RowSummary>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, RowSummary>> compute(Db db) {
+            Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, List<RowObligation>> owed = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                owed.put(behavior.name(), new ArrayList<>());
+            }
+            for (Hir.Example example : prepared.value().module().examples()) {
+                List<RowObligation> of = owed.get(example.target());
+                // A block naming something this module does not declare is reported where the
+                // names are resolved. The account is of the behaviors there are.
+                if (of == null) {
+                    continue;
+                }
+                for (Hir.ExampleRow row : example.rows()) {
+                    RowDisposition stands = standingOf(row.expected());
+                    // A row whose answer no parse could read is not an answer that is owed. It is
+                    // malformed, a diagnostic says how, and counting it here would put a module
+                    // full of syntax errors in front of a reader as work an author had left.
+                    if (stands == null) {
+                        continue;
+                    }
+                    of.add(new RowObligation(
+                            RowRef.of(example.target(), row.pos(), row.identity()),
+                            row.pos(), stands));
+                }
+            }
+            Map<String, RowSummary> out = new LinkedHashMap<>();
+            owed.forEach((behavior, rows) -> out.put(behavior, new RowSummary(rows)));
+            return Answer.of(Collections.unmodifiableMap(out));
+        }
+
+        /** Where the source puts a row, or null where it is a row this account is not of. */
+        private static RowDisposition standingOf(Hir.Expected expected) {
+            return switch (expected) {
+                case Hir.Expected.Asserted _ -> RowDisposition.MET;
+                case Hir.Expected.Unanswered _ -> RowDisposition.UNMET;
+                case Hir.Expected.Unwritten _ -> null;
+            };
+        }
+    }
+
+    /**
      * Everything the measures found, whatever each of them is about.
      *
      * <p>The one statement of what counts as a finding. A report prints these, a build is warned about
@@ -6091,6 +6158,15 @@ public final class Adequacy {
                     db.ask(new BodyBorders(name)).value();
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
             Map<String, InteractionEvidence> meetings = db.ask(new Interacts(name)).value();
+            // The account of what the rows owe, which this does not read the text a second time
+            // for: a row an author left open is one entry there and one finding here, and the two
+            // cannot come apart.
+            //
+            // Held to answering, unlike the measures above. It is answered from the shapes this
+            // one has already asked for, so an absence is not a measure that did not run.
+            Map<String, RowSummary> rows = Objects.requireNonNull(
+                    db.ask(new RowObligations(name)).value(),
+                    () -> "what the rows of `" + name + "` owe was not read");
 
             // One list and not a block per behavior. What each finding is about is its own
             // ({@link FindingSubject}), and a map keyed by behavior has no key for a finding about
@@ -6104,7 +6180,7 @@ public final class Adequacy {
             // wrote.
             List<Finding> out = new ArrayList<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                unansweredRows(prepared.value().module(), behavior.name(), out);
+                unansweredRows(rows.get(behavior.name()), out);
                 signatureFindings(behavior.name(),
                         signatures == null ? null : signatures.get(behavior.name()), out);
                 partitionFindings(behavior,
@@ -6326,30 +6402,24 @@ public final class Adequacy {
         }
 
         /**
-         * The rows of {@code behavior} whose answers are owed, one finding each.
+         * The entries of {@code owed} that are waiting for an answer, one finding each.
          *
-         * <p>Read off the module's own text, which is where the fact is settled. Every other way of
-         * reaching it goes through something that answers a different question and drops this one
-         * when its own answer is no: an arm carries it only while no other row covers the arm, only
-         * while the behavior has arms at all, and only while nothing weakened the measurement over
-         * the rows; a statement carries it only while the row's values are small enough to hand on.
-         * None of those is what makes a row's answer owed.
+         * <p>The account's unmet group and nothing worked out here. Whether a row's answer is owed
+         * is settled where the row was read, and every other way of reaching it goes through
+         * something that answers a different question and drops this one when its own answer is no:
+         * an arm carries it only while no other row covers the arm, only while the behavior has
+         * arms at all, and only while nothing weakened the measurement over the rows; a statement
+         * carries it only while the row's values are small enough to hand on. None of those is what
+         * makes a row's answer owed.
          *
          * <p>{@link Finding#noticed} because nothing measured it. There is no run behind this and
          * nothing about it could have come out otherwise — the row is written and its answer is
          * not — so it carries no weakening and a build's answer to it is the account's alone.
          */
-        private static void unansweredRows(Hir.Module module, String behavior, List<Finding> out) {
-            for (Hir.Example example : module.examples()) {
-                if (!behavior.equals(example.target())) {
-                    continue;
-                }
-                for (Hir.ExampleRow row : example.rows()) {
-                    if (row.expected() instanceof Hir.Expected.Unanswered) {
-                        out.add(Finding.noticed(behavior,
-                                new About.AnUnansweredRow(behavior, row.identity(), row.pos())));
-                    }
-                }
+        private static void unansweredRows(RowSummary owed, List<Finding> out) {
+            for (RowObligation each : owed.unmet()) {
+                out.add(Finding.noticed(each.rowRef().behavior(),
+                        new About.AnUnansweredRow(each.rowRef(), each.at())));
             }
         }
 
@@ -6769,11 +6839,11 @@ public final class Adequacy {
                         // meant from outside the file. An unnamed row is pointed at instead: the
                         // report is anchored where the row is written, and an ordinal is not words
                         // about a row.
-                        case About.AnUnansweredRow(var behavior, var row, var _) ->
-                                row instanceof RowIdentity.Named named
+                        case About.AnUnansweredRow(var rowRef, var _) ->
+                                rowRef.identity() instanceof RowIdentity.Named named
                                         ? new ExampleMessage.TheNamedRowsAnswerIsOwed(
-                                                named.name(), behavior)
-                                        : new ExampleMessage.TheRowsAnswerIsOwed(behavior);
+                                                named.name(), rowRef.behavior())
+                                        : new ExampleMessage.TheRowsAnswerIsOwed(rowRef.behavior());
                         // The class and the position it is a class of, in the partition's own
                         // words — which are the words the report writes for the same finding.
                         case About.AClassNoRowIsIn(var missing) ->

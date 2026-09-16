@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 22,
+  "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "bodies_not_elaborated", "rule_unread" ],
@@ -713,6 +713,22 @@
       "implementation" : "implemented",
       "rows" : 1,
       "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "book",
+          "source" : "0",
+          "name" : "a party of two takes a seat in the middle of the house"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 34,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1221,6 +1237,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -2486,6 +2503,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -3223,6 +3241,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "partial",
       "weakening" : [ "bodies_not_elaborated" ],
       "signature" : {
@@ -3292,6 +3311,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -3434,6 +3454,7 @@
     } ]
   } ],
   "sources" : {
+    "0" : "booking.sou",
     "1" : "vouchers.sou",
     "2" : "waitlist.sou",
     "5" : "codes.sou"

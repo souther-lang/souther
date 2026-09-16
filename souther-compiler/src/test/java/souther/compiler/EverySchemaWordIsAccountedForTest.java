@@ -24,6 +24,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.partition.ReadingGap;
@@ -525,6 +526,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "disposition"),
                     List.of(ArmDisposition.class), armDispositionWords(), Set.of()),
+            // Where the row account puts a row, spelled by the writer for the same reason.
+            new Vocabulary("behavior.rowObligations[].disposition",
+                    List.of("$defs", "behavior", "properties", "rowObligations", "items",
+                            "properties", "disposition"),
+                    List.of(RowDisposition.class), rowDispositionWords(), Set.of()),
             new Vocabulary("branch.obligations[].notCountedBecause",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "notCountedBecause"),
@@ -782,6 +788,13 @@ class EverySchemaWordIsAccountedForTest {
     /** The dispositions a document may name, spelled by the one writer of the field. */
     private static Set<String> dispositionWords() {
         return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Where the row account puts a row, spelled by the one writer of the field. */
+    private static Set<String> rowDispositionWords() {
+        return Arrays.stream(RowDisposition.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

@@ -171,6 +171,33 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             """;
 
     /**
+     * A row written {@code <?>} at an arm nothing else covers.
+     *
+     * <p>Two obligations about one piece of text, and one kind covers both. The arm is owed a row
+     * and the row that stands there does not answer, so the arm account holds it; the row is owed
+     * an answer and only an answer written where it is discharges that, so the row account holds
+     * it. The corpus reaches neither on its own, and a join asked of a kind rather than of the
+     * identity lands both findings on whichever account the kind was written down against.
+     */
+    private static final String A_ROW_AWAITING_ITS_ANSWER = """
+            module example.owed
+
+            data Yes
+            data No
+            data Flag = Yes | No
+            data Res = { n: Int }
+
+            behavior decide : (flag: Flag) -> Res
+                constructs Res
+
+            let decide (flag) = if flag == Yes then Res { n = 1 } else Res { n = 2 }
+
+            example decide
+                | "yes"  : (Yes) -> Res { n = 1 }
+                | "no"   : (No) -> <?>
+            """;
+
+    /**
      * The kinds whose findings are about nothing a row is owed for, asked of the kind.
      *
      * <p>Derived and not listed. Whether a finding names an obligation is the subject's own answer
@@ -370,6 +397,46 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                 () -> "which the account holds once: " + behavior.get("partition"));
     }
 
+    /**
+     * A row awaiting its answer and the arm it stands at are two entries of two accounts.
+     *
+     * <p>One kind and two obligations, which is why the join is asked of the identity. Both
+     * findings are {@code unanswered_row}; one is keyed on the arm and lands in the arm account,
+     * the other on the row and lands in the row account. A reader taking the account from the kind
+     * puts both against whichever of the two was written down, and the one it was not written down
+     * against joins nothing.
+     */
+    @Test
+    void aRowAwaitingItsAnswerAndTheArmItStandsAtAreTwoEntries() {
+        JsonNode document = reportOf(A_ROW_AWAITING_ITS_ANSWER);
+        JsonNode behavior = onlyBehaviorOf(document);
+        List<JsonNode> owed = new ArrayList<>();
+        for (JsonNode finding : behavior.get("findings")) {
+            if ("unanswered_row".equals(finding.get("kind").asString())) {
+                owed.add(finding);
+            }
+        }
+
+        assertEquals(2, owed.size(),
+                () -> "the arm is owed a row and the row is owed an answer: "
+                        + behavior.get("findings"));
+        assertEquals(2, owed.stream()
+                        .map(each -> String.valueOf(each.get("obligationId"))).distinct().count(),
+                () -> "told apart by what each is owed at: " + owed);
+        for (JsonNode each : owed) {
+            assertEquals(1, entriesOf(behavior, onlyModuleOf(document), "unanswered_row").stream()
+                            .filter(entry -> each.get("obligationId")
+                                    .equals(entry.get("obligationId"))).count(),
+                    () -> "and each lands on one entry of the account it is owed at: " + each);
+        }
+        List<String> stands = new ArrayList<>();
+        behavior.get("rowObligations")
+                .forEach(each -> stands.add(each.get("disposition").asString()));
+        assertEquals(List.of("met", "unmet"), stands,
+                () -> "and the account holds both rows, not only the one a finding is about: "
+                        + behavior.get("rowObligations"));
+    }
+
     private static List<JsonNode> entriesOf(JsonNode behavior, JsonNode module, String kind) {
         List<JsonNode> out = new ArrayList<>();
         // A combination of two classes, where the body's decisions meet nowhere and the pair space
@@ -416,11 +483,23 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             }
             return out;
         }
+        // A row waiting for its answer is owed at one of two entries, and which is not this
+        // reader's to decide. The arm such a row stands at is owed a row and the arm account holds
+        // that; the row itself is owed an answer and the row account holds that — two obligations
+        // about one piece of text, and the identity on the finding says which it is about.
+        if ("unanswered_row".equals(kind)) {
+            // A behavior with no arms has no arm account to publish, and a row of one is waiting
+            // for its answer all the same.
+            JsonNode arms = behavior.get("branch").get("obligations");
+            if (arms != null) {
+                arms.forEach(out::add);
+            }
+            behavior.get("rowObligations").forEach(out::add);
+            return out;
+        }
         JsonNode from = switch (kind) {
             case "decision_rule_uncovered" -> behavior.get("decision").get("obligations");
-            // A row waiting for its answer is owed at the arm it was written at, which is the entry
-            // an arm nothing reaches is owed at. One account and two things to do about it.
-            case "arm_unreached", "unanswered_row" -> behavior.get("branch").get("obligations");
+            case "arm_unreached" -> behavior.get("branch").get("obligations");
             case "boundary_unmet", "domain_point_uncovered" ->
                     behavior.get("partition").get("obligations");
             default -> throw new IllegalStateException(kind);
@@ -512,6 +591,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         out.add(reportOf(TWO_POSITIONS_ONE_CLASS_NAME));
         out.add(reportOf(TWO_RULES_ONE_ARM));
         out.add(reportOf(A_CASE_AND_ITS_CLASS));
+        out.add(reportOf(A_ROW_AWAITING_ITS_ANSWER));
         return out;
     }
 }

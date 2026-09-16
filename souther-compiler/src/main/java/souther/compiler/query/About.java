@@ -4,7 +4,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
@@ -517,14 +517,22 @@ public sealed interface About {
      *
      * <p>Beside {@link ARowAtAnArmAwaitsItsAnswer} and not instead of it. That one is about an arm
      * — what to tell an author about it, and that nothing should compose a second row for it —
-     * and this one is the work itself.
+     * and this one is the work itself. Two obligations and not one reading of a third: the arm's
+     * is discharged by any row going through it, and this one only by an answer written where this
+     * row is.
+     *
+     * @param at where the answer stands, which is where a reader is pointed
      */
-    record AnUnansweredRow(String behavior, RowIdentity identity, SourcePos at) implements About {
+    record AnUnansweredRow(RowRef rowRef, SourcePos at) implements OfAnObligation {
 
         public AnUnansweredRow {
-            Objects.requireNonNull(behavior, "a row is a row of a behavior");
-            Objects.requireNonNull(identity, "a row says what it calls itself");
+            Objects.requireNonNull(rowRef, "a finding is about something");
             Objects.requireNonNull(at, "a row is written somewhere");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfARow(rowRef);
         }
     }
 

@@ -74,8 +74,9 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                 | "over" : (20) -> Ok { n = 1 }
             """;
 
-    /** A model that leaves nothing to say about a source: its rows run, and its body has no arms for
-     * an unreached one to be reported at. */
+    /** A model that leaves nothing to say about a source: nobody wrote a row in it, so there is no
+     * row for its account to name, and its body has no arms for an unreached one to be reported
+     * at. */
     private static final String NOTHING_TO_SAY = """
             module example.plain
 
@@ -85,9 +86,6 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                 constructs Ok
 
             let keep (v) = Ok { n = v }
-
-            example keep
-                | "one" : (1) -> Ok { n = 1 }
             """;
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

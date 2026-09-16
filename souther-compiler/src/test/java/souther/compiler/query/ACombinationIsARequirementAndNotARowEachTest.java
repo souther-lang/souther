@@ -63,15 +63,16 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // is absent from it — so a rule constrains the positions its own way turns on and
                 // says nothing about the rest, which is the whole of what a combination is about.
                 "ARuleNoRowTakes",
+                // A row owed an answer, which is owed at the row. What it is owed at is the thing
+                // somebody wrote, so it is no more about a combination than an arm is — and it is
+                // the one kind here that is read off the source rather than measured.
+                "AnUnansweredRow",
                 "ARowAtAnArmAwaitsItsAnswer",
                 "ARuleWithoutALine", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",
-                "APositionReadWiderThanItsRules", "APositionWhoseRulesWereNotReached",
-                // A row owed an answer, which is owed at the row. What it is owed at is the thing
-                // somebody wrote, so it is no more about a combination than an arm is — and it is
-                // the one kind here that is read off the source rather than measured.
-                "AnUnansweredRow"), every,
+                "APositionReadWiderThanItsRules",
+                "APositionWhoseRulesWereNotReached"), every,
                 "a kind of gap this compiler finds that this law says nothing about");
     }
 
@@ -103,8 +104,9 @@ class ACombinationIsARequirementAndNotARowEachTest {
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfAnArm", "OfADecisionRule", "OfACombinationOfDecisions",
-                        "OfAFallbackPairCell", "OfAClass", "OfAnInputCase"),
+                List.of("OfALine", "OfAnArm", "OfARow", "OfADecisionRule",
+                        "OfACombinationOfDecisions", "OfAFallbackPairCell", "OfAClass",
+                        "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");
     }
 

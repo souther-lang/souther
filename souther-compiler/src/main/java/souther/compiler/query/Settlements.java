@@ -537,6 +537,11 @@ public record Settlements(List<ObligationIdentity> requested,
                 // rather than from what it states.
                 case ObligationIdentity.OfAnInputCase owed -> throw new IllegalStateException(
                         "no row is offered for " + owed + ", so none is weighed against it");
+                // An answer a row of the author's is waiting for. Nothing composes one: what
+                // discharges it is what the system does, written where that row is by somebody who
+                // knows it, and a row this composed would be a second row rather than that answer.
+                case ObligationIdentity.OfARow owed -> throw new IllegalStateException(
+                        "no row is offered for " + owed + ", so none is weighed against it");
                 case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);

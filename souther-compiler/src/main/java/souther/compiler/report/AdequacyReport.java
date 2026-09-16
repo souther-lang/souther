@@ -123,6 +123,9 @@ import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowDisposition;
+import souther.compiler.query.RowObligation;
+import souther.compiler.query.RowSummary;
 import souther.compiler.text.DisplayColumns;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
@@ -213,7 +216,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 22;
+    public static final int SCHEMA_VERSION = 23;
 
     /**
      * Where the schema this writes documents ships.
@@ -437,6 +440,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * What one behavior's compile came to, as this report says it.
      *
+     * @param rowsOwed  every row written for this behavior and whether its answer is written.
+     *                  Beside {@code evidence} and not in it: this is read off the text rather than
+     *                  measured over a run, so it stands for a behavior whose rows nobody ran and
+     *                  there is nothing it can have gone without
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
      *                  which is what keeps a claim from reaching a denominator
@@ -462,6 +469,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
+                                 RowSummary rowsOwed,
                                  ClaimAnnotations claimed,
                                  List<ReportedFinding> reported,
                                  Map<ArmReportAnchor, Citation> armPlaces,
@@ -708,6 +716,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Map<String, Adequacy.RowReading> readings = Objects.requireNonNull(
                 compilation.db().ask(new Adequacy.RowReadings(name)).value(),
                 () -> "the rows of `" + name + "` were not read for or against");
+        // What the rows themselves owe, which is the same account the findings are the unmet group
+        // of. Held to answering for the reason the reading above is: it is read off the shapes,
+        // which a module got this far by having, so an absence is this report and that query
+        // disagreeing about what a module is.
+        Map<String, RowSummary> rowsOwed = Objects.requireNonNull(
+                compilation.db().ask(new Adequacy.RowObligations(name)).value(),
+                () -> "what the rows of `" + name + "` owe was not read");
         Map<String, Adequacy.SignatureEvidence> signatures =
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
@@ -786,6 +801,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
                     evidence,
+                    // Asked of the answer. The account answers for every behavior the module
+                    // declares, so a missing key is that query and this walking different lists
+                    // rather than a behavior nobody wrote a row for.
+                    Objects.requireNonNull(rowsOwed.get(behavior.name()),
+                            () -> "what the rows of `" + behavior.name() + "` owe was not read"),
                     claims == null ? ClaimAnnotations.NONE
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     reported,
@@ -3738,6 +3758,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("input", at);
                 into.put("case", missing.name());
             }
+            // The behavior, the source and what the row calls itself — the same three parts a row
+            // is named by where it is a finding's subject, and spelled the same way. A row written
+            // with no name is numbered within its source, so a key without the source would hold
+            // one entry for the first row of the module and the first row of the file beside it.
+            case ObligationIdentity.OfARow(var rowRef) -> {
+                into.put("behavior", rowRef.behavior());
+                into.put("source", sources.written(rowRef.source()));
+                switch (rowRef.identity()) {
+                    case RowIdentity.Named named -> into.put("name", named.name());
+                    case RowIdentity.Unnamed unnamed -> into.put("ordinal", unnamed.ordinal());
+                }
+            }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
             case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
@@ -4401,6 +4433,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // acts on differently from rows nobody read.
                 behavior.rowCount().ifPresent(count -> b.put("rows", count));
                 behavior.pending().ifPresent(count -> b.put("pending", count));
+                // And what the rows themselves owe, which is a different question from either
+                // count above and is answered whether or not anything ran. Outside `measured`,
+                // where the arm account's entries are: an account read off the text has nothing to
+                // have gone without, and put behind a measurement a row waiting for its answer
+                // would be a finding with no entry to join to exactly when nobody ran the rows.
+                rowObligations(b, behavior.rowsOwed(), sources);
                 b.put("status", wire(behavior.status()));
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.name(), behavior.signature(), sources);
@@ -4558,6 +4596,39 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
         return at == null || at instanceof Citation.Elsewhere
                 ? Optional.empty() : PublishedAt.of(at);
+    }
+
+    /**
+     * Every row written for this behavior, with whether the answer it owes is written.
+     *
+     * <p>One entry per row and no number beside them. How many rows owe an answer is a fold of this
+     * array, and written out as well it would be two answers about one text.
+     *
+     * <p>Not {@code rows} said again. That count is of the rows a reading handed back, and is
+     * absent where nothing ran; this is of the rows an author wrote, and a behavior can have every
+     * one of them here while no run reached any. The two are different questions about the same
+     * text and neither is derived from the other.
+     */
+    private static void rowObligations(ObjectNode behavior, RowSummary owed,
+                                       DocumentSources sources) {
+        ArrayNode all = behavior.putArray("rowObligations");
+        for (RowObligation each : owed.all()) {
+            ObjectNode one = all.addObject();
+            obligationId(one.putObject("obligationId"), each.obligationIdentity(), sources);
+            // Where the row is written, which is where a reader is sent whichever way it stands:
+            // an answer that is owed is written here, and one already written is read here.
+            at(one, Citation.of(each.at()), sources);
+            one.put("disposition", wire(each.disposition()));
+        }
+    }
+
+    /** What a document calls where a row stands. Written out rather than taken off the constant's
+     *  name, for the reason every other word of this document is. */
+    public static String wire(RowDisposition disposition) {
+        return switch (disposition) {
+            case MET -> "met";
+            case UNMET -> "unmet";
+        };
     }
 
     private static void signature(ObjectNode behavior, String named,
@@ -5517,7 +5588,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // What the row calls itself, which is what says which row is meant from outside the
             // file. A row that wrote no name answers to nothing outside it and is shown as the
             // place it is written, which the entry carries beside this.
-            case About.AnUnansweredRow(var _, var row, var _) -> words(row.shown());
+            case About.AnUnansweredRow(var rowRef, var _) -> words(rowRef.identity().shown());
             // The behavior whose decisions the combination is of, for the reason a rule's subject
             // is the behavior: what tells one combination from another is the decisions it is of,
             // held in the terms the account keys on, and a subject spelling those would publish

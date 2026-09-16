@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 22,
+  "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "not_satisfied",
@@ -401,6 +401,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1627,6 +1628,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
@@ -29,7 +30,7 @@ import java.util.Set;
  */
 public sealed interface ObligationIdentity
         permits ObligationIdentity.OfALine, ObligationIdentity.OfAnArm,
-                ObligationIdentity.OfADecisionRule,
+                ObligationIdentity.OfARow, ObligationIdentity.OfADecisionRule,
                 ObligationIdentity.OfACombinationOfDecisions,
                 ObligationIdentity.OfAFallbackPairCell, WhereACaseOfAnInputIsOwed {
 
@@ -52,6 +53,26 @@ public sealed interface ObligationIdentity
 
         public OfAnArm {
             Objects.requireNonNull(arm, "an obligation is told apart by something");
+        }
+    }
+
+    /**
+     * A row an author wrote, which is what the row account is owed an answer at.
+     *
+     * <p>Not an arm a row stands at. An arm is owed a row and the account of arms says whether one
+     * goes through it; a row is owed an answer and is owed it whether or not the behavior branches
+     * at all. One {@code <?>} row through one arm is two things to do, told apart here by being
+     * keyed on two different shapes.
+     *
+     * <p>{@link RowRef} and not {@link souther.compiler.observe.RowIdentity}. A row written with no
+     * name is numbered within the source that writes it, so a behavior exampled in a module and in
+     * an attached file has a first row in each — and an account keyed on what the row names itself
+     * would hold one entry for two rows an author has to go and look at separately.
+     */
+    record OfARow(RowRef rowRef) implements ObligationIdentity {
+
+        public OfARow {
+            Objects.requireNonNull(rowRef, "an obligation is told apart by something");
         }
     }
 
