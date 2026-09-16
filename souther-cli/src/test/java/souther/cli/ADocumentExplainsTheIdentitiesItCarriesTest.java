@@ -74,8 +74,9 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                 | "over" : (20) -> Ok { n = 1 }
             """;
 
-    /** A model that leaves nothing to say about a source: its rows run, and its body has no arms for
-     * an unreached one to be reported at. */
+    /** A model that leaves nothing to say about a source: nobody wrote a row in it, so there is no
+     * row for its account to name, and its body has no arms for an unreached one to be reported
+     * at. */
     private static final String NOTHING_TO_SAY = """
             module example.plain
 
@@ -85,9 +86,6 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                 constructs Ok
 
             let keep (v) = Ok { n = v }
-
-            example keep
-                | "one" : (1) -> Ok { n = 1 }
             """;
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -117,6 +115,41 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         for (Written each : written) {
             assertTrue(explained.contains(each.sourceId()),
                     each + " is written and not explained by " + explained);
+        }
+    }
+
+    /**
+     * And every entry of the table is a source the document names.
+     *
+     * <p>The other direction, asked of the document and not of a fixture. What it rules out is a
+     * table that explains more than the document carries — a consumer reading it as the report's
+     * subject would be reading in files nothing here says anything about.
+     *
+     * <p><b>Why not asked by compiling a source nothing mentions.</b> That is what the test below
+     * does, and it is a statement about the command rather than about the document: it holds while
+     * such a source can be built, and a document that grows a new place to name one takes the case
+     * away without taking the claim away. The row account did exactly that — a behavior with a row
+     * now names the source that row is written in — and the test below went on passing about a
+     * narrower thing. This asks the document, where the two ends are both in hand whatever a
+     * fixture happens to reach.
+     */
+    @Test
+    void andEveryEntryOfTheTableIsASourceTheDocumentNames() throws Exception {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("arms.sou", ONE_ARM_UNREACHED);
+        sources.put("stopped.sou", stopped("example.stopped", "Qty"));
+
+        JsonNode report = JSON.readTree(run(sources, "--format", "json").out());
+
+        Set<String> named = new LinkedHashSet<>();
+        for (Written each : identitiesIn(report, new ArrayList<>())) {
+            named.add(each.sourceId());
+        }
+        List<String> explained = List.copyOf(report.get("sources").propertyNames());
+        assertFalse(explained.isEmpty(), "this document explains a source: " + report);
+        for (String each : explained) {
+            assertTrue(named.contains(each),
+                    each + " is explained and named by no identity in " + report);
         }
     }
 

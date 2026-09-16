@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 22,
+  "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "bodies_not_elaborated", "rule_unread" ],
@@ -713,12 +713,29 @@
       "implementation" : "implemented",
       "rows" : 1,
       "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "book",
+          "source" : "0",
+          "name" : "a party of two takes a seat in the middle of the house"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 34,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -1221,12 +1238,29 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "NotThisVoucher", "Redeemed", "TooManyForOneVoucher" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "NotThisVoucher"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "Redeemed"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "redeem",
+              "case" : "TooManyForOneVoucher"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -2486,12 +2520,29 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "NotOnTheList", "Seated", "TooManyForOneTicket" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "NotOnTheList"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "Seated"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "seat",
+              "case" : "TooManyForOneTicket"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -3223,6 +3274,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "partial",
       "weakening" : [ "bodies_not_elaborated" ],
       "signature" : {
@@ -3230,6 +3282,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -3292,6 +3345,7 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -3299,6 +3353,17 @@
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Domestic", "Overseas" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "originOf",
+              "case" : "Domestic"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "originOf",
+              "case" : "Overseas"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -3434,6 +3499,7 @@
     } ]
   } ],
   "sources" : {
+    "0" : "booking.sou",
     "1" : "vouchers.sou",
     "2" : "waitlist.sou",
     "5" : "codes.sou"

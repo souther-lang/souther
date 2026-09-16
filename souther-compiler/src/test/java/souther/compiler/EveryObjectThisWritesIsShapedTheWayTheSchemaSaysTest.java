@@ -76,8 +76,12 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
             example f
                 | "one" : (R { a = 1 }) -> Missing
 
+            // And one row whose answer is still owed, so the document reaches what a row account
+            // publishes and what a finding keyed on a row carries. Both of those are shapes no
+            // model that answers every row it writes ever gets to.
             example named
                 | "seven" : (R { a = 7 }) -> Found
+                | "other" : (R { a = 8 }) -> <?>
             """;
 
     @Test

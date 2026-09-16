@@ -50,6 +50,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
@@ -70,11 +71,13 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -190,10 +193,10 @@ public final class Adequacy {
      * both would be the same news twice.
      *
      * <p>What a build is held to is not here, because it is not asked for: every obligation the
-     * account derives is a row the model asks for ({@link Kind#isAboutAnObligation}). A measure a build did not ask
-     * for is one that was not made rather than one that is outside the question, so a level that
-     * measures less leaves a verdict of {@code undetermined} rather than a shorter list of what is
-     * owed.
+     * account derives is a row the model asks for ({@link About.OfAnObligation}). A measure a build
+     * did not ask for is one that was not made rather than one that is outside the question, so a
+     * level that measures less leaves a verdict of {@code undetermined} rather than a shorter list
+     * of what is owed.
      */
     public record Asked(Level level, boolean warn) {
 
@@ -223,10 +226,10 @@ public final class Adequacy {
          *
          * <p>{@code souther examples} asks for this. That command chooses no measurement — its
          * output is the report, so everything is measured — and what the report marks as a gap is
-         * the account's ({@link Kind#isAboutAnObligation}) rather than a word the caller wrote: a report answering
-         * a narrower question than the build beside it is how {@code souther examples --strict}
-         * came to exit 0 on a model a compile refused, with the gaps printed in the report that had
-         * just called it satisfied.
+         * the account's ({@link About.OfAnObligation}) rather than a word the caller wrote: a
+         * report answering a narrower question than the build beside it is how {@code souther
+         * examples --strict} came to exit 0 on a model a compile refused, with the gaps printed in
+         * the report that had just called it satisfied.
          */
         public static Asked fullReport() {
             return new Asked(Level.ALL, false);
@@ -4275,7 +4278,7 @@ public final class Adequacy {
                 // established rather than from a finding, so it was searched for and the search's
                 // own word for what stopped it is the better answer.
                 if (none == null && !finding.weakenedBy().isEmpty()
-                        && finding.kind().isAboutAnObligation()
+                        && finding.about() instanceof About.OfAnObligation
                         && !(finding.about() instanceof About.APointOfABorder)
                         && !(finding.about() instanceof About.AClassNoRowIsIn)) {
                     none = new GenerationOutcome.NotApplicable(
@@ -5090,11 +5093,17 @@ public final class Adequacy {
     /**
      * What one measure found and nothing filled.
      *
-     * <p>What a kind is, is what a measure found. Whether it is about something the model owes a row
-     * at is {@link #isAboutAnObligation}, and what a build then does about it is decided where a
-     * build is — a kind about an obligation has to carry a diagnostic code, or a build would fail
-     * over something it never printed; the agreement is held by a test rather than by reading one
-     * off the other.
+     * <p>What a kind is, is what a measure found. Whether the model owes a row at it is not asked
+     * here and cannot be: a kind is a coarsening of what the finding is about, and two subjects
+     * this puts under one word need not both be obligations — so the answer lives with the subject
+     * ({@link About.OfAnObligation}) and every surface reads it there. Which subjects fall under
+     * which word is not held to keeping that answer askable here, either: a word that covers a
+     * subject a row is owed at and one it is not is a word that says less, and nothing above it
+     * turns on the difference.
+     *
+     * <p>What a build is told, where it is told anything, is the code beside the constant. Which
+     * findings a build acts on is the subject's, so that a finding it acts on carries a code is a
+     * fact about the pair and is held of the document rather than by reading either off the other.
      */
     public enum Kind {
         /** A case of the output no row expects. */
@@ -5238,41 +5247,6 @@ public final class Adequacy {
         }
 
         /**
-         * Whether a finding of this kind is about something the model owes a row at.
-         *
-         * <p>The one division everything else is a projection of. A report marks these, a block
-         * offers rows against them and a build refuses over the ones a measure established — three
-         * surfaces reading one answer, none of them deciding it.
-         *
-         * <p>Said as what the kind is and not as what a build does with it, which is the shape the
-         * bars left behind. What a build refuses over was a word the caller wrote, so the table
-         * that survived them was named for the refusal; read that way, refusing is the primitive
-         * and being owed is derived from it, which is backwards. Whether the model owes a row is
-         * the model's answer, and a build refusing is one of the things that follow.
-         *
-         * <p>An exhaustive switch, so a kind added later does not compile until somebody has said
-         * which of the three it is.
-         */
-        public boolean isAboutAnObligation() {
-            return switch (this) {
-                // Every obligation the model derives, whichever derivation states it: a case of a
-                // signature, a point of a border, an arm of a body, a class of a position, a rule
-                // of the decision, and a row whose answer is owed. One account, so one answer.
-                case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET, ARM_UNREACHED,
-                     UNANSWERED_ROW, DOMAIN_POINT_UNCOVERED, AXIS_CLASS_UNCOVERED,
-                     DECISION_RULE_UNCOVERED, INTERACTION_UNCOVERED, PAIR_UNCOVERED -> true;
-                // An observation: what was seen rather than what is owed. A case nothing was
-                // observed producing is the rows' own account of themselves.
-                case OUTPUT_CASE_UNVERIFIED -> false;
-                // And this compiler's own shortfall: what a measure could not establish, and what
-                // it established about the model rather than about the rows. Neither is a row
-                // somebody owes, and nothing can make one of them into one.
-                case PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, RULE_UNACCOUNTED,
-                     PARTITION_RULES_NOT_REACHED, PARTITION_VALUES_NOT_SEPARATED -> false;
-            };
-        }
-
-        /**
          * Which question of the account answers about findings of this kind.
          *
          * <p>Here so that a surface reading part of the account names the kinds it has a reader for
@@ -5362,7 +5336,7 @@ public final class Adequacy {
             case About.APointOfADeclaredBorder(DeclaredDebt owed) ->
                     whereItIsWritten(db, owed.pointAt());
             // A row is shown where it is written, which is in this module's own source.
-            case About.AnUnansweredRow(String _, RowIdentity _, SourcePos at) -> Citation.of(at);
+            case About.AnUnansweredRow(RowRef _, SourcePos at) -> Citation.of(at);
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -5524,8 +5498,8 @@ public final class Adequacy {
          * <p>What that does not say is whether a build refuses. Being read rather than measured and
          * being refused over are different questions, and folding them left a finding read straight
          * off the source with no way to be a gap: a row written {@code <?>} is as certain as a fact
-         * gets and is exactly the work a build should stop for. Which kinds a build refuses over is
-         * {@link Kind#isAboutAnObligation} and is asked there.
+         * gets and is exactly the work a build should stop for. What a build refuses over is a
+         * finding whose subject is an {@link About.OfAnObligation} and is asked of the subject.
          */
         public static Finding noticed(String behavior, About about) {
             return noticed(new FindingSubject.OfABehavior(behavior), about);
@@ -5612,7 +5586,7 @@ public final class Adequacy {
          * apart.
          */
         public Finding.Disposition disposition() {
-            if (!kind().isAboutAnObligation()) {
+            if (!(about instanceof About.OfAnObligation)) {
                 return Finding.Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
@@ -6068,6 +6042,70 @@ public final class Adequacy {
     }
 
     /**
+     * What each behavior's rows owe by way of answers.
+     *
+     * <p>The one reading of the text that asks it. A row written {@code <?>} is a finding a build
+     * refuses over and an entry the document publishes, and both come from here — asked a second
+     * time where the findings are assembled, the two would be one judgement written twice, and the
+     * distinction the source makes between a row an author left open and a row a parse could not
+     * read would have to be kept true at each of them.
+     *
+     * <p>Answered from the shapes and from nothing a run produced. Every behavior a module declares
+     * has one of these, including a behavior nobody wrote a row for, whose account is empty.
+     */
+    public record RowObligations(String name) implements Key<Map<String, RowSummary>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, RowSummary>> compute(Db db) {
+            Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, List<RowObligation>> owed = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                owed.put(behavior.name(), new ArrayList<>());
+            }
+            for (Hir.Example example : prepared.value().module().examples()) {
+                List<RowObligation> of = owed.get(example.target());
+                // A block naming something this module does not declare is reported where the
+                // names are resolved. The account is of the behaviors there are.
+                if (of == null) {
+                    continue;
+                }
+                for (Hir.ExampleRow row : example.rows()) {
+                    RowDisposition stands = standingOf(row.expected());
+                    // A row whose answer no parse could read is not an answer that is owed. It is
+                    // malformed, a diagnostic says how, and counting it here would put a module
+                    // full of syntax errors in front of a reader as work an author had left.
+                    if (stands == null) {
+                        continue;
+                    }
+                    of.add(new RowObligation(
+                            RowRef.of(example.target(), row.pos(), row.identity()),
+                            row.pos(), stands));
+                }
+            }
+            Map<String, RowSummary> out = new LinkedHashMap<>();
+            owed.forEach((behavior, rows) -> out.put(behavior, new RowSummary(rows)));
+            return Answer.of(Collections.unmodifiableMap(out));
+        }
+
+        /** Where the source puts a row, or null where it is a row this account is not of. */
+        private static RowDisposition standingOf(Hir.Expected expected) {
+            return switch (expected) {
+                case Hir.Expected.Asserted _ -> RowDisposition.MET;
+                case Hir.Expected.Unanswered _ -> RowDisposition.UNMET;
+                case Hir.Expected.Unwritten _ -> null;
+            };
+        }
+    }
+
+    /**
      * Everything the measures found, whatever each of them is about.
      *
      * <p>The one statement of what counts as a finding. A report prints these, a build is warned about
@@ -6101,6 +6139,15 @@ public final class Adequacy {
                     db.ask(new BodyBorders(name)).value();
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
             Map<String, InteractionEvidence> meetings = db.ask(new Interacts(name)).value();
+            // The account of what the rows owe, which this does not read the text a second time
+            // for: a row an author left open is one entry there and one finding here, and the two
+            // cannot come apart.
+            //
+            // Held to answering, unlike the measures above. It is answered from the shapes this
+            // one has already asked for, so an absence is not a measure that did not run.
+            Map<String, RowSummary> rows = Objects.requireNonNull(
+                    db.ask(new RowObligations(name)).value(),
+                    () -> "what the rows of `" + name + "` owe was not read");
 
             // One list and not a block per behavior. What each finding is about is its own
             // ({@link FindingSubject}), and a map keyed by behavior has no key for a finding about
@@ -6114,7 +6161,7 @@ public final class Adequacy {
             // wrote.
             List<Finding> out = new ArrayList<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                unansweredRows(prepared.value().module(), behavior.name(), out);
+                unansweredRows(rows.get(behavior.name()), out);
                 signatureFindings(behavior.name(),
                         signatures == null ? null : signatures.get(behavior.name()), out);
                 partitionFindings(behavior,
@@ -6286,7 +6333,7 @@ public final class Adequacy {
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
                 out.add(Finding.by(behavior, output.cases(),
-                        new About.ACaseNoRowExpects(missing)));
+                        new About.ACaseNoRowExpects(behavior, missing)));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
             // them adds nothing to that. Asked of the rows rather than of the declaration: the two
@@ -6336,30 +6383,24 @@ public final class Adequacy {
         }
 
         /**
-         * The rows of {@code behavior} whose answers are owed, one finding each.
+         * The entries of {@code owed} that are waiting for an answer, one finding each.
          *
-         * <p>Read off the module's own text, which is where the fact is settled. Every other way of
-         * reaching it goes through something that answers a different question and drops this one
-         * when its own answer is no: an arm carries it only while no other row covers the arm, only
-         * while the behavior has arms at all, and only while nothing weakened the measurement over
-         * the rows; a statement carries it only while the row's values are small enough to hand on.
-         * None of those is what makes a row's answer owed.
+         * <p>The account's unmet group and nothing worked out here. Whether a row's answer is owed
+         * is settled where the row was read, and every other way of reaching it goes through
+         * something that answers a different question and drops this one when its own answer is no:
+         * an arm carries it only while no other row covers the arm, only while the behavior has
+         * arms at all, and only while nothing weakened the measurement over the rows; a statement
+         * carries it only while the row's values are small enough to hand on. None of those is what
+         * makes a row's answer owed.
          *
          * <p>{@link Finding#noticed} because nothing measured it. There is no run behind this and
          * nothing about it could have come out otherwise — the row is written and its answer is
          * not — so it carries no weakening and a build's answer to it is the account's alone.
          */
-        private static void unansweredRows(Hir.Module module, String behavior, List<Finding> out) {
-            for (Hir.Example example : module.examples()) {
-                if (!behavior.equals(example.target())) {
-                    continue;
-                }
-                for (Hir.ExampleRow row : example.rows()) {
-                    if (row.expected() instanceof Hir.Expected.Unanswered) {
-                        out.add(Finding.noticed(behavior,
-                                new About.AnUnansweredRow(behavior, row.identity(), row.pos())));
-                    }
-                }
+        private static void unansweredRows(RowSummary owed, List<Finding> out) {
+            for (RowObligation each : owed.unmet()) {
+                out.add(Finding.noticed(each.rowRef().behavior(),
+                        new About.AnUnansweredRow(each.rowRef(), each.at())));
             }
         }
 
@@ -6571,25 +6612,20 @@ public final class Adequacy {
     }
 
     /**
-     * The findings a build held to {@code held} could be warned about, and no more of the account.
+     * The findings a build could be warned about, which is the whole account.
      *
-     * <p><b>Not the account.</b> A warning is said about a finding a build refuses over, so the
-     * kinds nothing refuses over are kinds this surface will say nothing about whatever they hold —
-     * and what answers those kinds is work this build would pay for and never read. Which
-     * questions those are is not decided here: each kind says which question answers it, and the
-     * ones about an obligation name the questions this asks.
+     * <p>Every question of it, because both of them answer about obligations: the decision's rules
+     * and everything the measures count. This used to work that out by asking each kind whether it
+     * was about an obligation and collecting the questions those name — an answer that came to the
+     * whole account on every input there is, spelled as a choice.
      *
-     * <p>So the laziness is about which queries are demanded and never about what an account
-     * means. A caller that wants the account asks {@link #accountOf}, which asks all of them.
+     * <p>Beside {@link #accountOf} and not instead of it. The two ask the same questions today and
+     * say different things: this is what a build may be warned about, and that is the account a
+     * report writes. A question added that answers about nothing a row is owed for is where they
+     * part, and where this gets something to leave out.
      */
     public static List<Finding> whatAWarningCouldBeAbout(Db db, String module) {
-        EnumSet<AccountPart> asked = EnumSet.noneOf(AccountPart.class);
-        for (Kind kind : Kind.values()) {
-            if (kind.isAboutAnObligation()) {
-                asked.add(kind.answeredBy());
-            }
-        }
-        return partsOfTheAccount(db, module, asked);
+        return partsOfTheAccount(db, module, EnumSet.allOf(AccountPart.class));
     }
 
     /**
@@ -6706,7 +6742,7 @@ public final class Adequacy {
             About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(placeOf(db, module, finding))
                     .say(switch (said) {
-                        case About.ACaseNoRowExpects(var missing) ->
+                        case About.ACaseNoRowExpects(var _, var missing) ->
                                 new ExampleMessage.NoRowExpectsThatCase(
                                         missing.name(), finding.named());
                         case About.ACaseNoRowAppliesItTo(var input, var missing, var _) ->
@@ -6779,11 +6815,11 @@ public final class Adequacy {
                         // meant from outside the file. An unnamed row is pointed at instead: the
                         // report is anchored where the row is written, and an ordinal is not words
                         // about a row.
-                        case About.AnUnansweredRow(var behavior, var row, var _) ->
-                                row instanceof RowIdentity.Named named
+                        case About.AnUnansweredRow(var rowRef, var _) ->
+                                rowRef.identity() instanceof RowIdentity.Named named
                                         ? new ExampleMessage.TheNamedRowsAnswerIsOwed(
-                                                named.name(), behavior)
-                                        : new ExampleMessage.TheRowsAnswerIsOwed(behavior);
+                                                named.name(), rowRef.behavior())
+                                        : new ExampleMessage.TheRowsAnswerIsOwed(rowRef.behavior());
                         // The class and the position it is a class of, in the partition's own
                         // words — which are the words the report writes for the same finding.
                         case About.AClassNoRowIsIn(var missing) ->
@@ -6821,7 +6857,7 @@ public final class Adequacy {
                                         "no message for " + finding.kind());
                     });
             switch (said) {
-                case About.ACaseNoRowExpects(var missing) ->
+                case About.ACaseNoRowExpects(var _, var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The same hints, asked of the role. What a row at each point shows is a fact
                 // about the point and not about which of the two questions raised it.

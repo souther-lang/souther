@@ -535,8 +535,16 @@ public record Settlements(List<ObligationIdentity> requested,
                 // the signature measure counts off the row's own text. Answered here as well, that
                 // would be a second reading of one relation, made from the values a row builds
                 // rather than from what it states.
-                case ObligationIdentity.OfAnInputCase owed -> throw new IllegalStateException(
-                        "no row is offered for " + owed + ", so none is weighed against it");
+                //
+                // A case of the output is the same relation read the other way round, and what
+                // discharges it is what a row states as well.
+                //
+                // And a row waiting for its answer is discharged by nothing composed at all: what
+                // it is owed is what the system does, written where that row is by somebody who
+                // knows it, and a row composed here would be a second row rather than that answer.
+                case ObligationIdentity.OfAnInputCase _, ObligationIdentity.OfAnOutputCase _,
+                     ObligationIdentity.OfARow _ -> throw new IllegalStateException(
+                        "no row is offered for " + item + ", so none is weighed against it");
                 case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);

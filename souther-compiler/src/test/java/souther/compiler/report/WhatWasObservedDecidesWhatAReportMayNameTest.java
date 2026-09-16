@@ -66,6 +66,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                 new souther.compiler.query.BehaviorEvidence(
                         souther.compiler.query.Adequacy.RowReading.NONE,
                         null, null, null, null, read(), null, null),
+                new souther.compiler.query.RowSummary(List.of()),
                 null, List.of(), shown(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 

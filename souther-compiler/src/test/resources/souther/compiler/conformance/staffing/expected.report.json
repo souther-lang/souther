@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 22,
+  "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "not_satisfied",
@@ -401,12 +401,24 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Grant", "NotEntitled" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "grantLeave",
+              "case" : "Grant"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "grantLeave",
+              "case" : "NotEntitled"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
@@ -1627,12 +1639,24 @@
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
+      "rowObligations" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "no_rows",
         "output" : {
           "declared" : [ "Over", "Within" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "judgeHours",
+              "case" : "Over"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "judgeHours",
+              "case" : "Within"
+            }
+          } ],
           "status" : "unavailable",
           "reason" : "no_rows"
         },
