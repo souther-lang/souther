@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -33,13 +34,24 @@ import java.util.Objects;
  * projection is a {@code switch} over every way a measurement is weakened, so an empty selection is
  * every one of them having been classified as said elsewhere.
  *
+ * <p><b>And a reading nobody made is an answer here too.</b> What the readings that were made came
+ * to and how many there were to make are two questions about one point, and the second is not a
+ * reason of the first's kind — so it is beside the selection rather than in it, in the words the
+ * walk already answered it in ({@link StandingAtAPoint.ReadingsTried}). A point left open by a
+ * search that stopped and one left open by a value nothing could read are two things to do
+ * something about: the first is a figure to raise and the second is not.
+ *
  * @param eachKindOnce the reasons, one per distinct reason, in the order they are published in
+ * @param tried        whether the readings those reasons were met in are every reading there was
  */
-public record ReadingReasons(CanonicalSelection<ReadingGap> eachKindOnce) {
+public record ReadingReasons(CanonicalSelection<ReadingGap> eachKindOnce,
+                             StandingAtAPoint.ReadingsTried tried) {
 
     public ReadingReasons {
         Objects.requireNonNull(eachKindOnce,
                 "a point nothing could settle says what its readings met");
+        Objects.requireNonNull(tried,
+                "a point nothing could settle says whether there were readings left to try");
     }
 
     /**
@@ -50,7 +62,8 @@ public record ReadingReasons(CanonicalSelection<ReadingGap> eachKindOnce) {
      * as the first. No caller puts anything in order, so there is no second place for the order to
      * be decided in.
      */
-    public static ReadingReasons of(Collection<ReadingGap> met) {
-        return new ReadingReasons(PublicationOrders.READING_GAPS.keep(met));
+    public static ReadingReasons of(Collection<ReadingGap> met,
+                                    StandingAtAPoint.ReadingsTried tried) {
+        return new ReadingReasons(PublicationOrders.READING_GAPS.keep(met), tried);
     }
 }

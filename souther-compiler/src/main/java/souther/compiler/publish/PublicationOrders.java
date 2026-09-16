@@ -340,6 +340,7 @@ public final class PublicationOrders {
                 WeakeningWord.BORDER_VALUE_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_ABSENT,
                 WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
+                WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED,
                 WeakeningWord.BODIES_NOT_ELABORATED,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -103,7 +104,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                                 ReadingReasons.of(List.of(
-                                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
+                                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                                        StandingAtAPoint.ReadingsTried.EVERY_ONE)),
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
                 disposition,

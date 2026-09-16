@@ -47,6 +47,10 @@ final class Subjects {
             case Weakening.InputCasesUnreadable it ->
                     new Subject.AtAnInput(it.behavior(), it.at());
             case Weakening.BorderValueUnreadable it -> new Subject.AtABorder(it.border());
+            // The border, as the reading of it is. What the readings were stopped against is the
+            // figure this compiler walks to and is what the walk met; one border is one place to
+            // go back to however many rows stopped the walk there.
+            case Weakening.BorderReadingsNotExhausted it -> new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             case Weakening.BodiesNotElaborated it -> new Subject.OfAModule(it.module());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());

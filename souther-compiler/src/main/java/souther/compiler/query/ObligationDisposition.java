@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -229,7 +230,8 @@ public sealed interface ObligationDisposition {
     }
 
     /**
-     * What the readings of a point met, out of what the measurement of it went without.
+     * What the readings of a point met and whether they were all tried, out of what the measurement
+     * of it went without.
      *
      * <p>The one crossing from an accounting of facts to what a reader is told. What weakened the
      * measurement is keyed on the border each reading was made at, because a module counting what
@@ -242,8 +244,24 @@ public sealed interface ObligationDisposition {
      * arms that contribute nothing say so because their reason is written where it happened, and a
      * new arm has to be put on one side or the other before it can be built.
      */
-    private static ReadingReasons whatTheReadingsMet(WeakeningSet by) {
-        return ReadingReasons.of(readingGapsIn(by));
+    private static ReadingReasons whyTheReadingsDidNotSettle(WeakeningSet by) {
+        return ReadingReasons.of(readingGapsIn(by), readingsTriedIn(by));
+    }
+
+    /**
+     * Whether the readings behind these went as far as the steps allow.
+     *
+     * <p>Read off the one arm that says so, and answered {@code EveryOne} where none of them does.
+     * A search that stopped is a fact somebody recorded; nothing recording it is the search having
+     * run out, which is what every other way of weakening a measurement leaves untouched.
+     */
+    private static StandingAtAPoint.ReadingsTried readingsTriedIn(WeakeningSet by) {
+        for (Weakening each : by.causes()) {
+            if (each instanceof Weakening.BorderReadingsNotExhausted it) {
+                return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(it.limit());
+            }
+        }
+        return StandingAtAPoint.ReadingsTried.EVERY_ONE;
     }
 
     /** The gaps the readings met, as they were met. */
@@ -281,7 +299,11 @@ public sealed interface ObligationDisposition {
                      Weakening.MeetingsNotWalked _,
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
-                     Weakening.DecisionReadingIncomplete _ -> { }
+                     Weakening.DecisionReadingIncomplete _,
+                     // And the readings nobody made, which is read beside these rather than among
+                     // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
+                     // and there was no reading of those to meet anything.
+                     Weakening.BorderReadingsNotExhausted _ -> { }
             }
         }
         return met;
@@ -328,7 +350,8 @@ public sealed interface ObligationDisposition {
             // reading that came to nothing and a showing that came to nothing are two questions,
             // and a point where both happened is undecided about both.
             case ObligationCoverage.Undecided it -> Undecided.about(alsoWritability(
-                    new Uncertainty.WhetherARowIsThere.ReadingsStopped(whatTheReadingsMet(it.by())),
+                    new Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                            whyTheReadingsDidNotSettle(it.by())),
                     knowledge));
             case ObligationCoverage.Missed _ -> switch (knowledge) {
                 case WritabilityKnowledge.Established _ -> new Unmet();
