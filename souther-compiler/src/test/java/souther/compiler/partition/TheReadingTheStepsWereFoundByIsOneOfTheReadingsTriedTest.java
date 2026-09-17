@@ -63,8 +63,8 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(1, readings.tried().size(),
                 "a position outside a sequence gives one reading of the row");
-        assertEquals(1, readings.made().size(),
-                "and it is the reading the steps were found by, so it is not read again");
+        assertEquals(List.of(quantityOf(FLAT).read(readings.tried().get(0))), readings.made(),
+                "and what was kept is the reading of it, so it is not read again");
     }
 
     @Test
@@ -83,12 +83,15 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
         RuleReadingSource rules = RuleReadings.ofSource(MODEL);
         BehaviorInputs where = new BehaviorInputs(List.of("flat", "lines"),
                 List.of(Type.Prim.INT, new Type.ListOf(named("Line"))), rules, POLICY);
-        NumericTerm.ValueOf term = new NumericTerm.ValueOf(at);
-        BorderQuantity quantity = new BorderQuantity.OfACoordinate("decide", term,
-                TermOrdersFixtures.itself(term, new Carrier.Whole()));
         return StandingAtAPoint.readings(where,
-                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantity,
+                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantityOf(at),
                 new LinkedHashMap<>());
+    }
+
+    private static BorderQuantity quantityOf(TermPath at) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(at);
+        return new BorderQuantity.OfACoordinate("decide", term,
+                TermOrdersFixtures.itself(term, new Carrier.Whole()));
     }
 
     private static ObservedValue line(int amount) {

@@ -175,7 +175,7 @@ public final class StandingAtAPoint {
             Readings readings = readings(where, one, quantity, held);
             List<OneReadingOfARow> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
-                switch (quantity.standsAt(criterion, readings.readAt(which, quantity))) {
+                switch (quantity.standsAt(criterion, readings.readAt(which))) {
                     // A reading that could not look. What the row wrote nothing at is not among
                     // these: the quantity answers for the row there, since it is the quantity that
                     // knows whether a position it wrote nothing at leaves it a value.
@@ -293,7 +293,7 @@ public final class StandingAtAPoint {
             Map<TermPath, Integer> held = new LinkedHashMap<>();
             Readings readings = readings(where, one, quantity, held);
             for (int which = 0; which < readings.tried().size(); which++) {
-                switch (quantity.valuesOf(readings.readAt(which, quantity))) {
+                switch (quantity.valuesOf(readings.readAt(which))) {
                     case ValuesAtARow.Read(Map<souther.compiler.inputs.NumericTerm,
                             souther.compiler.numeric.Place> values) -> read.add(values);
                     // The row has no value at this quantity, which is the row's own answer and
@@ -444,14 +444,14 @@ public final class StandingAtAPoint {
     /**
      * The readings of one row a point is tried against.
      *
-     * <p>The first is run before the rest are known: which steps the line's positions take is the
-     * quantity's to say as it reads them, so it says so by being asked once. Every choice those
-     * steps allow follows it.
+     * <p>The row is read before the readings of it are known: which steps the line's positions take
+     * is the quantity's to say as it reads them, so it says so by reading the row once. Every choice
+     * those steps allow follows.
      *
-     * <p>Read and not asked anything, because reading the row is the whole of what the first run is
-     * for. What is read is kept and handed back with the readings: a reading of a row answers both
-     * what its numbers are and whether they stand where a line is, so the walk made to find the
-     * steps is a walk neither question has to make again.
+     * <p>Read and asked nothing, because reading the row is the whole of what that run is for. What
+     * it read is kept and handed back with the readings: a reading of a row answers both what its
+     * numbers are and whether they stand where a line is, so the walk made to find the steps is a
+     * walk neither question has to make again.
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity, Map<TermPath, Integer> held) {
@@ -471,7 +471,7 @@ public final class StandingAtAPoint {
         // afterwards from how many readings came back, a walk that was cut short and one the steps
         // never had more than are one answer, and whichever word is chosen for the pair is wrong
         // about the other.
-        return new Readings(out, made, stepsAllowMoreThan(held, MOST_READINGS)
+        return new Readings(quantity, out, made, stepsAllowMoreThan(held, MOST_READINGS)
                 ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
                 : ReadingsTried.EVERY_ONE);
     }
@@ -479,18 +479,20 @@ public final class StandingAtAPoint {
     /**
      * The readings of one row that were made, and whether they are all of them.
      *
+     * @param of      the quantity these are readings of, so that what was read and what may be
+     *                asked of it are not two things a caller holds and has to keep together
      * @param tried   the readings, in the order the choices were taken
      * @param made    what has already been read, for the first of {@code tried} and in its order,
      *                and empty where the reading the steps were found by is not one of them
      * @param whether what the walk that built them says about itself
      */
-    record Readings(List<OneReadingOfARow> tried, List<QuantityReading> made,
+    record Readings(BorderQuantity of, List<OneReadingOfARow> tried, List<QuantityReading> made,
                     ReadingsTried whether) {
 
         /** What the quantity reads at the reading {@code which}, read here where it has not been
          *  read already. */
-        QuantityReading readAt(int which, BorderQuantity quantity) {
-            return which < made.size() ? made.get(which) : quantity.read(tried.get(which));
+        QuantityReading readAt(int which) {
+            return which < made.size() ? made.get(which) : of.read(tried.get(which));
         }
     }
 

@@ -21,14 +21,13 @@ import java.util.List;
  * <p>No criterion here. A row and a quantity make a reading; a criterion is what a reading is then
  * asked about. Read with one in hand, a second criterion would be a second walk of the row.
  *
- * <p>What a term came to is this package's to read. A caller outside it holds a reading, hands it
- * back to the quantity that made it and is answered; what the arms of a term's reading are and which
- * of them outranks which is the quantity's business, and a reader that took them apart for itself
- * would be the second place that has to rank them.
+ * <p>This package's, for the reason {@link WhatATermRead} is. What the arms of a term's reading are
+ * and which of them outranks which is the quantity's business, and a reader outside that took them
+ * apart for itself would be the second place that has to rank them.
  */
-public record QuantityReading(List<OfATerm> terms) {
+record QuantityReading(List<OfATerm> terms) {
 
-    public QuantityReading {
+    QuantityReading {
         if (terms == null || terms.isEmpty()) {
             throw new IllegalArgumentException(
                     "a quantity is taken of at least one term, so a reading of one reads at least"
@@ -55,9 +54,9 @@ public record QuantityReading(List<OfATerm> terms) {
     }
 
     /** What one term came to, beside the term it is of. */
-    public record OfATerm(NumericTerm term, WhatATermRead read) {
+    record OfATerm(NumericTerm term, WhatATermRead read) {
 
-        public OfATerm {
+        OfATerm {
             if (term == null || read == null) {
                 throw new IllegalArgumentException(
                         "a term's reading is a term and what it came to: " + term + " " + read);
