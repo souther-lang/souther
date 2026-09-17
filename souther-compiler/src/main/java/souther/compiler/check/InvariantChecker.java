@@ -255,6 +255,11 @@ public final class InvariantChecker {
      * second walk deriving it again would be a second set of rules. */
     private final PathEngine engine;
     private final Symbols symbols;
+    /** Which form each declaration was written in and which of them wrap one value. Beside
+     * {@link #symbols} and not read off it: what a construction is judged against turns on the form
+     * its name was declared in, which was settled when the module was indexed. */
+    private final DeclarationKinds kinds;
+    private final DeclarationNewtypes newtypes;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
     private final Clauses clauses;
     /** Where a value is, what it is called, and what can be said of it. */
@@ -291,6 +296,8 @@ public final class InvariantChecker {
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.symbols = engine.symbols();
+        this.kinds = reading.source().kinds();
+        this.newtypes = reading.source().newtypes();
         this.clauses = engine.clauses();
         this.terms = engine.terms();
         this.predicates = engine.predicates();
@@ -4051,7 +4058,12 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declaredNode(made.typeName()) instanceof Hir.Data type)) {
+        // Which form the name was declared in, asked of what was settled when its module was
+        // indexed. Only a product carries an invariant to judge a construction against; reading the
+        // declaration to find that out is what had this check re-run for a declaration of another
+        // module that had only moved.
+        if (!(made.typeName() instanceof TypeSymbol.AtModule type)
+                || kinds.of(type.key()) != DeclarationKind.PRODUCT) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);
@@ -4072,7 +4084,7 @@ public final class InvariantChecker {
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
      * value and not a choice of arms.
      */
-    private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.Construct nd, TypeSymbol.AtModule type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldValue fv : nd.values()) {
@@ -4472,22 +4484,22 @@ public final class InvariantChecker {
      * have dropped an established clause a reader could have been told about: the two mistakes are
      * the same mistake, and they are the two spellings this did not have.
      */
-    private static Diagnostic.Builder mayViolate(Hir.Data type, Judgment judgment) {
+    private static Diagnostic.Builder mayViolate(TypeSymbol.AtModule type, Judgment judgment) {
         if (judgment.canNameUnsettled()) {
             if (judgment.canNameSettled()) {
                 return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesButDoesEstablish(
-                        type.name(), names(judgment.unsettled()),
+                        type.key().name(), names(judgment.unsettled()),
                         names(judgment.settled())));
             }
             return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishes(
-                    type.name(), names(judgment.unsettled())));
+                    type.key().name(), names(judgment.unsettled())));
         }
         if (judgment.canNameSettled()) {
             return Diagnostic.say(
                     new InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish(
-                            type.name(), names(judgment.settled())));
+                            type.key().name(), names(judgment.settled())));
         }
-        return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(type.name()));
+        return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(type.key().name()));
     }
 
     /**
@@ -4506,20 +4518,20 @@ public final class InvariantChecker {
     /** Whether the constant check reads this construction: a newtype's, over a value written where
      * it is built. That check names the clause that failed, so it is left to say it — and it reads
      * the construction as written, so a name given the value is not one it sees. */
-    private static boolean constantlyBuilt(Hir.Data type, Core.Construct nd) {
-        return type.newtype() && Terms.isWritten(nd.values().get(0).value());
+    private boolean constantlyBuilt(TypeSymbol.AtModule type, Core.Construct nd) {
+        return newtypes.of(type.key()) && Terms.isWritten(nd.values().get(0).value());
     }
 
     /** Says what {@code verdict} found. A definite violation is an error and an unproven one a
      * warning; a discharged or non-expressible invariant says nothing. An {@code attempted}
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
-    private void report(Core at, Hir.Data type, SourcePos pos, boolean attempted,
+    private void report(Core at, TypeSymbol.AtModule type, SourcePos pos, boolean attempted,
                         Judgment judgment) {
         Verdict verdict = judgment.verdict();
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
-            watching.add(new Said(type.name(), pos, judgment));
+            watching.add(new Said(type.key().name(), pos, judgment));
         }
         if (capturing != null) {
             capturing.found().put(new Occurrence(asWritten(at)),
@@ -4548,7 +4560,7 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {}
+    private record Reported(TypeSymbol.AtModule type, SourcePos pos, Judgment judgment, boolean attempted) {}
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
@@ -5044,7 +5056,7 @@ public final class InvariantChecker {
      * fails the invariant on its own, or it fails under what else is known where it stands. The check
      * knows which of the two decided it and not what within the second did, so neither message names
      * a guard. */
-    private void reportViolation(Hir.Data type, SourcePos pos, Judgment judgment,
+    private void reportViolation(TypeSymbol.AtModule type, SourcePos pos, Judgment judgment,
                                  boolean onAPath) {
         Diagnostic.Builder said = rejects(type, judgment, onAPath);
         // The message says what holds of every path, so it names the clauses the value fails
@@ -5121,19 +5133,19 @@ public final class InvariantChecker {
      * reporting them here asks {@link Judgment#canNameSettled()}, as the warning does, rather than
      * reading the answer off the set it is already writing out.
      */
-    private static Diagnostic.Builder rejects(Hir.Data type, Judgment judgment, boolean onAPath) {
+    private static Diagnostic.Builder rejects(TypeSymbol.AtModule type, Judgment judgment, boolean onAPath) {
         if (onAPath) {
             return judgment.canNameRefuted()
                     ? Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePath(
-                            type.name(), names(judgment.refuted())))
+                            type.key().name(), names(judgment.refuted())))
                     : Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePathUnnamed(
-                            type.name()));
+                            type.key().name()));
         }
         return judgment.canNameRefuted()
                 ? Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejects(
-                        type.name(), names(judgment.refuted())))
+                        type.key().name(), names(judgment.refuted())))
                 : Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejectsUnnamed(
-                        type.name()));
+                        type.key().name()));
     }
 
     // --- introducing a binding -----------------------------------------------------------------

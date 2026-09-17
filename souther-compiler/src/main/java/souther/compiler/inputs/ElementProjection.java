@@ -72,6 +72,13 @@ public record ElementProjection(List<String> steps) {
      */
     private record Reading(Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
 
+        private Reading {
+            if (newtypes == null) {
+                throw new IllegalArgumentException("walking to an element asks which of the names"
+                        + " on the way wrap one value, so it is handed somewhere to read that");
+            }
+        }
+
         private List<String> from(Core e, BindingId element) {
             return steps(e, element, new BindingTrail());
         }

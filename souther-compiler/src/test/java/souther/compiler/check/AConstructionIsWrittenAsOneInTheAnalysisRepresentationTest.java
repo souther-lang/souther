@@ -84,7 +84,7 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
             Hir.Def again = NewtypeDesugar.rewriteInvariantsOf(
                     new Hir.Data(data.written(), data.declares(), data.newtype(), data.includes(),
                             data.fields(), read, data.pos()),
-                    rules.symbols());
+                    rules.newtypes());
             assertEquals(read, ((Hir.Data) again).invariants(),
                     "the analysis representation of " + data.declares() + " writes its "
                             + "constructions as constructions, so normalizing it again is nothing");

@@ -89,7 +89,7 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
     @Test
     void everyDeclarationIsNormalisedByTheOneOperation() {
         for (InvariantSettled.Def def : settled.defs()) {
-            Normalized.Def normalised = Normalized.Def.of(def, scope);
+            Normalized.Def normalised = Normalized.Def.of(def, DeclarationNewtypes.asWritten(scope));
             Derived.Def derived =
                     Derived.Def.derive(normalised, scope, ScopedDeclarations.kindsOf(scope), ScopedDeclarations.of(scope));
             if (derived != null) {
@@ -105,11 +105,11 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
     void aDeclarationWithNothingToRewriteIsTheDeclarationItWas() {
         InvariantSettled.Def wrapped = defNamed("Wrapped");
 
-        assertSame(wrapped.def(), Normalized.Def.of(wrapped, scope).node());
+        assertSame(wrapped.def(), Normalized.Def.of(wrapped, DeclarationNewtypes.asWritten(scope)).node());
     }
 
     private Normalized.Def normalizedNamed(String name) {
-        return Normalized.Def.of(defNamed(name), scope);
+        return Normalized.Def.of(defNamed(name), DeclarationNewtypes.asWritten(scope));
     }
 
     private InvariantSettled.Def defNamed(String name) {

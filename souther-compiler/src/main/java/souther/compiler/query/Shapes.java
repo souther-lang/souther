@@ -240,7 +240,8 @@ public final class Shapes {
             }
             Map<String, souther.compiler.check.Normalized.Def> out = new LinkedHashMap<>();
             for (InvariantSettled.Def def : settling.value().defs()) {
-                out.put(def.name(), souther.compiler.check.Normalized.Def.of(def, scope.value()));
+                out.put(def.name(),
+                        souther.compiler.check.Normalized.Def.of(def, declarationNewtypes(db)));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -677,7 +678,8 @@ public final class Shapes {
             Map<String, souther.compiler.check.Desugared.Fn> out = new LinkedHashMap<>();
             for (Hir.FnDef fn : settling.value().fns()) {
                 out.put(fn.name(),
-                        souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
+                        souther.compiler.check.Desugared.Fn.desugar(fn,
+                                declarationNewtypes(db)));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -722,7 +724,8 @@ public final class Shapes {
             try {
                 souther.compiler.check.CheckSurface assembled =
                         souther.compiler.check.CheckSurface.assemble(
-                                settling.value(), normalized.value(), fns.value(), scope.value(),
+                                settling.value(), normalized.value(), fns.value(),
+                                declarationNewtypes(db),
                                 signatures.present() ? signatures.value() : Map.of(),
                                 declared.value());
                 // A definition that did not desugar is missing from what was handed in, and a
@@ -1141,7 +1144,7 @@ public final class Shapes {
             try {
                 return Answer.of(ClauseHelpers.expandedClausesOf(
                         expandable.value(), scope.value(), publishedDeclarations(db),
-                        declarationKinds(db), published));
+                        declarationKinds(db), declarationNewtypes(db), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1535,7 +1538,7 @@ public final class Shapes {
                     shapes.put(data.declares(),
                             ExecutableInvariants.of(data, scope.value(),
                                     publishedDeclarations(db), declarationKinds(db),
-                                    newtypeInners(db),
+                                    newtypeInners(db), effectiveFieldTypes(db),
                                     helpers.value()));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.

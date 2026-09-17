@@ -148,7 +148,16 @@ public final class Output {
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
-                      Map<String, souther.compiler.types.Type> standingCalls) {}
+                      Map<String, souther.compiler.types.Type> standingCalls) {
+
+            Inputs {
+                if (published == null || kinds == null || dischargeClauses == null) {
+                    throw new IllegalArgumentException("emitting a module asks the declarations"
+                            + " what they say, which form each of them is and what their clauses"
+                            + " state, so it is handed somewhere to read every one of them");
+                }
+            }
+        }
 
         static Inputs inputs(Db db, String name) {
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));

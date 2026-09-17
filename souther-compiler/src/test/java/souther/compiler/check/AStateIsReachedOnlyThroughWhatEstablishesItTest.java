@@ -197,7 +197,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(Set.of("settle(Expandable, Symbols, DeclarationKinds, Map)"), waysInto(InvariantSettled.class));
         assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
                 "a settled declaration is projected from the module it is one of");
-        assertEquals(Set.of("of(Def, ResolvedSymbols)", "ofLanguage(Def)"),
+        assertEquals(Set.of("of(Def, DeclarationNewtypes)", "ofLanguage(Def)"),
                 waysInto(Normalized.Def.class),
                 "the second is for what the language declares, whose clauses hold no construction "
                         + "left to write as one. Every kind of declaration goes through it, a "
@@ -212,7 +212,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         + "the proposition holds of the declaration as it stands. It refuses a "
                         + "product, which would need one derived like any other");
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
-        assertEquals(Set.of("desugar(FnDef, Symbols)", "reestablish(FnDef, Symbols)"),
+        assertEquals(Set.of("desugar(FnDef, DeclarationNewtypes)",
+                        "reestablish(FnDef, DeclarationNewtypes)"),
                 waysInto(Desugared.Fn.class),
                 "the second is for a rung that rewrote a definition this state already held: it "
                         + "proves the proposition again of what came out, and refuses where the "
@@ -263,11 +264,14 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(1, applications(bodyOf(written)),
                 "the construction is written as an application until the desugaring runs");
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> Desugared.Fn.reestablish(written, scope));
+                () -> Desugared.Fn.reestablish(written,
+                        DeclarationNewtypes.asWritten(scope)));
         assertTrue(refused.getMessage().contains("go"), refused.getMessage());
 
         assertEquals(written.name(),
-                Desugared.Fn.reestablish(Desugared.Fn.desugar(written, scope).read(), scope).name(),
+                Desugared.Fn.reestablish(Desugared.Fn.desugar(written,
+                                DeclarationNewtypes.asWritten(scope)).read(),
+                        DeclarationNewtypes.asWritten(scope)).name(),
                 "and answers for one the claim is true of");
     }
 
@@ -580,7 +584,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         assertTrue(unsettled.params().get(0).type() == null,
                 "the parameter is open, which is a definition this state admits");
-        Desugared.Fn desugared = Desugared.Fn.desugar(unsettled, scope);
+        Desugared.Fn desugared =
+                Desugared.Fn.desugar(unsettled, DeclarationNewtypes.asWritten(scope));
         assertEquals(0, applications(bodyOf(desugared.read())),
                 "and its constructions are constructions all the same");
     }
@@ -646,7 +651,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(2, applications(clauseOf(List.of(amount.def()), "Amount")),
                 "the constructions are written as applications until this rewrites them");
         assertEquals(0, applications(clauseOf(
-                        List.of(Normalized.Def.of(amount, scope).node()), "Amount")),
+                        List.of(Normalized.Def.of(amount,
+                                DeclarationNewtypes.asWritten(scope)).node()), "Amount")),
                 "and none is left as one afterwards");
     }
 
@@ -740,8 +746,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 }
             }
         }
-        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map,"
-                                + " FakeTables)",
+        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map,"
+                                + " DeclarationNewtypes, Map, FakeTables)",
                         "CheckSurface.<init>(InvariantSettled, List, List, List, List, FakeTables,"
                                 + " List, Map)",
                         "CheckSurface.settling"),
@@ -882,9 +888,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB,
                 ScopedDeclarations.kindsOf(scopeB), Map.of());
 
-        Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"), scopeA),
+        Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"),
+                        DeclarationNewtypes.asWritten(scopeA)),
                 scopeA, ScopedDeclarations.kindsOf(scopeA), ScopedDeclarations.of(scopeA));
-        Derived.Def ofB = Derived.Def.derive(Normalized.Def.of(defNamed(b, "Amount"), scopeB),
+        Derived.Def ofB = Derived.Def.derive(Normalized.Def.of(defNamed(b, "Amount"),
+                        DeclarationNewtypes.asWritten(scopeB)),
                 scopeB, ScopedDeclarations.kindsOf(scopeB), ScopedDeclarations.of(scopeB));
         assertEquals("Amount", ofB.name(), "the same bare name, so the map key does not tell them apart");
         assertNotEquals(ofA.declaredKey(), ofB.declaredKey());
@@ -905,7 +913,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         scopeA, ScopedDeclarations.kindsOf(scopeA), Map.of()),
                 Map.of("Amount", Derived.Def.derive(Normalized.Def.of(defNamed(InvariantSettled.settle(
                         Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA,
-                        ScopedDeclarations.kindsOf(scopeA), Map.of()), "Amount"), scopeA),
+                        ScopedDeclarations.kindsOf(scopeA), Map.of()), "Amount"),
+                        DeclarationNewtypes.asWritten(scopeA)),
                         scopeA, ScopedDeclarations.kindsOf(scopeA),
                         ScopedDeclarations.of(scopeA))));
         Hir.FnDef ofA = a.fns().get(0);
@@ -914,10 +923,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         assertEquals(ofA.name(), ofB.name(), "the same bare name, so the map key does not tell them apart");
         assertEquals("a", Desugared.Module.assemble(a,
-                Map.of(ofA.name(), Desugared.Fn.desugar(ofA, scopeA))).name());
+                Map.of(ofA.name(), Desugared.Fn.desugar(ofA, DeclarationNewtypes.asWritten(scopeA)))).name());
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> Desugared.Module.assemble(a,
-                        Map.of(ofA.name(), Desugared.Fn.desugar(ofB, scopeA))));
+                        Map.of(ofA.name(), Desugared.Fn.desugar(ofB, DeclarationNewtypes.asWritten(scopeA)))));
         assertTrue(refused.getMessage().contains(ofA.name()), refused.getMessage());
     }
 

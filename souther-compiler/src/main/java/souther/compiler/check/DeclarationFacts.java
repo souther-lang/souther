@@ -23,8 +23,10 @@ import souther.compiler.types.TypeSymbol;
 public record DeclarationFacts(FieldRead read, DeclarationNewtypes newtypes) {
 
     public DeclarationFacts {
-        if (read == null) {
-            throw new IllegalArgumentException("declarations are read in a world that says so");
+        if (read == null || newtypes == null) {
+            throw new IllegalArgumentException("declarations are read in a world that says so, and"
+                    + " which of them wrap one value is asked of what was settled when their"
+                    + " modules were indexed");
         }
     }
 
