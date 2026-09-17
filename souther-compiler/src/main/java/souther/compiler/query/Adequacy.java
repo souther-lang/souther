@@ -2613,12 +2613,10 @@ public final class Adequacy {
                             .A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER);
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-            // A row does answer this, and it is the input the finding names — what is missing is a
-            // strategy that composes one there. Said as a strategy nobody wrote rather than as a
-            // fact about the model: the work is real and an author can do it by hand.
-            case About.ALineTheRowsDoNotTellFromAnother _ -> new GenerationOutcome.NotSupported(
-                    GenerationOutcome.NotSupported.Reason
-                            .NO_STRATEGY_FOR_AN_INPUT_TWO_LINES_PART_AT);
+            // A row does answer this: one at the line's OFF point that the line beside it keeps.
+            // What became of the search for one is the reading's to say and is read where the
+            // lines are ({@link ARowTellingTheLinesApart}).
+            case About.ALineTheRowsDoNotTellFromAnother _ -> null;
             // A row stands here and the search that settled the rule composed it, so what became
             // of it is that search's answer and is read where the rows are ({@link #atRule}).
             case About.ARuleNoRowTakes _ -> null;
@@ -2789,7 +2787,11 @@ public final class Adequacy {
                 answered.add(item);
             }
         }
-        return composed.keeping(kept, answered);
+        // And where the row a person is handed stands on each line it answers. Asked of the table
+        // after the reduction, because that is when it is settled: a row that tells two lines apart
+        // answers the line whoever it was composed for, so the row composed for it is not always
+        // the one that goes out.
+        return composed.keeping(kept, answered, table.shownFor(kept));
     }
 
     /**
@@ -3865,6 +3867,27 @@ public final class Adequacy {
             generation = List.copyOf(generation);
         }
 
+        /**
+         * The rows composed for lines the rows do not tell from the lines beside them.
+         *
+         * <p>Read off the dispositions rather than kept beside them. A row here is what the search
+         * at such a line came to, and the disposition is where that answer already is — held twice,
+         * a block could offer a row the account beside it says was never composed.
+         *
+         * <p>Its own list because no other holds it. A row at a point of a line is offered from the
+         * module's account of the points, and this row is not at a point: what it answers is the
+         * line as a whole, and it is composed under a condition no point states.
+         */
+        public List<Generator.GeneratedRow> tellingLinesApart() {
+            List<Generator.GeneratedRow> out = new ArrayList<>();
+            for (GenerationDisposition each : generation) {
+                if (each.finding().about() instanceof About.ALineTheRowsDoNotTellFromAnother
+                        && each.outcome() instanceof GenerationOutcome.Generated made) {
+                    out.addAll(made.candidates());
+                }
+            }
+            return List.copyOf(out);
+        }
     }
 
     /**
@@ -4246,7 +4269,7 @@ public final class Adequacy {
                     RowReadings.readingFor(byTarget, behavior),
                     db.ask(new Front.Adequacy()).value().generation(), composed.rows().size());
             return Answer.of(new Filling(composed, offeredHere(behavior, edges), rules,
-                    dispositions(owed, rules,
+                    dispositions(owed, rules, edges,
                             // This behavior's readings and no others. What a finding of this
                             // behavior is about is a line its own rules drew, and such a line is
                             // read only in the body that wrote it — so a wider account walks
@@ -4278,6 +4301,7 @@ public final class Adequacy {
          */
         private static List<GenerationDisposition> dispositions(List<Finding> findings,
                                                       RowsForRules rules,
+                                                      List<BorderAssessment> edges,
                                                       BorderAccount account,
                                                       souther.compiler.partition.FillResult
                                                               composed) {
@@ -4321,13 +4345,19 @@ public final class Adequacy {
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
                                     atRule(ruled.rule(), rules);
+                            // Asked of the search that was made at the line rather than of the
+                            // finding's own reading of it. A finding is made wherever the lines
+                            // were read, and a reading made without composing has no search to
+                            // report — so what a row here came to is looked up in the reading this
+                            // generation searched.
+                            case About.ALineTheRowsDoNotTellFromAnother untold ->
+                                    tellingApart(untold, edges);
                             // The ones above, which is what `none` was not null for.
                             // A line a declaration is owed is not one of this behavior's findings,
                             // so nothing reaches here with one.
                             case About.APointOfADeclaredBorder _,
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
-                                    About.ALineTheRowsDoNotTellFromAnother _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -4338,6 +4368,29 @@ public final class Adequacy {
                         }));
             }
             return out;
+        }
+
+        /**
+         * What the search for a row telling {@code untold}'s line from the one beside it came to.
+         *
+         * <p>Found by the line the finding is about, in the readings this generation searched. A
+         * finding is made wherever the lines were read and a reading that composed nothing carries
+         * no search, so the answer is the searched reading's — asked of the finding's own, a run
+         * that composed a row would report that nothing was offered.
+         *
+         * <p>Refused rather than answered where this generation searched no such line. The finding
+         * and the search would then be about different lines, which is two of this compiler's
+         * answers disagreeing rather than a line nothing offers a row for.
+         */
+        private static GenerationOutcome tellingApart(About.ALineTheRowsDoNotTellFromAnother untold,
+                                                      List<BorderAssessment> edges) {
+            for (BorderAssessment each : edges) {
+                if (each.border().obligation().equals(untold.line().border().obligation())) {
+                    return each.toldApart().outcome();
+                }
+            }
+            throw new IllegalStateException("a finding about a line this generation searched no"
+                    + " reading of: " + untold.line().border().obligation());
         }
 
         /**
@@ -6975,10 +7028,13 @@ public final class Adequacy {
                 // The input the two lines part company at, where one was worked out. Said as a hint
                 // rather than in the sentence: the sentence is about the two lines, and this is the
                 // one row that settles which of them the model draws.
+                // What the measurement saw, because a warning is written where nothing was offered:
+                // a build is told what its rows do not show, and the rows a run would offer are
+                // asked for separately and are not in hand here.
                 case About.ALineTheRowsDoNotTellFromAnother untold -> {
-                    String parting = untold.partingSaid();
-                    if (parting != null) {
-                        built.hint(new ExampleMessage.WriteARowAtThatInput(parting));
+                    String saw = untold.sawThemPartSaid();
+                    if (saw != null) {
+                        built.hint(new ExampleMessage.WriteARowAtThatInput(saw));
                     }
                 }
                 // The same hints, asked of the role. What a row at each point shows is a fact

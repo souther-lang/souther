@@ -60,6 +60,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measure;
+import souther.compiler.query.Offering;
+import souther.compiler.query.InputOfARowForALine;
 import souther.compiler.query.Sites;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.RuleRequirement;
@@ -420,11 +422,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * report holding one finding and another's place would show a reader the wrong line with no
      * way to tell.
      */
-    public record ReportedFinding(Adequacy.Finding finding, Citation at) {
+    public record ReportedFinding(Adequacy.Finding finding, Citation at,
+                                  InputOfARowForALine offered) {
 
         public ReportedFinding {
             java.util.Objects.requireNonNull(finding, "a reported finding is some finding");
             java.util.Objects.requireNonNull(at, "a reported finding is shown somewhere");
+        }
+
+        /**
+         * The same, where this report was assembled without asking what a run would offer.
+         *
+         * <p>Which is every report but the one printed beside the rows. What is offered is settled
+         * by composing and reducing, and a report that asked for it would pay for a generation
+         * nobody requested — so a report written on its own names what the measurement saw, and
+         * that is the finding's own answer.
+         */
+        public ReportedFinding(Adequacy.Finding finding, Citation at) {
+            this(finding, at, null);
         }
 
         /** What it is about, for a reader that wants the fact and not the page. */
@@ -681,6 +696,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** Reads a finished compile. {@link Compilation#answerEverything()} must have been asked first;
      * otherwise there is nothing to read and every behavior looks unexampled. */
     public static AdequacyReport of(Compilation compilation) {
+        return of(compilation, Map.of());
+    }
+
+    /**
+     * The same, beside the rows a run is handing the same person.
+     *
+     * <p><b>Handed in rather than asked for.</b> What a run offers is settled by composing values,
+     * running them and reducing what they answer between them, and a report that asked for it would
+     * make every reader of a report pay for a generation nobody requested. So a caller that has
+     * both gives this the one it made, and a report written on its own has none — which is not the
+     * same as a run that offered nothing, and reads as the measurement's own answer either way.
+     *
+     * <p>What it changes is where a reader is sent. A line the rows do not tell from another is
+     * answered by whichever offered row tells the two apart, and that need not be the row composed
+     * for it — so the input this names is the offering's answer wherever there is one.
+     *
+     * @param offered what this run offers, one entry per module it was asked about
+     */
+    public static AdequacyReport of(Compilation compilation, Map<String, Offering> offered) {
         List<ModuleReport> modules = new ArrayList<>();
         WeakeningSet overall = WeakeningSet.none();
         for (String name : compilation.modules()) {
@@ -693,7 +727,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (module == null) {
                 continue;   // a module that did not get far enough to have behaviors
             }
-            ModuleReport report = moduleReport(compilation, name, module);
+            ModuleReport report = moduleReport(compilation, name, module, offered.get(name));
             modules.add(report);
             overall = overall.union(report.weakenedBy());
         }
@@ -702,7 +736,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name,
-                                             CheckSurface module) {
+                                             CheckSurface module, Offering offered) {
         // The same reading every measure beside them reads, asked for rather than made again. Two
         // evaluations of one model can disagree — a row that ran out of time under the instrumented
         // one and held under the other — and a report whose counts came from one while its coverage
@@ -786,7 +820,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // module would grow with its behaviors times its findings, and every one of them is
             // about some other behavior.
             List<ReportedFinding> reported = ofBehavior(compilation, name, findings,
-                    behavior.name());
+                    behavior.name(), offered);
             // What the search of the rules no row took came to. Asked where the account asks it
             // and under the same guard, so a page costs a module nothing the findings did not
             // already pay for.
@@ -826,7 +860,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<ReportedFinding> owed = findings == null ? List.of()
                 : findings.stream()
                         .filter(each -> !(each.subject() instanceof FindingSubject.OfABehavior))
-                        .map(each -> reported(compilation, name, each))
+                        .map(each -> reported(compilation, name, each, offered))
                         .toList();
         return new ModuleReport(name, compilation.sourceIdOf(name), behaviors, owed,
                 // The declarations' own block names conditions too, and the lines it names them
@@ -874,10 +908,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * a finding cannot be shown in one place on the page and another on the command line.
      */
     private static List<ReportedFinding> ofBehavior(Compilation compilation, String module,
-                                                    List<Adequacy.Finding> findings, String name) {
+                                                    List<Adequacy.Finding> findings, String name,
+                                                    Offering offered) {
         return findings == null ? List.of()
                 : findings.stream().filter(each -> each.subject().isBehavior(name))
-                        .map(each -> reported(compilation, module, each)).toList();
+                        .map(each -> reported(compilation, module, each, offered)).toList();
     }
 
     /**
@@ -1190,11 +1225,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return read == null ? List.of() : read.made().orElse(List.of());
     }
 
-    /** One finding with where this report shows it. */
+    /** One finding with where this report shows it, and the input of a row offered for it. */
     private static ReportedFinding reported(Compilation compilation, String module,
-                                            Adequacy.Finding finding) {
+                                            Adequacy.Finding finding, Offering offered) {
         return new ReportedFinding(finding,
-                Adequacy.placeOf(compilation.db(), module, finding));
+                Adequacy.placeOf(compilation.db(), module, finding), inputOffered(offered, finding));
+    }
+
+    /**
+     * The input of the row this run offers for what {@code finding} is about, or null where nothing
+     * is offered for it.
+     *
+     * <p>Asked of the offering and of nothing else. What is composed for a thing and what goes out
+     * for it are two answers — the reduction drops a row another one already answers for — so the
+     * one a reader may be sent to is the offering's.
+     *
+     * <p>Asked of every finding about an obligation rather than of the one kind that has an input
+     * to name. Which obligations a row has a nameable input for is the offering's answer, and a
+     * reader picking the kinds here would be deciding it a second time.
+     */
+    private static InputOfARowForALine inputOffered(Offering offered, Adequacy.Finding finding) {
+        return offered == null || !(finding.about() instanceof About.OfAnObligation owed) ? null
+                : offered.shownAt(owed.obligationIdentity());
     }
 
     /**
@@ -2236,11 +2288,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about()
                     instanceof About.ALineTheRowsDoNotTellFromAnother untold) {
-                String parting = untold.partingSaid();
+                // The input of the row this run offers for the line, and what the measurement saw
+                // where nothing is offered. One input and never two: a reader shown one and handed
+                // a row at another has been shown two answers about one line.
+                String shown = f.offered() != null ? f.offered().said() : untold.sawThemPartSaid();
                 out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
                         mark(f.finding()), untold.line().border().label(),
                         untold.allowed().label(),
-                        parting == null ? "" : ", and a row at `" + parting + "` would"));
+                        shown == null ? "" : ", and a row at `" + shown + "` would"));
             }
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:

@@ -8,6 +8,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
@@ -22,6 +23,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -146,6 +148,32 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     /** And where it stopped at the figure one point is tried against. */
     private static StandingAtAPoint.ReadingsTried stoppedShort() {
         return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(4);
+    }
+
+    /**
+     * The line it names answers what the model's answers at every row read, and answers differently
+     * at the input it names.
+     *
+     * <p>Which is what makes it the line the rows allow, and what a row settles it by. The
+     * threshold was chosen to keep every row the model keeps and refuse every row it refuses, so
+     * the two part company nowhere the rows already stand — put to the values here rather than
+     * taken from how the threshold was worked out, because that is how a row offered later is
+     * weighed ({@link AnotherLineTheRowsAllow.OneDoes#keeps}).
+     */
+    @Test
+    void theLineItNamesAnswersAlikeAtEveryRowAndDiffersAtTheInputItNames() {
+        Border border = TheLinesBesideABorder.aLineOverTwoPositions();
+        OrderedAffineBoundary drawn = OrderedAffineBoundary.of(border);
+        AnotherLineTheRowsAllow.OneDoes named = assertInstanceOf(
+                AnotherLineTheRowsAllow.OneDoes.class, of(ALIKE_UNDER_BOTH, everyOne()));
+
+        for (Map<NumericTerm, Place> row : rowsOf(border, ALIKE_UNDER_BOTH)) {
+            assertEquals(drawn.satisfiedBy(row), named.keeps(row),
+                    () -> "the two lines answer alike at every row that was read: " + row);
+        }
+        Map<NumericTerm, Place> apart = rowsOf(border, new int[][] {{1, 3}}).getFirst();
+        assertNotEquals(drawn.satisfiedBy(apart), named.keeps(apart),
+                () -> "and differently at the input the answer names: " + apart);
     }
 
     /**

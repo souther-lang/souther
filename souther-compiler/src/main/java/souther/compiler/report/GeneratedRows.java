@@ -106,24 +106,47 @@ public final class GeneratedRows {
      */
     public static Block of(Compilation compilation, String module, String behavior,
                            SourceRendering rendering) {
-        StringBuilder out = new StringBuilder();
-        int rows = 0;
+        return of(compilation, rendering, offered(compilation, module, behavior));
+    }
+
+    /**
+     * What this run offers, one entry per module it was asked about.
+     *
+     * <p>Asked once and handed to both readers of it. The rows a person is given decide two things
+     * — what the block prints, and which input the report sends them to for a line one of those
+     * rows answers — and a second asking would compose and run the rows again to arrive at the same
+     * answer, free to arrive at another.
+     *
+     * <p>Which rows go out is settled where both searches are read ({@link Adequacy#offeredFor}):
+     * a behavior's own and the ones a declaration's line is owed are work for one person, and a
+     * renderer putting them together would be deciding that where the layout is.
+     */
+    public static Map<String, Offering> offered(Compilation compilation, String module,
+                                                String behavior) {
+        Map<String, Offering> out = new LinkedHashMap<>();
         for (String name : compilation.modules()) {
             if (module != null && !module.equals(name)) {
                 continue;
             }
-            // What this run offers, asked as one question. Which rows go out is settled where both
-            // searches are read ({@link Adequacy#offeredFor}) — a behavior's own and the ones a
-            // declaration's line is owed are work for one person, and a renderer putting them
-            // together would be deciding that where the layout is.
             Offering offering = Adequacy.offeredFor(compilation.db(),
                     new OfferingRequest(name, behavior == null ? new GenerationScope.Module()
                             : new GenerationScope.Behavior(behavior)));
-            if (offering == null) {
-                continue;
+            if (offering != null) {
+                out.put(name, offering);
             }
-            Block one = of(offering, WrittenEnsures.of(compilation.db(), name), rendering,
-                    compilation.db());
+        }
+        return out;
+    }
+
+    /** The block for offerings already asked for, which is what a caller that also handed them to
+     *  the report has. */
+    public static Block of(Compilation compilation, SourceRendering rendering,
+                           Map<String, Offering> offered) {
+        StringBuilder out = new StringBuilder();
+        int rows = 0;
+        for (Map.Entry<String, Offering> each : offered.entrySet()) {
+            Block one = of(each.getValue(), WrittenEnsures.of(compilation.db(), each.getKey()),
+                    rendering, compilation.db());
             out.append(one.text());
             rows += one.rowCount();
         }
@@ -600,9 +623,15 @@ public final class GeneratedRows {
                 // about the class either way; an arm's is looked for at the classes a way into it
                 // leaves, and named for those it read as the class's line — the same words twice,
                 // so the arm's news was dropped as a repeat of the class's (issue #1009).
+                // A line held against the lines beside it is named for the finding too, and for the
+                // same reason: the search is made at a point of the line, so the place it names is
+                // a point a row already stands at — printed, it reads as a row missing where one
+                // is written.
                 case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(came ->
                         say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                                 each.finding().about() instanceof About.AnArmNoRowGoesThrough
+                                        || each.finding().about()
+                                                instanceof About.ALineTheRowsDoNotTellFromAnother
                                         ? about(each.finding(), rendering, places)
                                         : came.why().subject(),
                                 behavior, saidOf(came, rendering, places))));
@@ -765,9 +794,9 @@ public final class GeneratedRows {
                                             souther.compiler.partition.ClassOfAPosition::classId))
                             .map(each -> each.classId() + " at " + each.at())
                             .collect(java.util.stream.Collectors.joining(" with "));
-            // Both lines, which is what a row here would settle between. Nothing composes one yet,
-            // so what is printed beside these words is the strategy that is missing — and the input
-            // the two part company at is named there, which is the row an author writes by hand.
+            // Both lines, which is what a row here would settle between. What is printed beside
+            // these words is what the search for such a row came to, and a row that was composed
+            // is offered above rather than said here.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     untold.line().border().label() + " against " + untold.allowed().label();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is

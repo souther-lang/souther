@@ -32,6 +32,12 @@ import java.util.Set;
  * refuses over is one measurement read two ways rather than two measurements made to different
  * rules.
  *
+ * <p><b>And what a search for a row that would tell them apart came to.</b> Beside the line the rows
+ * allow rather than inside it: which lines these rows leave standing is what this compilation
+ * measured, and whether a row can be composed at one of the inputs that would settle it is work
+ * somebody asked for. Written into the measurement, a reading nobody asked to compose for would
+ * have had to carry a search that never ran.
+ *
  * <p><b>Total over the points its border has, the way that border is.</b> A border answers at every
  * point its rule gives it and so does this, so a reader asking what one of them came to is never
  * answered by an entry that is not there. Which of the four each point is is the line's answer
@@ -40,8 +46,15 @@ import java.util.Set;
  * where there are two.
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
-                               AnotherLineTheRowsAllow beside)
+                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart)
         implements RuleCitations {
+
+    /** One reading of a line, before anybody asked for a row that would tell it from the lines
+     *  beside it. */
+    public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                            AnotherLineTheRowsAllow beside) {
+        this(border, items, beside, ARowTellingTheLinesApart.notAsked());
+    }
 
     /**
      * The one handle this reading holds, which is the one the rule that drew the line was cited by.
@@ -123,6 +136,11 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         if (beside == null) {
             throw new IllegalArgumentException("a border says what the rows leave standing beside"
                     + " it, and a border that was not asked says that: " + border);
+        }
+        if (toldApart == null) {
+            throw new IllegalArgumentException("a reading says what a search for a row telling this"
+                    + " line from the ones beside it came to, and a reading nobody asked says"
+                    + " that: " + border);
         }
         if (items == null || !items.keySet().equals(border.answers().keySet())) {
             throw new IllegalArgumentException(

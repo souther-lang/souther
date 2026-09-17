@@ -4,13 +4,17 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -298,12 +302,21 @@ public sealed interface About {
             return (AnotherLineTheRowsAllow.OneDoes) line.beside();
         }
 
-        /** The input the two part company at, as an author would write the positions — or null
-         *  where none was worked out. */
-        public String partingSaid() {
-            return allowed().tellsApartAt() == null ? null
-                    : souther.compiler.partition.OrderedAffineBoundary.saidAt(
-                            line.border().cut().of(), allowed().tellsApartAt());
+        /**
+         * The input the measurement itself saw the two lines part company at, as an author would
+         * write the positions — or null where none was worked out.
+         *
+         * <p><b>What was seen, and never what a person is handed.</b> Which row goes out for this
+         * line is settled after a search, after the whole table of what each offered row would
+         * answer, and after the reduction that drops a row another one already answers for — so
+         * nothing here can name it, and a finding that tried would be naming a candidate from
+         * before any of that. What is offered is the offering's to say
+         * ({@link Offering#shownAt}), and a reader with no offering in hand has this.
+         */
+        public String sawThemPartSaid() {
+            Map<NumericTerm, Place> saw = allowed().tellsApartAt();
+            return saw == null ? null
+                    : OrderedAffineBoundary.saidAt(line.border().cut().of(), saw);
         }
 
         @Override
