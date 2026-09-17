@@ -2391,25 +2391,35 @@ public final class Bodies {
     }
 
     /**
-     * The behaviors of {@code settled} there is a body to check, in the order they are declared.
+     * The behaviors of {@code module} whose bodies are checked, in the order they are declared.
      *
-     * <p>One answer to which those are. An injection target has no body here — something else
-     * supplies it (spec §injected-behavior) — so there is nothing to check and nothing missing when
-     * there is none; and a question that worked that out a second time would ask about a body the
-     * check never made, whose answer nothing else in this store is holding.
+     * <p>One answer to which those are, because asking is what makes {@link CheckedBehavior} an
+     * answer this store holds. A reader that worked the set out a second time would ask about a body
+     * the check never made — computing it where nothing else has it, and saying whatever that comes
+     * to about a module that was never checked this far.
+     *
+     * <p>Two things decide it. An injection target has no body here — something else supplies it
+     * (spec §injected-behavior) — so there is nothing to check and nothing missing when there is
+     * none; and a module whose own check stopped built nothing for a body to be checked against, so
+     * none of its bodies is checked at all.
      */
-    private static List<String> bodiesToCheck(Hir.Module settled) {
+    private static List<String> bodiesCheckedIn(Db db, String module) {
+        Answer<Hir.Module> settled = db.ask(new Settled(module));
+        Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(module));
+        if (!settled.present() || !checked.present() || checked.value().stopped()) {
+            return List.of();
+        }
         Set<String> implemented = new LinkedHashSet<>();
-        for (Hir.FnDef fn : settled.fns()) {
+        for (Hir.FnDef fn : settled.value().fns()) {
             implemented.add(fn.name());
         }
-        List<String> checked = new ArrayList<>();
-        for (Hir.BehaviorDef b : settled.behaviors()) {
+        List<String> bodies = new ArrayList<>();
+        for (Hir.BehaviorDef b : settled.value().behaviors()) {
             if (b instanceof Hir.SpecBehavior spec && implemented.contains(spec.name())) {
-                checked.add(spec.name());
+                bodies.add(spec.name());
             }
         }
-        return List.copyOf(checked);
+        return List.copyOf(bodies);
     }
 
     /**
@@ -2439,16 +2449,9 @@ public final class Bodies {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Answer<Hir.Module> settled = db.ask(new Settled(module));
-            // A module whose own check stopped built nothing for a body to be checked against, so
-            // its bodies were never checked and there is nothing here that was found in one.
-            Answer<ModuleCheck.Of> checkedModule = db.ask(new ModuleCheck(module));
-            if (!settled.present() || !checkedModule.present() || checkedModule.value().stopped()) {
-                return Answer.of(true);
-            }
             ClauseLocations written = Shapes.clauseLocations(db);
             List<Report> reports = new ArrayList<>();
-            for (String behavior : bodiesToCheck(settled.value())) {
+            for (String behavior : bodiesCheckedIn(db, module)) {
                 Answer<CheckedBody> checked = db.ask(new CheckedBehavior(module, behavior));
                 if (!checked.present()) {
                     continue;
@@ -3063,28 +3066,25 @@ public final class Bodies {
             Map<souther.compiler.types.BindingOwner,
                     souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();
             boolean bodiesCheck = true;
-            // A module whose own check stopped built nothing for a body to be checked against, so
+            // In the order they are declared, so what the backend emits does not move with what the
+            // check happened to ask for first. A module whose own check stopped has none of them —
             // asking would report not being able to see what has already been reported missing.
-            if (!module.value().stopped()) {
-                // In the order they are declared, so what the backend emits does not move with what
-                // the check happened to ask for first.
-                for (String behavior : bodiesToCheck(settled.value())) {
-                    Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
-                    if (core.present()) {
-                        bodies.put(behavior, core.value().body());
-                        elements.put(behavior, core.value().elements());
-                        // Only where there is one. A behavior with no representation for the
-                        // analysis to read is absent from here, which is what a reader owed the
-                        // meanings is answered with — the tree beside it is a different question's
-                        // answer and is not a fallback.
-                        if (core.value().analysis() != null) {
-                            analysed.put(behavior, core.value().analysis());
-                        }
-                        decisions.putAll(core.value().decisions().byFork());
-                        supplied.putAll(core.value().supplied().byExpansion());
-                    } else {
-                        bodiesCheck = false;
+            for (String behavior : bodiesCheckedIn(db, name)) {
+                Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
+                if (core.present()) {
+                    bodies.put(behavior, core.value().body());
+                    elements.put(behavior, core.value().elements());
+                    // Only where there is one. A behavior with no representation for the
+                    // analysis to read is absent from here, which is what a reader owed the
+                    // meanings is answered with — the tree beside it is a different question's
+                    // answer and is not a fallback.
+                    if (core.value().analysis() != null) {
+                        analysed.put(behavior, core.value().analysis());
                     }
+                    decisions.putAll(core.value().decisions().byFork());
+                    supplied.putAll(core.value().supplied().byExpansion());
+                } else {
+                    bodiesCheck = false;
                 }
             }
             // A unit the check could not read at all leaves the module without a meaning to emit,

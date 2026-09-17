@@ -41,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -4357,8 +4358,33 @@ public final class InvariantChecker {
      * off it: {@link #settled()} is what the guards establish, {@link #refuted()} is what the value
      * fails, and {@link #unsettled()} is the two nothing known there establishes — which is the
      * question E2011 asks and E2010 does not.
+     *
+     * <p>In the order the clauses were declared, and that order is part of what this says. A report
+     * names them in it and labels the places in it, so two judgments holding the same clauses in
+     * different orders are two reports. Which is why {@link #equals} does not take the map's, whose
+     * answer is about entries and not about sequence: a reading held for being the reading it was
+     * would say what the other one says.
      */
     record Judgment(Verdict verdict, SequencedMap<Clause.Id, Judged> found) {
+
+        /** The same as {@code other}: the same verdict, over the same clauses judged the same way,
+         *  in the same order. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Judgment that && verdict == that.verdict
+                    && inOrder(found).equals(inOrder(that.found));
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(verdict, inOrder(found));
+        }
+
+        /** What a map says, sequence and all — which a list says and a map does not. */
+        private static List<Map.Entry<Clause.Id, Judged>> inOrder(
+                SequencedMap<Clause.Id, Judged> found) {
+            return List.copyOf(found.sequencedEntrySet());
+        }
 
         /**
          * What two readings of one construction found, together.

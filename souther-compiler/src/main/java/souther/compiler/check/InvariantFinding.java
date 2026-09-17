@@ -48,21 +48,17 @@ public final class InvariantFinding {
             throw new IllegalArgumentException("a finding is about a type being built somewhere,"
                     + " under what was proved of the clauses it is held to");
         }
-        if (!saysSomething(judgment.verdict())) {
+        // A discharged invariant and one this check cannot express are silent, so there is nothing
+        // to be reported and nothing here to report it. Which verdicts those are is the verdict's
+        // own answer: asked by listing them here, this would be a second reading of the enum, and
+        // the one that fell behind would either make a finding nobody can say or refuse one
+        // somebody has to.
+        if (judgment.verdict().holds()) {
             throw notSomethingToReport(judgment.verdict());
         }
         this.type = type;
         this.at = at;
         this.judgment = judgment;
-    }
-
-    /** Whether a verdict has a reader to be told anything. A discharged invariant and one this
-     *  check cannot express are silent, which is a decision about what is reported and is made
-     *  where the check reaches a verdict — not here, over a finding that was made anyway. */
-    static boolean saysSomething(Verdict verdict) {
-        return verdict == Verdict.UNKNOWN
-                || verdict == Verdict.REFUTED_ALONE
-                || verdict == Verdict.REFUTED_NOT_ALONE;
     }
 
     /**

@@ -17,7 +17,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A report about a declaration is sent where the declaration is now.
@@ -131,9 +130,12 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
 
     /** The line the one warning about this workspace puts its caret on. */
     private static int whereTheWarningIs(Compilation c) {
-        return c.texts().resolve(theOneWarning(c).primary() instanceof Primary.InSource in
-                ? in.place().region().start()
-                : fail("the warning is supposed to point at the construction")).line();
+        Primary primary = theOneWarning(c).primary();
+        if (primary instanceof Primary.InSource in) {
+            return c.texts().resolve(in.place().region().start()).line();
+        }
+        throw new AssertionError("the warning is supposed to point at the construction, and points "
+                + primary + " instead");
     }
 
     /** The line the one warning about this workspace quotes the rule from. */
@@ -141,9 +143,12 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         List<LabeledRegion> quoted = theOneWarning(c).secondary();
         assertEquals(1, quoted.size(),
                 "the warning is supposed to quote the one rule it is about: " + quoted);
-        return c.texts().resolve(quoted.getFirst().place() instanceof DiagnosticPlace.InSource in
-                ? in.region().start()
-                : fail("the rule is written in this workspace and is supposed to be quoted")).line();
+        DiagnosticPlace place = quoted.getFirst().place();
+        if (place instanceof DiagnosticPlace.InSource in) {
+            return c.texts().resolve(in.region().start()).line();
+        }
+        throw new AssertionError("the rule is written in this workspace, and the warning quotes it "
+                + place + " instead");
     }
 
     private static Diagnostic theOneWarning(Compilation c) {
