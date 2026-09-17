@@ -12,6 +12,7 @@ import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * beside it — a measure nobody asked for and one that could not read what it needed write the same
  * word — and this document is what a consumer holds, so a check here reads what a consumer can.
  */
+@ClosedWorldContract
 class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
 
     private static final JsonMapper JSON = new JsonMapper();

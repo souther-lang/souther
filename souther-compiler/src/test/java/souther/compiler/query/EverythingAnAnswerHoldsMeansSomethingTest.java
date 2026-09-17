@@ -1,9 +1,9 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * nothing is said about, the reports half of every answer in the store is empty, and a scenario
  * made of those exercises one half of everything it reaches.
  */
-@Tag("population")
+@ClosedWorldContract
 class EverythingAnAnswerHoldsMeansSomethingTest {
 
     /**

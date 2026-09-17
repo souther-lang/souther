@@ -5,17 +5,19 @@ on:
     branches: [ main, develop ]
   pull_request:
   schedule:
-    # Nightly, and the only thing that asks the population.
+    # Nightly, and the only thing that asks what is too slow to wait on.
     - cron: '0 18 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  # What a pull request and a push wait on: everything except the tests whose subjects are the
-  # models this repository carries. Those are the job below, and nobody waits on them.
+  # What a pull request and a push wait on: everything except the tests that cost more than waiting
+  # for them is worth. Those are the job below, and nobody waits on them. Every closed-world
+  # contract this repository writes is here, whether or not it sweeps a corpus to close its world —
+  # a contract found days later is found against a tree that has moved.
   #
-  # Not on a schedule: the job below runs everything this one runs and the population besides, so
+  # Not on a schedule: the job below runs everything this one runs and the slow tests besides, so
   # the two together would build the reactor twice over and answer the same question the second
   # time.
   build:
@@ -34,7 +36,7 @@ jobs:
         # machine somebody is also working on, and a runner is nobody's.
         run: mvn -B --no-transfer-progress verify -DforkCount=2
 
-  # And the population, asked where waiting for it costs nobody an edit: once a night, and nowhere
+  # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
   # runs is run here too, so this is the whole suite and not the remainder of it.
   #
@@ -42,7 +44,7 @@ jobs:
   # lands on are named here and checked out by name. What a merge into `develop` left behind is
   # found by the morning, and against the commit the day ended on rather than the one that broke
   # it.
-  population:
+  nightly:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     strategy:
@@ -59,5 +61,5 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build and test ${{ matrix.branch }}, the population included
+      - name: Build and test ${{ matrix.branch }}, the slow tests included
         run: mvn -B --no-transfer-progress verify -DforkCount=2 -Dtest.excluded.groups=

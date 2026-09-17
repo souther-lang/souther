@@ -1,14 +1,14 @@
 package souther.compiler.conformance;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import souther.compiler.query.Adequacy;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
 import souther.compiler.query.Settlements;
+import souther.test.ClosedWorldContract;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * come back {@code Undetermined} here. Strengthening the assertion to {@code Settles} would be
  * asserting something nothing establishes.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
     @Test

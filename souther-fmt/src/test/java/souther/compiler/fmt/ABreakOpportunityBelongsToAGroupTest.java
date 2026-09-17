@@ -1,6 +1,7 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * decided — nothing the layout wrote points at the group. So what a source gap is matched against
  * is the opportunity, which is there either way.
  */
-@Tag("population")
+@ClosedWorldContract
 class ABreakOpportunityBelongsToAGroupTest {
 
     /** A group that fits: its opportunities are there, and none of them was written as a break. */

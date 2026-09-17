@@ -1,7 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * look up. That is what the second test below refuses. It was false when it was written: the two
  * kinds it would have caught are the ones this class now reaches on purpose.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

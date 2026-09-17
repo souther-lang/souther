@@ -1,7 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DoesNotComeBack;
@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which no source reaches is a law that passes by not applying, and the counts below are what says
  * it does apply.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryObligationTheCountHoldsIsMetOrNamedTest {
 
     /**
