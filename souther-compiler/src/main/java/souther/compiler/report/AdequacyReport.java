@@ -3749,6 +3749,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                      DocumentSources sources) {
         switch (identity) {
             case ObligationIdentity.OfALine(var point) -> obligationId(into, point);
+            // The line and where it is cut, which is what a border of the document is keyed by —
+            // and no point, because what this is owed at is the line itself. Written the same way
+            // a point writes the two of them it shares, so a consumer holding either reads one
+            // vocabulary.
+            case ObligationIdentity.OfABorder(var line) -> {
+                authoredLineId(into.putObject("line"), line.line());
+                level(into.putObject("level"), line.at());
+            }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
             // The words a report writes for a class are not it: two positions of one behavior can
@@ -4837,6 +4845,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderAssessment boundary : lines.made().orElseGet(List::of)) {
             DocumentItem drawn = boundaries.addObject();
             ObjectNode b = drawn.node();
+            // What this line is owed as a line, which is what the lines beside it are asked of. The
+            // four points under it are owed at places on it and carry their own; this is the entry
+            // a finding about the line itself joins to, and there is one of it per line because a
+            // line read at several positions is one line here.
+            obligationId(b.putObject("obligationId"),
+                    new ObligationIdentity.OfABorder(boundary.border().obligation()), sources);
             b.put("axis", boundary.axis());
             // The identity, and never left out. This document says what it is about with the
             // ids the caller handed its sources over as, and `sources` explains each one; a

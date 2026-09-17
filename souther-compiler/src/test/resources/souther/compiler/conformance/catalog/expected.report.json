@@ -740,6 +740,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Sku",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "discount/String.length(item.sku)",
           "origin" : "invariant Sku #1",
           "kind" : "at_value",
@@ -783,6 +814,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Price",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "0"
+            }
+          },
           "axis" : "discount/item.price",
           "origin" : "invariant Price #1",
           "kind" : "at_value",
@@ -826,6 +888,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Weight",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "discount/item.weight",
           "origin" : "invariant Weight #1",
           "kind" : "at_value",
@@ -869,6 +962,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Rate",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "0"
+            }
+          },
           "axis" : "discount/rate",
           "origin" : "invariant Rate #1",
           "kind" : "at_value",
@@ -907,6 +1031,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Rate",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "discount/rate",
           "origin" : "invariant Rate #1",
           "kind" : "at_value",
@@ -1173,6 +1328,37 @@
         "axes" : [ ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Sku",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "現価を引く/String.length(品目[*])",
           "origin" : "invariant Sku #1",
           "kind" : "at_value",
@@ -1551,6 +1737,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.shipping",
+                  "declaredOn" : "送り状番号",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "台帳へ書く/String.length(指示.番号)",
           "origin" : "invariant 送り状番号 #1",
           "kind" : "at_value",
@@ -1594,6 +1811,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Sku",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "台帳へ書く/String.length(指示.品目[*])",
           "origin" : "invariant Sku #1",
           "kind" : "at_value",
@@ -1637,6 +1885,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Weight",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "台帳へ書く/指示.重量",
           "origin" : "invariant Weight #1",
           "kind" : "at_value",
@@ -2029,6 +2308,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.shipping",
+                  "declaredOn" : "送り状番号",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "出荷する/String.length(指示.番号)",
           "origin" : "invariant 送り状番号 #1",
           "kind" : "at_value",
@@ -2072,6 +2382,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Sku",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "出荷する/String.length(指示.品目[*])",
           "origin" : "invariant Sku #1",
           "kind" : "at_value",
@@ -2115,6 +2456,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Weight",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "出荷する/指示.重量",
           "origin" : "invariant Weight #1",
           "kind" : "at_value",
@@ -2158,6 +2530,34 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "出荷する",
+                  "behavior" : "出荷する",
+                  "ordinal" : 11,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "30000"
+            }
+          },
           "axis" : "出荷する/指示.重量",
           "origin" : "comparison@1:88:17",
           "kind" : "at_value",
@@ -2211,6 +2611,34 @@
             "hit" : false
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "出荷する",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            }
+          },
           "axis" : "出荷する/Time.hour(指示.集荷時刻)",
           "origin" : "comparison@1:57:50",
           "kind" : "at_value",
@@ -3569,6 +3997,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.shipping",
+                  "declaredOn" : "送り状番号",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "送料を出す/String.length(指示.番号)",
           "origin" : "invariant 送り状番号 #1",
           "kind" : "at_value",
@@ -3612,6 +4071,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Sku",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "送料を出す/String.length(指示.品目[*])",
           "origin" : "invariant Sku #1",
           "kind" : "at_value",
@@ -3655,6 +4145,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.catalog",
+                  "declaredOn" : "Weight",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "送料を出す/指示.重量",
           "origin" : "invariant Weight #1",
           "kind" : "at_value",
@@ -3698,6 +4219,34 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "送料を出す",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            }
+          },
           "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
           "origin" : "comparison@1:57:50",
           "kind" : "at_value",

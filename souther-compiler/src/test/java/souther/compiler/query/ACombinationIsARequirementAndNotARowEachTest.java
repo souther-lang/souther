@@ -55,6 +55,11 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // for where a behavior's decisions meet nowhere.
                 "ACombinationOfTwoClassesNoRowIsIn",
                 "APointOfABorder", "APointOfADeclaredBorder",
+                // A border every point of which a row is at, that the rows still do not tell from
+                // a line weighing one of its positions differently. Not a combination: it is one
+                // border, and what a row shows at it is which of two lines the model draws rather
+                // than what two positions do at once.
+                "ALineTheRowsDoNotTellFromAnother",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
                 "AnArmNoRowGoesThrough",
@@ -68,11 +73,6 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // the one kind here that is read off the source rather than measured.
                 "AnUnansweredRow",
                 "ARowAtAnArmAwaitsItsAnswer",
-                // A border every point of which a row is at, that the rows still do not tell from
-                // a line weighing one of its positions differently. Not a combination: it is one
-                // border, and what a row shows at it is which of two lines the model draws rather
-                // than what two positions do at once.
-                "ALineTheRowsDoNotTellFromAnother",
                 "ARuleWithoutALine", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",
@@ -109,7 +109,8 @@ class ACombinationIsARequirementAndNotARowEachTest {
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfAnArm", "OfARow", "OfAnOutputCase", "OfADecisionRule",
+                List.of("OfALine", "OfABorder", "OfAnArm", "OfARow", "OfAnOutputCase",
+                        "OfADecisionRule",
                         "OfACombinationOfDecisions", "OfAFallbackPairCell", "OfAClass",
                         "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");

@@ -271,7 +271,19 @@ public sealed interface About {
      * its line, and the line beside it that they allow.
      */
     record ALineTheRowsDoNotTellFromAnother(BorderAssessment line)
-            implements About, RuleCitations {
+            implements OfAnObligation, RuleCitations {
+
+        /**
+         * The line, which is one grain coarser than a point of it.
+         *
+         * <p>What a row here shows is which of two lines the model draws, and a line is what two
+         * lines are two of. Keyed on a point, this would be owed four times over one border and the
+         * row that answers it would leave three of them open.
+         */
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfABorder(line.border().obligation());
+        }
 
         public ALineTheRowsDoNotTellFromAnother {
             Objects.requireNonNull(line, "a finding is about something");

@@ -543,6 +543,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 // it is owed is what the system does, written where that row is by somebody who
                 // knows it, and a row composed here would be a second row rather than that answer.
                 case ObligationIdentity.OfAnInputCase _, ObligationIdentity.OfAnOutputCase _,
+                     // And a whole line held against the lines beside it. Rows here are composed at
+                     // the points of one line, and what would answer this is an input two lines
+                     // part company at — which nothing composes, so nothing arrives to be weighed.
+                     ObligationIdentity.OfABorder _,
                      ObligationIdentity.OfARow _ -> throw new IllegalStateException(
                         "no row is offered for " + item + ", so none is weighed against it");
                 case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
