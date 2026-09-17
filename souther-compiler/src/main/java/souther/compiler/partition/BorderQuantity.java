@@ -682,6 +682,32 @@ public sealed interface BorderQuantity {
     }
 
     /**
+     * What a row standing at {@code where} asks of each of the terms this is taken of.
+     *
+     * <p><b>The item is about this quantity, and only one kind of quantity is a term's own
+     * values.</b> Where a row's number is one position's, what the item leaves the quantity is what
+     * it leaves that position and a search of it may run to the end of that. Where the number is
+     * taken of several — how far two of them stand apart, what a form of them comes to — the item
+     * says one thing about the several: either term may take any number the others leave room for,
+     * so what is left of it on its own is every number the order has and the item travels whole.
+     *
+     * <p>Which is why an item holding one number is not each term holding one. The rules leaving a
+     * distance at exactly ten leave the near position wherever the far one is ten from, and a
+     * search that tried one such pair has tried one — the pair the solver picked. Read off the
+     * item, the same search would have walked every value there is of both.
+     *
+     * <p>Asked here because which quantity this is is asked nowhere else, and this is one more
+     * answer a quantity added has to give rather than an arm downstream.
+     */
+    default NumbersAskedFor asksOfEachTerm(Criterion where) {
+        return switch (this) {
+            case OfACoordinate _ -> NumbersAskedFor.of(where.region());
+            case Apart _, OverAForm _ ->
+                    NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
+        };
+    }
+
+    /**
      * Every term this quantity is taken of.
      *
      * <p>What a caller moving a quantity to another position has to know it is moving. Read off the

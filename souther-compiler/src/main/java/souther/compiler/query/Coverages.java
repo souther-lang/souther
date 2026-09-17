@@ -779,6 +779,11 @@ final class Coverages {
          *                 the placement rather than left out: the placement is about the positions
          *                 the item names and a condition above the line is about the others, and a
          *                 row is one row
+         * @param asking   what the item leaves each of the numbers {@code fixing} names one of,
+         *                 which is what a search coming back empty-handed said something about.
+         *                 Beside the places and not read off them: a place is what this search
+         *                 settled on, and the item it was taken out of holds every number the rules
+         *                 leave beside it
          * @param demands  what the thing being searched for asks of the dependencies the behavior
          *                 requires. Part of the request and not of the probe, because it is what
          *                 differs between the things one behavior is searched for: a point of a
@@ -789,6 +794,7 @@ final class Coverages {
         java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
                 String label,
                 Map<souther.compiler.partition.RealizationTarget, Place> fixing,
+                souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands);
 
@@ -1316,7 +1322,8 @@ final class Coverages {
                         // reached it, which row to offer, or what would have to give for the rest,
                         // asks that of {@link SearchOutcomes}.
                         java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> made =
-                                probe.attempt(label, found.fixing(), able,
+                                probe.attempt(label, found.fixing(),
+                                        quantity.asksOfEachTerm(criterion), able,
                                         souther.compiler.partition.AnswersDemanded.NOTHING);
                         // Nothing was tried at all, which is the classes not linking. An empty
                         // answer would say the point was searched and nothing happened. Not a value

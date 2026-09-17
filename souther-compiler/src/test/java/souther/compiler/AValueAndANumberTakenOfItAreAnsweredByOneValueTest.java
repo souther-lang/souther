@@ -103,11 +103,11 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
                 () -> "the value the rules single out is written: " + offered);
         assertTrue(offered.contains("// fills box.s=0 <= x <= 3"),
                 () -> "and the row stands at the class its own length is in: " + offered);
-        // Nothing was composed for it, and not a row that was composed and did not arrive. A value
-        // of the place put forward for a class its length is not in is a row that says the string
-        // is four characters long, and what turns it back is the run it is pasted into.
+        // What the model settles, and not a search that fell short. The rule above the line leaves
+        // the place one value, so every value that reaches this point is that one — and its length
+        // is not the one the point asks for. Nothing was walked past to get here.
         assertTrue(offered.contains("no row for `String.length(box.s) = 4` in `f`:"
-                        + " nothing here could build a representative"),
+                        + " the rules leave no value here"),
                 () -> "and no value of the place is offered for a length it does not have: "
                         + offered);
         assertFalse(offered.contains(THE_POPULATION),
@@ -115,21 +115,27 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
     }
 
     /**
-     * The length classes the value cannot be in are answered about, and not left unsaid.
+     * The length the value cannot have is answered about, and as what the model settles.
      *
-     * <p>Held because the answer is the one a reader may act on least: nothing here walked every
-     * string, so what the page may say is that this compiler wrote no value for the class — and an
-     * author reading it knows the row is theirs to write if the model has one.
+     * <p>The rule above the line singles the place's value out, so the only value that reaches the
+     * point is that one and its length is not the one asked for. Every number the question held
+     * was walked, so what the page says is about the model rather than about what this compiler
+     * managed — which is the one answer an author may act on.
      */
     @Test
-    void whatWasNotWrittenIsSaidAsSomethingThisCompilerDidNotWrite() {
+    void whatTheRulesLeaveNoValueAtIsSaidAsTheModelsAnswer() {
         String page = report(measured(A_LENGTH_NO_SUCH_VALUE_HAS));
 
         assertEquals(0, page.lines().filter(line -> line.contains(THE_POPULATION)).count(),
                 () -> "nothing here is a group without a way of writing one: " + page);
-        assertTrue(page.contains("nothing here could build a representative for"
-                        + " String.length(box.s) = 4"),
-                () -> "the class no value of the place is in is answered about: " + page);
+        assertEquals(0, page.lines()
+                        .filter(line -> line.contains("String.length(box.s) = 4"))
+                        .filter(line -> line.contains("nothing here could build a representative"))
+                        .count(),
+                () -> "what the model settles is not said as what this compiler managed: " + page);
+        assertTrue(page.lines().anyMatch(line -> line.contains("String.length(box.s) = 4")
+                        && line.contains("the rules leave no value")),
+                () -> "the point no value of the place reaches is answered about: " + page);
     }
 
     private static Compilation measured(String model) {

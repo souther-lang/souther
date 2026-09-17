@@ -2150,7 +2150,10 @@ public final class Adequacy {
             // Every way of standing the dependencies in, and what each of them established. Which
             // case a row carries where the way names none decides where the row goes, so a row
             // that went elsewhere says that of the case it carried and not of the rule.
+            // Nothing of the item is fixed here, so there is no number of one this is a candidate
+            // out of: what the row has to be is the way's, and the way is asked below.
             List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
+                    souther.compiler.partition.NumbersAskedFor.ANYTHING,
                     reaching, ruled.demands());
             // The proof, where every way of standing the dependencies in came back with one. Asked
             // of the ways together and before the fold below: what that fold joins on is how much
@@ -2414,6 +2417,7 @@ public final class Adequacy {
         public List<Generator.BoundaryAttempt> attempt(String label,
                 java.util.Map<souther.compiler.partition.RealizationTarget,
                         souther.compiler.numeric.Place> fixing,
+                souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands) {
             Generator.CandidateCheck check =
@@ -2424,7 +2428,8 @@ public final class Adequacy {
                 // all of them go back and none is chosen here.
                 List<Generator.BoundaryAttempt> out = new ArrayList<>();
                 for (AnswersStoodIn stood : answers.of(demands)) {
-                    out.add(Generator.probeFixing(subject, label, fixing, reaching, check, stood));
+                    out.add(Generator.probeFixing(subject, label, fixing, asking, reaching, check,
+                            stood));
                 }
                 return List.copyOf(out);
             } catch (LinkageError _) {

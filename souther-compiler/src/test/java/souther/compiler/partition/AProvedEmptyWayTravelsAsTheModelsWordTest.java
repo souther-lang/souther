@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -176,6 +177,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     private static Generator.BoundaryAttempt composing(SearchRegion within, OnTheWay.TakenIn cut) {
         return Generator.probeFixing(subject(), "r.cost = 100",
                 Map.of(new RealizationTarget.AtOnePosition(costAxis().term()), Count.of(100)),
+                NumbersAskedFor.of(LevelRegion.point(
+                        new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
                 new Reachability.Reaching(within, Requirements.NONE, List.of(cut)),
                 Generator.CandidateCheck.ANY);
     }

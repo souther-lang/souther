@@ -315,7 +315,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         assertEquals(List.of("x < 10", "10 <= x"), model.labelsAt(0, 1),
                 "a half below ten beside a third from ten up");
-        assertInstanceOf(TermRealizations.Realization.None.class, model.answering(asked),
+        assertInstanceOf(TermRealizations.Realization.NoNumberTheRulesAdmit.class,
+                model.answering(asked),
                 () -> "no number has both: " + model.answering(asked));
     }
 
@@ -491,9 +492,14 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         private TermRealizations.Realization answering(
                 SequencedMap<RealizationTarget, NumericSet> demands) {
+            // The classes as they are asked for, which is what a search of one is about: these
+            // fixtures hand over what a rule leaves and nothing picked a number out of it.
+            SequencedMap<RealizationTarget, AskedAt> asked = new LinkedHashMap<>();
+            demands.forEach((target, admits) -> asked.put(target, AskedAt.theClass(admits,
+                    subject.quantities().ordersOf(target.term()).answered())));
             return TermRealizations.allSatisfying(
                     subject.inputs().typeAtWrittenPath(demands.firstEntry().getKey().writeRoot()),
-                    demands, subject.quantities(), subject.quantities().region(),
+                    asked, subject.quantities(), subject.quantities().region(),
                     subject.ruleReading());
         }
 

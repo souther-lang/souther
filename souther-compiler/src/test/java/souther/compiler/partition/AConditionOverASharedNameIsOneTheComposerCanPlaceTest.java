@@ -107,6 +107,8 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         Axis fixed = axisAt("n");
         return Generator.probeFixing(subject(), "n = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
+                NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
+                        domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE,
                         List.of(new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(

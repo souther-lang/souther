@@ -112,7 +112,7 @@ public final class AnAnswerComposed {
      */
     private static Outcome composed(MeasuredInput subject, Reachability.Reaching reaching) {
         Generator.BoundaryAttempt attempt = Generator.probeFixing(subject,
-                "an answer of a dependency", Map.of(), reaching,
+                "an answer of a dependency", Map.of(), NumbersAskedFor.ANYTHING, reaching,
                 // Nothing refuses a candidate here. What a decoder answers about a value is asked
                 // where the row that carries it is run, and a check written here would be this
                 // reading building the dependency's own boundary a second way.

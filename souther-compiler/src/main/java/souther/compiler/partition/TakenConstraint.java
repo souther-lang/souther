@@ -43,7 +43,8 @@ public sealed interface TakenConstraint {
      * threshold moved across are one value. What this is over is every term the arithmetic could
      * name, however many of them there are.
      */
-    record Affine(LinearForm<NumericTerm> form, Rel rel) implements TakenConstraint {
+    record Affine(LinearForm<NumericTerm> form, Rel rel)
+            implements TakenConstraint, JointDemand {
 
         @Override
         public java.util.Set<NumericTerm> terms() {
