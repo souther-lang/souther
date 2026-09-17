@@ -28,15 +28,16 @@ import java.util.Optional;
  * beside this one is about the line and the rows, and two readings of it agree or one of them is
  * wrong — that is {@link AnotherLineTheRowsAllow}, and it is held once. Where a row may be composed
  * is not like that: a reading is reached under its caller's own conditions, so each has a region of
- * its own, and the place a row stands is written in the positions <em>that</em> reading names. Held
- * as one answer for the line, a row composed under one reading arrives beside another reading's
- * line — and the place it stands is then read at positions that reading does not have, which is a
+ * its own, and the input a row is composed at is written in the positions <em>that</em> reading
+ * names. Held as one answer for the line, a row composed under one reading arrives beside another
+ * reading's line — and its input is then read at positions that reading does not have, which is a
  * row offered under a sentence naming nowhere.
  *
- * <p><b>Where the row stands is kept beside what the search came to, and not read back off the
- * row.</b> A row is written as the values an author would type, and where its positions stand on
- * the quantity the line is drawn on is what the search settled — recovered from the text, it would
- * be a second reading of one thing, free to name a place the search never chose.
+ * <p><b>The input a search composed at is kept beside what it came to, and not read back off the
+ * row.</b> A row is written as the values an author would type, and what the realizer asked for is
+ * what the row was built from — recovered from the text, it would be a second reading of one
+ * thing, free to name an input the search never chose. It is not where the row was seen standing
+ * either: nothing may have read it back, and it is offered all the same.
  *
  * @param each one entry per reading that was asked, in the order the readings were walked
  */
@@ -47,7 +48,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * What one reading's search came to, and where the row it hands over stands.
+     * What one reading's search came to, and the input it composed its row at.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back

@@ -25,7 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -57,10 +56,23 @@ public record Settlements(List<ObligationIdentity> requested,
         byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
         standsAt = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(standsAt));
         composedAt = Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
+        // A row composed for a line was composed somewhere, and what a person is shown for such a
+        // line is that. Held here because the two are separate maps a caller fills: a line with a
+        // row and no input is one this would show the measurement's own answer for while the block
+        // hands the row over, which is the pair of sentences all of this exists to keep together.
+        // Asked of the lines alone — a class is where a value falls and an arm is a place a run
+        // went, and neither is somewhere a report sends a reader.
+        for (Map.Entry<ObligationIdentity, RowKey> each : composedFor.entrySet()) {
+            if (each.getKey() instanceof ObligationIdentity.OfABorder
+                    && !composedAt.containsKey(each.getKey())) {
+                throw new IllegalArgumentException("a row composed for a line and composed nowhere: "
+                        + each.getKey() + " by " + each.getValue());
+            }
+        }
     }
 
     /**
-     * Where the row a person is handed for each line stands, once the reduction has settled which
+     * The input of the row a person is handed for each line, once the reduction has settled which
      * rows those are.
      *
      * <p><b>After {@link #keeping()} and never before it.</b> What is composed for a line and what
@@ -294,7 +306,10 @@ public record Settlements(List<ObligationIdentity> requested,
             requested.addAll(read.owed());
             if (filling != null) {
                 composedFor.putAll(read.composed(filling));
-                composedAt.putAll(read.composedAt());
+                // The row and the input it was composed at, from the one value that holds both.
+                // Taken from two askings, a line could end up with a row from one reading and an
+                // input from another — which is the pair a report would then show a person.
+                read.composedForALine().forEach((item, made) -> composedAt.put(item, made.at()));
             }
         }
         // And the points the module's declarations are owed, which are no behavior's own. A row of
@@ -593,35 +608,32 @@ public record Settlements(List<ObligationIdentity> requested,
             // reading that composed it says which row it is, and the first of them is the row the
             // block offers — read off any reading that has one, a line searched twice would be
             // said to have been composed for by a row nobody is offered.
-            besides.forEach((item, readings) -> firstComposed(readings)
-                    .ifPresent(one -> out.put(item,
-                            RowKey.of(behavior, one.toldApart().composed().orElseThrow().row()))));
+            composedForALine().forEach((item, made) -> out.put(item, made.key()));
             return out;
         }
 
         /**
-         * The input the search composed for each line it composed a row at.
+         * The row composed for each line the rows do not tell from another, and the input it was
+         * composed at.
          *
-         * <p>Off the search and not off a reading of the row. What the realizer asked for is what
-         * the row was built from, and it is the only thing there is to name for a row nothing read
-         * back — which is a row a person is offered like any other.
+         * <p><b>One value, because the two have to be one asking.</b> Which reading composed the
+         * row and which input that reading composed it at are the same answer read twice, and two
+         * walks arriving at it are two walks somebody has to keep in step — a report would then be
+         * able to name the input of a row nobody is handed. There is nothing to keep in step here.
          *
-         * <p>The same reading {@link #composed} takes the row from, so the row a person is handed
-         * and the input named for it come from one asking.
+         * <p>The input off the search and not off a reading of the row. What the realizer asked for
+         * is what the row was built from, and it is the only thing there is to name for a row
+         * nothing read back — which is a row a person is offered like any other.
          */
-        Map<ObligationIdentity, InputOfARowForALine> composedAt() {
-            Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
-            besides.forEach((item, readings) -> firstComposed(readings).ifPresent(one ->
-                    out.put(item, new InputOfARowForALine(one.reading().border(),
-                            one.toldApart().composedAt()))));
+        Map<ObligationIdentity, ARowComposedForALine> composedForALine() {
+            Map<ObligationIdentity, ARowComposedForALine> out = new LinkedHashMap<>();
+            besides.forEach((item, readings) -> readings.stream()
+                    .filter(one -> one.toldApart().composed().isPresent()).findFirst()
+                    .ifPresent(one -> out.put(item, new ARowComposedForALine(
+                            RowKey.of(behavior, one.toldApart().composed().orElseThrow().row()),
+                            new InputOfARowForALine(one.reading().border(),
+                                    one.toldApart().composedAt())))));
             return out;
-        }
-
-        /** The first reading of a line whose own search composed a row, which is the one the block
-         *  offers from. */
-        private static Optional<ALineBesideOne> firstComposed(List<ALineBesideOne> readings) {
-            return readings.stream()
-                    .filter(one -> one.toldApart().composed().isPresent()).findFirst();
         }
 
         /**
@@ -976,6 +988,23 @@ public record Settlements(List<ObligationIdentity> requested,
      *  what a row there has to do. */
     private record AtAPoint(souther.compiler.partition.Border line,
                             souther.compiler.partition.Criterion criterion) {}
+
+    /**
+     * The row a search composed for one line, and the input it composed it at.
+     *
+     * <p>Two facts about one asking, so they travel as one value. Which reading composed the row
+     * decides both, and a caller holding them apart is a caller that can hand over the row from one
+     * reading beside the input from another.
+     */
+    private record ARowComposedForALine(RowKey key, InputOfARowForALine at) {
+
+        private ARowComposedForALine {
+            if (key == null || at == null) {
+                throw new IllegalArgumentException(
+                        "a row composed for a line was composed somewhere: " + key);
+            }
+        }
+    }
 
     /**
      * What a row does about one line, and where it stands on it where that is the answer.

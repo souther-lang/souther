@@ -1510,10 +1510,9 @@ final class Coverages {
         }
         return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
                 // Both readings' searches and neither standing for the other. A row is composed in
-                // one reading's region and is written in the positions that reading names, so the
-                // reading travels with it — folded to one here, a row would arrive beside the other
-                // reading's line and the place it stands would be read at positions that line has
-                // none of.
+                // one reading's region and at the positions that reading names, so the reading
+                // travels with it — folded to one here, a row would arrive beside the other
+                // reading's line and its input would be read at positions that line has none of.
                 a.toldApart().and(b.toldApart()));
     }
 

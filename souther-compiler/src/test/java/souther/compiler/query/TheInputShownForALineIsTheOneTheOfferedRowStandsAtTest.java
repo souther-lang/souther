@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The input a report names for a line is the input of the row a person is handed, and not the one
@@ -94,6 +95,27 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
     void aLineNoKeptRowIsOfferedForIsShownNoPlace() {
         assertNull(bothSettleIt().shownFor(Set.of()).get(LINE),
                 "what is shown then is what the measurement saw, which is the finding's own");
+    }
+
+    /**
+     * A row composed for a line was composed somewhere, and a table saying otherwise is refused.
+     *
+     * <p>The two are separate maps and a caller fills both, so this is the one place the pair is
+     * held together. Left to whoever fills them, a line with a row and no input is a line the
+     * report shows the measurement's own answer for while the block hands the row over — which is
+     * the state this whole reading exists to keep out.
+     */
+    @Test
+    void aRowComposedForALineAndComposedNowhereIsRefused() {
+        SequencedMap<ObligationIdentity, RowKey> composedFor = new LinkedHashMap<>();
+        composedFor.put(LINE, COMPOSED_FOR_IT);
+        SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow = new LinkedHashMap<>();
+        byRow.put(COMPOSED_FOR_IT, Map.of(LINE, new Settlement.Settles()));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new Settlements(List.of(LINE), composedFor, byRow, new LinkedHashMap<>(),
+                        Map.of()),
+                "a line whose row was composed nowhere is a state nothing downstream reads right");
     }
 
     /**

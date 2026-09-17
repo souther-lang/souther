@@ -52,10 +52,10 @@ public final class Offering {
      *                 rows, which is not the same as a request that asked and found none
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
-     * @param shownAt  where the row a person is handed for each line stands, for the lines one of
-     *                 these rows answers. Decided here because it is decided by what is offered:
-     *                 the row composed for a line goes when another row already answers it, so a
-     *                 place read off the search is a place from before that was settled
+     * @param shownAt  the input of the row a person is handed for each line, for the lines one of
+     *                 these rows is offered for. Decided here because it is decided by what is
+     *                 offered: the row composed for a line goes when another row already answers
+     *                 it, so an input read off the search is one from before that was settled
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,

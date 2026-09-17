@@ -1225,26 +1225,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return read == null ? List.of() : read.made().orElse(List.of());
     }
 
-    /** One finding with where this report shows it, and where a row offered for it stands. */
+    /** One finding with where this report shows it, and the input of a row offered for it. */
     private static ReportedFinding reported(Compilation compilation, String module,
                                             Adequacy.Finding finding, Offering offered) {
         return new ReportedFinding(finding,
-                Adequacy.placeOf(compilation.db(), module, finding), standsAt(offered, finding));
+                Adequacy.placeOf(compilation.db(), module, finding), inputOffered(offered, finding));
     }
 
     /**
-     * Where the row this run offers for what {@code finding} is about stands, or null where nothing
+     * The input of the row this run offers for what {@code finding} is about, or null where nothing
      * is offered for it.
      *
      * <p>Asked of the offering and of nothing else. What is composed for a thing and what goes out
      * for it are two answers — the reduction drops a row another one already answers for — so the
      * one a reader may be sent to is the offering's.
      *
-     * <p>Asked of every finding about an obligation rather than of the one kind that has a place to
-     * name. Which obligations a row stands somewhere nameable on is the offering's answer, and a
+     * <p>Asked of every finding about an obligation rather than of the one kind that has an input
+     * to name. Which obligations a row has a nameable input for is the offering's answer, and a
      * reader picking the kinds here would be deciding it a second time.
      */
-    private static InputOfARowForALine standsAt(Offering offered, Adequacy.Finding finding) {
+    private static InputOfARowForALine inputOffered(Offering offered, Adequacy.Finding finding) {
         return offered == null || !(finding.about() instanceof About.OfAnObligation owed) ? null
                 : offered.shownAt(owed.obligationIdentity());
     }
@@ -2288,9 +2288,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about()
                     instanceof About.ALineTheRowsDoNotTellFromAnother untold) {
-                // Where the row this run offers for the line stands, and what the measurement saw
-                // where nothing is offered. One place and never two: a reader shown one input and
-                // handed a row at another has been shown two answers about one line.
+                // The input of the row this run offers for the line, and what the measurement saw
+                // where nothing is offered. One input and never two: a reader shown one and handed
+                // a row at another has been shown two answers about one line.
                 String shown = f.offered() != null ? f.offered().said() : untold.sawThemPartSaid();
                 out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
                         mark(f.finding()), untold.line().border().label(),
