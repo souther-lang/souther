@@ -8,6 +8,7 @@ import souther.compiler.observe.ObservedValue;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,7 +94,7 @@ public final class StandingAtAPoint {
                             + " it could not");
                 }
                 // In the order they were met, for the reason a report keeps any order.
-                why = Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+                why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
             }
         }
 
@@ -160,7 +161,7 @@ public final class StandingAtAPoint {
                           List<ComparisonEmissionSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
-        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
+        Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
         for (ObservedInputs one : observed) {
@@ -171,7 +172,7 @@ public final class StandingAtAPoint {
             // The first run of the row says which steps the line's positions take, and the readings
             // are tried under each choice those steps allow.
             boolean stands = false;
-            Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+            Set<ReadingGap> stopped = new LinkedHashSet<>();
             Readings readings = readings(where, one, quantity);
             List<OneReadingOfARow> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
@@ -260,7 +261,7 @@ public final class StandingAtAPoint {
         BehaviorInputs where = line.subject().inputs();
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
-        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
+        Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean stoppedShort = false;
         boolean unwatched = false;
         for (ObservedInputs one : observed) {
@@ -316,7 +317,7 @@ public final class StandingAtAPoint {
 
         public RowsRead {
             each = List.copyOf(each);
-            why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
             if (tried == null) {
                 throw new IllegalArgumentException(
                         "a walk over the rows says whether it walked all of them");
@@ -358,17 +359,20 @@ public final class StandingAtAPoint {
                 // The walk and the type disagree, which is the quantity's to report.
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
+                // The row wrote no element here, which is a row that was read and is the same
+                // answer whichever walk asked. What that leaves a quantity is the quantity's to
+                // say, and it says it where it knows what the position is worth to the number it
+                // is reading.
                 case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
-                        WalkResult.reached(standingAmong(values));
+                        WalkResult.reached(values.isEmpty()
+                                ? ObservationAtPoint.WROTE_NOTHING : standingAmong(values));
             };
         }
 
         /**
-         * What this walk makes of the row's answers at a position it arrived at.
+         * What this walk makes of the elements the row wrote at a position it arrived at.
          *
-         * <p>An empty list is the row having written no element there, which is a row that was
-         * read. What that leaves a quantity is the quantity's to say, and it says it where it
-         * knows what the position is worth to the number it is reading.
+         * @param values what the row wrote there, never none of it
          */
         abstract ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values);
 
@@ -415,9 +419,6 @@ public final class StandingAtAPoint {
 
         @Override
         ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
-            if (values.isEmpty()) {
-                return ObservationAtPoint.WROTE_NOTHING;
-            }
             for (BehaviorInputs.Occurrence each : values) {
                 each.at().forEach((step, ordinal) -> steps.merge(step, ordinal + 1, Math::max));
             }
@@ -462,9 +463,6 @@ public final class StandingAtAPoint {
 
         @Override
         ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
-            if (values.isEmpty()) {
-                return ObservationAtPoint.WROTE_NOTHING;
-            }
             for (BehaviorInputs.Occurrence each : values) {
                 if (agrees(each)) {
                     return new ObservationAtPoint.Value(each.value());
