@@ -347,6 +347,9 @@ public final class Compilation {
      */
     public void answerWarnings(String module) {
         db.ask(new Names.UnusedImports(module));
+        // What the invariant check found, said where the rules it is about are written now. The
+        // bodies were checked without asking that, so this is where it is asked.
+        db.ask(new Bodies.InvariantWarnings(module));
         // A defect in the model rather than a gap in its rows, so it is asked whether or not this
         // build wanted a coverage report.
         db.ask(new Adequacy.DeadBranches(module));

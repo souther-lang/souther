@@ -120,25 +120,35 @@ class WhatAClauseMeansAndWhereItIsWrittenAreTwoAnswersTest {
     }
 
     /**
-     * And the check that reports about the construction depends on where the clause is written.
+     * And the question that reports about the construction depends on where the clause is written,
+     * while the one that judges it does not.
      *
      * <p>The edge is what this is all for, and it is the one thing neither answer above shows: two
      * answers that differ say nothing about whether the reader of the first asks for the second. A
      * report that worked the place out without recording that it had would go on saying where the
      * clause was, on the day a cut lets the reading itself stand.
+     *
+     * <p>Which reader that is, is the one about to point somewhere. The judgment is what the
+     * declaration states and is the body's answer; the caret under the clause is where the text is
+     * now and is the warning's. Asked of one question, the two would be one answer again, and it is
+     * the same answer this whole file is about there being two of.
      */
     @Test
-    void andTheCheckThatReportsAboutTheConstructionDependsOnWhereTheClauseIsWritten() {
+    void andTheQuestionThatReportsAboutTheConstructionDependsOnWhereTheClauseIsWritten() {
         Compilation compilation = answered(DECLARING);
 
-        Set<Key<?>> read =
+        Set<Key<?>> reporting =
+                compilation.db().dependenciesOf(new Bodies.InvariantWarnings("app"));
+        Set<Key<?>> judging =
                 compilation.db().dependenciesOf(new Bodies.CheckedBehavior("app", "make"));
 
-        assertTrue(read.contains(new Shapes.ClauseLocation(firstClauseOf(SMALL))),
-                "checking the body asks where the clause it reports about is written");
-        assertFalse(read.contains(new Shapes.ClauseLocation(
+        assertTrue(reporting.contains(new Shapes.ClauseLocation(firstClauseOf(SMALL))),
+                "the warning about the construction asks where the clause it points at is written");
+        assertFalse(reporting.contains(new Shapes.ClauseLocation(
                         new Clause.Id(TypeSymbols.declared(new TypeKey("limits", "Large")), 0))),
                 "and what it read is what it asked for: nothing declares a `Large` to ask about");
+        assertFalse(judging.contains(new Shapes.ClauseLocation(firstClauseOf(SMALL))),
+                "and checking the body asks what the clause states and not where it is written");
     }
 
     /**

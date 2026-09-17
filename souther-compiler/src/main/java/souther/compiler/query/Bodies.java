@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.check.ClauseLocations;
+import souther.compiler.check.InvariantFinding;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -2389,6 +2391,77 @@ public final class Bodies {
     }
 
     /**
+     * The behaviors of {@code settled} there is a body to check, in the order they are declared.
+     *
+     * <p>One answer to which those are. An injection target has no body here — something else
+     * supplies it (spec §injected-behavior) — so there is nothing to check and nothing missing when
+     * there is none; and a question that worked that out a second time would ask about a body the
+     * check never made, whose answer nothing else in this store is holding.
+     */
+    private static List<String> bodiesToCheck(Hir.Module settled) {
+        Set<String> implemented = new LinkedHashSet<>();
+        for (Hir.FnDef fn : settled.fns()) {
+            implemented.add(fn.name());
+        }
+        List<String> checked = new ArrayList<>();
+        for (Hir.BehaviorDef b : settled.behaviors()) {
+            if (b instanceof Hir.SpecBehavior spec && implemented.contains(spec.name())) {
+                checked.add(spec.name());
+            }
+        }
+        return List.copyOf(checked);
+    }
+
+    /**
+     * What the invariant check found in one module's bodies, said where the rules it is about are
+     * written now.
+     *
+     * <p>A question whose whole answer is its warnings, which is why it is one. What a body means is
+     * settled without asking where any rule it is judged against is written ({@link CheckedBody});
+     * a caret under one of those rules is where it is written and nowhere else. Held in one answer,
+     * an edit that moves a rule and changes nothing it states would either reach every body judged
+     * against it or leave the warning quoting the line the rule used to be on — the two cannot both
+     * be right, and they are not one question.
+     *
+     * <p>So this reads the findings and points at them, and depends on where every rule it points at
+     * is written. That dependency is what it is for.
+     *
+     * <p>Asked of the module rather than of each body, the way every other warning-only question
+     * here is asked ({@link Compilation#answerWarnings}). What a finding costs to say is a lookup
+     * per clause, so which body it came from decides nothing about what this repeats.
+     */
+    public record InvariantWarnings(String module) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return module;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(module));
+            // A module whose own check stopped built nothing for a body to be checked against, so
+            // its bodies were never checked and there is nothing here that was found in one.
+            Answer<ModuleCheck.Of> checkedModule = db.ask(new ModuleCheck(module));
+            if (!settled.present() || !checkedModule.present() || checkedModule.value().stopped()) {
+                return Answer.of(true);
+            }
+            ClauseLocations written = Shapes.clauseLocations(db);
+            List<Report> reports = new ArrayList<>();
+            for (String behavior : bodiesToCheck(settled.value())) {
+                Answer<CheckedBody> checked = db.ask(new CheckedBehavior(module, behavior));
+                if (!checked.present()) {
+                    continue;
+                }
+                for (InvariantFinding found : checked.value().found()) {
+                    reports.add(Report.of(found.reportedAs(written)));
+                }
+            }
+            return Answer.of(true, reports);
+        }
+    }
+
+    /**
      * One behavior's body checked against the behavior it implements, as the Core the backend emits.
      *
      * <p>What it reads is the behavior, its {@code let}, and what the module around it means. Not
@@ -2463,7 +2536,6 @@ public final class Bodies {
                                     policy, db.readings()),
                             contracts.present() ? contracts.value() : Map.of())
                     : null;
-            List<Diagnostic> warnings = new ArrayList<>();
             try {
                 SpecChecker.Checked checked =
                         TypeChecker.checkBehavior(spec.value(), fn.value(),
@@ -2473,13 +2545,8 @@ public final class Bodies {
                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
                         Shapes.effectiveFieldTypes(db),
                         calleeSigs.value(), reqSigs.value(),
-                        inliner.value(), sigs.value(), constructs.value(),
-                        warnings);
+                        inliner.value(), sigs.value(), constructs.value());
                 Core core = checked.emitted();
-                List<Report> reports = new ArrayList<>();
-                for (Diagnostic warning : warnings) {
-                    reports.add(Report.of(warning));
-                }
                 // The last thing done to a body before it is emitted, and the only one that is not a
                 // check: a fold that only grows a list is turned into a build (see GrowingFold).
                 // What the operations of the language hand their closures, read here because here
@@ -2513,7 +2580,13 @@ public final class Bodies {
                         //
                         // Not rewritten the way the emitted one is. A fold turned into a build is
                         // what a backend writes out, and the analysis reads the operation.
-                        checked.analysis()), reports);
+                        checked.analysis(),
+                        // What the analysis found, carried and not reported. Saying it here would
+                        // mean asking where every clause it is about is written, and this answer
+                        // is what a body means rather than what a reader is shown of it — an edit
+                        // that moves one of those clauses would then reach every body judged
+                        // against it. InvariantWarnings asks, because it is the one pointing.
+                        checked.found()));
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.
@@ -2728,11 +2801,21 @@ public final class Bodies {
      *                 themselves, or null where this behavior has no such representation. Two trees
      *                 and not one, and which is which is said by the type rather than by which
      *                 accessor a reader happened to call
+     * @param found    what the invariant check found about the constructions in it, said nowhere yet.
+     *                 Part of what checking this body came to and not a report of it: a finding is
+     *                 about this body and the rules it is judged against, and where those rules are
+     *                 written is a question {@link InvariantWarnings} asks when it points at one
      */
     public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements,
                              souther.compiler.coverage.DecisionSources decisions,
                              souther.compiler.coverage.SuppliedRules supplied,
-                             AnalysisBody analysis) {}
+                             AnalysisBody analysis,
+                             List<InvariantFinding> found) {
+
+        public CheckedBody {
+            found = List.copyOf(found);
+        }
+    }
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
@@ -2749,8 +2832,9 @@ public final class Bodies {
      * already: absent is a check that did not, present is one that did, and this is what the one
      * that did produced. A reader wanting only the fact asks whether the answer is present.
      *
-     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
-     * is one body, and a caller that wants them reads them from there.
+     * <p>What the check found is not in here. A warning belongs to the question that says it, which
+     * is the one that has somewhere to point ({@link InvariantWarnings}), and a caller that wants
+     * them reads them from there.
      */
     public static final class Elaborated {
 
@@ -2967,10 +3051,6 @@ public final class Bodies {
             // type absorbs so that the check can carry on, and stopping here would mean a mistake in
             // one declaration silencing every other definition in the file.
             boolean named = Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value());
-            Set<String> implemented = new LinkedHashSet<>();
-            for (Hir.FnDef fn : settled.value().fns()) {
-                implemented.add(fn.name());
-            }
             // In the order the module declares them, which is what the numbering below is of.
             java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
             Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
@@ -2988,22 +3068,17 @@ public final class Bodies {
             if (!module.value().stopped()) {
                 // In the order they are declared, so what the backend emits does not move with what
                 // the check happened to ask for first.
-                for (Hir.BehaviorDef b : settled.value().behaviors()) {
-                    // An injection target has no body here — something else supplies it (spec §injected-behavior)
-                    // — so there is nothing to check and nothing missing when there is none.
-                    if (!(b instanceof Hir.SpecBehavior spec) || !implemented.contains(spec.name())) {
-                        continue;
-                    }
-                    Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, spec.name()));
+                for (String behavior : bodiesToCheck(settled.value())) {
+                    Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
                     if (core.present()) {
-                        bodies.put(spec.name(), core.value().body());
-                        elements.put(spec.name(), core.value().elements());
+                        bodies.put(behavior, core.value().body());
+                        elements.put(behavior, core.value().elements());
                         // Only where there is one. A behavior with no representation for the
                         // analysis to read is absent from here, which is what a reader owed the
                         // meanings is answered with — the tree beside it is a different question's
                         // answer and is not a fallback.
                         if (core.value().analysis() != null) {
-                            analysed.put(spec.name(), core.value().analysis());
+                            analysed.put(behavior, core.value().analysis());
                         }
                         decisions.putAll(core.value().decisions().byFork());
                         supplied.putAll(core.value().supplied().byExpansion());
