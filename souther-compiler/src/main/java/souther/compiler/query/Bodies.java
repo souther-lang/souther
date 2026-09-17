@@ -926,7 +926,7 @@ public final class Bodies {
                                 Shapes.publishedDeclarations(db), Shapes.declarationKinds(db));
                         out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
                                 Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                                Shapes.newtypeInners(db),
+                                Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
                                 helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its
@@ -2471,6 +2471,7 @@ public final class Bodies {
                         policy,
                         dischargeSource, scope.value(), Shapes.publishedDeclarations(db),
                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
+                        Shapes.effectiveFieldTypes(db),
                         calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
                         warnings);
@@ -2680,7 +2681,7 @@ public final class Bodies {
                 }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                        Shapes.newtypeInners(db),
+                        Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
                         withNoValue.value(), Shapes.declarationLocations(db),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,

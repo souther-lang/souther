@@ -79,9 +79,9 @@ public final class CheckSurface implements Assembly {
      * this surface could differ from the same one read anywhere else. {@code desugared} is the same
      * of the definitions, answered for by {@code Shapes.DesugaredFns}.
      *
-     * <p>{@code scope} is what a name means below the derivation, which is what a definition is held
-     * to after it is rewritten; {@code signatures} is what each behavior takes and answers with,
-     * which says where a row's values stand.
+     * <p>{@code newtypes} is which names were declared wrapping one value, which is what deciding
+     * whether an application is a construction comes to; {@code signatures} is what each behavior
+     * takes and answers with, which says where a row's values stand.
      *
      * <p>Which answer stands in for which part is checked and not taken from the key it arrived
      * under. Both tables are keyed by the name written here, and a name is a name in some module —
@@ -100,7 +100,8 @@ public final class CheckSurface implements Assembly {
      */
     public static CheckSurface assemble(InvariantSettled settling,
                                         Map<String, Normalized.Def> normalized,
-                                        Map<String, Desugared.Fn> desugared, Symbols scope,
+                                        Map<String, Desugared.Fn> desugared,
+                                        DeclarationNewtypes newtypes,
                                         Map<ValueName.Behavior, Sig> signatures,
                                         FakeTables declared) {
         Hir.Module settled = settling.module();
@@ -145,7 +146,7 @@ public final class CheckSurface implements Assembly {
             }
             desugaredFrom.add(came);
             fns.add(Desugared.Fn.reestablish(
-                    HelperNames.qualifyImportsIn(came.read(), self), scope));
+                    HelperNames.qualifyImportsIn(came.read(), self), newtypes));
         }
         List<Hir.Example> examples = new ArrayList<>();
         for (Hir.Example block : settled.examples()) {
@@ -160,7 +161,7 @@ public final class CheckSurface implements Assembly {
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written, scope, signatures);
+        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, signatures);
         return rows.defs().isEmpty() ? written
                 : new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
                         List.copyOf(rows.defs().values()), rows.methods());

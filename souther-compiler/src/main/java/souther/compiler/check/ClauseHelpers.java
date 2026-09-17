@@ -93,7 +93,8 @@ public final class ClauseHelpers {
      */
     public static Map<TypeKey, ExpandedClauses> expandedClausesOf(
             Expandable expandable, Symbols symbols, PublishedDeclarations declarations,
-            DeclarationKinds kinds, Map<String, Hir.FnDef> published) {
+            DeclarationKinds kinds, DeclarationNewtypes newtypes,
+            Map<String, Hir.FnDef> published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols, declarations, kinds);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
@@ -114,7 +115,7 @@ public final class ClauseHelpers {
             List<Made> made = new ArrayList<>();
             Hir.Def expanded = withInlinedInvariants(inliner, def, made::add);
             out.put(declares,
-                    NewtypeDesugar.rewriteInvariantsOf(expanded, symbols) instanceof Hir.Data d
+                    NewtypeDesugar.rewriteInvariantsOf(expanded, newtypes) instanceof Hir.Data d
                             ? new ExpandedClauses(declares, paired(d.invariants(), made))
                             : ExpandedClauses.nothingToExpand(declares));
         }

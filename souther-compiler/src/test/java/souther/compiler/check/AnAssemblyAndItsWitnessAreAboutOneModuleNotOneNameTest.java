@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -87,7 +86,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         Map<String, Normalized.Def> elsewhere = new LinkedHashMap<>();
         for (InvariantSettled.Def def : settling.defs()) {
             elsewhere.put(def.name(),
-                    Normalized.Def.of(def, ResolvedSymbols.none(DefaultStdlib.get())));
+                    Normalized.Def.of(def, DeclarationNewtypes.asWritten(
+                            ResolvedSymbols.none(DefaultStdlib.get()))));
         }
 
         assertNotEquals(normalizedIn(declarations), List.copyOf(elsewhere.values()),
@@ -98,7 +98,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
             itsOwn.put(each.name(), each);
         }
         CheckSurface read = CheckSurface.assemble(settling, elsewhere, itsOwn,
-                Scopes.derived(Compilation.ofSource(WITH_A_CONSTRUCTION, "Main").db(), "m").value(),
+                DeclarationNewtypes.NONE,
                 Map.of(), FakeTables.classify(settling.module()));
         assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
 
@@ -136,8 +136,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> CheckSurface.assemble(settling, normalized, underTheWrongName,
-                        Scopes.derived(Compilation.ofSource(TWO_DEFINITIONS, "Main").db(), "m")
-                                .value(),
+                        DeclarationNewtypes.NONE,
                         Map.of(), FakeTables.classify(settling.module())),
                 "an answer for one definition stood in for another, and the name they were looked"
                         + " up by is the same shape");
@@ -172,11 +171,12 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         Hir.FnDef otherBody = first.withBody(second.body());
         Map<String, Desugared.Fn> read = new LinkedHashMap<>();
         read.put(first.name(),
-                Desugared.Fn.desugar(otherBody, ResolvedSymbols.none(DefaultStdlib.get())));
+                Desugared.Fn.desugar(otherBody,
+                        DeclarationNewtypes.asWritten(ResolvedSymbols.none(DefaultStdlib.get()))));
         read.put(second.name(), itsOwn.desugaredFrom().get(1));
 
         CheckSurface assembled = CheckSurface.assemble(settling, normalized, read,
-                Scopes.derived(Compilation.ofSource(TWO_DEFINITIONS, "Main").db(), "m").value(),
+                DeclarationNewtypes.NONE,
                 Map.of(), FakeTables.classify(settling.module()));
         assertNotNull(assembled, "the assembly is made, so the refusal below is about the pairing");
         assertNotEquals(declarations.fns(), assembled.desugaredFrom(),

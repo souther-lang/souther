@@ -161,7 +161,7 @@ public final class RowFixtures {
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
      */
-    public static Emitted emitted(CheckSurface surface, Symbols symbols,
+    public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
                                   Map<ValueName.Behavior, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new IdentityHashMap<>();
@@ -202,7 +202,7 @@ public final class RowFixtures {
                     surface.name(), List.of(), answers, new Hir.FnBody.Written(operand),
                     new Hir.Modifiers(true, true), new DefinitionRole.RowValue(position),
                     operand.pos());
-            out.put(name, Desugared.Fn.desugar(wrapped, symbols).read());
+            out.put(name, Desugared.Fn.desugar(wrapped, newtypes).read());
         }
         return new Emitted(out, methods);
     }

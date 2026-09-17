@@ -54,7 +54,7 @@ public final class ExecutableInvariants {
      */
     public static ValueShape of(Hir.Data data, DerivedSymbols symbols,
                                 PublishedDeclarations published, DeclarationKinds kinds,
-                                NewtypeInners inners,
+                                NewtypeInners inners, EffectiveFieldTypes fieldTypes,
                                 Map<String, Type> helpers) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
@@ -69,7 +69,8 @@ public final class ExecutableInvariants {
         Scope reading = DataChecker.fieldScope(data.declares(), types,
                 FieldBindings.asWritten(symbols)).reaching(helpers);
         CheckContext ctx =
-                CheckContext.executableInvariant(symbols, published, kinds, inners, data);
+                CheckContext.executableInvariant(symbols, published, kinds, inners, fieldTypes,
+                        data);
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (Hir.InvariantClause clause : TypeOps.settledClausesGoverning(data.declares(), symbols)) {
             // Desugared first, the way a body is: a clause writing a comprehension states the same

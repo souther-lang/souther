@@ -258,6 +258,7 @@ public final class SpecChecker {
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, PublishedDeclarations published,
                                     DeclarationKinds kinds, NewtypeInners inners,
+                                    EffectiveFieldTypes fieldTypes,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
@@ -346,7 +347,7 @@ public final class SpecChecker {
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, published, kinds, inners, null, reqSigs)
+                new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn), output);
         Type rt = elaboratedBody.type();
@@ -410,7 +411,7 @@ public final class SpecChecker {
                 // per-behavior query as well, which asks about one body and not about the module, so
                 // the clause check has not run before it. Measured from there by
                 // `askingOneBodyOfSuchAModuleReportsNoOverDeclaration`.
-                if (isUnitData(declaredName.answered().type(), symbols)) {
+                if (isUnitData(declaredName.answered().type(), kinds)) {
                     continue;
                 }
                 if (!constructed.builds(declaredName.answered().type())) {
@@ -459,7 +460,7 @@ public final class SpecChecker {
         // emitted tree, whose operations are no longer operations.
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
-                        new CheckContext(symbols, published, kinds, inners, null, reqSigs)
+                        new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
                                 .withCallees(calleeSigs)
                                 .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = discharge == null
@@ -556,9 +557,16 @@ public final class SpecChecker {
     }
 
 
-    /** Whether a name resolves to a unit data of this compilation or of a module it reads. */
-    private static boolean isUnitData(TypeSymbol type, Symbols symbols) {
-        return symbols.declaredNode(type) instanceof Hir.UnitData;
+    /**
+     * Whether a name resolves to a unit data of this compilation or of a module it reads.
+     *
+     * <p>Which form a declaration was written in, asked of what was settled when its module was
+     * indexed. Read off the declaration, a clause naming a unit of another module would be asked
+     * again whenever that declaration moved.
+     */
+    private static boolean isUnitData(TypeSymbol type, DeclarationKinds kinds) {
+        return type instanceof TypeSymbol.AtModule at
+                && kinds.of(at.key()) == DeclarationKind.UNIT;
     }
 
     /**
@@ -575,12 +583,13 @@ public final class SpecChecker {
      * caller has the module's other clauses to ask the same of, and a wrong clause is one thing to
      * rewrite. That is the reason E1002 and E1006 report each name too.
      */
-    static List<Diagnostic> unitDataNamedInConstructs(Hir.SpecBehavior spec, Symbols symbols) {
+    static List<Diagnostic> unitDataNamedInConstructs(Hir.SpecBehavior spec,
+                                                      DeclarationKinds kinds) {
         List<Diagnostic> named = new ArrayList<>();
         for (Hir.Name name : spec.constructs()) {
             // A name that answers nothing names no data to be kept or removed; it is reported where
             // it is written.
-            if (name.answered() != null && isUnitData(name.answered().type(), symbols)) {
+            if (name.answered() != null && isUnitData(name.answered().type(), kinds)) {
                 String c = name.written();
                 named.add(Diagnostic.at(spec.pos())
                         .hint(new DeclarationMessage.RemoveTheConstructsEntry(c))

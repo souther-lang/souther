@@ -164,7 +164,8 @@ public final class HelperTyping {
             }
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
                     new CheckContext(symbols, published, kinds,
-                            NewtypeInners.asWritten(symbols), null, reachable)
+                            NewtypeInners.asWritten(symbols),
+                            EffectiveFieldTypes.asWritten(symbols), null, reachable)
                             .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
@@ -683,7 +684,8 @@ public final class HelperTyping {
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
                         env, new CheckContext(symbols, published, kinds,
-                                NewtypeInners.asWritten(symbols), null, reqs));
+                                NewtypeInners.asWritten(symbols),
+                                EffectiveFieldTypes.asWritten(symbols), null, reqs));
                 if (TypeOps.unify(declared.get(i), at, bind, published) instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
@@ -765,7 +767,8 @@ public final class HelperTyping {
             try {
                 got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
                         new CheckContext(symbols, published, kinds,
-                                NewtypeInners.asWritten(symbols), null, reqs));
+                                NewtypeInners.asWritten(symbols),
+                                EffectiveFieldTypes.asWritten(symbols), null, reqs));
             } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }

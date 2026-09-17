@@ -250,9 +250,13 @@ public final class Elaborator {
                     // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
+                // Which form the name was declared in, asked of what was settled when its module
+                // was indexed. A construction builds a product and nothing else, and reading the
+                // declaration to find that out is reading a tree to answer a question about its
+                // form — which is how a body came to be checked again for a declaration of another
+                // module that had only moved.
                 if (!(built.type() instanceof TypeSymbol.AtModule constructed)
-                        || !(ctx.symbols().declaredNode(constructed)
-                                instanceof Hir.Data owner)) {
+                        || ctx.kinds().of(constructed.key()) != DeclarationKind.PRODUCT) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
@@ -273,7 +277,7 @@ public final class Elaborator {
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
-                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx,
+                        ctx.fieldTypes().of(constructed), env, ctx,
                         nd.mayOmitOptionalFields());
                 yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
             }

@@ -8,6 +8,7 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
+import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -225,7 +226,11 @@ final class BodyGen {
          * as the Core the checker made (issue #1080).
          */
         CheckContext context() {
-            return new CheckContext(symbols, ctx.published, ctx.kinds, ctx.inners, data, reqSigs());
+            // What each field holds is read off the world here, for the reason the context this
+            // takes its other answers from reads what a name wraps off it: this backend is handed
+            // no answer of the compilation's to read either from.
+            return new CheckContext(symbols, ctx.published, ctx.kinds, ctx.inners,
+                    EffectiveFieldTypes.asWritten(symbols), data, reqSigs());
         }
 
         /**

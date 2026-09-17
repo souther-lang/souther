@@ -211,7 +211,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> Apply.carriedByValue x1",
             "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> NewData.carriedByValue x1",
             "souther/compiler/check/HelperNames#publishedBy(Lsouther/compiler/ast/Hir$Expr;Ljava/lang/String;)Lsouther/compiler/ast/Hir$Expr; -> NewData.publishedBy x1",
-            "souther/compiler/check/NewtypeDesugar#go(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/check/Symbols;)Lsouther/compiler/ast/Hir$Expr; -> NewData.fromApply x1",
+            "souther/compiler/check/NewtypeDesugar#go(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/check/DeclarationNewtypes;)Lsouther/compiler/ast/Hir$Expr; -> NewData.fromApply x1",
             "souther/compiler/check/Resolve#applied(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Ast$Var;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
             "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
             "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> NewData.read x1",

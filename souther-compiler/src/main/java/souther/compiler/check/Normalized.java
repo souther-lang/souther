@@ -41,8 +41,8 @@ public final class Normalized {
          * nothing. Refusing here, this would be a producer whose failure decides what a declaration
          * means to every reader below — which is the shape it is written to stop.
          */
-        static Def of(InvariantSettled.Def settled, ResolvedSymbols scope) {
-            return over(NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope));
+        static Def of(InvariantSettled.Def settled, DeclarationNewtypes newtypes) {
+            return over(NewtypeDesugar.rewriteInvariantsOf(settled.def(), newtypes));
         }
 
 

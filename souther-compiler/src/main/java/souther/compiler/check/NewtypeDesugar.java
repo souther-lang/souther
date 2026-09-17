@@ -26,10 +26,10 @@ public final class NewtypeDesugar {
     private NewtypeDesugar() {}
 
     /** Rewrites every {@code Call(newtype, [arg])} in the module's fn bodies to a {@code NewData}. */
-    public static Hir.Module rewrite(Hir.Module m, Symbols symbols) {
+    public static Hir.Module rewrite(Hir.Module m, DeclarationNewtypes newtypes) {
         List<Hir.FnDef> fns = new ArrayList<>();
         for (Hir.FnDef fn : m.fns()) {
-            fns.add(rewriteOf(fn, symbols));
+            fns.add(rewriteOf(fn, newtypes));
         }
         return m.withFns(fns);
     }
@@ -43,9 +43,9 @@ public final class NewtypeDesugar {
      * one such application would leave every other definition without the form the check and the
      * backend read.
      */
-    public static Hir.FnDef rewriteOf(Hir.FnDef fn, Symbols symbols) {
+    public static Hir.FnDef rewriteOf(Hir.FnDef fn, DeclarationNewtypes newtypes) {
         Hir.FnBody body = switch (fn.body()) {
-            case Hir.FnBody.Written w -> new Hir.FnBody.Written(go(w.expr(), symbols));
+            case Hir.FnBody.Written w -> new Hir.FnBody.Written(go(w.expr(), newtypes));
             case Hir.FnBody.Intrinsic i -> i;
         };
         return fn.withBody(body);
@@ -57,10 +57,10 @@ public final class NewtypeDesugar {
      * are expanded into it — so a construction written in a helper arrives here as the construction
      * it is, and every check over an invariant reads one spelling rather than two.
      */
-    public static Hir.Module rewriteInvariants(Hir.Module m, Symbols symbols) {
+    public static Hir.Module rewriteInvariants(Hir.Module m, DeclarationNewtypes newtypes) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            defs.add(rewriteInvariantsOf(def, symbols));
+            defs.add(rewriteInvariantsOf(def, newtypes));
         }
         return m.withDefs(defs);
     }
@@ -74,10 +74,10 @@ public final class NewtypeDesugar {
      * whole module, and one bad application would leave every other declaration without the form
      * every later stage reads.
      */
-    public static Hir.Def rewriteInvariantsOf(Hir.Def def, Symbols symbols) {
+    public static Hir.Def rewriteInvariantsOf(Hir.Def def, DeclarationNewtypes newtypes) {
         if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
             return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                    Hir.mapClauses(d.invariants(), inv -> rewriteInvariant(inv, symbols)),
+                    Hir.mapClauses(d.invariants(), inv -> rewriteInvariant(inv, newtypes)),
                     d.pos());
         }
         return def;
@@ -92,14 +92,14 @@ public final class NewtypeDesugar {
      * text. Sent through the declaration instead, a part would have to be carried on a declaration
      * built to hold it, and would then take whatever else rewriting a declaration comes to mean.
      */
-    public static Hir.Expr rewriteInvariant(Hir.Expr invariant, Symbols symbols) {
-        return go(invariant, symbols);
+    public static Hir.Expr rewriteInvariant(Hir.Expr invariant, DeclarationNewtypes newtypes) {
+        return go(invariant, newtypes);
     }
 
-    private static Hir.Expr go(Hir.Expr e, Symbols symbols) {
+    private static Hir.Expr go(Hir.Expr e, DeclarationNewtypes newtypes) {
         return switch (e) {
             case Hir.Apply call -> {
-                List<Hir.Expr> args = mapExprs(call.args(), symbols);
+                List<Hir.Expr> args = mapExprs(call.args(), newtypes);
                 // Whether this name is a type or something else was answered when the module's names
                 // were resolved. Asking the type namespace again here would read a binding of the
                 // same spelling as the type it shadows, and rewrite an application of it into a
@@ -110,9 +110,11 @@ public final class NewtypeDesugar {
                 // The type name is the one the author applied, which a construction is named by. A
                 // callee denoting a type is one they wrote, so this holds wherever the branch is
                 // taken; asked of the callee it would be whatever a lowering had put there.
+                // Whether the name was declared as a newtype, which was settled when its module was
+                // indexed. Read off the declaration instead, a body writing `T(v)` for a `T` of
+                // another module would be rewritten again whenever that declaration moved.
                 if (built != null && call.applied().name() instanceof WrittenName wrote
-                        && symbols.declaredNode(built) instanceof Hir.Data nt
-                        && nt.newtype() && args.size() == 1) {
+                        && DeclarationFacts.isNewtype(built, newtypes) && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
                     yield Hir.NewData.fromApply(call, new Hir.Name.Denoting(wrote, built),
@@ -123,76 +125,76 @@ public final class NewtypeDesugar {
             case Hir.NewData nd -> {
                 List<Hir.FieldInit> inits = new ArrayList<>();
                 for (Hir.FieldInit fi : nd.inits()) {
-                    inits.add(fi.withValue(go(fi.value(), symbols)));
+                    inits.add(fi.withValue(go(fi.value(), newtypes)));
                 }
                 yield nd.with(inits, nd.spreads());
             }
-            case Hir.Neg neg -> new Hir.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
+            case Hir.Neg neg -> new Hir.Neg(go(neg.operand(), newtypes), neg.pos(), neg.region());
             case Hir.Binary bin ->
-                    new Hir.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols),
+                    new Hir.Binary(bin.op(), go(bin.left(), newtypes), go(bin.right(), newtypes),
                             bin.origin(), bin.pos(), bin.region());
-            case Hir.FieldAccess fa -> fa.withTarget(go(fa.target(), symbols));
-            case Hir.RowCollection row -> new Hir.RowCollection(mapExprs(row.elements(), symbols),
+            case Hir.FieldAccess fa -> fa.withTarget(go(fa.target(), newtypes));
+            case Hir.RowCollection row -> new Hir.RowCollection(mapExprs(row.elements(), newtypes),
                     row.origin(), row.pos(), row.region());
-            case Hir.ListLit lit -> new Hir.ListLit(mapExprs(lit.elements(), symbols), lit.origin(),
+            case Hir.ListLit lit -> new Hir.ListLit(mapExprs(lit.elements(), newtypes), lit.origin(),
                     lit.pos(), lit.region());
             case Hir.ListComp comp ->
-                    new Hir.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols),
+                    new Hir.ListComp(go(comp.element(), newtypes), mapExprs(comp.guards(), newtypes),
                             comp.origin(), comp.pos(),
                             comp.region());
             case Hir.LetIn li ->
-                    new Hir.LetIn(li.binder(), go(li.value(), symbols), li.declaredType(), li.annotated(), li.opens(),
-                            go(li.body(), symbols), li.pos(), li.region());
+                    new Hir.LetIn(li.binder(), go(li.value(), newtypes), li.declaredType(), li.annotated(), li.opens(),
+                            go(li.body(), newtypes), li.pos(), li.region());
             // A construction written inside a helper is written `T(v)` there too, and reaches an
             // invariant already expanded. What `given` holds is inside the body as well, and is
             // rewritten there.
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), go(b.value(), symbols)));
+                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), go(b.value(), newtypes)));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
-                        ex.declaredReturn(), go(ex.body(), symbols), ex.pos(), ex.region());
+                        ex.declaredReturn(), go(ex.body(), newtypes), ex.pos(), ex.region());
             }
             case Hir.If iff ->
-                    new Hir.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols),
+                    new Hir.If(go(iff.cond(), newtypes), go(iff.then(), newtypes), go(iff.els(), newtypes),
                             iff.origin(), iff.pos(), iff.region());
             // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it
             case Hir.IfConstructed ic ->
-                    new Hir.IfConstructed(go(ic.construct(), symbols), ic.binder(),
-                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.origin(), ic.pos(),
+                    new Hir.IfConstructed(go(ic.construct(), newtypes), ic.binder(),
+                            go(ic.then(), newtypes), arms(ic.els(), newtypes), ic.origin(), ic.pos(),
                             ic.region());
-            case Hir.Block b -> new Hir.Block(b.params(), go(b.body(), symbols), b.rule(), b.pos(),
+            case Hir.Block b -> new Hir.Block(b.params(), go(b.body(), newtypes), b.rule(), b.pos(),
                     b.region());
-            case Hir.Tuple tup -> new Hir.Tuple(mapExprs(tup.elements(), symbols), tup.pos(),
+            case Hir.Tuple tup -> new Hir.Tuple(mapExprs(tup.elements(), newtypes), tup.pos(),
                     tup.region());
-            case Hir.TupleGet tg -> new Hir.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(),
+            case Hir.TupleGet tg -> new Hir.TupleGet(go(tg.tuple(), newtypes), tg.index(), tg.arity(),
                     tg.pos(), tg.region());
             case Hir.Match mt -> {
                 List<Hir.Case> cases = new ArrayList<>();
                 for (Hir.Case c : mt.cases()) {
-                    cases.add(new Hir.Case(c.caseTypes(), c.binding(), go(c.body(), symbols),
+                    cases.add(new Hir.Case(c.caseTypes(), c.binding(), go(c.body(), newtypes),
                             c.unwrapAsserts(), c.pos()));
                 }
-                yield new Hir.Match(go(mt.scrutinee(), symbols), cases, mt.origin(), mt.pos(),
+                yield new Hir.Match(go(mt.scrutinee(), newtypes), cases, mt.origin(), mt.pos(),
                         mt.region());
             }
             default -> e;   // literals, Var — no child expressions to rewrite
         };
     }
 
-    private static List<Hir.Expr> mapExprs(List<Hir.Expr> es, Symbols symbols) {
+    private static List<Hir.Expr> mapExprs(List<Hir.Expr> es, DeclarationNewtypes newtypes) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Hir.Expr e : es) {
-            out.add(go(e, symbols));
+            out.add(go(e, newtypes));
         }
         return out;
     }
 
-    private static List<Hir.ElseArm> arms(List<Hir.ElseArm> arms, Symbols symbols) {
+    private static List<Hir.ElseArm> arms(List<Hir.ElseArm> arms, DeclarationNewtypes newtypes) {
         List<Hir.ElseArm> out = new ArrayList<>();
         for (Hir.ElseArm arm : arms) {
-            out.add(arm.with(go(arm.body(), symbols)));
+            out.add(arm.with(go(arm.body(), newtypes)));
         }
         return out;
     }
