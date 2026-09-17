@@ -85,6 +85,49 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
                 () -> "and the points the rows were already at are where they were:\n" + report);
     }
 
+    /**
+     * A line on an order that names no value beside it is looked for all the same.
+     *
+     * <p>Nothing stands one step outside {@code y <= 2.0m * x}: between any two decimals there is
+     * another, so the point against the line out there is one the order cannot write and the border
+     * owes no row at it. What the line refuses is not empty, though — it is every value above the
+     * line — and an input the two lines part company at is one of those. Looked for at the point
+     * instead, the search was never made and the block said nothing while the report asked for a
+     * row.
+     *
+     * <p>What comes back here is a figure of this compiler's rather than a row, which is the other
+     * half of the same rule: a side is never settled by looking, so what such a search says is that
+     * it left something untried. That is a thing an author can act on; silence is not.
+     */
+    @Test
+    void aLineOnAnOrderWithNoValueBesideItIsStillSearched() {
+        String report = run("""
+                module m
+
+                behavior f : (x: Decimal, y: Decimal) -> Bool
+
+                let f (x, y) = {
+                    guard y <= 2.0m * x else false
+
+                    true
+                }
+
+                example f
+                  | (0.0m, 0.0m)   -> true
+                  | (0.0m, 1.0m)   -> false
+                  | (13.0m, 23.0m) -> true
+                  | (12.0m, 24.0m) -> true
+                """);
+
+        assertEquals(List.of("no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
+                        + " and a row at `x = -1, y = -2` would"), findings(report),
+                () -> "the rows meet every point this order owes one at and still leave a line"
+                        + " standing:\n" + report);
+        assertTrue(report.contains("no row for `-2 * x + y = 0 against -3 * x + y = 0` in `f`"),
+                () -> "and the block says what looking for a row came to, rather than passing"
+                        + " over a line whose point against it the order cannot write:\n" + report);
+    }
+
     /** The model, with the rows handed in. */
     private static String over(String rows) {
         return """

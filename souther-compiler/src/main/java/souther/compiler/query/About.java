@@ -317,10 +317,17 @@ public sealed interface About {
          * would name a place a later search had no part in choosing.
          */
         public String shownSaid() {
-            Map<NumericTerm, Place> at = line.toldApart().standingAt() != null
-                    ? line.toldApart().standingAt() : allowed().tellsApartAt();
-            return at == null ? null
-                    : OrderedAffineBoundary.saidAt(line.border().cut().of(), at);
+            // The reading that composed it, and the place written at that reading's own positions.
+            // A line read in two places is read at two sets of them, so a place shown against the
+            // reading this finding happens to carry would name positions the row says nothing
+            // about — which is a sentence naming nowhere over a row that was composed.
+            if (line.toldApart().offered().orElse(null)
+                    instanceof ARowTellingTheLinesApart.AtOneReading made) {
+                return OrderedAffineBoundary.saidAt(made.reading().cut().of(), made.standingAt());
+            }
+            Map<NumericTerm, Place> saw = allowed().tellsApartAt();
+            return saw == null ? null
+                    : OrderedAffineBoundary.saidAt(line.border().cut().of(), saw);
         }
 
         @Override

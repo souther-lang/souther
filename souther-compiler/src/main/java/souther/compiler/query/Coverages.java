@@ -30,7 +30,6 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
-import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -920,40 +919,62 @@ final class Coverages {
      * What looking for a row that tells this line from the one beside it came to, or that nobody
      * asked where there is no such line.
      *
-     * <p><b>At the line's own {@code OFF} point and nowhere else.</b> What tells the two lines
-     * apart is an input the model refuses and the other keeps, and the model refuses everything at
-     * that point by definition of it — so the criterion is the one the point already has, and the
-     * whole of what is added is the condition that the other line keeps a row there
-     * ({@link AnotherLineTheRowsAllow.OneDoes#tellingThemApart}).
+     * <p><b>Everywhere this line refuses, and not at one point of it.</b> What tells the two lines
+     * apart is an input the model refuses and the other keeps, so the values to look through are
+     * the ones this line refuses — which is a run, and is what the point away from the line is in.
+     * Read as the point <em>against</em> the line instead, two things went wrong at once: a
+     * quantity whose order names no value beside the line has no such point and was never searched,
+     * and a level the rules leave nothing at came back as a proof that the model leaves nowhere to
+     * write — a proof about one level, published as a proof about every input the two part company
+     * at.
      *
-     * <p>Asked whether or not a row already stands at that point. A row at the point shows the line
-     * has not moved and says nothing about which way it runs, which is what raised this question:
-     * the point being met is what makes the question due rather than what answers it.
+     * <p>The run whole, which is the run the {@code OUT} point is in together with the value
+     * against the line that point leaves out. That value is refused like every other in the run,
+     * and it is the nearest of them: a search starts at the line and walks away, so where the order
+     * names it, it is the first thing tried.
      *
-     * <p>Nothing where the line has one {@code OFF} point in two places. A rule that names a value
-     * has a point outside it on each side, and no line beside such a rule is named in the first
-     * place — so this is the shape of the answer rather than a case to choose in.
+     * <p>Asked whether or not a row already stands in there. A row at a point shows the line has
+     * not moved and says nothing about which way it runs, which is what raised this question: the
+     * points being met is what makes the question due rather than what answers it.
      */
     private static ARowTellingTheLinesApart tellingApart(BorderAssessment border,
                                                          OneSearchOfABorder search) {
         if (!(border.beside() instanceof AnotherLineTheRowsAllow.OneDoes named)) {
             return ARowTellingTheLinesApart.notAsked();
         }
-        DomainPoint off = null;
-        for (DomainPoint point : border.items().keySet()) {
-            if (border.border().roleOf(point) == PointRole.OFF) {
-                if (off != null) {
-                    return ARowTellingTheLinesApart.notAsked();
-                }
-                off = point;
-            }
-        }
-        if (off == null || !(border.border().demand(off) instanceof Demand.Owed owed)) {
+        Criterion refused = refuses(border.border());
+        if (refused == null) {
             // The rules leave nothing outside this line, so there is nowhere a row could stand that
-            // the model refuses — and an input the two lines part company at is one of those.
+            // the model refuses — and every input the two lines part company at is one of those.
             return ARowTellingTheLinesApart.notAsked();
         }
-        return search.tellingApart(owed.criterion(), border.border().label(off), named);
+        return search.tellingApart(refused, border.border().label(), named);
+    }
+
+    /**
+     * The values {@code border} refuses, as one run, or null where the rules leave none.
+     *
+     * <p>Asked of the point that is in that run rather than worked out here. Where a run beside a
+     * line stops is settled by every other rule reaching this position, and a second derivation of
+     * it would be free to stop somewhere else — which is the one thing a search may not be wrong
+     * about, because a walk of the whole of it is what proves there is nowhere to write.
+     *
+     * <p>The value against the line goes back in. The point out there names the run less that
+     * value, because a row there is what that point is for and the value against the line is what
+     * the point beside it is for; refusing is not divided that way, and a search that left it out
+     * would pass over the nearest input the two lines part company at.
+     */
+    private static Criterion refuses(Border border) {
+        for (DomainPoint point : border.answers().keySet()) {
+            if (point.againstTheLine() || border.roleOf(point).inside()) {
+                continue;   // on the line, or on the side this one keeps
+            }
+            if (border.demand(point) instanceof Demand.Owed owed
+                    && owed.criterion() instanceof Criterion.Within in) {
+                return new Criterion.Within(in.band(), null, in.away());
+            }
+        }
+        return null;
     }
 
     /**
@@ -1022,11 +1043,11 @@ final class Coverages {
         /**
          * What looking for a row that tells this line from {@code beside} came to.
          *
-         * <p>The same criterion the line's {@code OFF} point is at, inside the region where the
-         * line beside it keeps a row. A row there is one the model refuses and that line keeps,
-         * which is the whole of what tells the two apart — so nothing here has to be told which
-         * places the rows already stand at: a row in the file answers alike under both lines and is
-         * outside this region by the same arithmetic that put the threshold where it is.
+         * <p>{@code criterion} is everywhere this line refuses, and the region is narrowed to where
+         * the line beside it keeps a row. A row found there is one the model refuses and that line
+         * keeps, which is the whole of what tells the two apart — so nothing here has to be told
+         * which places the rows already stand at: a row in the file answers alike under both lines
+         * and is outside that region by the same arithmetic that put the threshold where it is.
          */
         ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
                                               AnotherLineTheRowsAllow.OneDoes beside);
@@ -1212,7 +1233,7 @@ final class Coverages {
             public ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
                                                          AnotherLineTheRowsAllow.OneDoes beside) {
                 Looked looked = looked(criterion, label, beside::tellingThemApart);
-                return ARowTellingTheLinesApart.of(looked.offered(), looked.outcomes());
+                return ARowTellingTheLinesApart.of(border, looked.offered(), looked.outcomes());
             }
 
             /**
@@ -1482,28 +1503,12 @@ final class Coverages {
             kept.put(point, together(a.at(point), b.at(point)));
         }
         return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
-                whicheverLooked(a.toldApart(), b.toldApart()));
-    }
-
-    /**
-     * What two readings of one line came to when each was asked for a row that tells it from the
-     * line beside it.
-     *
-     * <p>A row from either is a row, and the one a reader is offered is the first that composed
-     * one. The two were looked for in two regions — a reading is reached under its caller's own
-     * conditions — so one of them finding nowhere to compose is not an answer about the other's
-     * region, and neither is read as one: what comes back is the row where there is one, and what
-     * the reading that looked said where there is not.
-     */
-    private static ARowTellingTheLinesApart whicheverLooked(ARowTellingTheLinesApart a,
-                                                            ARowTellingTheLinesApart b) {
-        if (a.searches().rowToOffer().isPresent()) {
-            return a;
-        }
-        if (b.searches().rowToOffer().isPresent()) {
-            return b;
-        }
-        return a.searches().ran() ? a : b;
+                // Both readings' searches and neither standing for the other. A row is composed in
+                // one reading's region and is written in the positions that reading names, so the
+                // reading travels with it — folded to one here, a row would arrive beside the other
+                // reading's line and the place it stands would be read at positions that line has
+                // none of.
+                a.toldApart().and(b.toldApart()));
     }
 
     /**
