@@ -13,7 +13,6 @@ import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -114,7 +113,10 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
                 case Hir.Data data -> {
                     CheckedData.WithFields built = assertInstanceOf(CheckedData.WithFields.class,
                             published, declared.getKey()::toString);
-                    assertEquals(new ArrayList<>(TypeOps.fieldTypes(data, read.symbols()).keySet()),
+                    // Where the fields stand, asked of what answers that. Read off what each of
+                    // them holds, this would be holding the compiler to an order that answer does
+                    // not state — which is the reading the snapshot exists to be checked against.
+                    assertEquals(TypeOps.fieldLayout(data, read.symbols()),
                             built.fields().stream().map(ValueShape.Field::name).toList(),
                             () -> "the fields of " + declared.getKey());
                     assertEquals(data.newtype(), built instanceof CheckedData.Newtype,

@@ -156,17 +156,17 @@ final class CardinalityTransfer {
         RuleKey emptiestAt = null;
         Emptiness emptiest = null;
         Cardinality.Standing across = Cardinality.atMost(1);   // a record of no fields is one value
-        for (Map.Entry<String, Type> each : fields.entrySet()) {
+        for (String field : TypeOps.fieldLayout(data, source.symbols())) {
             // Every field, and not up to the first one with nothing in it. Which proof the record
-            // carries is settled by how near the proofs are and by the order the fields are declared
-            // in, and a reading that stopped at the first would answer with whichever the traversal
-            // reached — the same model refused for a different reason each time the fields moved.
-            switch (upperAt(each.getValue(), RuleKey.of(each.getKey()), counts, values, source,
+            // carries is settled by how near the proofs are and, where two are equally near, by
+            // where the fields stand — so that is asked of what answers it rather than taken off
+            // the mapping beside it, which answers what each field holds and no order at all.
+            switch (upperAt(fields.get(field), RuleKey.of(field), counts, values, source,
                     answers, granted, new HashSet<>())) {
                 case Cardinality.None it -> {
                     if (emptiest == null || it.why().category().compareTo(emptiest.category()) < 0) {
                         emptiest = it.why();
-                        emptiestAt = RuleKey.of(each.getKey());
+                        emptiestAt = RuleKey.of(field);
                     }
                 }
                 case Cardinality.Standing it -> across = across.times(it);

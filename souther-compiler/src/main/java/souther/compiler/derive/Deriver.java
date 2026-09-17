@@ -67,11 +67,15 @@ public final class Deriver {
         // from it. Asked separately they would agree only by coincidence: a builder with an arm the
         // other lacks reports the shape it did not implement as one the language refuses, which is
         // how an unimplemented case comes to look like a rule (see CodecShape).
+        //
+        // In the order a value lays its fields out, asked of what answers that: what comes out of
+        // here is a list of binds and a list of field inits, so the order is carried into what is
+        // emitted. Taken off `fields`, a codec would be laid out by however a mapping iterated.
         Map<String, CodecShape> shapes = new LinkedHashMap<>();
         try {
-            for (Map.Entry<String, Type> f : fields.entrySet()) {
-                shapes.put(f.getKey(), CodecShape.of(f.getValue(), d, f.getKey(),
-                        fieldPos(d, f.getKey()), symbols, kinds, published));
+            for (String field : TypeOps.fieldLayout(d, symbols)) {
+                shapes.put(field, CodecShape.of(fields.get(field), d, field,
+                        fieldPos(d, field), symbols, kinds, published));
             }
         } catch (CodecShape.Unnamed _) {
             return null;

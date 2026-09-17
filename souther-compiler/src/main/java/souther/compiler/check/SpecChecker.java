@@ -666,10 +666,16 @@ public final class SpecChecker {
             }
             // Read through the includes: a spread flattens another data's fields into this one, so
             // they are this data's fields on the generated class and carry their types with them.
-            for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
-                refuseHidden(f.getValue(),
+            //
+            // Where the fields stand, because the first that rests on something kept is the one
+            // reported and the rest are not reached. An author told about whichever field a mapping
+            // happened to iterate to first would be told about a different one each time the
+            // declaration was edited elsewhere.
+            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+            for (String field : TypeOps.fieldLayout(data, symbols)) {
+                refuseHidden(fields.get(field),
                         hidden -> Diagnostic.say(new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
-                                f.getKey(), hidden))
+                                field, hidden))
                                 .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                 data.name())),
                         data.pos(), symbols, exposeAll, exposed);

@@ -725,30 +725,34 @@ public final class DataChecker {
                             .hint(new DataMessage.WrapTheValueAndWriteTheQuestionMarkOnTheField(ctx.data().name())).say(new DataMessage.ANewtypeMayNotWrapAnOptional(ctx.data().name(), Type.show(o.element()))).build());
         }
 
-        for (Map.Entry<String, Type> e : fields.entrySet()) {
+        // Where the fields stand: the first one refused here is the one the author is told about,
+        // so which it is is asked of what answers where a field stands rather than taken off the
+        // mapping that says what each of them holds.
+        for (String field : TypeOps.fieldLayout(ctx.data(), ctx.symbols())) {
+            Type held = fields.get(field);
             // A field is read through an accessor of the same name, and a data is a record over its
             // fields (spec §jvm-product). A no-argument method of Object is therefore taken: `toString` would
             // emit a second `toString()` and the class would not load, and the rest cannot be a record
             // component either. Reported here rather than left to codegen, as a duplicate name is.
-            if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
+            if (OBJECT_METHOD_NAMES.contains(field)) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                .say(new DataMessage.AFieldTakesAMethodOfObject(ctx.data().name(), e.getKey())).build());
+                                .at(fieldRegion(ctx.data(), field))
+                                .say(new DataMessage.AFieldTakesAMethodOfObject(ctx.data().name(), field)).build());
             }
-            if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
+            if (TypeOps.withoutExternalForm(held, ctx.symbols()) instanceof Type.TupleOf) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                .say(new DataMessage.ATupleCannotBeAField(ctx.data().name(), e.getKey())).build());
+                                .at(fieldRegion(ctx.data(), field))
+                                .say(new DataMessage.ATupleCannotBeAField(ctx.data().name(), field)).build());
             }
             // A field is written to and read from the outside, so a map it holds is a JSON object and
             // its keys are strings. Inside a body the same map may be keyed by anything (ADR-0040).
-            Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols(), ctx.kinds(),
+            Type badKey = TypeOps.nonBoundaryMapKey(held, ctx.symbols(), ctx.kinds(),
                     ctx.published());
             if (badKey != null) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                
-                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + e.getKey(), Type.show(badKey))).build());
+                                .at(fieldRegion(ctx.data(), field))
+
+                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + field, Type.show(badKey))).build());
             }
         }
 
