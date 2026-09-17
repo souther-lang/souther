@@ -20,6 +20,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static souther.compiler.partition.QuantityFixtures.stands;
 
 /**
  * A value an observation could not keep is not a value standing somewhere else.
@@ -75,7 +76,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     void aRunHoldingAValueALimitStoppedIsUnreadableAndSaysSo() {
         assertEquals(BorderQuantity.Stands.couldNotTell(
                         ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                form().standsAt(AT_A_HUNDRED,
+                stands(form(), AT_A_HUNDRED,
                         run(new ObservedValue.Integer(40), new ObservedValue.Truncated())),
                 "a total over a value the limits stopped is not a total that missed the line");
     }
@@ -85,7 +86,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     void aRunHoldingAValueNothingCouldDecodeSaysThatInstead() {
         assertEquals(BorderQuantity.Stands.couldNotTell(
                         ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
-                form().standsAt(AT_A_HUNDRED,
+                stands(form(), AT_A_HUNDRED,
                         run(new ObservedValue.Integer(40), new ObservedValue.Unknown("no"))),
                 "what a limit shortened and what nothing could read are two things to tell a"
                         + " person");
@@ -99,11 +100,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aRunWhoseValuesAreAllThereStillAnswers() {
         assertEquals(BorderQuantity.Stands.YES,
-                form().standsAt(AT_A_HUNDRED,
+                stands(form(), AT_A_HUNDRED,
                         run(new ObservedValue.Integer(60), new ObservedValue.Integer(40))),
                 "a row whose values come to the level stands on the line");
         assertEquals(BorderQuantity.Stands.NO,
-                form().standsAt(AT_A_HUNDRED,
+                stands(form(), AT_A_HUNDRED,
                         run(new ObservedValue.Integer(60), new ObservedValue.Integer(39))),
                 "and one that comes to anything else does not");
     }
@@ -122,7 +123,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                         .plus(LinearForm.atom((NumericTerm) OTHER_TOTAL)),
                 Map.of(TOTAL, ON_THE_TOTAL, OTHER_TOTAL, ON_THE_OTHER));
 
-        BorderQuantity.Stands stands = both.standsAt(AT_A_HUNDRED,
+        BorderQuantity.Stands met = stands(both, AT_A_HUNDRED,
                 new BorderQuantity.Observation() {
 
                     @Override
@@ -140,7 +141,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
 
         assertEquals(Set.of(ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED),
                         ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
-                assertInstanceOf(BorderQuantity.Stands.CouldNotTell.class, stands).why(),
+                assertInstanceOf(BorderQuantity.Stands.CouldNotTell.class, met).why(),
                 "a reading stopped in two ways is stopped in both of them");
     }
 
@@ -154,7 +155,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
      */
     @Test
     void aWalkThatReachedNoValueIsNotAnObservationThatStopped() {
-        BorderQuantity.Stands stands = atAPlace().standsAt(AT_A_HUNDRED,
+        BorderQuantity.Stands met = stands(atAPlace(), AT_A_HUNDRED,
                 new BorderQuantity.Observation() {
 
                     @Override
@@ -168,7 +169,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     }
                 });
 
-        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), stands,
+        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), met,
                 "the walk arrived and no value of the row stands there, which is not a value an"
                         + " observation could not keep");
     }
@@ -183,7 +184,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
      */
     @Test
     void aRunTheWalkNeverReachedIsNotARunThatMissedTheLine() {
-        BorderQuantity.Stands stands = form().standsAt(AT_A_HUNDRED,
+        BorderQuantity.Stands met = stands(form(), AT_A_HUNDRED,
                 new BorderQuantity.Observation() {
 
                     @Override
@@ -197,7 +198,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     }
                 });
 
-        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.COULD_NOT_WALK), stands,
+        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.COULD_NOT_WALK), met,
                 "the walk did not reach the run, which says nothing about where the row stands");
     }
 

@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static souther.compiler.partition.QuantityFixtures.stands;
 
 /**
  * A position a row wrote nothing at answers for the row, and outranks what stopped elsewhere.
@@ -59,10 +60,10 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
     @Test
     void aFormOverAPositionTheRowWroteNothingAtDoesNotStand() {
         assertEquals(BorderQuantity.Stands.NO,
-                form(AT_THE_EMPTY, AT_THE_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(form(AT_THE_EMPTY, AT_THE_STOPPED), AT_A_HUNDRED, oneOfEach()),
                 "the row wrote nothing at a position the form is over, so it has no value here");
         assertEquals(BorderQuantity.Stands.NO,
-                form(AT_THE_STOPPED, AT_THE_EMPTY).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(form(AT_THE_STOPPED, AT_THE_EMPTY), AT_A_HUNDRED, oneOfEach()),
                 "and the same with the two terms written the other way round");
     }
 
@@ -76,10 +77,10 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
     @Test
     void aPairWithOneEndTheRowWroteNothingAtDoesNotStand() {
         assertEquals(BorderQuantity.Stands.NO,
-                pair(AT_THE_EMPTY, AT_THE_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(pair(AT_THE_EMPTY, AT_THE_STOPPED), AT_A_HUNDRED, oneOfEach()),
                 "an end the row wrote nothing at leaves the pair no distance to stand at");
         assertEquals(BorderQuantity.Stands.NO,
-                pair(AT_THE_STOPPED, AT_THE_EMPTY).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(pair(AT_THE_STOPPED, AT_THE_EMPTY), AT_A_HUNDRED, oneOfEach()),
                 "and the same with the ends swapped");
     }
 
@@ -95,10 +96,10 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED));
 
         assertEquals(undecided,
-                form(AT_THE_STOPPED, AT_THE_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(form(AT_THE_STOPPED, AT_THE_STOPPED), AT_A_HUNDRED, oneOfEach()),
                 "nothing here is the row's answer, so the point is one this could not tell about");
         assertEquals(undecided,
-                pair(AT_THE_STOPPED, AT_ANOTHER_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach()),
+                stands(pair(AT_THE_STOPPED, AT_ANOTHER_STOPPED), AT_A_HUNDRED, oneOfEach()),
                 "and the same of a pair whose ends were both stopped");
     }
 
@@ -108,16 +109,16 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
      * <p>Asking is how the measure finds out how many elements each of the line's positions holds,
      * and that is what says how many readings of the row there are to try — so a quantity that
      * stopped asking as soon as it knew its answer would be deciding which readings the row gets.
-     * The two are one call, and this is what keeps the second whole while the first short-circuits.
      *
-     * <p>Held of the row's own answer because that is the one that settles a form outright. The
-     * reasons do not: a term that came to nothing goes on to the next term already.
+     * <p>Held of the row's own answer because that is the one that settles a form outright. Asked
+     * through the two steps a measure takes, since it is the reading that has every term to ask and
+     * the answer after it that has a row to settle.
      */
     @Test
     void aFormAsksEveryTermThoughOneOfThemSettlesTheRow() {
         Set<TermPath> asked = new LinkedHashSet<>();
 
-        form(AT_THE_EMPTY, AT_THE_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach(asked));
+        stands(form(AT_THE_EMPTY, AT_THE_STOPPED), AT_A_HUNDRED, oneOfEach(asked));
 
         assertEquals(Set.of(NOTHING_WRITTEN, STOPPED), asked,
                 "both positions were asked, so what each holds is known to whoever enumerates the"
