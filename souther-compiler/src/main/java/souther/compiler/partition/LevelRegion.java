@@ -72,6 +72,33 @@ public record LevelRegion(List<LevelInterval> parts) {
         return new LevelRegion(left);
     }
 
+    /**
+     * The values both items stand for.
+     *
+     * <p><b>Membership and nothing more.</b> What this promises is that a value is in the answer
+     * exactly where both of them hold it, and a reader may ask it nothing else. In particular the
+     * runs it is written as are whichever ones crossing produced: two regions holding the same
+     * values are not two of these that are equal, because nothing here joins runs that touch or
+     * puts them in an order. A reader that compared two of these for what they hold would be
+     * reading an identity off a spelling.
+     *
+     * <p>Every pair of runs, because one item is a union and the values two unions share are not
+     * the runs of either. Crossed pairs hold nothing and are left out rather than written down as
+     * runs with nothing in them.
+     */
+    public LevelRegion meet(LevelRegion other) {
+        List<LevelInterval> both = new ArrayList<>();
+        for (LevelInterval part : parts) {
+            for (LevelInterval against : other.parts) {
+                LevelInterval held = part.intersect(against);
+                if (held != null) {
+                    both.add(held);
+                }
+            }
+        }
+        return new LevelRegion(both);
+    }
+
     @Override
     public String toString() {
         return parts.isEmpty() ? "nothing"
