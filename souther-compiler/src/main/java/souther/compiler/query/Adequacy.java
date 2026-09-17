@@ -2782,7 +2782,11 @@ public final class Adequacy {
                 answered.add(item);
             }
         }
-        return composed.keeping(kept, answered);
+        // And where the row a person is handed stands on each line it answers. Asked of the table
+        // after the reduction, because that is when it is settled: a row that tells two lines apart
+        // answers the line whoever it was composed for, so the row composed for it is not always
+        // the one that goes out.
+        return composed.keeping(kept, answered, table.shownFor(kept));
     }
 
     /**
@@ -7019,10 +7023,13 @@ public final class Adequacy {
                 // The input the two lines part company at, where one was worked out. Said as a hint
                 // rather than in the sentence: the sentence is about the two lines, and this is the
                 // one row that settles which of them the model draws.
+                // What the measurement saw, because a warning is written where nothing was offered:
+                // a build is told what its rows do not show, and the rows a run would offer are
+                // asked for separately and are not in hand here.
                 case About.ALineTheRowsDoNotTellFromAnother untold -> {
-                    String shown = untold.shownSaid();
-                    if (shown != null) {
-                        built.hint(new ExampleMessage.WriteARowAtThatInput(shown));
+                    String saw = untold.sawThemPartSaid();
+                    if (saw != null) {
+                        built.hint(new ExampleMessage.WriteARowAtThatInput(saw));
                     }
                 }
                 // The same hints, asked of the role. What a row at each point shows is a fact

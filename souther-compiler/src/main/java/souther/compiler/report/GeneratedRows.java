@@ -106,24 +106,47 @@ public final class GeneratedRows {
      */
     public static Block of(Compilation compilation, String module, String behavior,
                            SourceRendering rendering) {
-        StringBuilder out = new StringBuilder();
-        int rows = 0;
+        return of(compilation, rendering, offered(compilation, module, behavior));
+    }
+
+    /**
+     * What this run offers, one entry per module it was asked about.
+     *
+     * <p>Asked once and handed to both readers of it. The rows a person is given decide two things
+     * — what the block prints, and which input the report sends them to for a line one of those
+     * rows answers — and a second asking would compose and run the rows again to arrive at the same
+     * answer, free to arrive at another.
+     *
+     * <p>Which rows go out is settled where both searches are read ({@link Adequacy#offeredFor}):
+     * a behavior's own and the ones a declaration's line is owed are work for one person, and a
+     * renderer putting them together would be deciding that where the layout is.
+     */
+    public static Map<String, Offering> offered(Compilation compilation, String module,
+                                                String behavior) {
+        Map<String, Offering> out = new LinkedHashMap<>();
         for (String name : compilation.modules()) {
             if (module != null && !module.equals(name)) {
                 continue;
             }
-            // What this run offers, asked as one question. Which rows go out is settled where both
-            // searches are read ({@link Adequacy#offeredFor}) — a behavior's own and the ones a
-            // declaration's line is owed are work for one person, and a renderer putting them
-            // together would be deciding that where the layout is.
             Offering offering = Adequacy.offeredFor(compilation.db(),
                     new OfferingRequest(name, behavior == null ? new GenerationScope.Module()
                             : new GenerationScope.Behavior(behavior)));
-            if (offering == null) {
-                continue;
+            if (offering != null) {
+                out.put(name, offering);
             }
-            Block one = of(offering, WrittenEnsures.of(compilation.db(), name), rendering,
-                    compilation.db());
+        }
+        return out;
+    }
+
+    /** The block for offerings already asked for, which is what a caller that also handed them to
+     *  the report has. */
+    public static Block of(Compilation compilation, SourceRendering rendering,
+                           Map<String, Offering> offered) {
+        StringBuilder out = new StringBuilder();
+        int rows = 0;
+        for (Map.Entry<String, Offering> each : offered.entrySet()) {
+            Block one = of(each.getValue(), WrittenEnsures.of(compilation.db(), each.getKey()),
+                    rendering, compilation.db());
             out.append(one.text());
             rows += one.rowCount();
         }

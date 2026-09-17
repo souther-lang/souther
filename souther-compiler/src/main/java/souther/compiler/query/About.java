@@ -303,28 +303,17 @@ public sealed interface About {
         }
 
         /**
-         * The input a reader is shown, as an author would write the positions — or null where
-         * nothing named one.
+         * The input the measurement itself saw the two lines part company at, as an author would
+         * write the positions — or null where none was worked out.
          *
-         * <p><b>Chosen here and once.</b> There are two inputs the two lines part company at that
-         * this could name: where a row was composed, and where the measurement itself saw them
-         * part. A reader is shown one of them, and it has to be the one they are handed a row at —
-         * so a row that was composed names the place, and the measurement's own witness is what is
-         * left to say when none was.
-         *
-         * <p>Which is why the choice is not made at the measurement. What the rows leave standing
-         * beside a line is settled before anybody asks for a row there, and a sentence written then
-         * would name a place a later search had no part in choosing.
+         * <p><b>What was seen, and never what a person is handed.</b> Which row goes out for this
+         * line is settled after a search, after the whole table of what each offered row would
+         * answer, and after the reduction that drops a row another one already answers for — so
+         * nothing here can name it, and a finding that tried would be naming a candidate from
+         * before any of that. What is offered is the offering's to say
+         * ({@link Offering#shownAt}), and a reader with no offering in hand has this.
          */
-        public String shownSaid() {
-            // The reading that composed it, and the place written at that reading's own positions.
-            // A line read in two places is read at two sets of them, so a place shown against the
-            // reading this finding happens to carry would name positions the row says nothing
-            // about — which is a sentence naming nowhere over a row that was composed.
-            if (line.toldApart().offered().orElse(null)
-                    instanceof ARowTellingTheLinesApart.AtOneReading made) {
-                return OrderedAffineBoundary.saidAt(made.reading().cut().of(), made.standingAt());
-            }
+        public String sawThemPartSaid() {
             Map<NumericTerm, Place> saw = allowed().tellsApartAt();
             return saw == null ? null
                     : OrderedAffineBoundary.saidAt(line.border().cut().of(), saw);

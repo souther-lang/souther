@@ -14,15 +14,15 @@ package souther.compiler.query;
  */
 public final class EveryRowOfIt {
 
-    /** The offering that keeps every row of {@code composed} and says nothing is answered, which is
-     *  what not having asked means. */
+    /** The offering that keeps every row of {@code composed} and says nothing is answered and
+     *  nothing stands anywhere nameable, which is what not having asked means. */
     public static Offering offered(Composition composed) {
         return composed.keeping(
                 composed.rowsByBehavior().values().stream().flatMap(java.util.List::stream)
                         .map(OfferedRow::key)
                         .collect(java.util.stream.Collectors.toCollection(
                                 java.util.LinkedHashSet::new)),
-                java.util.Set.of());
+                java.util.Set.of(), java.util.Map.of());
     }
 
     private EveryRowOfIt() {}

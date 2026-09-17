@@ -33,6 +33,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.Offering;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
@@ -372,7 +373,14 @@ public final class Main {
                 System.err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
-            AdequacyReport assessed = AdequacyReport.of(compilation);
+            // What this run offers, where rows were asked for. Before the report and not after it:
+            // a line the rows do not tell from another is answered by whichever offered row tells
+            // the two apart, so where the report sends a reader for one is settled by what goes
+            // out — asked afterwards, the sentence would name a candidate and the block would hand
+            // over something else.
+            Map<String, Offering> offered = generate
+                    ? GeneratedRows.offered(compilation, module, behavior) : Map.of();
+            AdequacyReport assessed = AdequacyReport.of(compilation, offered);
             // Whether there is anything to report on is a question about the compilation, and what
             // the report shows is a question about the selection. They are asked of different things
             // — this of everything that formed, `only` of what was named — so that neither can come
@@ -394,7 +402,7 @@ public final class Main {
                     // command's compile has because the report it writes is measured over them. A
                     // row is offered for a meeting of the body's decisions no row makes, and
                     // nothing can say a meeting was missed of a run that recorded nothing.
-                    String rows = GeneratedRows.of(compilation, module, behavior, rendering).text();
+                    String rows = GeneratedRows.of(compilation, rendering, offered).text();
                     (render.json() ? System.err : System.out).print(rows);
                 }
             }

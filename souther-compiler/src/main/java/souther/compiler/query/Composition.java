@@ -194,7 +194,8 @@ public record Composition(OfferingRequest request,
      * constructor and leaving the one call that reaches it open would have left the same door with
      * a longer name on it.
      */
-    Offering keeping(Set<RowKey> kept, Set<ObligationIdentity> answered) {
+    Offering keeping(Set<RowKey> kept, Set<ObligationIdentity> answered,
+                     Map<ObligationIdentity, WhereARowStandsOnALine> shownAt) {
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         rowsByBehavior.forEach((behavior, here) -> {
             List<OfferedRow> left = here.stream().filter(row -> kept.contains(row.key())).toList();
@@ -202,6 +203,6 @@ public record Composition(OfferingRequest request,
                 out.put(behavior, left);
             }
         });
-        return new Offering(request, out, searched, account, answered);
+        return new Offering(request, out, searched, account, answered, shownAt);
     }
 }

@@ -45,12 +45,54 @@ import java.util.Set;
  */
 public record Settlements(List<ObligationIdentity> requested,
                           SequencedMap<ObligationIdentity, RowKey> composedFor,
-                          SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow) {
+                          SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow,
+                          SequencedMap<RowKey, Map<ObligationIdentity,
+                                  WhereARowStandsOnALine>> standsAt) {
 
     public Settlements {
         requested = List.copyOf(requested);
         composedFor = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composedFor));
         byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
+        standsAt = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(standsAt));
+    }
+
+    /**
+     * Where the row a person is handed for each line stands, once the reduction has settled which
+     * rows those are.
+     *
+     * <p><b>After {@link #keeping()} and never before it.</b> What is composed for a line and what
+     * is offered for it are two answers: a row that tells the two lines apart answers the line
+     * whoever it was composed for, so the row composed for it goes when another one already does
+     * that ({@link #offers}). A place read off the search is a place from before that was decided,
+     * and a report naming it sends a reader to an input the block does not hand them.
+     *
+     * <p>The row composed for the line first, where the reduction kept it, and otherwise whichever
+     * kept row settles it — in the order the rows are offered, which is the order a person reads
+     * them in.
+     *
+     * <p>Empty for a line no kept row answers, which is a line the block says nothing offers a row
+     * for. What is shown then is what the measurement saw, and that is the measurement's to say.
+     */
+    public Map<ObligationIdentity, WhereARowStandsOnALine> shownFor(Set<RowKey> kept) {
+        Map<ObligationIdentity, WhereARowStandsOnALine> out = new LinkedHashMap<>();
+        for (ObligationIdentity item : requested) {
+            RowKey composed = composedFor.get(item);
+            RowKey offers = composed != null && kept.contains(composed) ? composed : null;
+            if (offers == null) {
+                for (RowKey rowKey : byRow.keySet()) {
+                    if (kept.contains(rowKey) && byRow.get(rowKey).get(item).settles()) {
+                        offers = rowKey;
+                        break;
+                    }
+                }
+            }
+            WhereARowStandsOnALine at = offers == null ? null
+                    : standsAt.getOrDefault(offers, Map.of()).get(item);
+            if (at != null) {
+                out.put(item, at);
+            }
+        }
+        return Collections.unmodifiableMap(out);
     }
 
     /** What the row {@code rowKey} addresses would do about {@code item}, for a reader holding
@@ -204,6 +246,11 @@ public record Settlements(List<ObligationIdentity> requested,
         List<ObligationIdentity> requested = new ArrayList<>();
         SequencedMap<ObligationIdentity, RowKey> composedFor = new LinkedHashMap<>();
         SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow = new LinkedHashMap<>();
+        // And where each row stands on each line it answers, which is what a report names when it
+        // sends a reader to an input. Kept beside the settlements and made with them: the row was
+        // read once, and a place worked out again afterwards is a second reading of it.
+        SequencedMap<RowKey, Map<ObligationIdentity, WhereARowStandsOnALine>> standsAt =
+                new LinkedHashMap<>();
         // How each behavior reads the lines the module's declarations own. A behavior's own account
         // holds the lines it is owed a row at and none of these — that is what the account is for —
         // so a walk that looked only there would find no reading of a declared line anywhere and
@@ -263,13 +310,23 @@ public record Settlements(List<ObligationIdentity> requested,
                 // happens to be asked about, at the price of running it that many times.
                 RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.toRun());
                 Map<ObligationIdentity, Settlement> here = new LinkedHashMap<>();
+                Map<ObligationIdentity, WhereARowStandsOnALine> where = new LinkedHashMap<>();
                 for (ObligationIdentity item : items) {
-                    here.put(item, read == null ? undetermined(one) : read.settlementOf(one, item));
+                    ToldApartAt answered = read == null
+                            ? new ToldApartAt(undetermined(one), null)
+                            : read.answerFor(one, item);
+                    here.put(item, answered.said());
+                    if (answered.at() != null) {
+                        where.put(item, answered.at());
+                    }
                 }
                 byRow.put(row.key(), Collections.unmodifiableMap(here));
+                if (!where.isEmpty()) {
+                    standsAt.put(row.key(), Collections.unmodifiableMap(where));
+                }
             }
         });
-        return new Settlements(items, composedFor, byRow);
+        return new Settlements(items, composedFor, byRow, standsAt);
     }
 
     /**
@@ -570,7 +627,26 @@ public record Settlements(List<ObligationIdentity> requested,
             return RowAsRead.of(sig, building, trial, row);
         }
 
-        Settlement settlementOf(RowAsRead asRead, ObligationIdentity item) {
+        /**
+         * What this row would do about {@code item}, and where it stands if the item is a line it
+         * answers.
+         *
+         * <p>One question, because reading the row is the expensive half and the two answers come
+         * out of one reading. Asked apart, a caller wanting the place would put the row through the
+         * line a second time — and could be handed a place from a reading the settlement was not
+         * made at.
+         *
+         * <p>{@code at} is empty for every item but a whole line. A class is where a value falls
+         * and an arm is a place a run went, and neither is somewhere a report sends a reader.
+         */
+        ToldApartAt answerFor(RowAsRead asRead, ObligationIdentity item) {
+            if (item instanceof ObligationIdentity.OfABorder line) {
+                return tellingTheLinesApart(asRead, line);
+            }
+            return new ToldApartAt(settlementOf(asRead, item), null);
+        }
+
+        private Settlement settlementOf(RowAsRead asRead, ObligationIdentity item) {
             return switch (item) {
                 case ObligationIdentity.OfAClass(var owed) -> inClass(asRead, owed);
                 // A case of an input of a behavior that divides no position of its own. Nothing
@@ -589,7 +665,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfAnInputCase _, ObligationIdentity.OfAnOutputCase _,
                      ObligationIdentity.OfARow _ -> throw new IllegalStateException(
                         "no row is offered for " + item + ", so none is weighed against it");
-                case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at);
+                case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
                 case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
@@ -744,30 +820,30 @@ public record Settlements(List<ObligationIdentity> requested,
          * two lines differently at any position the behavior reads the line at is a row that shows
          * which of them it is.
          */
-        private Settlement tellingTheLinesApart(RowAsRead asRead,
-                                                ObligationIdentity.OfABorder at) {
+        private ToldApartAt tellingTheLinesApart(RowAsRead asRead,
+                                                 ObligationIdentity.OfABorder at) {
             List<ALineBesideOne> here = besides.get(at);
             if (here == null || here.isEmpty()) {
                 // No line of this behavior. A row written here says nothing about a line it is not
                 // read against, which is a row that does not settle it rather than one nothing
                 // could tell about.
-                return new Settlement.DoesNotSettle();
+                return new ToldApartAt(new Settlement.DoesNotSettle(), null);
             }
             if (asRead.values() == null) {
-                return undetermined(asRead);
+                return new ToldApartAt(undetermined(asRead), null);
             }
             // Existential over the readings, the way a point met at one position of a behavior is:
             // a row answering the two lines differently anywhere the behavior reads the line is a
             // row that shows which of them it is. A reading that could not tell is carried and does
             // not decide, so a run nothing watched does not turn a row that settles into one that
             // is open.
-            Settlement answer = new Settlement.DoesNotSettle();
+            ToldApartAt answer = new ToldApartAt(new Settlement.DoesNotSettle(), null);
             for (ALineBesideOne one : here) {
-                Settlement said = tellsThemApartAt(asRead, one);
-                if (said.settles()) {
+                ToldApartAt said = tellsThemApartAt(asRead, one);
+                if (said.said().settles()) {
                     return said;
                 }
-                if (said instanceof Settlement.Undetermined) {
+                if (said.said() instanceof Settlement.Undetermined) {
                     answer = said;
                 }
             }
@@ -782,24 +858,29 @@ public record Settlements(List<ObligationIdentity> requested,
          * apart two positions stand is a number a reading has, and another reading of the same line
          * is over other positions.
          */
-        private Settlement tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
+        private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
             StandingAtAPoint.RowsRead read = StandingAtAPoint.valuesOf(one.reading(),
                     List.of(asRead.asInputs()), one.reading().border().origin().recordedAt());
             if (read.each().isEmpty()) {
                 // The row holds no value on this line at all, whether because nothing watched its
                 // run or because its positions could not be read there. Which of those it is is
                 // the reading's own answer and is what a reader is told.
-                return read.everyOne() ? new Settlement.DoesNotSettle()
+                return new ToldApartAt(read.everyOne() ? new Settlement.DoesNotSettle()
                         : new Settlement.Undetermined(read.unwatched()
                                 ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
-                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
             }
             for (Map<NumericTerm, Place> values : read.each()) {
                 if (one.drawn().satisfiedBy(values) != one.beside().keeps(values)) {
-                    return new Settlement.Settles();
+                    // Where it answered them differently, kept beside the answer. What a person is
+                    // shown for this line is where the row they are handed stands, and that is this
+                    // — worked out again by whoever shows it, it would be a second reading of the
+                    // row, free to name a reading this one did not settle at.
+                    return new ToldApartAt(new Settlement.Settles(),
+                            new WhereARowStandsOnALine(one.reading().border(), values));
                 }
             }
-            return new Settlement.DoesNotSettle();
+            return new ToldApartAt(new Settlement.DoesNotSettle(), null);
         }
 
         /**
@@ -853,6 +934,22 @@ public record Settlements(List<ObligationIdentity> requested,
      *  what a row there has to do. */
     private record AtAPoint(souther.compiler.partition.Border line,
                             souther.compiler.partition.Criterion criterion) {}
+
+    /**
+     * What a row does about one line, and where it stands on it where that is the answer.
+     *
+     * <p>The two together because one reading of the row produced both. A place beside a settlement
+     * that is not {@link Settlement.Settles} would be a row shown as answering a line it does not.
+     */
+    private record ToldApartAt(Settlement said, WhereARowStandsOnALine at) {
+
+        private ToldApartAt {
+            if (at != null && !said.settles()) {
+                throw new IllegalArgumentException("a row shown standing on a line it does not"
+                        + " answer: " + at.said());
+            }
+        }
+    }
 
     /**
      * One line the rows do not tell from a line beside it, as a row is put to it.
