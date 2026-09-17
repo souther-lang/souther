@@ -1008,14 +1008,19 @@ public final class TypeOps {
         }
     }
 
-    /** Effective field name → type, in the order the declaration writes them: the data spread in
-     *  first, then the data's own. Which order that is, is what a reader is shown the fields in and
-     *  which one a row is built for first, so it is handed back as something that has one. */
-    public static java.util.SequencedMap<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
-        return FieldExpansion.laidOut(expansionOf(data.declares(), data, symbols), REFUSING);
+    /**
+     * Effective field name → type: what the data spreads in, and what it writes itself.
+     *
+     * <p>A mapping, read by name. Which order a value lays those fields out in is
+     * {@link #fieldLayout}, and a reader of that asks it — the two are read off one expansion and
+     * neither is read off the other, so nothing here answers where a field stands.
+     */
+    public static Map<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
+        return FieldExpansion.types(expansionOf(data.declares(), data, symbols), REFUSING);
     }
 
-    /** The names {@link #fieldTypes} answers about, in the order a value lays them out. */
+    /** The names {@link #fieldTypes} answers about, in the order a value lays them out: what each
+     *  spread brings in, spread by spread as they are written, and then the data's own. */
     public static List<String> fieldLayout(Hir.Data data, Symbols symbols) {
         return FieldExpansion.layout(expansionOf(data.declares(), data, symbols), REFUSING);
     }

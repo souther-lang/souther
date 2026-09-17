@@ -213,30 +213,50 @@ public final class FieldExpansion {
     private record Held(Type type, Supplier by) {}
 
     /**
-     * Every field the expansion reaches and what it holds, in the order a value lays them out:
-     * what each spread brings in, spread by spread as they are written, and then what the
-     * declaration writes itself.
+     * What each field the expansion reaches holds.
+     *
+     * <p><b>A mapping.</b> What comes back iterates, as something has to, and in what order it does
+     * is not answered here — {@link #layout} is, and is not read off this. Held apart because a
+     * reader of one has no business being worked out again by an edit to the other, which is the
+     * whole of why these are projections rather than one answer with two things in it.
+     *
+     * <p>A name reached twice takes the type the last of them wrote. Which is the answer for a
+     * reader that answers about whatever is written; {@code refusing} is what the pass that holds a
+     * declaration to its rules says instead.
+     */
+    public static Map<String, Type> types(Of of, Refusing refusing) {
+        Map<String, Type> out = new LinkedHashMap<>();
+        held(of, refusing).forEach((name, held) -> out.put(name, held.type()));
+        return out;
+    }
+
+    /**
+     * The order a value of the declaration lays its fields out in: what each spread brings in,
+     * spread by spread as they are written, and then what the declaration writes itself.
+     *
+     * <p><b>A sequence, and it is the whole of what this says.</b> Read off the expansion beside
+     * {@link #types} rather than out of it: a projection taken from another is that other one, and
+     * a reader of the order would be reading a mapping again the day either of them moved.
+     *
+     * <p>A name reached twice stands where the first of them put it.
+     */
+    public static List<String> layout(Of of, Refusing refusing) {
+        return List.copyOf(held(of, refusing).keySet());
+    }
+
+    /**
+     * The expansion merged declaration by declaration: what each field holds and what put it there,
+     * in the order a value lays them out.
+     *
+     * <p>Private, and the one thing the projections above share. What each of them answers is a
+     * narrowing of this, and none of them is a narrowing of another — so nothing outside can take
+     * an order off a mapping or a type off a sequence, whatever this happens to be carried in.
      *
      * <p><b>Closed at each declaration.</b> The fields a spread brings in are worked out from that
      * declaration's own expansion before any of them is taken in here, so two fields that met
      * further down met there, and what is said about them names the spreads of the declaration
      * they met under.
-     *
-     * <p>A name reached twice keeps the place the first of them gave it and the type the last of
-     * them wrote. Which is the answer for a reader that answers about whatever is written;
-     * {@code refusing} is what the pass that holds a declaration to its rules says instead.
      */
-    public static SequencedMap<String, Type> laidOut(Of of, Refusing refusing) {
-        SequencedMap<String, Type> out = new LinkedHashMap<>();
-        held(of, refusing).forEach((name, held) -> out.put(name, held.type()));
-        return out;
-    }
-
-    /** The names {@link #laidOut} answers about, in the order it answers them in. */
-    public static List<String> layout(Of of, Refusing refusing) {
-        return List.copyOf(laidOut(of, refusing).keySet());
-    }
-
     private static SequencedMap<String, Held> held(Of of, Refusing refusing) {
         SequencedMap<String, Held> out = new LinkedHashMap<>();
         for (Include include : of.includes()) {

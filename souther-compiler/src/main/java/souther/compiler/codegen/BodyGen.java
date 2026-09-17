@@ -43,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -73,15 +74,15 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private Map<String, Type> fieldTypes(Hir.Data data) {
-        return ctx.fieldTypes(data);
+    private SequencedMap<String, Type> fieldTypes(Hir.Data data) {
+        return ctx.laidOutFields(data);
     }
 
     private ClassDesc jvmType(Type type) {
         return JvmTypes.jvmType(type, ctx);
     }
 
-    private ClassDesc[] fieldDescs(Map<String, Type> fields) {
+    private ClassDesc[] fieldDescs(SequencedMap<String, Type> fields) {
         return JvmTypes.fieldDescs(fields, ctx);
     }
 
@@ -450,7 +451,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
+                    SequencedMap<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -984,7 +985,7 @@ final class BodyGen {
 
         private void construct(Core.Construct nd) {
             Hir.Data owner = (Hir.Data) symbols.declaredNode(nd.typeName());
-            Map<String, Type> flds = fieldTypes(owner);
+            SequencedMap<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             TypeSymbol.AtModule built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
@@ -1056,7 +1057,7 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.Construct nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
+            SequencedMap<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
@@ -1145,7 +1146,7 @@ final class BodyGen {
         /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
          * (yield, or abort on invariant violation), and a narrowing cast — with the field values
          * already on the stack. */
-        private void finishInvariantConstruct(ClassDesc cdType, Map<String, Type> flds) {
+        private void finishInvariantConstruct(ClassDesc cdType, SequencedMap<String, Type> flds) {
             code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
             code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
             code.checkcast(cdType);

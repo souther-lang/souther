@@ -19,8 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a declaration's fields stand and what each of them holds are two questions, and an edit
- * that only moves a field reaches the readers of the first and leaves the readers of the second
- * alone.
+ * that changes only the first reaches its readers and leaves the readers of the second alone.
+ *
+ * <p>The edit is two spreads written the other way round, which is what changes the layout and
+ * nothing else. Not every edit that moves a field is: a declaration's own fields moved among
+ * themselves are numbered the other way round, so which binding each of them is moves too. What is
+ * held below is the edit that separates the three answers, and there is only one kind of it.
  *
  * <p>Both halves here, on one edit. Held apart they are both true of a compiler that answers only
  * one of them: a store that never noticed the edit passes the half about what the fields hold, and
@@ -60,6 +64,20 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
             data Pair = { ...B, ...A }
             """;
 
+    /** The same fields written on the declaration itself, and the same two written the other way
+     *  round — the other kind of edit that moves a field. */
+    private static final String PRICES_OWN = """
+            module shop.prices exposing ( Pair )
+
+            data Pair = { qty: Int, note: String }
+            """;
+
+    private static final String PRICES_OWN_SWAPPED = """
+            module shop.prices exposing ( Pair )
+
+            data Pair = { note: String, qty: Int }
+            """;
+
     /** Builds a value of the declaration above, so an edit to where its fields stand reaches here. */
     private static final String CART = """
             module shop.cart exposing ( make )
@@ -95,6 +113,31 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
         assertEquals(bound, bindings(c),
                 "nor to which binding each of them is: a field brought in keeps the number the"
                         + " declaration that wrote it gave it, and neither of those moved");
+    }
+
+    /**
+     * The other kind of edit that moves a field: a declaration's own two written the other way
+     * round. Where they stand moves, and so does which binding each of them is.
+     *
+     * <p>Held beside the one above because together they say what each answer is about. A binding
+     * is which field of its owner it is, so a field moved among its siblings is numbered the other
+     * way round — which is a fact about the numbering and not about the layout, and the two answers
+     * move here for two reasons rather than one. What still does not move is what the fields hold.
+     */
+    @Test
+    void movingADeclarationsOwnFieldsMovesWhereTheyStandAndWhichBindingEachIs() {
+        Compilation c = compiling(PRICES_OWN);
+        Map<String, Type> held = fields(c);
+        Map<String, BindingId> bound = bindings(c);
+        assertEquals(List.of("qty", "note"), layout(c));
+
+        edit(c, PRICES_OWN_SWAPPED);
+
+        assertEquals(List.of("note", "qty"), layout(c), "the fields stand the other way round");
+        assertNotEquals(bound, bindings(c),
+                "and each is numbered the other way round, which is what a binding is");
+        assertEquals(held, fields(c),
+                "what they hold is what neither kind of edit moves");
     }
 
     /**

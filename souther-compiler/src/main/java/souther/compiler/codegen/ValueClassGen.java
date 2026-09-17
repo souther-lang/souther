@@ -35,8 +35,11 @@ import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SequencedMap;
 
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
@@ -64,10 +67,16 @@ final class ValueClassGen {
     private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
-    private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
+    private SequencedMap<String, Type> fieldTypes(Hir.Data data) { return ctx.laidOutFields(data); }
+    /** What a unit data is laid out from: a record with no components. */
+    private static final SequencedMap<String, Type> NO_FIELDS =
+            Collections.unmodifiableSequencedMap(new LinkedHashMap<>());
+
     private int pub(String name) { return ctx.pub(name); }
     private ClassDesc jvmType(Type type) { return JvmTypes.jvmType(type, ctx); }
-    private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
+    private ClassDesc[] fieldDescs(SequencedMap<String, Type> fields) {
+        return JvmTypes.fieldDescs(fields, ctx);
+    }
 
     /**
      * What a value of {@code data} is made of and what must hold of one, as the check answered it.
@@ -102,7 +111,7 @@ final class ValueClassGen {
 
     void generateData(Hir.Data data, Emissions out) {
         ClassDesc cdName = cd(data);
-        Map<String, Type> fields = fieldTypes(data);
+        SequencedMap<String, Type> fields = fieldTypes(data);
 
         out.put(valueOf(data), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -169,7 +178,7 @@ final class ValueClassGen {
      * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
      * rather than as the whole invariant (issue #83, spec §decoder-error).
      */
-    private void emitCtfeCheck(Hir.Data data, Map<String, Type> fields, Emissions out) {
+    private void emitCtfeCheck(Hir.Data data, SequencedMap<String, Type> fields, Emissions out) {
         ClassDesc cdName = cd(data);
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(valueOf(data)));
         List<ValueShape.Invariant> clauses = shapeOf(data).invariants();
@@ -189,7 +198,7 @@ final class ValueClassGen {
     }
 
     private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Hir.Data data,
-                                 Map<String, Type> fields, List<ValueShape.Invariant> clauses) {
+                                 SequencedMap<String, Type> fields, List<ValueShape.Invariant> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
@@ -353,7 +362,10 @@ final class ValueClassGen {
      */
     byte[] generateBridgeCase(TypeSymbol member, List<GeneratedClass.BehaviorResult> unions) {
         ClassDesc cdB = ctx.bridgeCaseClass(member);
-        Map<String, Type> held = Map.of("value", TypeOps.caseBindType(member));
+        // One field, so the order is not in question — held as something that has one because that
+        // is what a class is emitted from, and a bridge case is emitted like any other value.
+        SequencedMap<String, Type> held = new LinkedHashMap<>();
+        held.put("value", TypeOps.caseBindType(member));
         List<ClassDesc> ifaces = new ArrayList<>();
         for (GeneratedClass.BehaviorResult union : unions) {
             ifaces.add(cd(union));
@@ -384,14 +396,14 @@ final class ValueClassGen {
             // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
             // deconstructs it in a Java switch as its sibling product cases do (spec §jvm-product)
             cb.withSuperclass(CD_Record);
-            cb.with(recordComponents(Map.of()));
+            cb.with(recordComponents(NO_FIELDS));
             ClassDesc[] ifaces = caseInterfaces(unit.name());
             if (ifaces.length > 0) {
                 cb.withInterfaceSymbols(ifaces);
             }
             emitDefaultCtor(cb, CD_Record);
-            emitValueEquality(cb, cdU, Map.of());   // all units of a type are the same value
-            emitToString(cb, cdU, unit.name(), Map.of());
+            emitValueEquality(cb, cdU, NO_FIELDS);   // all units of a type are the same value
+            emitToString(cb, cdU, unit.name(), NO_FIELDS);
             // A unit has no fields, no invariant and so no `__construct` (spec §unit-data), so the
             // type has exactly one value. The field is public because another module's generated
             // code loads it, and on an exposed unit that puts the value within reach of hand-written
@@ -421,7 +433,7 @@ final class ValueClassGen {
      * is what {@code ==} means on a data (spec §equality) and what Java callers expect of a value
      * class. A unit data has no fields, so all of its values are equal.
      */
-    private void emitValueEquality(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
+    private void emitValueEquality(ClassBuilder cb, ClassDesc cdName, SequencedMap<String, Type> fields) {
         cb.withMethodBody("equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
                     Label same = code.newLabel();
@@ -496,7 +508,7 @@ final class ValueClassGen {
      * {@link #orderOfWrapped}: claiming one here that the {@code compareTo} below cannot emit is
      * what left {@code data StageN = Stage} declaring {@code Comparable} and throwing on the first
      * Java reader that compared two (issue #856). */
-    private boolean isOrderedNewtype(Hir.Data data, Map<String, Type> fields) {
+    private boolean isOrderedNewtype(Hir.Data data, SequencedMap<String, Type> fields) {
         return data.newtype() && fields.size() == 1
                 && orderOfWrapped(fields.values().iterator().next()) != null;
     }
@@ -529,7 +541,7 @@ final class ValueClassGen {
      * that declaration and throws {@code AbstractMethodError} when anything prints the value.
      */
     private void emitToString(ClassBuilder cb, ClassDesc cdName, String typeName,
-                              Map<String, Type> fields) {
+                              SequencedMap<String, Type> fields) {
         cb.withMethodBody("toString", MTD_toString, ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
             code.new_(CD_StringBuilder);
             code.dup();
@@ -628,7 +640,7 @@ final class ValueClassGen {
      * does not apply the class's {@code @NullMarked} there; without it every read is a platform type
      * again (spec §jvm-nullness).
      */
-    private void emitAccessors(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
+    private void emitAccessors(ClassBuilder cb, ClassDesc cdName, SequencedMap<String, Type> fields) {
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             Type ft = f.getValue();
             ClassDesc fd = jvmType(ft);
@@ -664,7 +676,7 @@ final class ValueClassGen {
      * {@code Signature}, and {@code @NonNull} — because reflection reads the component, not the
      * accessor.
      */
-    private RecordAttribute recordComponents(Map<String, Type> fields) {
+    private RecordAttribute recordComponents(SequencedMap<String, Type> fields) {
         List<RecordComponentInfo> components = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             Type type = f.getValue();
@@ -699,11 +711,11 @@ final class ValueClassGen {
      * value is built inside the module or through the invariant-checking {@code __construct} and not
      * by a Java caller writing {@code new} (spec §field-visibility).
      */
-    private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
+    private void emitCtor(ClassBuilder cb, ClassDesc cdName, SequencedMap<String, Type> fields) {
         emitCtor(cb, cdName, fields, 0);
     }
 
-    private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields, int flags) {
+    private void emitCtor(ClassBuilder cb, ClassDesc cdName, SequencedMap<String, Type> fields, int flags) {
         cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), flags, code -> {
             code.aload(0);
             code.invokespecial(CD_Record, "<init>", MTD_void);
@@ -719,7 +731,7 @@ final class ValueClassGen {
     }
 
     private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Hir.Data data,
-                                     Map<String, Type> fields) {
+                                     SequencedMap<String, Type> fields) {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
         // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
@@ -774,7 +786,7 @@ final class ValueClassGen {
      * a Kotlin caller reads a raw type as a platform type, which is the one thing the rest of the class
      * is marked to avoid (issue #150).
      */
-    private String constructSignature(Map<String, Type> fields, ClassDesc cdName) {
+    private String constructSignature(SequencedMap<String, Type> fields, ClassDesc cdName) {
         StringBuilder sb = new StringBuilder("(");
         for (Type t : fields.values()) {
             String g = JvmTypes.genericSig(t, ctx);

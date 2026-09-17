@@ -408,8 +408,13 @@ public final class Shapes {
      * two move at different times and a reader takes the one it means.
      *
      * <p>What is laid out here is what a constructor of the type takes, in the order it takes them,
-     * and what a value written out is read back in. So an edit that only moves a field among its
-     * siblings is a change to this and to nothing else.
+     * and what a value written out is read back in.
+     *
+     * <p>An edit that changes only where the fields stand is a change to this and to neither of the
+     * mappings — reordering two spreads that bring in different fields, say. Not every edit that
+     * moves a field is one: a declaration's own fields moved among themselves are numbered the other
+     * way round, so {@link FieldBindingsOf} moves too, because a binding is which field of its owner
+     * it is. What this alone answers is where a field stands, not that a field moved.
      *
      * <p>Absent where nothing declares the name, and empty where what it declares reaches no field.
      */
@@ -475,7 +480,7 @@ public final class Shapes {
             // order it iterates in says anything. What this answers is which type stands at each
             // name; the order a value lays them out in is {@link FieldLayoutOf}.
             return Answer.of(declared instanceof Hir.Data data
-                    ? Collections.unmodifiableMap(FieldExpansion.laidOut(
+                    ? Collections.unmodifiableMap(FieldExpansion.types(
                             expansionOf(db, data), FieldExpansion.Refusing.NOTHING))
                     : Map.of());
         }

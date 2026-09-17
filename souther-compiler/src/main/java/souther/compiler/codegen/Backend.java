@@ -56,6 +56,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
@@ -859,7 +860,7 @@ public final class Backend {
         // module declares, and the class of one is that module's.
         Hir.Data data = (Hir.Data) symbols.declaredNode(construct);
         ClassDesc cdType = ctx.cd(construct);
-        Map<String, Type> fields = ctx.fieldTypes(data);
+        SequencedMap<String, Type> fields = ctx.laidOutFields(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
         String sig = factorySignature(fields, cdType);
         cb.withMethod(data.name(), MethodTypeDesc.of(cdType, fieldDs),
@@ -883,7 +884,7 @@ public final class Backend {
      * (List/Set/Map/Option), else {@code null}. Mirrors the value-class accessor signature (spec §field-visibility)
      * so a Java caller passes {@code List<Line>} rather than a raw {@code List}. A non-container field
      * keeps its plain descriptor; the signature erases to the method's descriptor either way. */
-    private String factorySignature(Map<String, Type> fields, ClassDesc ret) {
+    private String factorySignature(SequencedMap<String, Type> fields, ClassDesc ret) {
         boolean anyContainer = false;
         StringBuilder sb = new StringBuilder("(");
         for (Type t : fields.values()) {
