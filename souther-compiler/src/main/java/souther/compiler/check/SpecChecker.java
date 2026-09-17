@@ -263,8 +263,7 @@ public final class SpecChecker {
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
-                                    Map<String, DataChecker.Constructs> recHelperConstructs,
-                                    List<Diagnostic> warnings) {
+                                    Map<String, DataChecker.Constructs> recHelperConstructs) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(Diagnostic
                             .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
@@ -467,13 +466,13 @@ public final class SpecChecker {
                 ? InvariantChecker.Findings.notRun()
                 : InvariantChecker.analyze(dischargeBody, discharge.reading(),
                         discharge.contracts(), env);
-        warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
         }
         return new Checked(elaboratedBody,
                 dischargeBody == null ? null
-                        : new AnalysisBody(dischargeBody, discharge.elements()));
+                        : new AnalysisBody(dischargeBody, discharge.elements()),
+                inv.warnings());
     }
 
     /**
@@ -488,13 +487,17 @@ public final class SpecChecker {
      *                 behavior has no such representation. Null is "there is none" and never "it is
      *                 the other one": a reader owed the meanings and given the algorithm finds the
      *                 operations gone with nothing saying they were there
+     * @param found    what the invariant check found and said nothing about yet
+     *                 ({@link InvariantFinding}). Handed back rather than reported, because where a
+     *                 clause it is about is written is not part of checking a body
      */
-    public record Checked(Core emitted, AnalysisBody analysis) {
+    public record Checked(Core emitted, AnalysisBody analysis, List<InvariantFinding> found) {
 
         public Checked {
             if (emitted == null) {
                 throw new IllegalArgumentException("a body that was checked was elaborated");
             }
+            found = List.copyOf(found);
         }
     }
 

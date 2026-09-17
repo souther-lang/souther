@@ -133,11 +133,10 @@ public final class TypeChecker {
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
-                                     Map<String, DataChecker.Constructs> recHelperConstructs,
-                                     List<Diagnostic> warnings) {
+                                     Map<String, DataChecker.Constructs> recHelperConstructs) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, published, kinds,
                 inners, fieldTypes, policy,
-                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs, warnings);
+                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs);
     }
 
     /**
