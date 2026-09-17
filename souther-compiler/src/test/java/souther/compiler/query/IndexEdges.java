@@ -429,6 +429,7 @@ final class IndexEdges {
         names(out, Shapes.DerivedDef.class, "named");
         names(out, Shapes.EffectiveFieldTypesOf.class, "named");
         names(out, Shapes.FieldBindingsOf.class, "named");
+        names(out, Shapes.FieldLayoutOf.class, "named");
         names(out, Shapes.MeaningOf.class, "named");
         names(out, Shapes.NewtypeInnerOf.class, "named");
         names(out, Shapes.NormalizedDef.class, "named");

@@ -185,6 +185,7 @@ public final class Db implements StoreWork {
                     Shapes.newtypeInners(this),
                     Shapes.fieldBindings(this),
                     Shapes.effectiveFieldTypes(this),
+                    Shapes.fieldLayout(this),
                     Shapes.clauseLocations(this));
         }
         return sources.of(module);

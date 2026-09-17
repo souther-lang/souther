@@ -969,11 +969,9 @@ public final class TypeOps {
      */
     public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
                                                        Symbols symbols) {
-        Map<String, BindingId> bindings = new LinkedHashMap<>();
-        if (symbols.declaredNode(declared.key()) instanceof Hir.Data data) {
-            walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
-        }
-        return bindings;
+        return symbols.declaredNode(declared.key()) instanceof Hir.Data data
+                ? FieldExpansion.bindings(expansionOf(declared, data, symbols))
+                : new LinkedHashMap<>();
     }
 
     /**
@@ -990,43 +988,6 @@ public final class TypeOps {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
         walkWrittenFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
-    }
-
-    /**
-     * Every field {@code data} has, each with the binding the declaration that declares it gives it.
-     *
-     * <p>A field brought in by an include keeps the binding of the declaration it was written in,
-     * because the invariant that reads it was written there too and is carried in with it. So a
-     * declaration binds its own fields and the fields underneath, and an invariant reads the same
-     * binding wherever it is checked or emitted.
-     *
-     * <p>A walk of its own, not the one {@link #fieldTypes} makes, because it answers where that one
-     * cannot: a field has a name whether or not its type has been worked out. It therefore reaches
-     * the fields in an order of its own, which is why nothing reads one off the result. An include
-     * that names nothing is skipped, and a name an include repeats keeps the declaration's own —
-     * both are refused where the declaration is checked, and refusing them twice says nothing more.
-     */
-    private static void walkFields(Hir.Data data, TypeSymbol.AtModule declared, Symbols symbols,
-                                   Set<TypeSymbol> seen, Map<String, BindingId> out) {
-        BindingOwner owner = new BindingOwner.OfFields(declared);
-        int ordinal = 0;
-        for (Hir.Field field : data.fields()) {
-            out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
-        }
-        for (Hir.Name include : data.includes()) {
-            TypeSymbol source = switch (include) {
-                case Hir.Name.Denoting denoting -> denoting.type();
-                // Reported where it is written. A name nothing declares brings in no fields, and
-                // saying so again here would be a second report about the one mistake.
-                case Hir.Name.Unanswered _ -> null;
-            };
-            // An include names a data, which a module declares; what the language gives is
-            // no declaration to walk, and the lookup below already answered nothing for one.
-            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
-                    && symbols.declaredNode(at) instanceof Hir.Data included) {
-                walkFields(included, at, symbols, seen, out);
-            }
-        }
     }
 
     /** The same walk over a declaration as it was written: an include is a spelling, and what it
@@ -1051,42 +1012,59 @@ public final class TypeOps {
      *  first, then the data's own. Which order that is, is what a reader is shown the fields in and
      *  which one a row is built for first, so it is handed back as something that has one. */
     public static java.util.SequencedMap<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
-        java.util.SequencedMap<String, Type> types = new LinkedHashMap<>();
-        // Which spread put each field here, so a collision names the group that supplied the earlier
-        // one. Reporting it against the taking data names a declaration that, where both fields came
-        // through spreads, holds no such field at all.
-        Map<String, String> suppliedBy = new LinkedHashMap<>();
-        for (Hir.Name inc : data.includes()) {
-            if (!(inc instanceof Hir.Name.Denoting names)) {
-                // Nothing declares it, which was reported where it is written. It brings in no
-                // fields, and complaining here that it is not a product data would be a second
-                // report about the one mistake.
-                continue;
-            }
-            TypeSymbol included = names.type();
-            if (!(symbols.declaredNode(included) instanceof Hir.Data id)) {
-                throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
-                        .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
-                        .build());
-            }
-            for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
-                if (types.put(e.getKey(), e.getValue()) != null) {
-                    throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
-                            .say(new DataMessage.SpreadFieldCollision(
-                                    e.getKey(), inc.written(), suppliedBy.get(e.getKey())))
-                            .build());
-                }
-                suppliedBy.put(e.getKey(), "..." + inc.written());
+        return FieldExpansion.laidOut(expansionOf(data.declares(), data, symbols), REFUSING);
+    }
+
+    /** The names {@link #fieldTypes} answers about, in the order a value lays them out. */
+    public static List<String> fieldLayout(Hir.Data data, Symbols symbols) {
+        return FieldExpansion.layout(expansionOf(data.declares(), data, symbols), REFUSING);
+    }
+
+    /** What a declaration reaches, read off {@code symbols}. */
+    private static FieldExpansion.Of expansionOf(TypeSymbol.AtModule declared, Hir.Data data,
+                                                 Symbols symbols) {
+        return FieldExpansion.of(declared, data, at -> symbols.declaredNode(at));
+    }
+
+    /**
+     * What the pass that holds a declaration to its rules says about one that does not hold
+     * together: a declaration reaching two fields under one name has no fields, and a spread of
+     * something a value is not made of is the author spreading the wrong thing.
+     */
+    private static final FieldExpansion.Refusing REFUSING = new FieldExpansion.Refusing() {
+        @Override
+        public void twice(String field, FieldExpansion.Of of, FieldExpansion.Supplier arriving,
+                          FieldExpansion.Supplier held) {
+            switch (arriving) {
+                case FieldExpansion.Supplier.Own(Hir.Field written) ->
+                        throw CompileException.of(Diagnostic.at(written.pos())
+                                .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(
+                                        field, of.declaration().name()))
+                                .build());
+                // Which two of this declaration's spreads brought them, and not which declaration
+                // wrote either: a field is taken in under the spread that supplied it.
+                case FieldExpansion.Supplier.Spread(Hir.Name written) ->
+                        throw CompileException.of(Diagnostic.at(written.name().reportedAt())
+                                .say(new DataMessage.SpreadFieldCollision(field, written.written(),
+                                        spelled(held)))
+                                .build());
             }
         }
-        for (Hir.Field f : data.fields()) {
-            if (types.put(f.name(), fieldType(f)) != null) {
-                throw CompileException.of(Diagnostic.at(f.pos())
-                        .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(f.name(), data.name()))
-                        .build());
-            }
+
+        @Override
+        public void notAProduct(FieldExpansion.Include.NotAProduct include) {
+            throw CompileException.of(Diagnostic.at(include.written().name().reportedAt())
+                    .say(new DataMessage.SpreadIsNotAProductData(include.written().written()))
+                    .build());
         }
-        return types;
+    };
+
+    /** How a report names what already held a field: the spread that supplied it, as it is written. */
+    private static String spelled(FieldExpansion.Supplier held) {
+        return switch (held) {
+            case FieldExpansion.Supplier.Spread(Hir.Name written) -> "..." + written.written();
+            case FieldExpansion.Supplier.Own(Hir.Field written) -> written.name();
+        };
     }
 
     /**

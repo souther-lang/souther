@@ -277,7 +277,7 @@ public final class Elaborator {
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
-                        ctx.fieldTypes().of(constructed), env, ctx,
+                        ctx.layout().of(constructed), ctx.fieldTypes().of(constructed), env, ctx,
                         nd.mayOmitOptionalFields());
                 yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
             }

@@ -258,7 +258,7 @@ public final class SpecChecker {
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, PublishedDeclarations published,
                                     DeclarationKinds kinds, NewtypeInners inners,
-                                    EffectiveFieldTypes fieldTypes,
+                                    EffectiveFieldTypes fieldTypes, FieldLayout layout,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
@@ -346,7 +346,7 @@ public final class SpecChecker {
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
+                new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn), output);
         Type rt = elaboratedBody.type();
@@ -459,7 +459,7 @@ public final class SpecChecker {
         // emitted tree, whose operations are no longer operations.
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
-                        new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
+                        new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                                 .withCallees(calleeSigs)
                                 .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = discharge == null

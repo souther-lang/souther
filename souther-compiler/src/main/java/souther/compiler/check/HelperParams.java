@@ -440,7 +440,7 @@ final class HelperParams {
             this.kinds = kinds;
             this.ctx = new CheckContext(symbols, published, kinds,
                     NewtypeInners.asWritten(symbols), EffectiveFieldTypes.asWritten(symbols),
-                    null, reqSigs);
+                    FieldLayout.asWritten(symbols), null, reqSigs);
             this.reqSigs = reqSigs;
             this.recursiveHelperFns = recursiveHelperFns;
         }

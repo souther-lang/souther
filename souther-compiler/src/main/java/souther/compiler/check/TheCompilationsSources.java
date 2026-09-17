@@ -38,6 +38,7 @@ public final class TheCompilationsSources {
     private final NewtypeInners inners;
     private final FieldBindings bindings;
     private final EffectiveFieldTypes fieldTypes;
+    private final FieldLayout layout;
     private final ClauseLocations written;
 
     /** Which mint this is, told to nobody: what it stamps says this and what another stamps says
@@ -57,7 +58,7 @@ public final class TheCompilationsSources {
                                   PublishedDeclarations published, DeclarationKinds kinds,
                                   DeclarationNewtypes newtypes, NewtypeInners inners,
                                   FieldBindings bindings, EffectiveFieldTypes fieldTypes,
-                                  ClauseLocations written) {
+                                  FieldLayout layout, ClauseLocations written) {
         if (scopeOf == null || clauses == null || published == null || kinds == null
                 || newtypes == null || written == null) {
             throw new IllegalArgumentException(
@@ -73,6 +74,7 @@ public final class TheCompilationsSources {
         this.inners = inners;
         this.bindings = bindings;
         this.fieldTypes = fieldTypes;
+        this.layout = layout;
         this.written = written;
     }
 
@@ -82,9 +84,10 @@ public final class TheCompilationsSources {
                                   PublishedDeclarations published, DeclarationKinds kinds,
                                   DeclarationNewtypes newtypes, ClauseLocations written) {
         // Null rather than an answer of its own: what a declaration wraps, which binding each of
-        // its fields is and what each of them holds are read off the scope the source is made over,
-        // and which scope that is is not known until a module is named.
-        this(scopeOf, clauses, published, kinds, newtypes, null, null, null, written);
+        // its fields is, what each of them holds and
+        // where they stand are read off the scope the source is made over, and which scope that is
+        // is not known until a module is named.
+        this(scopeOf, clauses, published, kinds, newtypes, null, null, null, null, written);
     }
 
     /** The source {@code module}'s rules are read under, or null where the compilation resolves no
@@ -96,6 +99,7 @@ public final class TheCompilationsSources {
                         inners == null ? NewtypeInners.asWritten(scope) : inners,
                         bindings == null ? FieldBindings.asWritten(scope) : bindings,
                         fieldTypes == null ? EffectiveFieldTypes.asWritten(scope) : fieldTypes,
+                        layout == null ? FieldLayout.asWritten(scope) : layout,
                         written, new AModulesRules(mint, module));
     }
 }

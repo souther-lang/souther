@@ -78,6 +78,7 @@ public final class TypeChecker {
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
                                        PublishedDeclarations published, DeclarationKinds kinds,
                                        NewtypeInners inners, EffectiveFieldTypes fieldTypes,
+                                       FieldLayout layout,
                                        UninhabitableTypes.WithNoValue withNoValue,
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -94,7 +95,8 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, published, kinds, inners, fieldTypes, withNoValue,
+            checkRecovering(module, symbols, published, kinds, inners, fieldTypes, layout,
+                    withNoValue,
                     declaredAt,
                     policy, sigs,
                     importedInjected,
@@ -129,13 +131,13 @@ public final class TypeChecker {
                                      InvariantChecker.Source discharge,
                                      Symbols symbols, PublishedDeclarations published,
                                      DeclarationKinds kinds, NewtypeInners inners,
-                                     EffectiveFieldTypes fieldTypes,
+                                     EffectiveFieldTypes fieldTypes, FieldLayout layout,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, published, kinds,
-                inners, fieldTypes, policy,
+                inners, fieldTypes, layout, policy,
                 calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs);
     }
 
@@ -216,6 +218,7 @@ public final class TypeChecker {
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
                                         PublishedDeclarations published, DeclarationKinds kinds,
                                         NewtypeInners inners, EffectiveFieldTypes fieldTypes,
+                                        FieldLayout layout,
                                         UninhabitableTypes.WithNoValue withNoValue,
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -331,8 +334,8 @@ public final class TypeChecker {
                         if (symbols.declarations().declaration(data.declares())
                                 instanceof Derived.Data derived) {
                             DataChecker.checkData(derived,
-                                    CheckContext.of(symbols, published, kinds, inners, fieldTypes)
-                                            .forData(data));
+                                    CheckContext.of(symbols, published, kinds, inners, fieldTypes,
+                                            layout).forData(data));
                         }
                     }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, published);

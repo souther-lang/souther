@@ -60,17 +60,19 @@ public final class ExecutableInvariants {
         Map<String, BindingId> bindings =
                 TypeOps.fieldBindings(data.declares(), symbols);
         List<ValueShape.Field> fields = new ArrayList<>();
-        // In the order a value lays its fields out, which is what `fieldTypes` answers. The bindings
-        // are a walk of their own and answer in an order of nothing's deciding, so what is read off
-        // them is the binding of a field this one named.
-        types.forEach((field, type) -> fields.add(
-                new ValueShape.Field(field, type, bindings.get(field))));
+        // In the order a value lays its fields out, asked of what answers that. The two beside it
+        // are read by name: which type stands at a name and which binding it is are mappings and
+        // say nothing about where the field stands, so taking the order off either would be reading
+        // something neither of them answers.
+        for (String field : TypeOps.fieldLayout(data, symbols)) {
+            fields.add(new ValueShape.Field(field, types.get(field), bindings.get(field)));
+        }
 
         Scope reading = DataChecker.fieldScope(data.declares(), types,
                 FieldBindings.asWritten(symbols)).reaching(helpers);
         CheckContext ctx =
                 CheckContext.executableInvariant(symbols, published, kinds, inners, fieldTypes,
-                        data);
+                        FieldLayout.asWritten(symbols), data);
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (Hir.InvariantClause clause : TypeOps.settledClausesGoverning(data.declares(), symbols)) {
             // Desugared first, the way a body is: a clause writing a comprehension states the same

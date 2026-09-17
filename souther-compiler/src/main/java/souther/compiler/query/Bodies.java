@@ -929,7 +929,7 @@ public final class Bodies {
                         out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
                                 Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
                                 Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
-                                helpers.value()));
+                                Shapes.fieldLayout(db), helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its
                         // rules. There is nothing to read into a term, and a behavior that cannot be
@@ -2535,6 +2535,7 @@ public final class Bodies {
                                             Shapes.newtypeInners(db),
                                             Shapes.fieldBindings(db),
                                             Shapes.effectiveFieldTypes(db),
+                                            Shapes.fieldLayout(db),
                                             Shapes.clauseLocations(db)),
                                     policy, db.readings()),
                             contracts.present() ? contracts.value() : Map.of())
@@ -2546,7 +2547,7 @@ public final class Bodies {
                         policy,
                         dischargeSource, scope.value(), Shapes.publishedDeclarations(db),
                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
-                        Shapes.effectiveFieldTypes(db),
+                        Shapes.effectiveFieldTypes(db), Shapes.fieldLayout(db),
                         calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value());
                 Core core = checked.emitted();
@@ -2758,6 +2759,7 @@ public final class Bodies {
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
                         Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
+                        Shapes.fieldLayout(db),
                         withNoValue.value(), Shapes.declarationLocations(db),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,

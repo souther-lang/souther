@@ -265,7 +265,8 @@ public final class BehaviorChecker {
                 scopeOf(contract, rule).reaching(helpers),
                 CheckContext.executableEnsures(symbols, published, kinds,
                         NewtypeInners.asWritten(symbols),
-                        EffectiveFieldTypes.asWritten(symbols)));
+                        EffectiveFieldTypes.asWritten(symbols),
+                        FieldLayout.asWritten(symbols)));
         if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(
