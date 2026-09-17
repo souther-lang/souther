@@ -35,36 +35,36 @@ import java.util.List;
  *
  * @param values       every number the rules leave this target on its own, which is
  *                     {@link LevelRegion#EVERYTHING} where they leave it everything
- * @param onlyTogether the conditions bearing on it that are about a form of several positions and
- *                     not about this one. Empty is the ordinary case and is what makes a walk of
- *                     {@code values} a walk of the whole question
+ * @param onlyTogether the rules bearing on it that are about several of the row's numbers at once
+ *                     and not about this one. Empty is the ordinary case and is what makes a walk
+ *                     of {@code values} a walk of the whole question
  */
-record NumbersAskedFor(LevelRegion values, List<TakenConstraint.Affine> onlyTogether) {
+public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether) {
 
-    NumbersAskedFor {
+    public NumbersAskedFor {
         onlyTogether = List.copyOf(onlyTogether);
     }
 
     /** Every number the order has, under no condition at all. */
-    static final NumbersAskedFor ANYTHING =
+    public static final NumbersAskedFor ANYTHING =
             new NumbersAskedFor(LevelRegion.EVERYTHING, List.of());
 
     /** The numbers a rule leaves this target, said of it alone. */
-    static NumbersAskedFor of(LevelRegion values) {
+    public static NumbersAskedFor of(LevelRegion values) {
         return new NumbersAskedFor(values, List.of());
     }
 
     /**
-     * A condition over a form of several positions, which leaves each of them everything on its
-     * own.
+     * A rule about several of the row's numbers at once, which leaves each of them everything on
+     * its own.
      *
-     * <p>Not nothing. What the condition says is true and is carried; what it does not say is which
-     * numbers this position may take, and the two are different facts. Recorded as an absence of
-     * information, a caller would search this position as widely as it does and also claim to have
+     * <p>Not nothing. What the rule says is true and is carried; what it does not say is which
+     * numbers this target may take, and the two are different facts. Recorded as an absence of
+     * information, a caller would search this target as widely as it does and also claim to have
      * finished.
      */
-    static NumbersAskedFor onlyTogether(TakenConstraint.Affine constraint) {
-        return new NumbersAskedFor(LevelRegion.EVERYTHING, List.of(constraint));
+    public static NumbersAskedFor onlyTogether(JointDemand demand) {
+        return new NumbersAskedFor(LevelRegion.EVERYTHING, List.of(demand));
     }
 
     /**
@@ -84,7 +84,7 @@ record NumbersAskedFor(LevelRegion values, List<TakenConstraint.Affine> onlyToge
      * @param cuts every cut the way took in, of which the ones naming {@code term} are read
      * @param on   the order {@code term}'s values are counted on
      */
-    static NumbersAskedFor askedOf(NumericTerm.FromOnePosition term,
+    public static NumbersAskedFor askedOf(NumericTerm.FromOnePosition term,
                                    SearchRegion within, Carrier on,
                                    List<OnTheWay.TakenIn> cuts) {
         NumbersAskedFor asked = switch (within.projectionOf(term)) {
@@ -132,9 +132,9 @@ record NumbersAskedFor(LevelRegion values, List<TakenConstraint.Affine> onlyToge
      * has one on either side keeps every value both sides left — which is the difference between
      * searching a position the rules bound and searching the whole of its order.
      */
-    NumbersAskedFor meet(NumbersAskedFor other) {
-        List<TakenConstraint.Affine> both = new ArrayList<>(onlyTogether);
-        for (TakenConstraint.Affine each : other.onlyTogether) {
+    public NumbersAskedFor meet(NumbersAskedFor other) {
+        List<JointDemand> both = new ArrayList<>(onlyTogether);
+        for (JointDemand each : other.onlyTogether) {
             if (!both.contains(each)) {
                 both.add(each);
             }
@@ -149,7 +149,7 @@ record NumbersAskedFor(LevelRegion values, List<TakenConstraint.Affine> onlyToge
      * rules leave none only where this holds; where it does not, the numbers this target may take
      * are the ones some other position's value decides, and none of them was looked at.
      */
-    boolean isWalkedWhole() {
+    public boolean isWalkedWhole() {
         return onlyTogether.isEmpty();
     }
 
@@ -160,7 +160,7 @@ record NumbersAskedFor(LevelRegion values, List<TakenConstraint.Affine> onlyToge
      * number that tries that number has tried every number there is of it; a search asked for a
      * class that tries one number out of it has tried one.
      */
-    boolean isOneNumber() {
+    public boolean isOneNumber() {
         return isWalkedWhole() && values.parts().size() == 1 && values.parts().getFirst().onePlace();
     }
 }
