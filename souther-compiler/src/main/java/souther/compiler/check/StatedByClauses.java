@@ -1660,9 +1660,28 @@ sealed interface StatedByClauses {
      */
     final class Asked<K> {
 
-        private final Map<K, List<ClauseOccurrence>> byPart = new LinkedHashMap<>();
-        private final Map<K, StatedByClauses> trees = new LinkedHashMap<>();
-        private final Map<K, RuleRef.Invariant> rules = new LinkedHashMap<>();
+        /**
+         * What was read under one key, in the order the keys were first read.
+         *
+         * <p>One entry and not three tables. The clauses as read, the rule they are of and where
+         * their parts are belong to one key and are always wanted together, so a walk holding an
+         * entry has them all — asked of a second table, the key would be put through its own hash
+         * again, and a key here is a clause of a body whose hash is a walk of what is under it.
+         *
+         * <p>The order is the order a key was first read at, which is what the entry is made by.
+         * Nothing that fills in a part of one afterwards decides where it sits.
+         */
+        private final Map<K, Parts> asked = new LinkedHashMap<>();
+
+        /**
+         * One key's reading: the clauses as they were read, the rule they are of, and where in the
+         * clause each part is, in the order the reading reached them.
+         */
+        private record Parts(List<ClauseOccurrence> byPart, StatedByClauses clauses,
+                             RuleRef.Invariant rule) {}
+
+        /** One key's reading with what met it, kept while the two walks below run. */
+        private record Resolved<K>(K key, Parts parts, StatedTogether projected) {}
 
         /**
          * One clause read from {@code at} in the world {@code view} describes
@@ -1695,9 +1714,7 @@ sealed interface StatedByClauses {
             // to a shape it no longer states.
             assert mirrors(clause, one, view)
                     : "the reading of a clause is not the tree its author wrote it as";
-            byPart.put(key, parts);
-            trees.put(key, one);
-            rules.put(key, rule);
+            asked.put(key, new Parts(parts, one, rule));
             return one;
         }
 
@@ -1720,12 +1737,16 @@ sealed interface StatedByClauses {
             // second projection would be a second answer that agrees only until somebody changes
             // one of them.
             ChoicesDecided decided = new ChoicesDecided();
-            Map<K, StatedTogether> projected = new LinkedHashMap<>();
+            // Carried to the walk below as a list rather than filed under the keys again. What the
+            // second walk wants of a key is what this one just made for it, and it is walking the
+            // same keys in the same order — put back in a table, each of them would be hashed a
+            // second time to find what is already in hand.
+            List<Resolved<K>> resolved = new ArrayList<>();
             StatedTogether whole = StatedTogether.top(reader.ordered().carriers());
-            for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
-                StatedTogether one = reader.together(rules.get(each.getKey()), each.getValue(),
-                        decided);
-                projected.put(each.getKey(), one);
+            for (Map.Entry<K, Parts> each : asked.entrySet()) {
+                Parts parts = each.getValue();
+                StatedTogether one = reader.together(parts.rule(), parts.clauses(), decided);
+                resolved.add(new Resolved<>(each.getKey(), parts, one));
                 whole = whole.meet(one);
             }
             // What this reading did with the choices it read, gathered as the walks below do their
@@ -1752,18 +1773,18 @@ sealed interface StatedByClauses {
             // for and spends it by design, so a check that started before it would be about
             // something else and would never fail.
             int unspent = spentBy(by);
-            for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
+            for (Resolved<K> each : resolved) {
                 // The rule on its own as well as in the declaration, because what it did to a
                 // position and what the position came to are two questions. Its own choices are
                 // decided by its own clauses against what the answer already established; met with
                 // its neighbours first, a branch they refuse is dropped and the rule is credited
                 // with a narrowing it did not do.
-                Account mine = reader.accountOf(rules.get(each.getKey()), each.getValue(),
-                        projected.get(each.getKey()), made, by, tally);
-                said.put(each.getKey(), mine.parts());
+                Account mine = reader.accountOf(each.parts().rule(), each.parts().clauses(),
+                        each.projected(), made, by, tally);
+                said.put(each.key(), mine.parts());
                 opened.addAll(mine.opened());
                 PartAccount clause = mine.parts().get(ClauseOccurrence.ofTheClause());
-                narrowed.put(each.getKey(), mine.narrowed());
+                narrowed.put(each.key(), mine.narrowed());
                 byValues = byValues.both(clause.byValues());
                 byOrder = byOrder.both(clause.byOrder());
             }
@@ -1805,11 +1826,11 @@ sealed interface StatedByClauses {
             ReadByClauses read = new ReadByClauses(answered, byValues, byOrder);
             Map<K, List<Map.Entry<ClauseOccurrence, ReadByClauses.OfAPart>>> parts =
                     new LinkedHashMap<>();
-            byPart.forEach((key, these) -> {
+            asked.forEach((key, these) -> {
                 Map<ClauseOccurrence, ReadByClauses.OfAPart> mine = published.get(key);
                 List<Map.Entry<ClauseOccurrence, ReadByClauses.OfAPart>> out =
                         new ArrayList<>();
-                these.forEach(each -> {
+                these.byPart().forEach(each -> {
                     ReadByClauses.OfAPart one = mine == null ? null : mine.get(each);
                     if (one != null) {
                         out.add(Map.entry(each, one));
