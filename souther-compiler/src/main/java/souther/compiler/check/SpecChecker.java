@@ -258,7 +258,7 @@ public final class SpecChecker {
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, PublishedDeclarations published,
                                     DeclarationKinds kinds, NewtypeInners inners,
-                                    EffectiveFieldTypes fieldTypes,
+                                    EffectiveFieldTypes fieldTypes, FieldLayout layout,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
@@ -346,7 +346,7 @@ public final class SpecChecker {
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
+                new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn), output);
         Type rt = elaboratedBody.type();
@@ -459,7 +459,7 @@ public final class SpecChecker {
         // emitted tree, whose operations are no longer operations.
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
-                        new CheckContext(symbols, published, kinds, inners, fieldTypes, null, reqSigs)
+                        new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                                 .withCallees(calleeSigs)
                                 .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = discharge == null
@@ -666,10 +666,16 @@ public final class SpecChecker {
             }
             // Read through the includes: a spread flattens another data's fields into this one, so
             // they are this data's fields on the generated class and carry their types with them.
-            for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
-                refuseHidden(f.getValue(),
+            //
+            // Where the fields stand, because the first that rests on something kept is the one
+            // reported and the rest are not reached. An author told about whichever field a mapping
+            // happened to iterate to first would be told about a different one each time the
+            // declaration was edited elsewhere.
+            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+            for (String field : TypeOps.fieldLayout(data, symbols)) {
+                refuseHidden(fields.get(field),
                         hidden -> Diagnostic.say(new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
-                                f.getKey(), hidden))
+                                field, hidden))
                                 .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                 data.name())),
                         data.pos(), symbols, exposeAll, exposed);

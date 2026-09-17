@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -92,8 +93,10 @@ final class CodecGen {
     private GeneratedClass decoderOf(Hir.Def def, Src src) { return new GeneratedClass.Decoder(valueOf(def), src.kind()); }
     private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
-    private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
-    private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
+    private SequencedMap<String, Type> fieldTypes(Hir.Data data) { return ctx.laidOutFields(data); }
+    private ClassDesc[] fieldDescs(SequencedMap<String, Type> fields) {
+        return JvmTypes.fieldDescs(fields, ctx);
+    }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
 
     private static String srcFactory(Src s) {
@@ -179,9 +182,9 @@ final class CodecGen {
      * <p>A plain {@code String} key used to be left alone — it is already what the decoded object
      * carries — and that was true until text arriving from outside became canonical (ADR-0096). The
      * keys of a decoded map do not pass the string leaf that canonicalizes, so leaving them alone
-     * left `Map<String, V>` the one place a boundary handed the domain text it had not canonicalized:
-     * `Map.get` with a literal would miss a key written the other way, while `Map<UserId, V>` beside
-     * it was canonical because a newtype key runs its own decoder here.
+     * left {@code Map<String, V>} the one place a boundary handed the domain text it had not
+     * canonicalized: {@code Map.get} with a literal would miss a key written the other way, while
+     * {@code Map<UserId, V>} beside it was canonical because a newtype key runs its own decoder here.
      *
      * <p>Kept as a question rather than deleted because the walk it turns on is also where a
      * canonicalization collision is caught, and that is a property of every key type, not of the
@@ -587,7 +590,7 @@ final class CodecGen {
     }
 
     byte[] generateDecoderClass(ClassDesc cdName, Hir.Data data, Hir.DecoderDef dec,
-                                        Map<String, Type> fields, Src src) {
+                                        SequencedMap<String, Type> fields, Src src) {
         ClassDesc cdDec = cd(decoderOf(data, src));
         decoderClass = cdDec;
         decodedValue = valueOf(data);
@@ -1068,7 +1071,7 @@ final class CodecGen {
     }
 
     private void emitPrimDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.PrimDecoder prim,
-                                Map<String, Type> fields, Src src, Invariants invariants) {
+                                SequencedMap<String, Type> fields, Src src, Invariants invariants) {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
         switch (prim.from()) {
@@ -1125,7 +1128,7 @@ final class CodecGen {
      * Y's decoder rather than a primitive one.
      */
     private void emitNewtypeDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.NewtypeDecoder dec,
-                                   Map<String, Type> fields, Src src, Invariants invariants) {
+                                   SequencedMap<String, Type> fields, Src src, Invariants invariants) {
         if (dec.inner() instanceof Hir.MapDecRef mp) {
             // The map's own decoder, then its two halves of invariant either side of the key remap.
             // A mapped constraint is one of Raoh's and needs the typed leaf, which is only before the
@@ -1237,7 +1240,7 @@ final class CodecGen {
     }
 
     private void emitObjectDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.ObjectDecoder obj,
-                                  Map<String, Type> fields, Src src) {
+                                  SequencedMap<String, Type> fields, Src src) {
         emitObjectGuard(code, src, gen.slot(Type.STRING));
         List<Hir.Bind> binds = obj.binds();
         int[] resultSlots = new int[binds.size()];
@@ -1630,7 +1633,7 @@ final class CodecGen {
      * bodies whose {@code BodyGen} locals start above slot 2, so slot 2 always holds the path.
      */
     private void emitConstructCall(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.Construct construct,
-                                   Map<String, Type> fields) {
+                                   SequencedMap<String, Type> fields) {
         // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
         // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
         // The field's declared type is pushed in, as the checker does when it checks a construction.

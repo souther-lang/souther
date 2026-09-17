@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Objects;
 import java.util.Set;
 
@@ -655,6 +656,28 @@ final class CodegenContext {
 
     Map<String, Type> fieldTypes(Hir.Data data) {
         return TypeOps.fieldTypes(data, symbols);
+    }
+
+    /**
+     * {@code data}'s fields in the order a value lays them out — the components the class is
+     * emitted with, and the parameters its constructor takes.
+     *
+     * <p><b>The order is asked of what answers it</b> ({@link TypeOps#fieldLayout}) and the types
+     * are read by name. {@link #fieldTypes} says which type stands at each name and says nothing
+     * about where a field stands, so an emitter taking a parameter order off it would be a second
+     * place that decided the layout — and the day the two disagreed, a construction the check
+     * lined up one way would be handed over another.
+     *
+     * <p>Asked once per class emitted and walked thereafter, so that every part of it — the
+     * components, the fields, the constructor, the accessors — is laid out by the one answer.
+     */
+    SequencedMap<String, Type> laidOutFields(Hir.Data data) {
+        SequencedMap<String, Type> out = new LinkedHashMap<>();
+        Map<String, Type> types = fieldTypes(data);
+        for (String field : TypeOps.fieldLayout(data, symbols)) {
+            out.put(field, types.get(field));
+        }
+        return out;
     }
 
     Type successType(Hir.RetType ret) {

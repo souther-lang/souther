@@ -11,13 +11,19 @@ import java.util.Map;
  * <p>One answer and not a field at a time. What a clause of a declaration reads resolves against the
  * fields that declaration reaches — its own and the ones its spreads bring in — and a field brought
  * in keeps the binding of the declaration that wrote it, because the clause that reads it was written
- * there too. So the answer is the closure a walk from one declaration makes, in the order it makes
- * it: which field a name means depends on what was reached first.
+ * there too. So the answer is the closure a walk from one declaration makes, settled by reading a
+ * declaration's own fields before the ones its spreads bring in: the nearer binding is the one a
+ * name means.
  *
- * <p><b>Bindings and not types.</b> A field's type changing leaves every binding where it was, and a
- * field's order changing moves them. Answered together with what each field holds, a reader of the
- * bindings would be worked out again by an edit that only changed a type — which is the same
- * over-reading a declaration's meaning was cut apart to stop.
+ * <p><b>A mapping, and that precedence is not an order it answers.</b> Reading the nearer first is
+ * how a name is settled, not a sequence anything may take off the result — and it could not be the
+ * order a value lays its fields out in, which takes in what is spread before what is written. A
+ * reader of that asks {@link FieldLayout}.
+ *
+ * <p><b>Bindings and not types.</b> A field's type changing leaves every binding where it was.
+ * Answered together with what each field holds, a reader of the bindings would be worked out again
+ * by an edit that only changed a type — which is the same over-reading a declaration's meaning was
+ * cut apart to stop.
  *
  * <p>Beside {@link Symbols} rather than on it. A carrier of declarations answers what a declaration
  * is; this says what a walk over several of them came to, which is not something one declaration

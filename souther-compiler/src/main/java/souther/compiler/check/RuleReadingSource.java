@@ -71,12 +71,13 @@ public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants
                                 PublishedDeclarations published, DeclarationKinds kinds,
                                 DeclarationNewtypes newtypes, NewtypeInners inners,
                                 FieldBindings bindings, EffectiveFieldTypes fieldTypes,
+                                FieldLayout layout,
                                 ClauseLocations written, Origin origin) {
 
     public RuleReadingSource {
         if (symbols == null || invariants == null || published == null || kinds == null
                 || newtypes == null || inners == null || bindings == null || fieldTypes == null
-                || written == null || origin == null) {
+                || layout == null || written == null || origin == null) {
             throw new IllegalArgumentException(
                     "reading a declaration's rules takes a scope, somewhere to read clauses from,"
                             + " somewhere to read what a declaration says, somewhere to read where"
@@ -96,7 +97,8 @@ public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants
                              PublishedDeclarations published, DeclarationKinds kinds,
                              DeclarationNewtypes newtypes, ClauseLocations written) {
         this(symbols, invariants, published, kinds, newtypes, NewtypeInners.asWritten(symbols),
-                FieldBindings.asWritten(symbols), EffectiveFieldTypes.asWritten(symbols), written);
+                FieldBindings.asWritten(symbols), EffectiveFieldTypes.asWritten(symbols),
+                FieldLayout.asWritten(symbols), written);
     }
 
     /** A source made for a reading of its own, which nobody else can name. */
@@ -104,9 +106,9 @@ public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants
                              PublishedDeclarations published, DeclarationKinds kinds,
                              DeclarationNewtypes newtypes, NewtypeInners inners,
                              FieldBindings bindings, EffectiveFieldTypes fieldTypes,
-                             ClauseLocations written) {
-        this(symbols, invariants, published, kinds, newtypes, inners, bindings, fieldTypes, written,
-                AReadingOfItsOwn.next());
+                             FieldLayout layout, ClauseLocations written) {
+        this(symbols, invariants, published, kinds, newtypes, inners, bindings, fieldTypes, layout,
+                written, AReadingOfItsOwn.next());
     }
 
     /**

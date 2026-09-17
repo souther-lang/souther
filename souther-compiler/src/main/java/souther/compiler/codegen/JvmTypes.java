@@ -11,7 +11,7 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.SequencedMap;
 import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -230,7 +230,15 @@ final class JvmTypes {
         };
     }
 
-    static ClassDesc[] fieldDescs(Map<String, Type> fields, CodegenContext ctx) {
+    /**
+     * The parameters a data's constructor takes, in the order it takes them.
+     *
+     * <p>Handed something that has an order rather than a mapping, because the order is the answer
+     * here: a parameter list is positional. What decides it is
+     * {@code CodegenContext.laidOutFields}, which asks what answers where a field stands; nothing
+     * takes an order off a question about what the fields hold.
+     */
+    static ClassDesc[] fieldDescs(SequencedMap<String, Type> fields, CodegenContext ctx) {
         List<ClassDesc> descs = new ArrayList<>();
         for (Type t : fields.values()) {
             descs.add(jvmType(t, ctx));

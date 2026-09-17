@@ -725,30 +725,34 @@ public final class DataChecker {
                             .hint(new DataMessage.WrapTheValueAndWriteTheQuestionMarkOnTheField(ctx.data().name())).say(new DataMessage.ANewtypeMayNotWrapAnOptional(ctx.data().name(), Type.show(o.element()))).build());
         }
 
-        for (Map.Entry<String, Type> e : fields.entrySet()) {
+        // Where the fields stand: the first one refused here is the one the author is told about,
+        // so which it is is asked of what answers where a field stands rather than taken off the
+        // mapping that says what each of them holds.
+        for (String field : TypeOps.fieldLayout(ctx.data(), ctx.symbols())) {
+            Type held = fields.get(field);
             // A field is read through an accessor of the same name, and a data is a record over its
             // fields (spec §jvm-product). A no-argument method of Object is therefore taken: `toString` would
             // emit a second `toString()` and the class would not load, and the rest cannot be a record
             // component either. Reported here rather than left to codegen, as a duplicate name is.
-            if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
+            if (OBJECT_METHOD_NAMES.contains(field)) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                .say(new DataMessage.AFieldTakesAMethodOfObject(ctx.data().name(), e.getKey())).build());
+                                .at(fieldRegion(ctx.data(), field))
+                                .say(new DataMessage.AFieldTakesAMethodOfObject(ctx.data().name(), field)).build());
             }
-            if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
+            if (TypeOps.withoutExternalForm(held, ctx.symbols()) instanceof Type.TupleOf) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                .say(new DataMessage.ATupleCannotBeAField(ctx.data().name(), e.getKey())).build());
+                                .at(fieldRegion(ctx.data(), field))
+                                .say(new DataMessage.ATupleCannotBeAField(ctx.data().name(), field)).build());
             }
             // A field is written to and read from the outside, so a map it holds is a JSON object and
             // its keys are strings. Inside a body the same map may be keyed by anything (ADR-0040).
-            Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols(), ctx.kinds(),
+            Type badKey = TypeOps.nonBoundaryMapKey(held, ctx.symbols(), ctx.kinds(),
                     ctx.published());
             if (badKey != null) {
                 throw CompileException.of(Diagnostic
-                                .at(fieldRegion(ctx.data(), e.getKey()))
-                                
-                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + e.getKey(), Type.show(badKey))).build());
+                                .at(fieldRegion(ctx.data(), field))
+
+                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + field, Type.show(badKey))).build());
             }
         }
 
@@ -836,16 +840,29 @@ public final class DataChecker {
         // nothing builds a decoder's construction with a spread, so there is no binding to copy from
         // here; whether a field left out is one it had to write is the node's answer, as it is for
         // the construction a body writes
-        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx,
+        // Both read off the scope, as `fields` is: a decoder builds the declaration being checked,
+        // whose fields were walked here rather than asked of the compilation. Taking the order from
+        // one reading of the declarations and what stands at each name from another is how the two
+        // come to disagree about a name.
+        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(),
+                TypeOps.fieldLayout(ctx.data(), ctx.symbols()), fields, env, ctx,
                 c.mayOmitOptionalFields());
     }
 
     /**
-     * What each declared field of a construction is given, in declaration order — the one place that
-     * answers it. A field written out is given what was written; one no field init names is given the
-     * read of that field off the value spread into the construction, which is a field read like the
-     * one an author writes. So a construction carries no spread past here, and every reader of it
-     * asks the same values in the same order rather than working the spread out again.
+     * What each declared field of a construction is given, lined up with the order a value of the
+     * type lays its fields out in — the one place that answers it. A field written out is given what
+     * was written; one no field init names is given the read of that field off the value spread into
+     * the construction, which is a field read like the one an author writes. So a construction
+     * carries no spread past here, and every reader of it asks the same values in the same order
+     * rather than working the spread out again.
+     *
+     * <p><b>The order is {@code layout}'s and is not decided here.</b> What this answers is which
+     * value stands at each place a value of the type has; where those places are is one answer for
+     * the whole compile ({@link FieldLayout}), and the backend emits a constructor of that same
+     * order. Worked out here from whatever order {@code fields} happened to iterate in, the two
+     * would be two answers, and the day they disagreed a construction would hand its values to the
+     * wrong parameters.
      *
      * <p>Where several spreads carry one field, the first of them supplies it — one field is given
      * one value, and which is decided here and not by whichever reader looks.
@@ -856,7 +873,8 @@ public final class DataChecker {
      */
     static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
                                           List<Core.Read> spreads,
-                                          SourcePos pos, Map<String, Type> fields, Scope env,
+                                          SourcePos pos, List<String> layout,
+                                          Map<String, Type> fields, Scope env,
                                           CheckContext ctx, boolean mayOmitOptionals) {
         Map<String, Core.FieldValue> written = new LinkedHashMap<>();
         for (Hir.FieldInit init : inits) {
@@ -916,51 +934,51 @@ public final class DataChecker {
             }
         }
         List<Core.FieldValue> values = new ArrayList<>();
-        for (Map.Entry<String, Type> f : fields.entrySet()) {
-            Core.FieldValue own = written.get(f.getKey());
+        for (String name : layout) {
+            Type type = fields.get(name);
+            Core.FieldValue own = written.get(name);
             if (own != null) {
                 values.add(own);
                 continue;
             }
-            Spread from = supplying(spread, f.getKey());
-            if (from == null && mayOmitOptionals && f.getValue() instanceof Type.OptionOf) {
+            Spread from = supplying(spread, name);
+            if (from == null && mayOmitOptionals && type instanceof Type.OptionOf) {
                 // A fixture writes the value a field holds and writes nothing where it holds none,
                 // so a field left out is the absent value it declares rather than one with no value.
-                values.add(new Core.FieldValue(f.getKey(),
-                        new Core.OptionNone(f.getValue(), pos), pos));
+                values.add(new Core.FieldValue(name, new Core.OptionNone(type, pos), pos));
                 continue;
             }
             if (from == null) {
                 Diagnostic.Builder d = Diagnostic.at(pos)
-                        .say(new DataMessage.ConstructionIsMissingAField(typeName, f.getKey()));
+                        .say(new DataMessage.ConstructionIsMissingAField(typeName, name));
                 // one rule broken in one of several ways, and the hint is where the way is said. What
                 // was written decides it: `fromSums` counts the sums spread, which says nothing about
                 // whether anything was spread at all, so a construction with no spread is asked about
                 // separately rather than read off an empty count.
                 if (spreads.isEmpty()) {
-                    d = d.hint(new DataMessage.GiveTheFieldAValue(f.getKey()));
+                    d = d.hint(new DataMessage.GiveTheFieldAValue(name));
                 } else {
                     d = switch (fromSums.size()) {
-                        case 0 -> d.hint(new DataMessage.SupplyTheFieldExplicitly(f.getKey()));
+                        case 0 -> d.hint(new DataMessage.SupplyTheFieldExplicitly(name));
                         case 1 -> d.hint(new DataMessage.TheFieldIsNotInWhatTheSumShares(
-                                f.getKey(), fromSums.iterator().next()));
+                                name, fromSums.iterator().next()));
                         default -> d.hint(new DataMessage.TheFieldIsInTheSharedPartOfNoneOfThese(
-                                f.getKey(), String.join(", ", fromSums)));
+                                name, String.join(", ", fromSums)));
                     };
                 }
                 throw CompileException.of(d.build());
             }
-            Type pv = from.fields().get(f.getKey());
-            if (!TypeOps.assignable(pv, f.getValue(), ctx.published())) {
+            Type pv = from.fields().get(name);
+            if (!TypeOps.assignable(pv, type, ctx.published())) {
                 throw CompileException.of(Diagnostic.at(pos)
-                        .say(new DataMessage.SpreadSuppliesTheWrongType(f.getKey(), Type.show(pv),
-                                typeName, Type.show(f.getValue())))
-                        .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build());
+                        .say(new DataMessage.SpreadSuppliesTheWrongType(name, Type.show(pv),
+                                typeName, Type.show(type)))
+                        .diff(Type.show(pv, type), Type.show(type, pv)).build());
             }
             // The value is read at the type the source declares the field, which is the type the
             // backend loads it at; that it fits the field being given it was decided just above.
-            values.add(new Core.FieldValue(f.getKey(),
-                    new Core.FieldAccess(from.read(), f.getKey(), pv, from.read().pos()),
+            values.add(new Core.FieldValue(name,
+                    new Core.FieldAccess(from.read(), name, pv, from.read().pos()),
                     from.read().pos()));
         }
         return values;

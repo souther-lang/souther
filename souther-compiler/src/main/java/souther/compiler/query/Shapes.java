@@ -15,7 +15,8 @@ import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.FieldBindings;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.FieldExpansion;
+import souther.compiler.check.FieldLayout;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.ExpandedClauses;
@@ -49,10 +50,8 @@ import souther.compiler.types.TypeSymbols;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What each declaration becomes before anything is checked against it, one achievement to a rung:
@@ -348,8 +347,18 @@ public final class Shapes {
      * together here.
      *
      * <p>Nothing of what a field holds. A binding is an owner and which field of that owner it is, so
-     * an edit that changes a field's type leaves this answer alone; one that reorders the fields, or
-     * changes what is spread, does not.
+     * an edit that changes a field's type leaves this answer alone.
+     *
+     * <p><b>A mapping, and the precedence it is built by is not an order it answers.</b> Which field
+     * a name means is decided by reading a declaration's own fields before the ones its spreads
+     * bring in — the nearer binding is the one kept — and that is a rule for settling a name rather
+     * than a sequence anything may read off the answer. It is not the order a value lays its fields
+     * out in and could not be: that one takes in what is spread before what is written, which is the
+     * other way round. A reader of the layout asks {@link FieldLayoutOf}.
+     *
+     * <p>So an edit that moves a field among the ones its own declaration writes moves this, because
+     * the field is numbered where it is written and the numbers are what this answers. One that
+     * moves a whole spread does not.
      */
     public record FieldBindingsOf(TypeKey named) implements Key<Map<String, BindingId>> {
         @Override
@@ -359,51 +368,71 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, BindingId>> compute(Db db) {
-            Map<String, BindingId> bindings = new LinkedHashMap<>();
-            if (declaredAt(db, named) instanceof Hir.Data data) {
-                // The identity the declaration carries, which is what its own clauses resolve
-                // against — not one built here out of the address this was asked under.
-                walk(db, data, data.declares(), new LinkedHashSet<>(), bindings);
-            }
-            // Kept in the order the walk reached them. A reader lists what a declaration binds and
-            // reports it in that order, so an answer that came back in whatever order a hash gave
-            // would move a sentence about a program nothing had changed.
-            return Answer.of(Collections.unmodifiableMap(bindings));
+            return Answer.of(declaredAt(db, named) instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(
+                            FieldExpansion.bindings(expansionOf(db, data)))
+                    : Map.of());
+        }
+    }
+
+    /**
+     * What a declaration reaches, read off the store.
+     *
+     * <p>Every declaration the spreads reach is asked for on its own, so that an answer built from
+     * this depends on the declarations it walked and on nothing else — and an edit to one of them
+     * reaches exactly the answers that walked it. Null where nothing declares the name, or where
+     * what it declares is not something fields are taken out of.
+     *
+     * <p>Asked under the identity the declaration carries rather than the address it was reached
+     * by, which is what its own clauses resolve against.
+     */
+    private static FieldExpansion.Of expansionOf(Db db, Hir.Data data) {
+        return FieldExpansion.of(data.declares(), data, at -> declaredAt(db, at.key()));
+    }
+
+    /** The declaration at {@code address} with its names resolved, or null where none is. */
+    private static Hir.Def declaredAt(Db db, TypeKey address) {
+        Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
+        return declared.present() ? declared.value() : null;
+    }
+
+    /**
+     * The order a value of a declaration lays its fields out in: what each spread brings in, spread
+     * by spread as they are written, and then what the declaration writes itself.
+     *
+     * <p><b>A sequence, and it is what this answers.</b> Two of these holding the same names in
+     * another order are two different answers, so a declaration whose spreads are written the other
+     * way round reaches every reader of this — which is what a reader of an order needs and what a
+     * mapping cannot give it. {@link EffectiveFieldTypesOf} answers what stands at each name and
+     * says nothing about their order; this says the order and nothing about what is in them. The
+     * two move at different times and a reader takes the one it means.
+     *
+     * <p>What is laid out here is what a constructor of the type takes, in the order it takes them,
+     * and what a value written out is read back in.
+     *
+     * <p>An edit that changes only where the fields stand is a change to this and to neither of the
+     * mappings — reordering two spreads that bring in different fields, say. Not every edit that
+     * moves a field is one: a declaration's own fields moved among themselves are numbered the other
+     * way round, so {@link FieldBindingsOf} moves too, because a binding is which field of its owner
+     * it is. What this alone answers is where a field stands, not that a field moved.
+     *
+     * <p>Absent where nothing declares the name, and empty where what it declares reaches no field.
+     */
+    public record FieldLayoutOf(TypeKey named) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return named.module();
         }
 
-        /**
-         * {@code data}'s own fields, then what it spreads — the walk {@code TypeOps.fieldBindings}
-         * makes, reading each declaration it reaches off the store.
-         *
-         * <p>Carried over as it stands, {@code seen} and all: which include is walked and which
-         * binding a repeated name keeps are decided by the order this goes in, and an edit to that
-         * order here would be a change to what a clause resolves to made under cover of a change to
-         * where the answer comes from.
-         */
-        private static void walk(Db db, Hir.Data data, TypeSymbol.AtModule declared,
-                                 Set<TypeSymbol> seen, Map<String, BindingId> out) {
-            BindingOwner owner = new BindingOwner.OfFields(declared);
-            int ordinal = 0;
-            for (Hir.Field field : data.fields()) {
-                out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            Hir.Def declared = declaredAt(db, named);
+            if (declared == null) {
+                return Answer.absent();
             }
-            for (Hir.Name include : data.includes()) {
-                TypeSymbol source = switch (include) {
-                    case Hir.Name.Denoting denoting -> denoting.type();
-                    // Reported where it is written, and bringing in no fields.
-                    case Hir.Name.Unanswered _ -> null;
-                };
-                if (source instanceof TypeSymbol.AtModule at && seen.add(at)
-                        && declaredAt(db, at.key()) instanceof Hir.Data included) {
-                    walk(db, included, at, seen, out);
-                }
-            }
-        }
-
-        /** The declaration at {@code address} with its names resolved, or null where none is. */
-        private static Hir.Def declaredAt(Db db, TypeKey address) {
-            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
-            return declared.present() ? declared.value() : null;
+            return Answer.of(declared instanceof Hir.Data data
+                    ? FieldExpansion.layout(expansionOf(db, data), FieldExpansion.Refusing.NOTHING)
+                    : List.of());
         }
     }
 
@@ -419,9 +448,9 @@ public final class Shapes {
      * nothing that read it. A reader taking the order off it would be reading something the store
      * does not watch, and would go stale with nothing to say so.
      *
-     * <p>A reader that needs the order asks something that answers it. {@link FieldBindingsOf}
-     * numbers a declaration's own fields as it writes them, and what a value is laid out as is
-     * {@code ValueShape}'s — which reads the order off the walk that builds it and is not this.
+     * <p>A reader that needs the order asks {@link FieldLayoutOf}, which answers it and is moved by
+     * an edit that only moves a field. Said here rather than left to whoever looks: the order is a
+     * real question about a declaration, and the answer to it is somewhere.
      *
      * <p>Which is what keeps this answer as narrow as the question it is for. What type a field
      * holds and what order the fields come in move at different times: put together, every reader
@@ -447,43 +476,13 @@ public final class Shapes {
             if (declared == null) {
                 return Answer.absent();
             }
-            Map<String, Type> types = new LinkedHashMap<>();
-            if (declared instanceof Hir.Data data) {
-                walk(db, data, types);
-            }
-            // Kept in a map that iterates, because the walk fills one — and not because the order
-            // it iterates in says anything. What this answers is which type stands at each name.
-            return Answer.of(Collections.unmodifiableMap(types));
-        }
-
-        /**
-         * What {@code data} spreads, then its own fields — the walk {@code TypeOps.fieldTypes}
-         * makes, reading each declaration it reaches off the store.
-         *
-         * <p>Carried over as it stands. Which order the walk goes in decides which type a name
-         * holds where two fields carry one spelling, and that is content: an edit to the order
-         * here would change what a field means under cover of a change to where the answer comes
-         * from. It is not the order the answer iterates in, which nothing may read.
-         */
-        private static void walk(Db db, Hir.Data data, Map<String, Type> out) {
-            for (Hir.Name include : data.includes()) {
-                // A name nothing declares, or one that declares something no field can be taken
-                // out of. Both bring in nothing here and are reported where the spread is written.
-                if (include instanceof Hir.Name.Denoting denoting
-                        && denoting.type() instanceof TypeSymbol.AtModule at
-                        && declaredAt(db, at.key()) instanceof Hir.Data included) {
-                    walk(db, included, out);
-                }
-            }
-            for (Hir.Field field : data.fields()) {
-                out.put(field.name(), TypeOps.fieldType(field));
-            }
-        }
-
-        /** The declaration at {@code address} with its names resolved, or null where none is. */
-        private static Hir.Def declaredAt(Db db, TypeKey address) {
-            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
-            return declared.present() ? declared.value() : null;
+            // Kept in a map that iterates, because the projection fills one — and not because the
+            // order it iterates in says anything. What this answers is which type stands at each
+            // name; the order a value lays them out in is {@link FieldLayoutOf}.
+            return Answer.of(declared instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(FieldExpansion.types(
+                            expansionOf(db, data), FieldExpansion.Refusing.NOTHING))
+                    : Map.of());
         }
     }
 
@@ -496,6 +495,22 @@ public final class Shapes {
         return declared -> {
             Answer<Map<String, Type>> types = db.ask(new EffectiveFieldTypesOf(declared.key()));
             return types.present() ? types.value() : Map.of();
+        };
+    }
+
+    /**
+     * The order any declaration lays its fields out in, for a reader that emits or lines up a value
+     * of one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on where the fields of the declarations it asks about stand and on
+     * nothing else about them — not on what any of them holds, and not on where any of it is
+     * written.
+     */
+    public static FieldLayout fieldLayout(Db db) {
+        return declared -> {
+            Answer<List<String>> layout = db.ask(new FieldLayoutOf(declared.key()));
+            return layout.present() ? layout.value() : List.of();
         };
     }
 

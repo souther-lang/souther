@@ -150,7 +150,7 @@ final class Clauses {
         return () -> new SecondaryClauseReading.Over(
                 DataChecker.fieldScope(named, fieldsOf(named), source().bindings()),
                 CheckContext.of(symbols, published, kinds, source().inners(),
-                        source().fieldTypes()).forDischarge());
+                        source().fieldTypes(), source().layout()).forDischarge());
     }
 
     /**
