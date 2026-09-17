@@ -2270,6 +2270,12 @@ public final class Generator {
             // and offered as the class's answer it stands for a space the search never entered.
             case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(pins.labels(),
                     UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+            // What one combination came to, which is what this says and all it says. A search for
+            // a requirement runs at a combination of classes and the word below is that
+            // combination's — so what a reader may take from it is that this compiler composed
+            // nothing, and never that the rules leave nothing: another combination of the same
+            // requirement goes on admitting values, and which one ran last is the order the walk
+            // happened to take.
             case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
                     ? new UnresolvedCombination(pins.labels(),
                             UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED)
@@ -4627,17 +4633,7 @@ public final class Generator {
                 // anything a reader could raise reaches it. Taken as the word alone, a group this
                 // compiler writes none of the values for arrives as a search that left something
                 // untried with nothing of this compiler's beside it.
-                //
-                // Which the edge's own word would be, where what it settled is that the rules
-                // leave no number at this combination. That is true of the combination and the
-                // class this is filling is answered by every combination of it — so the proof
-                // stays the combination's until something folds them, and what is said here is
-                // what this route has always said: nothing was composed.
-                return new Attempt(null,
-                        composed.settlesTheQuestion()
-                                ? UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
-                                : composed.reason(),
-                        group.getKey().toString(),
+                return new Attempt(null, composed.reason(), group.getKey().toString(),
                         Optional.ofNullable(composed.detail()), new LinkedHashMap<>(),
                         composed.met());
             }
@@ -6049,13 +6045,13 @@ public final class Generator {
                 // the word and not the word.
                 case TermRealizations.Realization.Unexhausted _ ->
                         UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
-                // A row at a point is one row at one obligation, so what the search of it settled
-                // is what the point comes to. A class is not: several combinations fill one, and
-                // what this edge settled is the combination it ran at — which is why a caller
-                // filling a class reads {@link #settlesTheQuestion()} and folds it rather than
-                // taking this word.
+                // Nothing was composed, which is what every caller of this may take from it. That
+                // the rules were shown to leave no number is about the combination this edge ran
+                // at, and whether that settles what somebody is owed a row at turns on what is
+                // owed — so it is asked for ({@link #settlesTheQuestion()}) by the reader that
+                // knows, and is not carried in a word every reader takes.
                 case TermRealizations.Realization.NoNumberTheRulesAdmit _ ->
-                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE;
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");
             };
@@ -6083,8 +6079,17 @@ public final class Generator {
             if (!notAllOf().isEmpty()) {
                 return BoundaryAttempt.Unexhausted.at(label, detail(), notAllOf(), unrepresented);
             }
+            // A row at a point is one row at one thing somebody is owed, and this edge is the
+            // search for it — so what the search settled about the numbers is what the point comes
+            // to. Which is the one place the proof is published, because it is the one place where
+            // what was walked and what is owed are the same question.
             return new BoundaryAttempt.Unresolved(
-                    new UnresolvedCombination(List.of(label), reason(), detail()), unrepresented);
+                    new UnresolvedCombination(List.of(label),
+                            settlesTheQuestion()
+                                    ? UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE
+                                    : reason(),
+                            detail()),
+                    unrepresented);
         }
 
     }

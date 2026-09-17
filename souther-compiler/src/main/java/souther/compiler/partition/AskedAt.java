@@ -6,11 +6,11 @@ import souther.compiler.numeric.Place;
 /**
  * What a search is asked at one of a row's numbers.
  *
- * <p><b>Three answers that used to be one set.</b> What an account walks, which number a caller
- * has already picked to try, and what a walk that came back empty-handed is entitled to say — those
- * were one {@link NumericSet}, and a set of one number said all three: walk this number, try this
- * number, and there was no other. Two of those are true of a caller that picked a number out of a
- * class, and the third is not.
+ * <p><b>Three answers and not one set.</b> What an account walks, which number a caller has already
+ * picked to try, and what a walk that came back empty-handed is entitled to say are three
+ * questions. A set of one number answers all three the same way — walk this number, try this
+ * number, there was no other — and two of those are true of a caller that picked a number out of a
+ * class while the third is not.
  *
  * <p>So {@link #about} is the subject of whatever is concluded and the other two are how the
  * looking was done. A class of a row is its own subject and the walk of it is the walk of the
