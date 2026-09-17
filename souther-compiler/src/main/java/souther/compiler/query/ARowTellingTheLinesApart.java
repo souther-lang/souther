@@ -43,15 +43,29 @@ public record ARowTellingTheLinesApart(Map<NumericTerm, Place> standingAt,
         // Both ways round, so that neither can be read as the other's absence. A place with no row
         // to hand over is a witness nothing composed; a row with nowhere named is one a reader
         // could be offered under a sentence about somewhere else.
-        if ((standingAt == null) == searches.rowToOffer().isPresent()) {
+        //
+        // Asked of a search that ran, which is what makes this free on the line it is asked of
+        // most. Every reading of every border is one of these and almost none of them was searched
+        // — a walk of what nothing looked for would be this compiler asking, once per line of every
+        // compile, what a search that never happened composed.
+        if (searches.ran() && (standingAt == null) == searches.rowToOffer().isPresent()) {
             throw new IllegalArgumentException("a row composed here stands somewhere and a search"
                     + " that composed none stands nowhere: " + standingAt);
         }
+        if (!searches.ran() && standingAt != null) {
+            throw new IllegalArgumentException("a row standing somewhere that no search composed: "
+                    + standingAt);
+        }
     }
+
+    /** Nobody asked for a row that tells the two lines apart, which is most lines of most
+     *  compiles: one value, because it says nothing about the line it is beside. */
+    private static final ARowTellingTheLinesApart NOT_ASKED =
+            new ARowTellingTheLinesApart(null, SearchOutcomes.none());
 
     /** Nobody asked for a row that tells the two lines apart. */
     public static ARowTellingTheLinesApart notAsked() {
-        return new ARowTellingTheLinesApart(null, SearchOutcomes.none());
+        return NOT_ASKED;
     }
 
     /**

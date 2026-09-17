@@ -6,12 +6,12 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
-import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.RowToRun;
@@ -406,7 +406,9 @@ public record Settlements(List<ObligationIdentity> requested,
                 for (BorderAssessment at : lines == null ? List.<BorderAssessment>of() : lines) {
                     if (at.beside() instanceof AnotherLineTheRowsAllow.OneDoes named) {
                         besides.put(new ObligationIdentity.OfABorder(at.border().obligation()),
-                                new ALineBesideOne(at.border(), named, at.toldApart()));
+                                new ALineBesideOne(subject.at(at.border()),
+                                        OrderedAffineBoundary.of(at.border()), named,
+                                        at.toldApart()));
                     }
                 }
             }
@@ -740,17 +742,8 @@ public record Settlements(List<ObligationIdentity> requested,
             if (asRead.values() == null) {
                 return undetermined(asRead);
             }
-            OrderedAffineBoundary drawn = OrderedAffineBoundary.of(here.line());
-            if (drawn == null) {
-                // A rule that names a value orders nothing, so no line beside it was ever named —
-                // which makes this a state the account and the measurement disagree about rather
-                // than a row that fails to settle anything.
-                throw new IllegalStateException("a line the rows allow beside a rule that orders"
-                        + " nothing: " + at);
-            }
-            StandingAtAPoint.RowsRead read = StandingAtAPoint.valuesOf(
-                    subject.at(here.line()), List.of(asRead.asInputs()),
-                    here.line().origin().recordedAt());
+            StandingAtAPoint.RowsRead read = StandingAtAPoint.valuesOf(here.reading(),
+                    List.of(asRead.asInputs()), here.reading().border().origin().recordedAt());
             if (read.each().isEmpty()) {
                 // The row holds no value on this line at all, whether because nothing watched its
                 // run or because its positions could not be read there. Which of those it is is
@@ -761,7 +754,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                 : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
             }
             for (Map<NumericTerm, Place> values : read.each()) {
-                if (drawn.satisfiedBy(values) != here.beside().keeps(values)) {
+                if (here.drawn().satisfiedBy(values) != here.beside().keeps(values)) {
                     return new Settlement.Settles();
                 }
             }
@@ -827,9 +820,28 @@ public record Settlements(List<ObligationIdentity> requested,
      * for a row telling the two apart came to. All three, because the question a row is put here is
      * about the pair: a row settles this by answering differently under the two, which neither of
      * them says alone.
+     *
+     * <p><b>The line as this behavior reads it, and as the inequality it is, worked out once.</b>
+     * Both are settled by the border and by nothing a row says, and a row is put to this once per
+     * row a run offers — derived where the question is asked, finding the reading walks every line
+     * of the behavior and reading the inequality folds the quantity's own step, once per row for an
+     * answer that was the same every time.
      */
-    private record ALineBesideOne(Border line, AnotherLineTheRowsAllow.OneDoes beside,
-                                  ARowTellingTheLinesApart toldApart) {}
+    private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+                                  AnotherLineTheRowsAllow.OneDoes beside,
+                                  ARowTellingTheLinesApart toldApart) {
+
+        ALineBesideOne {
+            if (drawn == null) {
+                // A rule that names a value orders nothing, so no line beside it is ever named.
+                // Refused where the pair is put together rather than where a row is weighed against
+                // it: what it says is that the measurement and this account disagree about the
+                // line, which is true of the pair whether or not a row is ever offered.
+                throw new IllegalStateException("a line the rows allow beside a rule that orders"
+                        + " nothing: " + reading.border().obligation());
+            }
+        }
+    }
 
     /** What an item that needs the values is told, where they are not here. */
     private static Settlement undetermined(RowAsRead asRead) {
