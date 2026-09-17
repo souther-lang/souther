@@ -1,6 +1,5 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -11,6 +10,7 @@ import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.test.ClosedWorldContract;
 import souther.test.RepositoryLayout;
 
 import java.io.IOException;
@@ -55,7 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link SyntaxKind} is built at least once, and that is asserted — a kind added to the grammar
  * without a source here fails rather than going unmeasured.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhatGoesBetweenTwoTokensOnALineTest {
 
     /** Sources written to reach the constructs the bundled standard library does not use. */

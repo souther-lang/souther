@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -11,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * cannot put in the source's words; a test pinning the kinds this repository's models reach would
  * make a corpus into the rule, and would go red for a model that is fine.
  */
-@Tag("population")
+@ClosedWorldContract
 class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
 
     /**

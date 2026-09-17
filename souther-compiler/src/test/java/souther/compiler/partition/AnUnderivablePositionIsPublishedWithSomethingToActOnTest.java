@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -9,6 +8,7 @@ import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * reader shown the first is not left with nothing to act on, and that a reader shown a position the
  * model states something about is not sent after a limit that is not there.
  */
-@Tag("population")
+@ClosedWorldContract
 class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
 
     /** A rule about a pair of positions, which each of them is read through and neither divided by. */

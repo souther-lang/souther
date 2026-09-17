@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -12,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.test.ClosedWorldContract;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * declaration once would be answering about the rules as they stood before it chose anything, which
  * is the reading that leaves {@code b} its whole range while {@code a < b} is still open.
  */
-@Tag("population")
+@ClosedWorldContract
 class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
 
     /**

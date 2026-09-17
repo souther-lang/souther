@@ -3,8 +3,8 @@ package souther.compiler.report;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * says; what it does not say is that the openings a real model produces reach the arms anybody
  * expected. Those are two claims and only the second can go wrong quietly.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
 
     /**

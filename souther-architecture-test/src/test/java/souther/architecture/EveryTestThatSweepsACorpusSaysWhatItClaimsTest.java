@@ -1,11 +1,12 @@
 package souther.architecture;
 
+import souther.test.CheckedInObservation;
+import souther.test.ClosedWorldContract;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.Annotation;
-import java.lang.classfile.AnnotationValue;
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.constantpool.ClassEntry;
@@ -27,17 +28,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Every test whose subjects come from this repository says that it is one.
+ * Every test that sweeps a corpus says what it claims of one.
  *
- * <p>A test that sweeps the models this repository carries is asking about the language rather than
- * about a source somebody wrote to ask one question. Answering such a subject is most of what the
- * suite costs, so a plain run leaves them out and the merge into develop asks them. What decides
- * which run a test lands in is the tag it carries.
+ * <p>A test reaching the models this repository carries is asking about the language rather than
+ * about a source somebody wrote to ask one question, and there is more than one thing such a test
+ * can be. It can close a set the compiler declares and hold that nothing is missing from it, or it
+ * can hold what the compiler answers against an answer written down here. Which of those it is
+ * decides what a reader does with a red one, and nothing about the code says it.
  *
- * <p><b>So the tag cannot be a thing to remember.</b> A test reaching a corpus without one is left in
- * the run everybody waits on, and nothing about writing it would say so — the class compiles, passes,
- * and is slow somewhere else. The population is read off the compiled tests here instead: every test
- * class that reaches a corpus, by its own constant pool or through another test class that does.
+ * <p><b>So the claim is declared and is not worked out here.</b> Reaching a corpus is a fact about
+ * the constant pool and is read off it; what the test claims is a fact about the sentence at the top
+ * of the file, and a rule that guessed it from the reach would be putting words in the author's
+ * mouth — which is what a table of exceptions beside such a rule is for, and why there was one.
+ * Asked for instead: a test that reaches a corpus and says nothing fails here, and the author writes
+ * the one word that settles it.
+ *
+ * <p><b>And it says nothing about when the test runs.</b> {@link souther.test.Nightly} is the other
+ * annotation and is free of this one: a contract too slow to wait on carries both, and a test whose
+ * claim this is about carries this one whether or not a plain run asks it. Neither is derived from
+ * the other, because what a test establishes is stable and what it is worth paying for is not.
  *
  * <p>The corpora are named below rather than recognised. A corpus is a thing somebody wrote to be
  * swept, and there are few of them; a rule that guessed which classes were corpora would be a second
@@ -46,18 +55,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><b>What this sees is a test that reaches one of the corpora named below.</b> A test that walks
  * this repository's own sources or its specification some other way — through
  * {@link RepositoryLayout} and a suffix, say — sweeps a population too and is not one of these, so
- * it is asked in every run and nothing here says whether that is right. Naming the layout as a
- * corpus would not close it either: reading class files to answer a question about this compiler
- * goes through the same door, and every check in this package would come back as a population test.
+ * it is asked for nothing here. Naming the layout as a corpus would not close it either: reading
+ * class files to answer a question about this compiler goes through the same door, and every check
+ * in this package would come back as one of these.
  */
-class EveryTestAboutTheRepositorysPopulationSaysSoTest {
+class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
 
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     private static final CompiledOutputs TESTS = CompiledOutputs.ofEverythingCompiledHere();
 
-    /** What this tag is spelled as where a test carries it. */
-    private static final String TAG = "population";
+    /**
+     * The annotations one of these says its claim with, as class-file descriptors.
+     *
+     * <p>Exactly one, and the alternatives are here rather than in the assertion so that the two
+     * ways of being wrong — none of them, and more than one — are one question asked once. A test
+     * carrying both would be claiming to record an answer and to close a set, which are different
+     * things to do about a red run.
+     */
+    private static final Map<String, Class<?>> CLAIMS = Map.of(
+            "L" + ClosedWorldContract.class.getName().replace('.', '/') + ";",
+            ClosedWorldContract.class,
+            "L" + CheckedInObservation.class.getName().replace('.', '/') + ";",
+            CheckedInObservation.class);
 
     /**
      * What hands out a population, as binary names.
@@ -73,66 +93,36 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
             "souther/compiler/fmt/WhatGoesBetweenTwoTokensOnALineTest",
             "souther/bench/Corpus");
 
-    /**
-     * The tests that reach a corpus and are asked anyway, with what each of them is.
-     *
-     * <p>Reaching a corpus is not the whole of what the tag is about. What the tag defers is a
-     * question whose subjects are the population: its work grows with what the corpora hold, because
-     * it is the same question asked of each of them. These reach a corpus to answer one bounded
-     * question instead — a model added to a corpus gives them nothing more to do — and that question
-     * belongs in the run a change waits on. Deferred, each would pass on the change that breaks it
-     * and fail after the merge, on a branch nobody is waiting to fix.
-     *
-     * <p>So this is not a list of the cheap ones. What decides it is whether the corpus is being
-     * quantified over or drawn from: a check that compiles one model of its own accord is here, and
-     * one that reads every model already analysed would not be if it read them all to answer about
-     * them all.
-     */
-    private static final Map<String, String> ASKED_ANYWAY = Map.of(
-            "souther/compiler/conformance/TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest",
-            "nothing else fails when an answer changes, and what fixes it is regenerating what is"
-                    + " checked in",
-            "souther/compiler/conformance/AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest",
-            "a construct added to the language is one the corpus does not reach yet, and the change"
-                    + " that added it is the one to say so",
-            "souther/compiler/report/AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest",
-            "the human report is held to one model the repository carries rather than to what the"
-                    + " corpora hold, and a change to what that report says is one the editing run"
-                    + " is the place to catch");
-
     @Test
-    void everyTestReachingACorpusCarriesTheTag() {
+    void everyTestReachingACorpusDeclaresWhatItClaims() {
         Map<String, Set<String>> references = referencesByClass();
         assertFalse(references.isEmpty(),
                 "no compiled test was read, so this walked nothing and would hold either way");
 
-        Set<String> reaching = reachingACorpus(references);
-        TreeSet<String> untagged = new TreeSet<>();
-        for (String each : reaching) {
+        TreeSet<String> silent = new TreeSet<>();
+        TreeSet<String> saidTwice = new TreeSet<>();
+        for (String each : reachingACorpus(references)) {
             if (!each.endsWith("Test")) {
-                // A helper a test reaches through. It runs nothing of its own, so no tag decides
-                // anything about it.
+                // A helper a test reaches through. It runs nothing of its own, so nothing about it
+                // is a claim somebody would act on.
                 continue;
             }
-            if (ASKED_ANYWAY.containsKey(each) || tags(each).contains(TAG)) {
-                continue;
-            }
-            untagged.add(each.replace('/', '.'));
-        }
-
-        TreeSet<String> tagged = new TreeSet<>();
-        for (String each : ASKED_ANYWAY.keySet()) {
-            if (tags(each).contains(TAG)) {
-                tagged.add(each.replace('/', '.'));
+            int said = claims(each).size();
+            if (said == 0) {
+                silent.add(each.replace('/', '.'));
+            } else if (said > 1) {
+                saidTwice.add(each.replace('/', '.'));
             }
         }
-        assertEquals(List.of(), List.copyOf(tagged),
-                "a test named above as one asked anyway, carrying the tag that defers it: it is in"
-                        + " one list or the other and the tag is what surefire reads");
 
-        assertEquals(List.of(), List.copyOf(untagged),
-                "a test whose subjects come from this repository, in the run somebody waits on while"
-                        + " editing: it carries @Tag(\"" + TAG + "\") or it stops reaching a corpus");
+        assertEquals(List.of(), List.copyOf(saidTwice),
+                "a test sweeping a corpus under more than one of " + CLAIMS.values() + ": what a"
+                        + " reader does with a red run is one of those things and not both");
+
+        assertEquals(List.of(), List.copyOf(silent),
+                "a test whose subjects come from this repository, saying nothing about what it"
+                        + " claims of them: it carries one of " + CLAIMS.values() + " or it stops"
+                        + " reaching a corpus");
     }
 
     /**
@@ -154,17 +144,18 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
      *
      * <p><b>Only the ones a source still writes.</b> Nothing here removes a class file, and the
      * build is not run with {@code clean}, so a test renamed or deleted leaves its old one behind.
-     * Read as a test, it would be held to a tag its author cannot add to a source that no longer
-     * exists — and if the rename is what added the tag, the check would name a class nobody can
-     * find. A class file with no source is what a previous build left, and is passed over.
+     * Read as a test, it would be held to an annotation its author cannot add to a source that no
+     * longer exists — and if the rename is what added the annotation, the check would name a class
+     * nobody can find. A class file with no source is what a previous build left, and is passed
+     * over.
      *
      * <p><b>And a name can be more than one class.</b> Packages are written under more than one
      * module here — {@code souther.compiler.inputs} holds a fixtures class in two of them — so a
      * name does not settle which class file it is. Kept as one, the second would replace the first
-     * and whichever lost would be neither held to the tag nor read for one. All of them are kept
-     * instead, and what a name reaches or carries is what any of them does: which one a reference
-     * meant is what this cannot say, and asking for the tag where either would want it is the side
-     * of that to be wrong on.
+     * and whichever lost would be neither held to the rule nor read for an answer to it. All of them
+     * are kept instead, and what a name reaches or claims is what any of them does: which one a
+     * reference meant is what this cannot say, and asking for a claim where either would want one is
+     * the side of that to be wrong on.
      */
     private static Map<String, List<ClassModel>> compiled;
 
@@ -228,19 +219,20 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
     }
 
     /**
-     * The tags one compiled test runs under, which are its own and the ones it is written inside.
+     * The claims one compiled test is written under, which are its own and the ones it is written
+     * inside.
      *
-     * <p>A tag on a class covers the {@code @Nested} classes in it — that is what decides which run
-     * they land in, and it is not written at them. Read off the class alone, a nested test inside a
-     * tagged one comes back untagged here while surefire leaves it out, and the author is told to
-     * add a tag that is already deciding its run.
+     * <p>A claim made at a class covers the {@code @Nested} classes in it — one file of test source
+     * is one sentence, and the author writes it once at the top. Read off the class alone, a nested
+     * test inside a declared one comes back silent here and the author is told to say again what the
+     * file already says.
      */
-    private static Set<String> tags(String internalName) {
+    private static Set<Class<?>> claims(String internalName) {
         Map<String, List<ClassModel>> tests = compiledTests();
-        Set<String> out = new LinkedHashSet<>();
+        Set<Class<?>> out = new LinkedHashSet<>();
         for (String each = internalName; each != null; each = enclosing(each)) {
             for (ClassModel where : tests.getOrDefault(each, List.of())) {
-                out.addAll(tagsOf(where));
+                out.addAll(claimsOf(where));
             }
         }
         return out;
@@ -252,29 +244,16 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
         return nested < 0 ? null : internalName.substring(0, nested);
     }
 
-    private static Set<String> tagsOf(ClassModel model) {
-        Set<String> out = new LinkedHashSet<>();
+    private static Set<Class<?>> claimsOf(ClassModel model) {
+        Set<Class<?>> out = new LinkedHashSet<>();
         model.findAttribute(Attributes.runtimeVisibleAnnotations()).ifPresent(annotations -> {
             for (Annotation each : annotations.annotations()) {
-                String type = each.className().stringValue();
-                if (!"Lorg/junit/jupiter/api/Tag;".equals(type)) {
-                    continue;
+                Class<?> claim = CLAIMS.get(each.className().stringValue());
+                if (claim != null) {
+                    out.add(claim);
                 }
-                each.elements().stream()
-                        .filter(element -> "value".equals(element.name().stringValue()))
-                        .forEach(element -> {
-                            if (element.value() instanceof AnnotationValue.OfString it) {
-                                out.add(it.stringValue());
-                            }
-                        });
             }
         });
         return out;
     }
-
-
-
-
-
-
 }

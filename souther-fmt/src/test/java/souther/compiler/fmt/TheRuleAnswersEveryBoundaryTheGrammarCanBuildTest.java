@@ -1,10 +1,10 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
+import souther.test.ClosedWorldContract;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -35,7 +35,7 @@ import static souther.compiler.cst.SyntaxKind.*;
  * before another does not tie with it — it wins — so a disagreement is one list answering for a
  * construct that writes the boundary the other way, and nothing downstream can see that it did.
  */
-@Tag("population")
+@ClosedWorldContract
 class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
 
     private static Set<SyntaxKind> of(SyntaxKind... k) {

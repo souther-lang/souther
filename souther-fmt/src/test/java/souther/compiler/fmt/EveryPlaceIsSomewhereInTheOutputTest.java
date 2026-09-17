@@ -1,9 +1,9 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * place is the whole output. Recording only the first left sixty-three places of this repository's
  * corpus with no answer, and a reader of a difference has to be able to point at any of them.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryPlaceIsSomewhereInTheOutputTest {
 
     private static Formatter.CanonicalForm canonical(String source) {

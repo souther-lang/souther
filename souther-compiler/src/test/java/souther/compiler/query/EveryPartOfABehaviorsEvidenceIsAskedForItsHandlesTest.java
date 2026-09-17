@@ -1,12 +1,12 @@
 package souther.compiler.query;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import souther.compiler.WhatWasCompiled;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
-import souther.compiler.WhatWasCompiled;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.report.AdequacyReport;
+import souther.test.ClosedWorldContract;
 
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * each part of each behavior is asked whether the value in it is one of the things that answers for
  * a rule it read.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryPartOfABehaviorsEvidenceIsAskedForItsHandlesTest {
 
     @Test

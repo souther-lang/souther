@@ -1,11 +1,11 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.cst.CstParser;
+import souther.test.ClosedWorldContract;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * run that way here because it takes three minutes, and what the reduction rests on is the sentence
  * above rather than that measurement.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
 
     /**

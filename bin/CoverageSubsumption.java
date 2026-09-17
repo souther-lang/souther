@@ -37,17 +37,19 @@ import java.util.stream.Stream;
  * <ul>
  * <li>the class;
  * <li>how many probes it reached;
- * <li>{@code none}, {@code held}, {@code by-others}, or {@code by-population-only}: it reached no
+ * <li>{@code none}, {@code held}, {@code by-others}, or {@code by-nightly-only}: it reached no
  *     main code at all, some probe is its own, every probe is also some other class's, or every
- *     probe is also some other class's but at least one only a class tagged {@code population}
- *     runs — which a pull request's run leaves out, so in that run this class stands alone;
+ *     probe is also some other class's but at least one only a class the nightly run asks —
+ *     which a pull request's run leaves out, so in that run this class stands alone;
  * <li>how many classes, this one included, reach its least-shared probe: 1 for a held class, and
  *     2 for one whose every branch is one other class's as well — the nearest thing to a twin;
  * <li>one other class containing this one whole, if there is one, else empty.
  * </ul>
- * Which classes carry the tag is read from the test sources, as the annotation written at class
- * level. The test-support module's classes are not main code but the tests' own furniture, so a
- * class that only reads sources through them reaches nothing here.
+ * Which classes the nightly alone asks is read from the test sources, as {@code @Nightly} written at
+ * class level. That is the scheduling annotation and not the one saying what a test claims: what
+ * this column is about is which classes are in the run alongside this one. The test-support module's
+ * classes are not main code but the tests' own furniture, so a class that only reads sources through
+ * them reaches nothing here.
  */
 public final class CoverageSubsumption {
 
@@ -66,7 +68,7 @@ public final class CoverageSubsumption {
     public static void main(String[] args) throws IOException {
         Path root = Path.of("").toAbsolutePath();
         Set<String> mainClasses = mainClasses(root);
-        Set<String> population = populationClasses(root);
+        Set<String> nightly = nightlyClasses(root);
 
         Map<String, Probes> probesOf = new HashMap<>();
         int[] next = {0};
@@ -91,14 +93,14 @@ public final class CoverageSubsumption {
         }
 
         int[] coverers = new int[next[0]];
-        int[] coverersOutsidePopulation = new int[next[0]];
+        int[] coverersAPullRequestRuns = new int[next[0]];
         for (Map.Entry<String, BitSet> entry : covered.entrySet()) {
-            boolean inPopulation = population.contains(entry.getKey());
+            boolean deferred = nightly.contains(entry.getKey());
             BitSet bits = entry.getValue();
             for (int i = bits.nextSetBit(0); i >= 0; i = bits.nextSetBit(i + 1)) {
                 coverers[i]++;
-                if (!inPopulation) {
-                    coverersOutsidePopulation[i]++;
+                if (!deferred) {
+                    coverersAPullRequestRuns[i]++;
                 }
             }
         }
@@ -106,31 +108,31 @@ public final class CoverageSubsumption {
         for (Map.Entry<String, BitSet> entry : covered.entrySet()) {
             String test = entry.getKey();
             BitSet bits = entry.getValue();
-            boolean inPopulation = population.contains(test);
+            boolean deferred = nightly.contains(test);
             String standing;
             int rarest = -1;
             if (bits.isEmpty()) {
                 standing = "none";
             } else {
                 boolean byOthers = true;
-                boolean byOthersOutsidePopulation = true;
+                boolean byOthersAPullRequestRuns = true;
                 for (int i = bits.nextSetBit(0); i >= 0; i = bits.nextSetBit(i + 1)) {
                     if (coverers[i] < 2) {
                         byOthers = false;
                     }
-                    if (coverersOutsidePopulation[i] < (inPopulation ? 1 : 2)) {
-                        byOthersOutsidePopulation = false;
+                    if (coverersAPullRequestRuns[i] < (deferred ? 1 : 2)) {
+                        byOthersAPullRequestRuns = false;
                     }
                     if (rarest < 0 || coverers[i] < coverers[rarest]) {
                         rarest = i;
                     }
                 }
                 standing = !byOthers ? "held"
-                        : byOthersOutsidePopulation ? "by-others"
-                        : "by-population-only";
+                        : byOthersAPullRequestRuns ? "by-others"
+                        : "by-nightly-only";
             }
             String container = "";
-            if (standing.equals("by-others") || standing.equals("by-population-only")) {
+            if (standing.equals("by-others") || standing.equals("by-nightly-only")) {
                 for (Map.Entry<String, BitSet> other : covered.entrySet()) {
                     if (other.getKey().equals(test) || !other.getValue().get(rarest)) {
                         continue;
@@ -173,8 +175,8 @@ public final class CoverageSubsumption {
         return names;
     }
 
-    /** The outermost test classes whose source carries the population tag. */
-    private static Set<String> populationClasses(Path root) throws IOException {
+    /** The outermost test classes whose source carries the nightly annotation. */
+    private static Set<String> nightlyClasses(Path root) throws IOException {
         Set<String> names = new HashSet<>();
         try (Stream<Path> modules = Files.list(root)) {
             for (Path module : modules.toList()) {
@@ -184,8 +186,11 @@ public final class CoverageSubsumption {
                 }
                 try (Stream<Path> files = Files.walk(tests)) {
                     for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+                        // At the start of a line of its own, which is where an annotation on a class
+                        // is written. Searched for anywhere in the text, the word in a sentence
+                        // about the annotation would answer as the annotation.
                         String source = Files.readString(file);
-                        if (!source.contains("@Tag(\"population\")")) {
+                        if (source.lines().noneMatch(line -> line.equals("@Nightly"))) {
                             continue;
                         }
                         String relative = tests.relativize(file).toString();

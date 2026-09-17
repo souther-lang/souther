@@ -1,7 +1,7 @@
 package souther.compiler.fmt;
 
 import souther.compiler.diag.msg.MessageKeys;
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -54,7 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparison drops. Everything else a node carries is compared, names and modifiers and structure
  * included.
  */
-@Tag("population")
+@ClosedWorldContract
 class TheCanonicalFormMeansWhatTheSourceMeantTest {
 
     /** The sources the layout rules are swept over: the bundled standard library, and the written
@@ -148,7 +148,7 @@ class TheCanonicalFormMeansWhatTheSourceMeantTest {
         switch (value) {
             case null -> out.append("absent");
             // where a node was written, which is not what it means
-            case SourcePos ignored -> out.append("somewhere");
+            case SourcePos _ -> out.append("somewhere");
             // an Optional prints what it holds, and what it holds may be a node
             case Optional<?> held -> write(held.orElse(null), out);
             case List<?> items -> {

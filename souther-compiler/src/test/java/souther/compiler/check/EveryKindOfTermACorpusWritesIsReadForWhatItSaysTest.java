@@ -5,8 +5,8 @@ import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a module numbers its constructs after the ones the blank lines did not add — so what says where a
  * construct stands among its neighbours is held by the fixtures and not here.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
 
     /**

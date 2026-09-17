@@ -5,8 +5,8 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ValueName;
+import souther.test.ClosedWorldContract;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * numbered after the ones the blank lines did not add, so a place surviving anywhere in a contract
  * shows up here as an inequality.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
 
     /** Every behavior that states something, in every module of every corpus. */

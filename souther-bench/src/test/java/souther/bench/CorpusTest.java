@@ -1,11 +1,12 @@
 package souther.bench;
 
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ChoicesRead;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,8 +32,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code souther-compiler}, and looking for it here would find nothing: these sources are timed,
  * not read back, and every measure a report carries could move without one of them failing to
  * compile.
+ *
+ * <p>Asked once a night. Compiling the corpora is most of what the whole suite costs, and what a
+ * change waits on is the rest of it: a language change that leaves a corpus behind is found by the
+ * morning, and nothing else in the suite is held up meanwhile.
  */
-@Tag("population")
+@ClosedWorldContract
+@Nightly
 class CorpusTest {
 
     /**

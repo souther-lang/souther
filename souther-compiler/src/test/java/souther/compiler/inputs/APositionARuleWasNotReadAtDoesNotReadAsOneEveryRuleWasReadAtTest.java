@@ -1,7 +1,6 @@
 package souther.compiler.inputs;
 
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
@@ -12,6 +11,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * why the population here is every position of every model this repository carries, and the reason
  * is read off the finding rather than looked for in one place.
  */
-@Tag("population")
+@ClosedWorldContract
 class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
 
     /**

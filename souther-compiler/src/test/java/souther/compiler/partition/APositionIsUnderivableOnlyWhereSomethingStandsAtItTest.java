@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
@@ -16,6 +15,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * reconstruction the accounting exists to take away — so the population here is the positions
  * themselves and the accounts that answer for them.
  */
-@Tag("population")
+@ClosedWorldContract
 class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
 
     /**

@@ -7,13 +7,19 @@ Build from the reactor root. Never `-pl`, never `clean`, never `CI=1` or
 
     mvn -o test -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false   # iterating
     mvn -o test                                                          # the module
-    mvn -o test -Dgroups=population -Dtest.excluded.groups=              # the population alone
+    mvn -o test -Dgroups=nightly -Dtest.excluded.groups=                 # the deferred ones alone
 
-`mvn -o test` leaves out the tests tagged `population` — the ones whose subjects
-are the models this repository carries rather than a source written to ask one
-question. The nightly runs them over `develop` and `main`, and nothing a change
-waits on does. The third line is the only way to ask for them here, and needs
-both properties. Naming a class with `-Dtest=` runs it whatever it is tagged.
+`mvn -o test` leaves out the tests tagged `nightly` — the ones costing more than
+asking them on every change is worth. The nightly runs them over `develop` and
+`main`, and nothing a change waits on does. The third line is the only way to ask
+for them here, and needs both properties. Naming a class with `-Dtest=` runs it
+whatever it is tagged.
+
+What a test claims is a separate annotation and decides nothing about which run
+it lands in: `@ClosedWorldContract` closes a set this compiler declares,
+`@CheckedInObservation` holds an answer against one written down here. A test
+that sweeps a corpus carries exactly one of them, and
+`EveryTestThatSweepsACorpusSaysWhatItClaimsTest` is what asks for it.
 
 Forks are capped rather than taken as a share of the machine, so a run leaves
 the machine usable for whatever else is on it. `-DforkCount=N` overrides the

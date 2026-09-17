@@ -1,10 +1,10 @@
 package souther.compiler.query;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest.Because;
+import souther.test.ClosedWorldContract;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -43,7 +43,7 @@ import static souther.compiler.query.WhatStillHoldsAPlaceUnderAFindingIsReadOnTw
  * <p>A carrier added without a reading fails a build; a reading that has gone out of date with the
  * models fails the run that reads them.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhatStillHoldsAPlaceUnderAFindingIsWhatTheModelsShowTest {
 
     /**

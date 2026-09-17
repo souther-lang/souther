@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -10,6 +9,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.WrittenOwner;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and what the index says of it is that — not that no run answers through it, and not that its
  * arrival could not be projected.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhereARunThroughAConstructOfTheModelIsRecordedTest {
 
     /** One helper called twice: two constructs of the model, and two places a run is recorded. */

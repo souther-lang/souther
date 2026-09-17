@@ -1,10 +1,10 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxToken;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * as the text would have to be rewritten for a change it is not about — which is the complaint
  * issue #938 makes about the formatter itself.
  */
-@Tag("population")
+@ClosedWorldContract
 class ARowOfATableIsWrittenAtItsTablesColumnTest {
 
     /** Two tables, each with rows of unequal width, and a row with no description. */

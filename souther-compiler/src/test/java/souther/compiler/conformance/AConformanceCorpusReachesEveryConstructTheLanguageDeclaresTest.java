@@ -18,6 +18,7 @@ import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.cst.TopLevelForm;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -52,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * keeps, and what a corpus reaches of their product is asked here as the tokens are asked above —
  * computed from the corpus rather than written out beside it.
  */
+@ClosedWorldContract
 class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
 
     /** Every meaningful token of every source in the corpus, one list per source. */
