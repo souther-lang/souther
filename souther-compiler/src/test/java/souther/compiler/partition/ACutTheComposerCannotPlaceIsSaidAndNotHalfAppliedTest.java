@@ -186,8 +186,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                                                        OnTheWay.TakenIn... taken) {
         return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
-                NumbersAskedFor.justTheNumber(at,
-                        domain().quantities(rules()).ordersOf(axis.term()).answered()),
+                NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
+                        domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, List.of(taken)),
                 Generator.CandidateCheck.ANY);

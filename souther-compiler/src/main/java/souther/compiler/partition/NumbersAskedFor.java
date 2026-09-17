@@ -93,16 +93,6 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     }
 
     /**
-     * Exactly one number, which is what a row at a point of one position's own values stands at.
-     *
-     * <p>A question and not a candidate: this is the number the rules leave, so a search that
-     * tried it tried every number there was to try.
-     */
-    public static NumbersAskedFor justTheNumber(Place at, Carrier on) {
-        return ofTheClass(new NumericSet.At(at), on);
-    }
-
-    /**
      * What the rules leave {@code term}, said of that term alone.
      *
      * <p>Taken from the region as it was handed over, which is the declarations narrowed by every

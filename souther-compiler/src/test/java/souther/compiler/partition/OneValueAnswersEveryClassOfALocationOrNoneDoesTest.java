@@ -492,10 +492,11 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         private TermRealizations.Realization answering(
                 SequencedMap<RealizationTarget, NumericSet> demands) {
-            SequencedMap<RealizationTarget, AskedAt> asked = new java.util.LinkedHashMap<>();
+            // The classes as they are asked for, which is what a search of one is about: these
+            // fixtures hand over what a rule leaves and nothing picked a number out of it.
+            SequencedMap<RealizationTarget, AskedAt> asked = new LinkedHashMap<>();
             demands.forEach((target, admits) -> asked.put(target, AskedAt.theClass(admits,
-                    subject.quantities().ordersOf(target.term()) == null ? null
-                            : subject.quantities().ordersOf(target.term()).answered())));
+                    subject.quantities().ordersOf(target.term()).answered())));
             return TermRealizations.allSatisfying(
                     subject.inputs().typeAtWrittenPath(demands.firstEntry().getKey().writeRoot()),
                     asked, subject.quantities(), subject.quantities().region(),

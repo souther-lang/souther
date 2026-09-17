@@ -177,7 +177,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     private static Generator.BoundaryAttempt composing(SearchRegion within, OnTheWay.TakenIn cut) {
         return Generator.probeFixing(subject(), "r.cost = 100",
                 Map.of(new RealizationTarget.AtOnePosition(costAxis().term()), Count.of(100)),
-                NumbersAskedFor.justTheNumber(Count.of(100), Carrier.WHOLE),
+                NumbersAskedFor.of(LevelRegion.point(
+                        new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
                 new Reachability.Reaching(within, Requirements.NONE, List.of(cut)),
                 Generator.CandidateCheck.ANY);
     }

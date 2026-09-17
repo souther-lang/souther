@@ -882,7 +882,7 @@ final class TermRealizations {
                                   SearchRegion within,
                                   RuleReadingContext reading) {
         return satisfying(sourceType, orders,
-                AskedAt.aNumberOutOf(wanted, named, orders == null ? null : orders.answered()),
+                AskedAt.aNumberOutOf(wanted, named, orders.answered()),
                 within, reading);
     }
 

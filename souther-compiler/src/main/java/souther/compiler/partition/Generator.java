@@ -3993,6 +3993,11 @@ public final class Generator {
      * not about it, and a position of the item by a region that has the item's own value in it.
      *
      * <p>A position under both is under both, and what it is asked is what they leave together.
+     *
+     * <p>One entry for every number the row stands at, since every one of them came from the item
+     * or from a cut. A number with no entry is a number this reader did not know it was placing,
+     * and it is refused where the search is built rather than answered about as though the rules
+     * said nothing of it.
      */
     private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
             MeasuredInput subject, Map<RealizationTarget, Place> fixing,
@@ -4029,9 +4034,8 @@ public final class Generator {
             Map<RealizationTarget, NumbersAskedFor> asking) {
         Map<RealizationTarget, AskedAt> out = new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
-            out.put(each.getKey(), AskedAt.oneNumberOf(
-                    asking.getOrDefault(each.getKey(), NumbersAskedFor.ANYTHING),
-                    each.getValue()));
+            out.put(each.getKey(),
+                    AskedAt.oneNumberOf(asking.get(each.getKey()), each.getValue()));
         }
         return out;
     }
@@ -6024,10 +6028,10 @@ public final class Generator {
          * Whether the rules were shown to leave no number at what this edge was asked, which is
          * about the model and about the combination this edge ran at.
          *
-         * <p>Asked rather than read off {@link #reason()}, because the word is what a point
-         * publishes and a class is not a point: one of these settles the combination, and what a
-         * class comes to is what every combination that fills it came to. A caller folding these
-         * has one answer per combination and may say of the class what all of them said.
+         * <p>Asked rather than read off {@link #reason()}, which says what this compiler composed
+         * and says it to every reader. Whether what was shown about the numbers settles what
+         * somebody is owed a row at turns on what is owed, so the one reader for which the two are
+         * the same question asks for it and the rest are not handed it.
          */
         boolean settlesTheQuestion() {
             return came instanceof TermRealizations.Realization.NoNumberTheRulesAdmit;
