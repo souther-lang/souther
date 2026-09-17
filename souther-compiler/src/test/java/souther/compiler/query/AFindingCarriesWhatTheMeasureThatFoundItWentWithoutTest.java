@@ -175,7 +175,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
             List<Adequacy.Finding> found, Class<?> kind, TypeSymbol missing) {
         for (Adequacy.Finding each : found) {
             if (kind.isInstance(each.about())
-                    && each.about() instanceof About.ACaseNoRowExpects(var what)
+                    && each.about() instanceof About.ACaseNoRowExpects(var _, var what)
                     && what.equals(missing)) {
                 return each.disposition();
             }

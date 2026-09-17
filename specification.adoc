@@ -405,7 +405,7 @@ data Line =
     }
 ----
 
-This is what a module does when two it depends on declare the same type name — `+Amount+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written wherever a type is written or named (<<a-type-is-written-in-a-type-position>>, <<binding-patterns>>, <<match>>). A sum's case list is the exception: its cases are declared with it (<<sum-data>>), so there is no other module to name.
+This is what a module does when two it depends on declare the same type name — `+Amount+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written wherever a type is named: a type position (<<a-type-is-written-in-a-type-position>>), a binding pattern (<<binding-patterns>>), a `+match+` case (<<match>>), and the type a record literal constructs (<<record-literal>>). A sum's case list is the exception: its cases are declared with it (<<sum-data>>), so there is no other module to name.
 
 Which spelling names a type is not something a check has an opinion about. A bare `+Amount+` an `+import+` brings in and a qualified `+example.pricing.Amount+` are one type, so a clause and a body that spell it differently agree, and a pattern opens the type it names however the field that holds it was written.
 
@@ -2311,7 +2311,7 @@ A dependency (`+depends on+`) is different and MUST *always* be written (<<depen
 [#record-literal]
 === Record literals and spread
 
-Construction is done with a record literal that writes the constructed type name.
+Construction is done with a record literal that names the type it constructs. [[a-construction-names-its-type-as-a-type-is-named]]That name MAY be written bare or as a qualified reference (<<qualified-reference>>), as a type named anywhere else is — `+Amount { ... }+`, `+Pricing.Amount { ... }+` and `+example.pricing.Amount { ... }+` construct one type. What follows the name is what makes it a construction: a name and a brace are read together, so a module reaching a type through the module that declares it builds one there as it names one elsewhere.
 
 [[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
 

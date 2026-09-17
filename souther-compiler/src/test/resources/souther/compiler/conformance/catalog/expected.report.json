@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 22,
+  "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "decision_of_row_unreadable" ],
@@ -579,12 +579,84 @@
       "implementation" : "implemented",
       "rows" : 4,
       "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "discount",
+          "source" : "0",
+          "name" : "a tenth off a whole price leaves nine tenths of it"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 73,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "discount",
+          "source" : "0",
+          "name" : "a price that would be cut past a penny is refused"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 77,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "discount",
+          "source" : "0",
+          "name" : "the shortest sku the catalog admits is still a sku"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 81,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "discount",
+          "source" : "0",
+          "name" : "a price at the floor cannot be cut any further"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 85,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "Discounted", "TooCheap" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "discount",
+              "case" : "Discounted"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "discount",
+              "case" : "TooCheap"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "Discounted", "TooCheap" ],
           "observed" : [ "Discounted", "TooCheap" ],
@@ -1041,12 +1113,44 @@
       "implementation" : "injected",
       "rows" : 2,
       "pending" : 2,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "現価を引く",
+          "source" : "0",
+          "name" : "a basket of one is worth what that one is worth"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 94,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "現価を引く",
+          "source" : "0",
+          "name" : "an empty basket is worth nothing"
+        },
+        "at" : {
+          "sourceId" : "0",
+          "line" : 95,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -1304,11 +1408,113 @@
       "implementation" : "injected",
       "rows" : 6,
       "pending" : 6,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "受け付けた指示は書かれて返る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 43,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "受け付けられない指示はその旨が返る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 44,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "速達も台帳の側では同じ扱い"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 45,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "冷蔵も台帳の側では同じ扱い"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 47,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "一文字の送り状番号も台帳は受ける"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 49,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "台帳へ書く",
+          "source" : "2",
+          "name" : "最も軽い荷も台帳は受ける"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 51,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "台帳へ書く",
+              "case" : "出荷済み"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "台帳へ書く",
+              "case" : "書けなかった"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった" ],
           "observed" : [ ],
@@ -1515,12 +1721,194 @@
       "implementation" : "implemented",
       "rows" : 11,
       "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "上限内で締切に余裕があれば台帳に書かれる"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 7,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "上限ちょうどはまだ通る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 9,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "上限をひとつ超えたら書かずに拒む"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 11,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "台帳が受け付けなければその答えがそのまま出る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 13,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "速達も同じ規則で通る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 15,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "冷蔵も同じ規則で通る"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 17,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "最も軽い荷でも重量は重量"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 19,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "一文字の送り状番号は番号として最も短い"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 21,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "締切が翌日なら急ぎで、午後の集荷なら出せない"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 23,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "締切が翌日でも午前の集荷なら出せる"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 27,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "source" : "2",
+          "name" : "高い荷は台帳が同じ答えを返しても送料が上がる"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 29,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "partial",
       "weakening" : [ "rule_unread", "decision_of_row_unreadable" ],
       "signature" : {
         "status" : "complete",
         "output" : {
           "declared" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "出荷済み"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "書けなかった"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "出荷する",
+              "case" : "重量超過"
+            }
+          } ],
           "status" : "complete",
           "specified" : [ "出荷済み", "書けなかった", "重量超過" ],
           "observed" : [ "出荷済み", "書けなかった", "重量超過" ],
@@ -3082,6 +3470,52 @@
       "implementation" : "implemented",
       "rows" : 3,
       "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "source" : "2",
+          "name" : "通常の荷を午前に集荷する"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 35,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "source" : "2",
+          "name" : "速達の荷を午後に集荷する"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 36,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "source" : "2",
+          "name" : "冷蔵の荷を午前に集荷する"
+        },
+        "at" : {
+          "sourceId" : "2",
+          "line" : 38,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
       "status" : "partial",
       "weakening" : [ "decision_of_row_unreadable" ],
       "signature" : {
@@ -3089,6 +3523,7 @@
         "reason" : "not_a_sum",
         "output" : {
           "declared" : [ ],
+          "obligations" : [ ],
           "status" : "unavailable",
           "reason" : "not_a_sum"
         },
@@ -4209,6 +4644,7 @@
   } ],
   "sources" : {
     "0" : "catalog.sou",
+    "2" : "shipping.examples.sou",
     "1" : "shipping.sou"
   }
 }

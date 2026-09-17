@@ -137,13 +137,18 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
      * table comes out in the order the entries above did — which is a consequence of those being
      * arranged before anything was written, and would be the order a comparison happened to ask
      * about them in if a place were chosen while writing.
+     *
+     * <p>The module's own source comes last and not first, which is the whole of what this asks.
+     * Nothing was read from the two beside it and both are named before any behavior is written;
+     * the module's own is named where the row it writes is, under the behavior.
      */
     @Test
     void theSourcesThisDocumentExplainsFollowFromWritingThem() {
         assertEquals("""
                 {
                   "1" : "1",
-                  "2" : "2"
+                  "2" : "2",
+                  "0" : "0"
                 }""", written().get("sources").toPrettyString());
     }
 

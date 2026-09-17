@@ -81,11 +81,29 @@ public final class Formatter {
     private Formatter() {
     }
 
-    /** Formats source text into its canonical form. Assumes the source parses without syntax errors;
-     * a caller that cannot assume that should check {@link CstParser#parse} first. */
+    /**
+     * Formats source text into its canonical form.
+     *
+     * <p>Refused where the source does not parse. What comes back from this is a canonicalization
+     * of what went in, and a recovering parse does not hold everything that was written: a
+     * construct the grammar has no reading of leaves a tree the printer walks past, and the text it
+     * returns is the source with some of it gone. A caller that took that for an answer wrote
+     * somebody's file back without part of it, and nothing said so.
+     *
+     * <p>Thrown rather than returned, because a caller that can do something else about it is
+     * already a caller that parses first ({@link CstParser#parse}) and can see what is wrong and
+     * where. What is left for this is the callers that assumed a clean parse, and the thing to tell
+     * them is that the assumption did not hold.
+     */
     public static String format(String source) {
         try {
-            return format(CstParser.parse(source).root());
+            CstParser.Result parsed = CstParser.parse(source);
+            if (!parsed.errors().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "source this cannot read is source it would return part of: "
+                                + parsed.errors().get(0));
+            }
+            return format(parsed.root());
         } catch (StackOverflowError _) {
             throw tooDeep();   // the descent that found the end of the stack was the parse's own
         }
@@ -1907,7 +1925,9 @@ public final class Formatter {
     }
 
     private TokenDoc newData(SyntaxNode n, Place at) {
-        String typeName = firstIdent(n);
+        // The type as it was written, which is one name however many dots it has: the fields are
+        // inside their own nodes, so the identifiers standing directly under this are the head.
+        TokenDoc typeName = dottedName(idents(n));
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
         List<Member> members = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
@@ -1933,7 +1953,7 @@ public final class Formatter {
             // wants anyway: a `//` on a line the group had collapsed would swallow the rest of it.
             members.add(member(place, written));
         }
-        return TokenDoc.node(n.kind(), concat(ident(typeName), GAP, TokenDoc.at(run,
+        return TokenDoc.node(n.kind(), concat(typeName, GAP, TokenDoc.at(run,
                 delimited(run, SyntaxKind.NEW_DATA_EXPR, LBRACE, withEndComments(run, members),
                         RBRACE))));
     }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-22.json",
+  "$id": "https://souther-lang.org/schema/adequacy-23.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
@@ -45,7 +45,7 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 22
+      "const": 23
     },
     "compilerVersion": {
       "type": "string",
@@ -221,6 +221,10 @@
           "border_value_absent",
           "border_observation_unavailable",
           "border_readings_not_exhausted",
+          "lines_beside_a_border_not_tried",
+          "a_borders_rows_are_all_on_one_side",
+          "a_borders_run_not_watched",
+          "no_reachable_distinguisher_for_a_border",
           "rule_unread",
           "position_not_read",
           "question_unanswered",
@@ -1576,7 +1580,8 @@
       "required": [
         "name",
         "implementation",
-        "status"
+        "status",
+        "rowObligations"
       ],
       "additionalProperties": false,
       "dependentRequired": {
@@ -1608,6 +1613,34 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many of those rows are recorded rather than evaluated. Present and absent exactly where `rows` is, and for the same reason."
+        },
+        "rowObligations": {
+          "type": "array",
+          "description": "Every row written for this behavior and whether the answer it owes is written. Not `rows` said again: that count is of the rows a reading handed back and is absent where nothing ran, while this is read off the text — so a behavior can have every one of its rows here and no count beside them, which says the rows were written and no observation came back. How many are waiting is a fold of this array and is written nowhere else. A row whose answer no parse could read is not here: it is malformed, a diagnostic says how, and counting it would put a source full of syntax errors in front of a reader as work an author had left.",
+          "items": {
+            "type": "object",
+            "required": [
+              "obligationId",
+              "at",
+              "disposition"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "obligationId": {
+                "$ref": "#/$defs/rowObligationId"
+              },
+              "at": {
+                "$ref": "#/$defs/at"
+              },
+              "disposition": {
+                "description": "Where the row stands. `met` is a row that states what it expects; `unmet` is a row written `<?>`, which a build refuses over and which an `unanswered_row` finding keyed on this row joins to. An `unanswered_row` finding keyed on an arm is about the arm and joins `branch.obligations` instead. There is no third: whether a row's answer is owed is a fact about the text, settled where the row was read and true whatever became of the evaluation.",
+                "enum": [
+                  "met",
+                  "unmet"
+                ]
+              }
+            }
+          }
         },
         "status": {
           "$ref": "#/$defs/status"
@@ -1662,7 +1695,8 @@
                     "decision_rule_uncovered",
                     "interaction_uncovered",
                     "pair_uncovered",
-                    "domain_point_uncovered"
+                    "domain_point_uncovered",
+                    "boundary_not_told_from_another"
                   ]
                 }
               },
@@ -1684,15 +1718,29 @@
             }
           },
           {
-            "description": "And the place is written for the one kind whose place is its own. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice.",
+            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, and a row waiting for its answer at the row or at the arm it stands at. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice.",
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "arm_unreached"
+              "anyOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "arm_unreached"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "unanswered_row"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1939,10 +1987,62 @@
                           }
                         },
                         "else": {
-                          "not": {
+                          "if": {
+                            "properties": {
+                              "kind": {
+                                "const": "output_case_unspecified"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          "then": {
                             "required": [
                               "obligationId"
-                            ]
+                            ],
+                            "properties": {
+                              "obligationId": {
+                                "$ref": "#/$defs/outputCaseObligationId"
+                              }
+                            }
+                          },
+                          "else": {
+                            "if": {
+                              "properties": {
+                                "kind": {
+                                  "const": "unanswered_row"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ]
+                            },
+                            "then": {
+                              "description": "One of two, because one kind covers two obligations: the arm a row stands at is owed a row and the arm account holds that, and the row itself is owed an answer and the row account holds that. Which of them a finding is about is what it publishes here.",
+                              "required": [
+                                "obligationId"
+                              ],
+                              "properties": {
+                                "obligationId": {
+                                  "oneOf": [
+                                    {
+                                      "$ref": "#/$defs/armObligationId"
+                                    },
+                                    {
+                                      "$ref": "#/$defs/rowObligationId"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "else": {
+                              "not": {
+                                "required": [
+                                  "obligationId"
+                                ]
+                              }
+                            }
                           }
                         }
                       }
@@ -1955,7 +2055,7 @@
         ],
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the rules leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the rules leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
             "enum": [
               "output_case_unspecified",
               "input_case_unspecified",
@@ -1984,7 +2084,7 @@
             ]
           },
           "obligationId": {
-            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, and in `partition.axes` where it is a class of a position. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`, an axis and a class for `axis_class_uncovered`. For `input_case_unspecified` it is one of two, because that case is one obligation with the class of its position only where the behavior has a position of its own: an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike. A combination of a body's decisions is one of these too, written as the decisions a run has to have made.",
+            "description": "Which thing a row is owed for the finding is about, written exactly where the finding is about one — which is also where `disposition` says a build acts on it, since the two are one fact about the finding's subject written in two fields. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, in `rowObligations` where it is a row waiting on its answer, in `signature.output.obligations` where it is a case of the output, and in `partition.axes` where it is a class of a position. Its shape is the shape the account it is an entry of keeps, and the shape is what says which account that is — a point of a line, an arm, an axis and a class, a row, a case of an output, and the rest are distinct and closed, so a consumer reads the key and knows where to look it up. Not settled by `kind`: that word is a coarser sort than what a finding is about, and more than one of them covers subjects owed at different accounts. `unanswered_row` is the plain case — a row waiting for its answer is owed at the row, and the arm it stands at is owed a row of its own, and the two are told apart here and nowhere else. `input_case_unspecified` is the same shape of thing: a case of an input is one obligation with the class of its position only where the behavior has a position of its own, so it is an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike. A combination of a body's decisions is one of these too, written as the decisions a run has to have made.",
             "oneOf": [
               {
                 "$ref": "#/$defs/obligationId"
@@ -1997,6 +2097,12 @@
               },
               {
                 "$ref": "#/$defs/inputCaseObligationId"
+              },
+              {
+                "$ref": "#/$defs/outputCaseObligationId"
+              },
+              {
+                "$ref": "#/$defs/rowObligationId"
               },
               {
                 "$ref": "#/$defs/ruleObligationId"
@@ -2248,6 +2354,78 @@
           "description": "The case of that input, as the model declares it."
         }
       }
+    },
+    "outputCaseObligationId": {
+      "type": "object",
+      "description": "What tells one case of a behavior's output from every other. The behavior and which case, and nothing about a position: an output has none, an axis is of an input, so there is no other account this could have an entry in and the array under `signature.output` is the one place it is kept. The behavior is part of it because two behaviors answering with the same sum owe that case separately.",
+      "required": [
+        "behavior",
+        "case"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "type": "string",
+          "description": "The behavior whose output it is."
+        },
+        "case": {
+          "type": "string",
+          "description": "The case of that output, as the model declares it."
+        }
+      }
+    },
+    "rowObligationId": {
+      "type": "object",
+      "description": "What tells one row an author wrote from every other, which is what the answer it owes is owed at. A key within this document: it names an entry of the behavior's `rowObligations`, and a consumer joins an `unanswered_row` finding to the row it is about on it. Three parts, because two of them are not enough: a row written with no name is numbered within the source that writes it, so a behavior exampled in a module and in a file attached to it has a first row in each. Not the arm such a row may stand at — an arm is owed a row and any row through it discharges that, while this is owed an answer and only an answer written here discharges it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "behavior",
+            "source",
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "behavior": {
+              "type": "string",
+              "description": "The behavior the row is written for."
+            },
+            "source": {
+              "type": "string",
+              "description": "The source, under the name this document gives it."
+            },
+            "name": {
+              "type": "string",
+              "description": "The row's name, where it was written with one."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "behavior",
+            "source",
+            "ordinal"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "behavior": {
+              "type": "string",
+              "description": "The behavior the row is written for."
+            },
+            "source": {
+              "type": "string",
+              "description": "The source, under the name this document gives it."
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Which of its behavior's rows in that source it is, where it has no name."
+            }
+          }
+        }
+      ]
     },
     "classObligationId": {
       "type": "object",
@@ -3701,12 +3879,29 @@
           "type": "object",
           "required": [
             "declared",
+            "obligations",
             "status"
           ],
           "additionalProperties": false,
           "properties": {
             "declared": {
               "$ref": "#/$defs/caseNames"
+            },
+            "obligations": {
+              "type": "array",
+              "description": "What a row is owed at here: one entry per case of the output, which is what an `output_case_unspecified` finding joins to. The only place any of them is — an axis is of an input, so an output case has no other account it could be an entry of. Beside `declared` and not instead of it: those are the words the model writes for the cases, and these are the key a consumer joins on.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "obligationId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "obligationId": {
+                    "$ref": "#/$defs/outputCaseObligationId"
+                  }
+                }
+              }
             },
             "specified": {
               "$ref": "#/$defs/caseNames",
@@ -4422,7 +4617,7 @@
                 "partition",
                 "decision"
               ],
-              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`)."
+              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`). `boundary` answers two questions over one reading of the lines: whether a row stands at each point of a line, which shows the line has not moved, and whether any line one step from it answers alike at every row, which is what a one-step fault in its weights would look like. A reading short of either is short, and which of the two it was is the word the shortfall itself carries."
             }
           }
         },
