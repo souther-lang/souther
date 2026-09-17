@@ -281,6 +281,7 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                             + " pattern the engine refused"),
             new Permission("souther.compiler.query.Adequacy$ARowBuiltAndRun", "attempt",
                     "(Ljava/lang/String;Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
                             + "Lsouther/compiler/partition/AnswersDemanded;)"
                             + "Ljava/util/List;",

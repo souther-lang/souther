@@ -203,7 +203,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // tries and what it hands over beside them is whether it ran out of numbers first.
             Map.entry("souther.compiler.partition.TermRealizations#holding("
                             + "Lsouther/compiler/types/Type;"
-                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/partition/AskedAt;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",

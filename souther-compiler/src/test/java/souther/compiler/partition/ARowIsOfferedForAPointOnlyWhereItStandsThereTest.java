@@ -188,6 +188,8 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
         return Generator.probeFixing(subject, "r.cost = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
+                NumbersAskedFor.justTheNumber(at,
+                        domain.quantities(rules).ordersOf(axis.term()).answered()),
                 Reachability.untouched(domain.quantities(rules).region()), check);
     }
 }

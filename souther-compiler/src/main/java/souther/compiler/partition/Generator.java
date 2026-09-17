@@ -13,7 +13,9 @@ import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -3296,8 +3298,9 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
                                               Map<RealizationTarget, Place> fixing,
+                                              NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check) {
-        return probeFixing(subject, label, fixing, reaching, check,
+        return probeFixing(subject, label, fixing, asking, reaching, check,
                 AnswersStoodIn.REQUIRING_NOTHING);
     }
 
@@ -3311,6 +3314,7 @@ public final class Generator {
      */
     public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
                                               Map<RealizationTarget, Place> fixing,
+                                              NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               AnswersStoodIn stood) {
         LocationWrites decided = new LocationWrites();
@@ -3351,8 +3355,10 @@ public final class Generator {
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
-        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
-                : byTheLocationTheyWrite(atThoseNumbers(standing)).entrySet()) {
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, AskedAt>> group
+                : byTheLocationTheyWrite(atThoseNumbers(standing,
+                        whatEachOfThemIsANumberOf(subject, fixing, asking, reaching)))
+                .entrySet()) {
             Edge edge = edgeAt(subject, group.getValue(), reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
@@ -3886,7 +3892,7 @@ public final class Generator {
      * many values answer exactly as it is for a number one does.
      */
     private static Edge edgeAt(MeasuredInput subject,
-                               SequencedMap<RealizationTarget, NumericSet> group,
+                               SequencedMap<RealizationTarget, AskedAt> group,
                                souther.compiler.inputs.SearchRegion within) {
         RealizationTarget target = group.firstEntry().getKey();
         // Which value answers the number is `TermRealizations`' one answer — asked of it whatever
@@ -3929,11 +3935,11 @@ public final class Generator {
      * both are: the arrangement is the same either way, and reading it twice would be two answers
      * to which location a number is written at.
      */
-    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>>
-            byTheLocationTheyWrite(Map<RealizationTarget, NumericSet> standing) {
-        SequencedMap<TermPath, SequencedMap<RealizationTarget, NumericSet>> out =
+    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>>
+            byTheLocationTheyWrite(Map<RealizationTarget, AskedAt> standing) {
+        SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>> out =
                 new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, NumericSet> each : standing.entrySet()) {
+        for (Map.Entry<RealizationTarget, AskedAt> each : standing.entrySet()) {
             out.computeIfAbsent(each.getKey().writeRoot(), _ -> new LinkedHashMap<>())
                     .put(each.getKey(), each.getValue());
         }
@@ -3954,9 +3960,9 @@ public final class Generator {
      * and not a value of the unnarrowed position, and what stands there is composed out of the
      * narrowed type by the walk below — so a number to compose for is what the class beside it has.
      */
-    private static SequencedMap<RealizationTarget, NumericSet> numbersTheClassesAdmit(
-            MeasuredInput.MeasuredAxes axes, int[] where) {
-        SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+    private static SequencedMap<RealizationTarget, AskedAt> numbersTheClassesAdmit(
+            MeasuredInput.MeasuredAxes axes, int[] where, Quantities measuring) {
+        SequencedMap<RealizationTarget, AskedAt> out = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
             if (where[i] == NOT_HERE) {
                 continue;
@@ -3964,21 +3970,70 @@ public final class Generator {
             PartitionClass cls = axes.get(i).classes().get(where[i]);
             NumericSet admits = admitted(cls);
             if (admits != null) {
-                out.put(RealizationTarget.of(cls.of()), admits);
+                out.put(RealizationTarget.of(cls.of()),
+                        AskedAt.theClass(admits, carrierOf(cls.of(), measuring)));
             }
         }
         return out;
     }
 
-    /** Each of those numbers as the set holding it alone, which is what a point of a border asks
-     *  for: the one number the row has to stand at. */
-    private static Map<RealizationTarget, NumericSet> atThoseNumbers(
-            Map<RealizationTarget, Place> standing) {
-        Map<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
-        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
-            out.put(each.getKey(), new NumericSet.At(each.getValue()));
+    /**
+     * What each of the row's numbers is one of, by where the number came from.
+     *
+     * <p>Two askings and they are asked of two things. A number the item names is one of what the
+     * item leaves that position, which is the border's quantity to answer; a number placed on the
+     * way is one of what the rules leave it there, which is the region and the cuts. Read off one
+     * of the two for both, a position the way bounds would be answered about by an item that is
+     * not about it, and a position of the item by a region that has the item's own value in it.
+     *
+     * <p>A position under both is under both, and what it is asked is what they leave together.
+     */
+    private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
+            MeasuredInput subject, Map<RealizationTarget, Place> fixing,
+            NumbersAskedFor asking, Reachability.Reaching reaching) {
+        Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>();
+        for (RealizationTarget each : fixing.keySet()) {
+            out.put(each, asking);
+        }
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            for (NumericTerm term : cut.taken().terms()) {
+                NumericTerm.FromOnePosition at = term.atOnePosition();
+                if (at == null) {
+                    continue;
+                }
+                RealizationTarget target = RealizationTarget.of(at);
+                NumbersAskedFor leaves = NumbersAskedFor.askedOf(at, reaching.region(),
+                        carrierOf(at, subject.quantities()), reaching.boundedOnTheWay());
+                out.merge(target, leaves, NumbersAskedFor::meet);
+            }
         }
         return out;
+    }
+
+    /**
+     * Each of those numbers as one a caller picked out of what it was asking about.
+     *
+     * <p>Which is what a point of a border is tried with: the search settled on this number of the
+     * item and the row is composed for it. What it is a number <em>of</em> travels beside it, so
+     * that nothing built at this one is an answer about this one — the item holds every number the
+     * rules leave beside it, and a walk of one candidate saw none of them.
+     */
+    private static Map<RealizationTarget, AskedAt> atThoseNumbers(
+            Map<RealizationTarget, Place> standing,
+            Map<RealizationTarget, NumbersAskedFor> asking) {
+        Map<RealizationTarget, AskedAt> out = new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+            out.put(each.getKey(), AskedAt.oneNumberOf(
+                    asking.getOrDefault(each.getKey(), NumbersAskedFor.ANYTHING),
+                    each.getValue()));
+        }
+        return out;
+    }
+
+    /** The order a term's values are counted on, or null where this reading has none for it. */
+    private static Carrier carrierOf(NumericTerm term, Quantities measuring) {
+        souther.compiler.inputs.TermOrders orders = measuring.ordersOf(term);
+        return orders == null ? null : orders.answered();
     }
 
     /** The numbers a class admits of the number it is a class of, or null where it is about
@@ -4549,8 +4604,9 @@ public final class Generator {
         // while being offered as covering both. Composed here instead, before anything is written,
         // by the reader that answers this for the points of a border ({@link #edgeAt}).
         Map<TermPath, List<FixtureTemplate>> together = new LinkedHashMap<>();
-        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, NumericSet>> group
-                : byTheLocationTheyWrite(numbersTheClassesAdmit(axes, where)).entrySet()) {
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, AskedAt>> group
+                : byTheLocationTheyWrite(
+                        numbersTheClassesAdmit(axes, where, subject.quantities())).entrySet()) {
             // A location asked for one number, which the class standing at it holds a value for
             // already — composed by this same owner, for this same number, when the class was made.
             // So what is composed here is what more than one of them takes: one value answering
@@ -4571,7 +4627,17 @@ public final class Generator {
                 // anything a reader could raise reaches it. Taken as the word alone, a group this
                 // compiler writes none of the values for arrives as a search that left something
                 // untried with nothing of this compiler's beside it.
-                return new Attempt(null, composed.reason(), group.getKey().toString(),
+                //
+                // Which the edge's own word would be, where what it settled is that the rules
+                // leave no number at this combination. That is true of the combination and the
+                // class this is filling is answered by every combination of it — so the proof
+                // stays the combination's until something folds them, and what is said here is
+                // what this route has always said: nothing was composed.
+                return new Attempt(null,
+                        composed.settlesTheQuestion()
+                                ? UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
+                                : composed.reason(),
+                        group.getKey().toString(),
                         Optional.ofNullable(composed.detail()), new LinkedHashMap<>(),
                         composed.met());
             }
@@ -5904,6 +5970,7 @@ public final class Generator {
                 case TermRealizations.Realization.Built built -> built.heldBack();
                 case TermRealizations.Realization.Stopped stopped -> stopped.by();
                 case TermRealizations.Realization.Unexhausted _,
+                     TermRealizations.Realization.NoNumberTheRulesAdmit _,
                      TermRealizations.Realization.None _ -> java.util.Set.of();
             };
         }
@@ -5922,7 +5989,10 @@ public final class Generator {
                 case TermRealizations.Realization.Built built -> built.notAllOf();
                 case TermRealizations.Realization.Stopped stopped -> stopped.notAllOf();
                 case TermRealizations.Realization.Unexhausted some -> some.notAllOf();
-                case TermRealizations.Realization.None _ -> java.util.Set.of();
+                // The rules leaving no number is not a population this compiler writes some of:
+                // there is nothing left over to write.
+                case TermRealizations.Realization.NoNumberTheRulesAdmit _,
+                     TermRealizations.Realization.None _ -> java.util.Set.of();
             };
         }
 
@@ -5938,7 +6008,8 @@ public final class Generator {
                 case TermRealizations.Realization.None none -> none.detail();
                 case TermRealizations.Realization.Unexhausted some -> some.detail();
                 case TermRealizations.Realization.Built _,
-                     TermRealizations.Realization.Stopped _ -> null;
+                     TermRealizations.Realization.Stopped _,
+                     TermRealizations.Realization.NoNumberTheRulesAdmit _ -> null;
             };
         }
 
@@ -5953,6 +6024,19 @@ public final class Generator {
             return CompositionShortfall.of(stoppedBy(), notAllOf());
         }
 
+        /**
+         * Whether the rules were shown to leave no number at what this edge was asked, which is
+         * about the model and about the combination this edge ran at.
+         *
+         * <p>Asked rather than read off {@link #reason()}, because the word is what a point
+         * publishes and a class is not a point: one of these settles the combination, and what a
+         * class comes to is what every combination that fills it came to. A caller folding these
+         * has one answer per combination and may say of the class what all of them said.
+         */
+        boolean settlesTheQuestion() {
+            return came instanceof TermRealizations.Realization.NoNumberTheRulesAdmit;
+        }
+
         /** What to report where no value was offered here at all. */
         UnresolvedCombination.Reason reason() {
             return switch (came) {
@@ -5965,6 +6049,13 @@ public final class Generator {
                 // the word and not the word.
                 case TermRealizations.Realization.Unexhausted _ ->
                         UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                // A row at a point is one row at one obligation, so what the search of it settled
+                // is what the point comes to. A class is not: several combinations fill one, and
+                // what this edge settled is the combination it ran at — which is why a caller
+                // filling a class reads {@link #settlesTheQuestion()} and folds it rather than
+                // taking this word.
+                case TermRealizations.Realization.NoNumberTheRulesAdmit _ ->
+                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE;
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");
             };
@@ -6013,7 +6104,7 @@ public final class Generator {
      * among the ones it puts together.
      */
     private static Edge edgeFrom(TermRealizations.Realization made,
-                                 SequencedMap<RealizationTarget, NumericSet> group) {
+                                 SequencedMap<RealizationTarget, AskedAt> group) {
         if (group.size() != 1) {
             return new Edge(made, null);
         }
@@ -6022,7 +6113,8 @@ public final class Generator {
             // a row written for one stands at is whichever of them the value was built at — which
             // is the composer's answer and not something this could read off the question.
             case NumericTerm.ValueOf _ ->
-                    group.firstEntry().getValue() instanceof NumericSet.At one ? one.value() : null;
+                    group.firstEntry().getValue().walking() instanceof NumericSet.At one
+                            ? one.value() : null;
             // What an operation answered is not what its root holds — three characters is not the
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;

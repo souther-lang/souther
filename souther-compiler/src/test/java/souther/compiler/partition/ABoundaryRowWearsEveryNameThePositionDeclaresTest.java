@@ -120,6 +120,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                                 java.util.Map.of(
                                         new RealizationTarget.AtOnePosition(axis.term()),
                                         ((Level.OnACarrier) each.at()).at()),
+                                NumbersAskedFor.of(LevelRegion.point(each.at())),
                                 Reachability.untouched(domain.quantities(rules).region()),
                                 Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built

@@ -164,6 +164,27 @@ final class TermRealizations {
         }
 
         /**
+         * The rules admit no number of what was asked about, which is walked and not guessed.
+         *
+         * <p><b>About the numbers and not about the values.</b> Nothing was built because there was
+         * nothing to build for: the walk went over every number the question holds and the rules
+         * left none of them standing. A walk that had numbers and built at none of them is not
+         * this — what that shows is about this compiler, and what this shows is about the model.
+         *
+         * <p><b>And about the question this attempt was for.</b> A location asked for a class and
+         * a location asked for one number a caller picked out of one are two questions, and only a
+         * walk of the first says anything of the first — which is what {@link AskedAt} keeps apart
+         * and why the walk is only this where it covered what it was about.
+         *
+         * <p>Not a word a reader may print. What somebody is owed a row at is an obligation and a
+         * search runs at a combination, so one of these settles the combination it came from and
+         * the obligation is settled by what every combination of it came to. Published from here,
+         * a class one combination of leaves nothing would be a class the rules leave nothing in,
+         * while another combination of it goes on admitting values.
+         */
+        record NoNumberTheRulesAdmit() implements Realization {}
+
+        /**
          * Nothing here writes a value answering it, and no budget of this compiler's is why.
          *
          * <p>Which is a walk that looked everywhere it was going to look and found nothing, and not
@@ -425,7 +446,7 @@ final class TermRealizations {
      */
     sealed interface JointBuilder {
 
-        Realization from(Type sourceType, SequencedMap<RealizationTarget, NumericSet> demands,
+        Realization from(Type sourceType, SequencedMap<RealizationTarget, AskedAt> demands,
                          Quantities measuring, SearchRegion within, RuleReadingContext reading);
 
         /**
@@ -440,10 +461,10 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
-                Map.Entry<RealizationTarget, NumericSet> one = demands.firstEntry();
+                Map.Entry<RealizationTarget, AskedAt> one = demands.firstEntry();
                 return satisfying(sourceType, measuring.ordersOf(one.getKey().term()),
                         one.getValue(), within, reading);
             }
@@ -463,12 +484,12 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
                 Map<TakenAs.TimePart, NumericSet> asked = new LinkedHashMap<>();
                 for (Map.Entry<RealizationTarget, TakenAs.TimePart> each : parts.entrySet()) {
-                    asked.put(each.getValue(), demands.get(each.getKey()));
+                    asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return atThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
                         reading.source());
@@ -489,12 +510,12 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
                 Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
                 for (Map.Entry<RealizationTarget, TakenAs.DatePart> each : parts.entrySet()) {
-                    asked.put(each.getValue(), demands.get(each.getKey()));
+                    asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
                         reading.source());
@@ -532,7 +553,7 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
                 Carrier observed = rootOf(by.keySet(), measuring);
@@ -542,7 +563,8 @@ final class TermRealizations {
                 }
                 NumericDomain.Bounds lies = NumericDomain.Bounds.OPEN;
                 for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
-                    NumericDomain.Bounds quotients = quotientsAsked(demands.get(each.getKey()));
+                    NumericDomain.Bounds quotients =
+                            quotientsAsked(demands.get(each.getKey()).walking());
                     if (quotients == null) {
                         return new Realization.Unexhausted(Set.of(CompositionRepertoire
                                 .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS), null);
@@ -564,7 +586,7 @@ final class TermRealizations {
                     lies = lies.meet(numbersWhoseQuotientLiesIn(quotients, each.getValue()));
                 }
                 RuleReadingSource ruleSource = reading.source();
-                return firstThatBuilds(
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         numbersInside(lies, observed,
                                 at -> readsBackIntoEveryOne(at, by, demands, observed)),
                         at -> writtenAt(at, sourceType, observed, ruleSource));
@@ -603,11 +625,12 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
                 TermOrders orders = measuring.ordersOf(itself.term());
-                NumericSet stands = demands.get(itself);
+                AskedAt standsAt = demands.get(itself);
+                NumericSet stands = standsAt == null ? null : standsAt.walking();
                 if (orders == null || orders.observed() == null || orders.answered() == null
                         || stands == null) {
                     return new Realization.None(
@@ -620,7 +643,8 @@ final class TermRealizations {
                 List<Asked> readOfEach = new ArrayList<>();
                 for (RealizationTarget each : takenOfIt) {
                     TermOrders of = measuring.ordersOf(each.term());
-                    NumericSet wanted = demands.get(each);
+                    AskedAt at = demands.get(each);
+                    NumericSet wanted = at == null ? null : at.walking();
                     if (of == null || of.answered() == null || wanted == null) {
                         return new Realization.None(
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -643,8 +667,8 @@ final class TermRealizations {
                 }
                 RuleReadingSource ruleSource = reading.source();
                 Carrier answered = orders.answered();
-                return firstThatBuilds(
-                        admitting(onTheOrder(stands, orders, null, within),
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        admitting(onTheOrder(stands, orders, standsAt.named(), within),
                                 at -> everyNumberTakenOfItReadsBack(at, orders.observed(),
                                         readOfEach)),
                         at -> writtenAt(at, sourceType, answered, ruleSource));
@@ -674,13 +698,15 @@ final class TermRealizations {
 
             @Override
             public Realization from(Type sourceType,
-                                    SequencedMap<RealizationTarget, NumericSet> demands,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading) {
                 TermOrders counted = measuring.ordersOf(manyItHolds.term());
                 TermOrders adds = measuring.ordersOf(whatItComesTo.term());
-                NumericSet many = demands.get(manyItHolds);
-                NumericSet total = demands.get(whatItComesTo);
+                AskedAt holdsAt = demands.get(manyItHolds);
+                AskedAt comesToAt = demands.get(whatItComesTo);
+                NumericSet many = holdsAt == null ? null : holdsAt.walking();
+                NumericSet total = comesToAt == null ? null : comesToAt.walking();
                 if (counted == null || counted.answered() == null || adds == null
                         || many == null || total == null) {
                     return new Realization.None(
@@ -696,7 +722,8 @@ final class TermRealizations {
                 }
                 ContainersAddingUp.HowManyIsAskedFor holding =
                         new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
-                return firstThatBuilds(onTheOrder(total, adds, null, within),
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        onTheOrder(total, adds, comesToAt.named(), within),
                         at -> ContainersAddingUp.to(at, sourceType, adds, within, reading,
                                 holding));
             }
@@ -746,7 +773,7 @@ final class TermRealizations {
      * none of a population, which is the answer a reader may conclude nothing from.
      */
     static Realization allSatisfying(Type sourceType,
-                                     SequencedMap<RealizationTarget, NumericSet> demands,
+                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                      Quantities measuring,
                                      SearchRegion within,
                                      RuleReadingContext reading) {
@@ -809,20 +836,10 @@ final class TermRealizations {
     }
 
     /**
-     * The same, with a number of the set a caller has already named.
-     *
-     * <p><b>A candidate, and never the question.</b> What the search is asked for stays the set:
-     * a number picked out of it is one this may try first, and its failing says nothing about the
-     * numbers beside it. Handed in as the set instead — as the one number the set holds — a class
-     * whose first candidate nothing builds at comes back as a class nothing writes a value in,
-     * which is the quantifier this file exists to keep where it belongs.
-     *
-     * <p>For the sets this cannot walk: the numbers a rule leaves when it singles one out are every
-     * number but those, and which of them to try is a witness somebody pays for. So the reader that
-     * pays names one, and what comes of it is an answer about that one.
+     * The values to write at {@code orders}' root answering what this was asked, which says both
+     * which numbers to walk and which numbers a walk of them is about.
      */
-    static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
-                                  Place named,
+    static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
                                   SearchRegion within,
                                   RuleReadingContext reading) {
         if (sourceType == null) {
@@ -839,13 +856,34 @@ final class TermRealizations {
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            case NumericTerm.ValueOf _ ->
-                    standing(sourceType, orders, wanted, named, within, reading);
+            case NumericTerm.ValueOf _ -> standing(sourceType, orders, asked, within, reading);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
-                    orders, wanted, named, within, reading);
+                    orders, asked, within, reading);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    wanted, named, within, reading);
+                    asked, within, reading);
         };
+    }
+
+    /**
+     * The same, with a number of the set a caller has already named.
+     *
+     * <p><b>A candidate, and never the question.</b> What the search is asked for stays the set:
+     * a number picked out of it is one this may try first, and its failing says nothing about the
+     * numbers beside it. Handed in as the set instead — as the one number the set holds — a class
+     * whose first candidate nothing builds at comes back as a class nothing writes a value in,
+     * which is the quantifier this file exists to keep where it belongs.
+     *
+     * <p>For the sets this cannot walk: the numbers a rule leaves when it singles one out are every
+     * number but those, and which of them to try is a witness somebody pays for. So the reader that
+     * pays names one, and what comes of it is an answer about that one.
+     */
+    static Realization satisfying(Type sourceType, TermOrders orders, NumericSet wanted,
+                                  Place named,
+                                  SearchRegion within,
+                                  RuleReadingContext reading) {
+        return satisfying(sourceType, orders,
+                AskedAt.aNumberOutOf(wanted, named, orders == null ? null : orders.answered()),
+                within, reading);
     }
 
     /**
@@ -856,13 +894,13 @@ final class TermRealizations {
      * region, since where a row may be written is what says how far the values run — worked out
      * from the type instead, this would answer about wherever that type came from.
      */
-    private static Realization standing(Type sourceType, TermOrders orders, NumericSet wanted,
-                                        Place named,
+    private static Realization standing(Type sourceType, TermOrders orders, AskedAt asked,
                                         SearchRegion within,
                                         RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         Carrier carrier = orders.answered();
-        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
                 chosen -> oneValue(
                         FixtureTemplate.on(carrier, chosen, ruleSource.symbols().scope()::reach),
                         sourceType, ruleSource));
@@ -878,19 +916,20 @@ final class TermRealizations {
      * would have said only that every value tried was refused.
      */
     private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
-                                     TermOrders orders, NumericSet wanted, Place named,
+                                     TermOrders orders, AskedAt asked,
                                      SearchRegion within,
                                      RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
+        NumericSet wanted = asked.walking();
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
-            case TakenAs.HowManyItHolds _ -> holding(sourceType, wanted, orders, reading);
+            case TakenAs.HowManyItHolds _ -> holding(sourceType, asked, orders, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
@@ -903,9 +942,21 @@ final class TermRealizations {
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
-                    atThatQuotient(taken.read(arguments), sourceType, orders, wanted, named,
+                    atThatQuotient(taken.read(arguments), sourceType, orders, asked,
                             within, ruleSource);
         };
+    }
+
+    /**
+     * Whether walking what each of these hands over is walking what they are about.
+     *
+     * <p>Of all of them, because one value answers the group and a word about it is a word about
+     * every number the group asked for. One of them a caller picked a number out of is one the
+     * walk saw a candidate of, and the answer is about that candidate whatever the rest were
+     * asked.
+     */
+    private static boolean walkIsOfTheWholeQuestion(Collection<AskedAt> asked) {
+        return asked.stream().allMatch(AskedAt::walkIsOfTheWholeQuestion);
     }
 
     /**
@@ -920,8 +971,14 @@ final class TermRealizations {
      * <p>The reasons the attempts came back with travel either way. A budget met on the way to one
      * number is a budget met, whichever number was being tried, and a reader deciding what to do
      * about the offer reads it the same.
+     *
+     * <p><b>And all the numbers handed over is not all the numbers asked about.</b> What handed
+     * them over says which of its own it had left, and that is a walk's answer rather than a
+     * question's: the numbers handed over are the ones a caller named where a caller named any. So
+     * the one place a walk becomes something said about the model is here, and what it is said of
+     * is what the search was for.
      */
-    private static Realization firstThatBuilds(Tried tried,
+    private static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
                                                Function<Place, Realization> of) {
         Set<CompositionBudget> met = new java.util.LinkedHashSet<>();
         Set<CompositionRepertoire> some = new java.util.LinkedHashSet<>();
@@ -938,7 +995,10 @@ final class TermRealizations {
                     some.addAll(stopped.notAllOf());
                 }
                 case Realization.Unexhausted walked -> some.addAll(walked.notAllOf());
-                case Realization.None _, Realization.Built _ -> { }
+                // The rules leaving no number at one of the numbers handed over says nothing about
+                // the next: this walk is over the numbers, and that one was a value's answer.
+                case Realization.NoNumberTheRulesAdmit _, Realization.None _,
+                     Realization.Built _ -> { }
             }
         }
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
@@ -956,6 +1016,19 @@ final class TermRealizations {
             return new Realization.Unexhausted(some,
                     last instanceof Realization.Unexhausted walked ? walked.detail() : null);
         }
+        // Nothing was handed over, nothing was held back, and the numbers there were to hand over
+        // were the whole of what was asked about. Which is the rules admitting no number of the
+        // question, and the one answer here that is about the model rather than about this
+        // compiler.
+        //
+        // Both halves are the point. A walk over a number a caller picked out of a class ends the
+        // same way and has seen one number of it, so the same emptiness said of the class would be
+        // a sentence about every value the class holds. And nothing here says anything about what
+        // could be built at a number this walked past: this is about the numbers, not the values.
+        if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
+                && walkedTheWholeQuestion) {
+            return new Realization.NoNumberTheRulesAdmit();
+        }
         return last instanceof Realization.None none ? none
                 : new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -963,8 +1036,7 @@ final class TermRealizations {
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
      *  this number to be there. */
-    private static Realization addingUp(NumericSet wanted, Type sourceType, TermOrders orders,
-                                        Place named,
+    private static Realization addingUp(AskedAt asked, Type sourceType, TermOrders orders,
                                         SearchRegion within,
                                         RuleReadingContext reading) {
         if (orders.answered() == null) {
@@ -978,7 +1050,8 @@ final class TermRealizations {
         // Asked on the order the total is measured on, which a run of values answers a number over
         // and stands at no place of. Read on the order the values are written on instead, a total
         // taken over a run would be asked about a carrier the run has and the number does not.
-        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
                 total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
     }
 
@@ -997,7 +1070,7 @@ final class TermRealizations {
      * carrier's answer, and a value past it is one no row can write however the arithmetic came out.
      */
     private static Realization atThatQuotient(BigDecimal by, Type sourceType, TermOrders orders,
-                                              NumericSet wanted, Place named,
+                                              AskedAt asked,
                                               SearchRegion within,
                                               RuleReadingSource ruleSource) {
         Carrier observed = orders.observed();
@@ -1011,7 +1084,8 @@ final class TermRealizations {
         // A quotient is a place on the order it is answered on, and how far that order runs is the
         // carrier's. Walked as whole numbers between figures of this compiler's instead, a quotient
         // the position holds and an int does not was a number nothing offered.
-        return firstThatBuilds(onTheOrder(wanted, orders, named, within),
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
     }
 
@@ -1298,13 +1372,14 @@ final class TermRealizations {
      */
     private static boolean readsBackIntoEveryOne(Place at,
                                                  SequencedMap<RealizationTarget, BigDecimal> by,
-                                                 SequencedMap<RealizationTarget, NumericSet> asked,
+                                                 SequencedMap<RealizationTarget, AskedAt> asked,
                                                  Carrier observed) {
         if (!(at instanceof Count count)) {
             return false;
         }
         for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
-            NumericSet wanted = asked.get(each.getKey());
+            AskedAt of = asked.get(each.getKey());
+            NumericSet wanted = of == null ? null : of.walking();
             Place quotient = observed.onTheGrid(new Count(
                     Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())));
             if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
@@ -1469,11 +1544,11 @@ final class TermRealizations {
      * number nothing reads.
      */
     private static Realization overARun(TakenAs how, Type sourceType,
-                                        TermOrders orders, NumericSet wanted, Place named,
+                                        TermOrders orders, AskedAt asked,
                                         SearchRegion within,
                                         RuleReadingContext reading) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(wanted, sourceType, orders, named,
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _ -> new Realization.None(
@@ -1490,13 +1565,13 @@ final class TermRealizations {
      * the next count of the set is asked after it — so a set holding a count the type has no value
      * for is not a set nothing writes a value in.
      */
-    private static Realization holding(Type sourceType, NumericSet wanted, TermOrders orders,
+    private static Realization holding(Type sourceType, AskedAt asked, TermOrders orders,
                                        RuleReadingContext reading) {
         // From none upward, which is as far as a count runs and as many of them as the figure
         // allows. A count is the one account whose numbers are whole and whose window is the whole
         // of what it can be asked for, so a walk that reaches the end of it has walked the set.
-        return firstThatBuilds(
-                wholeNumbers(wanted, orders.answered(), 0, Integer.MAX_VALUE,
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
                 count -> holdingExactly(sourceType, count, reading));
     }

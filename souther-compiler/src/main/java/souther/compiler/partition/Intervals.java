@@ -275,7 +275,12 @@ final class Intervals {
         return switch (made) {
             case TermRealizations.Realization.Built built ->
                     RepresentativeSource.of(built.values());
-            case TermRealizations.Realization.None _ ->
+            // Nothing writes one either way. That the rules leave no number of the class is more
+            // than this says, and it is not this reader's to carry: what a representative is for
+            // is standing in a class, and a class the rules leave nothing in has nothing to stand
+            // in it whichever of the two is why.
+            case TermRealizations.Realization.NoNumberTheRulesAdmit _,
+                 TermRealizations.Realization.None _ ->
                     new RepresentativeSource.Ungeneratable("nothing here writes " + what);
             case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotReached(
                     stopped.by(), stopped.notAllOf(),
