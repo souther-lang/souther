@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
@@ -8,7 +9,9 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A border read as one inequality over the positions it is drawn on.
@@ -75,7 +78,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      */
     public static boolean weighable(BorderQuantity of) {
         for (NumericTerm term : of.terms()) {
-            souther.compiler.check.Carrier on = of.carrierOf(term);
+            Carrier on = of.carrierOf(term);
             if (on == null || !on.counts()) {
                 return false;
             }
@@ -91,21 +94,21 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
     /**
      * The positions of it a rule could write another weight for.
      *
-     * <p>Asked of each position's own order ({@link souther.compiler.check.Carrier#canBeWeighed}).
+     * <p>Asked of each position's own order ({@link Carrier#canBeWeighed}).
      * A date counts from an origin nobody wrote, so a line weighing one of them two is a line
      * nobody can state — and the weights such a position has are the one pair a distance is written
      * with.
      */
-    public java.util.Set<NumericTerm> weighedByANumber() {
+    public Set<NumericTerm> weighedByANumber() {
         return weighedByANumber(of);
     }
 
     /** The same, asked of a quantity rather than of a boundary on it — for a caller working out
      *  whether there is a boundary of this kind to build at all. */
-    public static java.util.Set<NumericTerm> weighedByANumber(BorderQuantity of) {
-        java.util.Set<NumericTerm> out = new java.util.LinkedHashSet<>();
+    public static Set<NumericTerm> weighedByANumber(BorderQuantity of) {
+        Set<NumericTerm> out = new LinkedHashSet<>();
         for (NumericTerm term : QuantityKey.of(of.direction()).direction().keySet()) {
-            souther.compiler.check.Carrier on = of.carrierOf(term);
+            Carrier on = of.carrierOf(term);
             if (on != null && on.canBeWeighed()) {
                 out.add(term);
             }
@@ -167,11 +170,11 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
         // In the order the quantity's own form is spelled in, so that an input and the line it is
         // an input of name their positions the same way round. Taken in the order the terms were
         // recorded, a reader compares a form written one way against a row written another.
-        for (Map.Entry<NumericTerm, java.math.BigDecimal> each
+        for (Map.Entry<NumericTerm, BigDecimal> each
                 : AffineReading.ordered(of.direction())) {
             NumericTerm term = each.getKey();
             Place at = values.get(term);
-            souther.compiler.check.Carrier on = of.carrierOf(term);
+            Carrier on = of.carrierOf(term);
             if (at == null || on == null) {
                 return null;
             }

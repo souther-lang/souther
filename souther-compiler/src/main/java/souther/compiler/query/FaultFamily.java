@@ -6,6 +6,7 @@ import souther.compiler.partition.QuantityKey;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -91,7 +92,7 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
         // of them — so a walk in the map's own order would name a different line from one run to
         // the next, and a document written twice could not be compared with itself.
         for (NumericTerm term : weighed.stream()
-                .sorted(java.util.Comparator.comparing(NumericTerm::toString)).toList()) {
+                .sorted(Comparator.comparing(NumericTerm::toString)).toList()) {
             for (BigDecimal step : List.of(BigDecimal.ONE, BigDecimal.ONE.negate())) {
                 QuantityKey other = weighed(term, step);
                 if (other != null && named.add(other.key())) {

@@ -3,7 +3,9 @@ package souther.cli;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -185,8 +187,8 @@ class ABorderEveryPointOfWhichHasARowMayStillBeTheWrongLineTest {
                 System.setErr(err);
             }
             return said.toString(StandardCharsets.UTF_8);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 }

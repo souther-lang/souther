@@ -6,10 +6,15 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.Demand;
+import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -109,7 +114,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(names, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED);
 
         AnotherLineTheRowsAllow.CouldNotTell open =
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
@@ -126,7 +131,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read for a line with no neighbour");
                 },
-                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED);
 
         assertEquals(new AnotherLineTheRowsAllow.NoSuchQuestion(
                         AnotherLineTheRowsAllow.Reason.THE_LINE_IS_ON_ONE_POSITION), said,
@@ -154,15 +159,14 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
         return AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, rows), Set.of(), tried, false),
-                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED);
     }
 
     /** One reading per row, each value on the term the quantity reads it at. */
     private static List<Map<NumericTerm, Place>> rowsOf(Border border, int[][] rows) {
         List<NumericTerm> terms = new ArrayList<>(
-                souther.compiler.partition.QuantityKey.of(border.cut().of().direction())
-                        .direction().keySet());
-        terms.sort(java.util.Comparator.comparing(NumericTerm::toString));
+                QuantityKey.of(border.cut().of().direction()).direction().keySet());
+        terms.sort(Comparator.comparing(NumericTerm::toString));
         List<Map<NumericTerm, Place>> out = new ArrayList<>();
         for (int[] row : rows) {
             Map<NumericTerm, Place> at = new LinkedHashMap<>();
@@ -213,9 +217,9 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     /** The border with nothing established at any of its points, which is not what these are
      *  about: what moves between them is the answer beside the points. */
     private static BorderAssessment assessed(Border border, AnotherLineTheRowsAllow beside) {
-        Map<souther.compiler.partition.DomainPoint, ItemAssessment> items = new LinkedHashMap<>();
+        Map<DomainPoint, ItemAssessment> items = new LinkedHashMap<>();
         border.answers().keySet().forEach(point -> items.put(point,
-                border.demand(point) instanceof souther.compiler.partition.Demand.NotOwed not
+                border.demand(point) instanceof Demand.NotOwed not
                         ? new ItemAssessment.NotOwed(not.reason())
                         : new ItemAssessment.Owed(border.demand(point).criterion(),
                                 new Measurement.NotMeasured<>(
@@ -316,7 +320,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read before the question is due");
                 },
-                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED);
 
         assertEquals(AnotherLineTheRowsAllow.NOT_DUE_YET, said,
                 "what the rows are short of here is what the points say they are short of");
@@ -330,7 +334,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(ReadingGap.NO_VALUE), StandingAtAPoint.ReadingsTried.EVERY_ONE,
                         false),
-                List.of(), souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED);
 
         assertNotNull(said);
         assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,

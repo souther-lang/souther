@@ -1,21 +1,30 @@
 package souther.compiler.query;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.TakenConstraint;
+import souther.compiler.partition.WayToTheBorder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -113,7 +122,7 @@ public sealed interface AnotherLineTheRowsAllow {
     record CouldNotTell(Unsettled why) implements AnotherLineTheRowsAllow {
 
         public CouldNotTell {
-            java.util.Objects.requireNonNull(why, "a question not settled says what stopped it");
+            Objects.requireNonNull(why, "a question not settled says what stopped it");
         }
     }
 
@@ -139,7 +148,7 @@ public sealed interface AnotherLineTheRowsAllow {
         record RowsIncomplete(ReadingReasons met) implements Unsettled {
 
             public RowsIncomplete {
-                java.util.Objects.requireNonNull(met, "a walk says what it went without");
+                Objects.requireNonNull(met, "a walk says what it went without");
                 if (met.eachKindOnce().isEmpty()
                         && met.tried() instanceof StandingAtAPoint.ReadingsTried.EveryOne) {
                     throw new IllegalArgumentException("a walk that went without nothing and read"
@@ -215,7 +224,7 @@ public sealed interface AnotherLineTheRowsAllow {
         record NoStrategyForIt(Strategy which) implements Unsettled {
 
             public NoStrategyForIt {
-                java.util.Objects.requireNonNull(which, "a strategy that is missing is named");
+                Objects.requireNonNull(which, "a strategy that is missing is named");
             }
         }
     }
@@ -251,7 +260,7 @@ public sealed interface AnotherLineTheRowsAllow {
     record NoSuchQuestion(Reason why) implements AnotherLineTheRowsAllow {
 
         public NoSuchQuestion {
-            java.util.Objects.requireNonNull(why, "a question that does not exist says why");
+            Objects.requireNonNull(why, "a question that does not exist says why");
         }
     }
 
@@ -280,11 +289,11 @@ public sealed interface AnotherLineTheRowsAllow {
      * many as the quantity has positions and each is a line a row would rule out; naming all of them
      * would put a reader in front of a list every entry of which is the same row to write.
      */
-    static AnotherLineTheRowsAllow of(souther.compiler.partition.Border border,
+    static AnotherLineTheRowsAllow of(Border border,
                                       boolean everyPointMet,
                                       java.util.function.Supplier<StandingAtAPoint.RowsRead> read,
                                       List<OrderedAffineBoundary> elsewhere,
-                                      souther.compiler.partition.WayToTheBorder way) {
+                                      WayToTheBorder way) {
         // The two ways a border is not a line another line can be written beside, told apart. A
         // rule that names a value orders nothing and has no side to keep a row on; a rule on an
         // order with no numbers has no weights to write differently. Read off one answer, either
@@ -293,7 +302,7 @@ public sealed interface AnotherLineTheRowsAllow {
         // from this one is the line's own answer and is the same whichever way the rule reads it —
         // so a bound on one position comes back as a question that does not arise, and never as one
         // this compiler declined to put.
-        souther.compiler.partition.BorderQuantity of = border.cut().of();
+        BorderQuantity of = border.cut().of();
         if (!OrderedAffineBoundary.weighable(of)) {
             return new NoSuchQuestion(Reason.THE_QUANTITY_HAS_NO_NUMBERS);
         }
@@ -443,7 +452,7 @@ public sealed interface AnotherLineTheRowsAllow {
                                                      List<Map<NumericTerm, Place>> satisfying,
                                                      List<Map<NumericTerm, Place>> refusing,
                                                      List<OrderedAffineBoundary> elsewhere,
-                                                     souther.compiler.partition.WayToTheBorder way) {
+                                                     WayToTheBorder way) {
         Map<NumericTerm, BigDecimal> along = alongTheLine(boundary.direction(), other);
         if (along == null) {
             return null;
@@ -469,7 +478,7 @@ public sealed interface AnotherLineTheRowsAllow {
         // it is the preference beside that: where they keep it, this line is what settles the answer
         // there, and where they do not the two part company under a rule that has already decided.
         return found.stream().filter(Parting::reached)
-                .min(java.util.Comparator.comparingInt((Parting each) -> each.visible() ? 0 : 1)
+                .min(Comparator.comparingInt((Parting each) -> each.visible() ? 0 : 1)
                         .thenComparing(Parting::steps))
                 .map(Parting::at).orElse(null);
     }
@@ -543,40 +552,40 @@ public sealed interface AnotherLineTheRowsAllow {
      *
      * <p><b>And a condition nothing here took in turns every step away.</b> What such a way leaves
      * is not known to be what reaches the border — that is what {@link
-     * souther.compiler.partition.WayToTheBorder} says of itself — so an input past it is one nothing
+     * WayToTheBorder} says of itself — so an input past it is one nothing
      * here can say a row arrives at. Read as arriving, a line two borders part company at somewhere
      * unreachable would be published as a fault, and the row asked for would show nothing.
      */
     final class Reaches {
 
-        private final souther.compiler.partition.WayToTheBorder way;
+        private final WayToTheBorder way;
 
         private final Set<NumericTerm> moved;
 
-        Reaches(souther.compiler.partition.WayToTheBorder way, Set<NumericTerm> moved) {
+        Reaches(WayToTheBorder way, Set<NumericTerm> moved) {
             this.way = way;
             this.moved = Set.copyOf(moved);
         }
 
         boolean stillArrives(Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
-            for (souther.compiler.partition.OnTheWay each : way.onTheWay()) {
+            for (OnTheWay each : way.onTheWay()) {
                 switch (each) {
                     // Nothing here turned it into something a row can be held against, so nothing
                     // here can say whether the input still passes it.
-                    case souther.compiler.partition.OnTheWay.Declined _ -> {
+                    case OnTheWay.Declined _ -> {
                         return false;
                     }
                     // Which case a value turned out to be. A step moves numbers and a narrowing is
                     // about a position being one of its cases, so a step that moves no number of
                     // that position leaves it as the row had it; one that does is past what this
                     // reads.
-                    case souther.compiler.partition.OnTheWay.Narrowed(var _, var position) -> {
+                    case OnTheWay.Narrowed(var _, var position) -> {
                         if (moved.stream().anyMatch(term -> term.subjectPath().equals(position))) {
                             return false;
                         }
                     }
-                    case souther.compiler.partition.OnTheWay.TakenIn(var _, var taken) -> {
-                        if (java.util.Collections.disjoint(taken.terms(), moved)) {
+                    case OnTheWay.TakenIn(var _, var taken) -> {
+                        if (Collections.disjoint(taken.terms(), moved)) {
                             continue;   // the row's answer at it, unmoved
                         }
                         Boolean holds = holdsAt(taken, from, at);
@@ -604,23 +613,23 @@ public sealed interface AnotherLineTheRowsAllow {
      * satisfied at nought that the step moves at all is not. What is left unknown is a step that
      * moves a condition the way it could break it, and a hole a step could land in.
      */
-    private static Boolean holdsAt(souther.compiler.partition.TakenConstraint taken,
+    private static Boolean holdsAt(TakenConstraint taken,
                                    Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
         if (at.keySet().containsAll(taken.terms())) {
             return switch (taken) {
-                case souther.compiler.partition.TakenConstraint.Affine(var form, var rel) ->
+                case TakenConstraint.Affine(var form, var rel) ->
                         rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
                                 .add(form.constant()).signum());
-                case souther.compiler.partition.TakenConstraint.Ordered(
+                case TakenConstraint.Ordered(
                         var term, var place, var rel) -> rel.holds(at.get(term).compareTo(place));
-                case souther.compiler.partition.TakenConstraint.AwayFrom(var term, var place) ->
+                case TakenConstraint.AwayFrom(var term, var place) ->
                         at.get(term).compareTo(place) != 0;
             };
         }
         // A bound on one position and a hole at one are over the position they name, and a step
         // that moves it has that position's number in hand — so the only condition that reaches
         // here is a form over positions this input says nothing about.
-        if (!(taken instanceof souther.compiler.partition.TakenConstraint.Affine(
+        if (!(taken instanceof TakenConstraint.Affine(
                 var form, var rel))) {
             return null;
         }
@@ -647,7 +656,7 @@ public sealed interface AnotherLineTheRowsAllow {
 
     /** Whether a condition that held still holds once what it is over has moved by {@code by}, or
      *  null where the move could go either way. */
-    private static Boolean whatAStepDoesTo(souther.compiler.numeric.Rel rel, BigDecimal by) {
+    private static Boolean whatAStepDoesTo(Rel rel, BigDecimal by) {
         if (by.signum() == 0) {
             return true;   // nothing moved it, so it answers what it answered
         }
@@ -684,7 +693,7 @@ public sealed interface AnotherLineTheRowsAllow {
                 out.add(steps);
             }
         }
-        out.sort(java.util.Comparator.comparing(BigDecimal::abs));
+        out.sort(Comparator.comparing(BigDecimal::abs));
         return out;
     }
 
@@ -736,7 +745,7 @@ public sealed interface AnotherLineTheRowsAllow {
         for (Map.Entry<NumericTerm, Place> each : values.entrySet()) {
             BigDecimal by = step.getOrDefault(each.getKey(), BigDecimal.ZERO);
             BigDecimal at = Count.number(each.getValue()).at().add(by.multiply(steps));
-            souther.compiler.check.Carrier carrier = boundary.of().carrierOf(each.getKey());
+            Carrier carrier = boundary.of().carrierOf(each.getKey());
             Place there = carrier == null ? null : carrier.onTheGrid(new Count(at));
             if (there == null) {
                 return null;
@@ -752,7 +761,7 @@ public sealed interface AnotherLineTheRowsAllow {
     private static List<NumericTerm> named(QuantityKey wrote, QuantityKey other) {
         Set<NumericTerm> terms = new LinkedHashSet<>(wrote.direction().keySet());
         terms.addAll(other.direction().keySet());
-        return terms.stream().sorted(java.util.Comparator.comparing(NumericTerm::toString))
+        return terms.stream().sorted(Comparator.comparing(NumericTerm::toString))
                 .toList();
     }
 

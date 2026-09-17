@@ -3,20 +3,30 @@ package souther.compiler.query;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.partition.ClauseStatementId;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.TakenConstraint;
+import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.WhichLine;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -71,18 +81,16 @@ final class TheLinesBesideABorder {
      * <p>Every input the lines one step from {@code -2 * x + y} part company with this one at has
      * {@code x} somewhere else, so this is a way that makes them one line as far as a row goes.
      */
-    static souther.compiler.partition.WayToTheBorder aWayThatHoldsXAtNought() {
+    static WayToTheBorder aWayThatHoldsXAtNought() {
         Map<NumericTerm, BigDecimal> onlyX = new LinkedHashMap<>();
         onlyX.put(X, BigDecimal.ONE);
-        return new souther.compiler.partition.WayToTheBorder(List.of(
-                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
-                        new souther.compiler.partition.TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.ZERO, onlyX),
-                                souther.compiler.numeric.Rel.LE)),
-                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
-                        new souther.compiler.partition.TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.ZERO, onlyX),
-                                souther.compiler.numeric.Rel.GE))));
+        return new WayToTheBorder(List.of(
+                new OnTheWay.TakenIn(anchor(),
+                        new TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.ZERO, onlyX), Rel.LE)),
+                new OnTheWay.TakenIn(anchor(),
+                        new TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.ZERO, onlyX), Rel.GE))));
     }
 
     /**
@@ -94,28 +102,26 @@ final class TheLinesBesideABorder {
      * step moves it one way: down the way it is satisfied, and the condition still holds whatever
      * {@code z} was.
      */
-    static souther.compiler.partition.WayToTheBorder aWayOverAPositionTheBorderIsNotOn() {
+    static WayToTheBorder aWayOverAPositionTheBorderIsNotOn() {
         Map<NumericTerm, BigDecimal> xAndZ = new LinkedHashMap<>();
         xAndZ.put(X, BigDecimal.ONE);
         xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), BigDecimal.ONE);
-        return new souther.compiler.partition.WayToTheBorder(List.of(
-                new souther.compiler.partition.OnTheWay.TakenIn(anchor(),
-                        new souther.compiler.partition.TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.valueOf(-10), xAndZ),
-                                souther.compiler.numeric.Rel.LE))));
+        return new WayToTheBorder(List.of(
+                new OnTheWay.TakenIn(anchor(),
+                        new TakenConstraint.Affine(
+                                new LinearForm<>(BigDecimal.valueOf(-10), xAndZ), Rel.LE))));
     }
 
     /** And one holding a condition nothing turned into something a row can be held against. */
-    static souther.compiler.partition.WayToTheBorder aWayWithAConditionNobodyRead() {
-        return new souther.compiler.partition.WayToTheBorder(List.of(
-                new souther.compiler.partition.OnTheWay.Declined(
-                        new souther.compiler.partition.ConditionOccurrence("f", 0), anchor(),
-                        new souther.compiler.partition.OnTheWay.Declined.Why.NoWordsForTheShape())));
+    static WayToTheBorder aWayWithAConditionNobodyRead() {
+        return new WayToTheBorder(List.of(
+                new OnTheWay.Declined(new ConditionOccurrence("f", 0), anchor(),
+                        new OnTheWay.Why.NoWordsForTheShape())));
     }
 
-    private static souther.compiler.partition.ConditionReportAnchor anchor() {
-        return new souther.compiler.partition.ConditionReportAnchor.WhereTheReadingMetIt("m",
-                new souther.compiler.partition.ConditionOccurrence("f", 0));
+    private static ConditionReportAnchor anchor() {
+        return new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                new ConditionOccurrence("f", 0));
     }
 
     /** What the rows are weighed by: {@code x} at minus two and {@code y} at one. */
@@ -123,7 +129,7 @@ final class TheLinesBesideABorder {
         Map<NumericTerm, BigDecimal> weights = new LinkedHashMap<>();
         weights.put(X, BigDecimal.valueOf(-2));
         weights.put(Y, BigDecimal.ONE);
-        Map<NumericTerm, souther.compiler.inputs.TermOrders> on = new LinkedHashMap<>();
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         on.put(X, TermOrdersFixtures.itself(X, WHOLE));
         on.put(Y, TermOrdersFixtures.itself(Y, WHOLE));
         return new BorderQuantity.OverAForm("f", new LinearForm<>(BigDecimal.ZERO, weights), on);
@@ -139,9 +145,9 @@ final class TheLinesBesideABorder {
                         ? new Level.ACount(Count.of(0))
                         : new Level.OnACarrier(WHOLE, Count.of(0)));
         LineOrigin origin = new LineOrigin.EnsuresOrigin(
-                new souther.compiler.partition.WhichLine.OfAComparisonOfAPart(
-                        new souther.compiler.partition.ClauseStatementId(
-                                new souther.compiler.check.PartId<>(new RuleRef.Ensures(
+                new WhichLine.OfAComparisonOfAPart(
+                        new ClauseStatementId(
+                                new PartId<>(new RuleRef.Ensures(
                                         new BehaviorContract.RuleId(null, 0, 0, null), "line"), 0),
                                 0)),
                 facts);
