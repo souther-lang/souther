@@ -104,12 +104,14 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation observation) {
-            // Read on the order the value is written on and asked on the order the answer is
-            // measured on. The two are one carrier for a position's own content and part for a term
-            // that is what an operation answered — a time counts the seconds of its day and its hour
-            // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (WhatATermRead.at(of, observation.at(term.position()))) {
+        public Stands standsAt(Criterion where, QuantityReading reading) {
+            // Asked on the order the answer is measured on, the value having been read on the order
+            // it is written on. The two are one carrier for a position's own content and part for a
+            // term that is what an operation answered — a time counts the seconds of its day and its
+            // hour counts by one, so a reader handed the second decodes the first as nothing. Which
+            // is why the reading is asked for by the orders: read on the other one, this position
+            // is a number this quantity does not have.
+            return switch (reading.of(of)) {
                 case WhatATermRead.CameToNothing(ReadingGap why) -> Stands.couldNotTell(why);
                 case WhatATermRead.NoNumberOfTheValue _, WhatATermRead.NothingWrittenThere _ ->
                         Stands.NO;
@@ -318,13 +320,12 @@ public sealed interface BorderQuantity {
          * decimals read as met by no row, including the rows that meet it.
          */
         @Override
-        public Stands standsAt(Criterion where, Observation observation) {
-            // Each on its own order. Read on one order for the pair, a position written back
-            // differently from the other was read as a value it does not hold — a date read as a
-            // whole number is no number at all, and the row stood at nothing (#1018).
-            WhatATermRead here = WhatATermRead.at(on, observation.at(on.term().subjectPath()));
-            WhatATermRead there =
-                    WhatATermRead.at(against, observation.at(against.term().subjectPath()));
+        public Stands standsAt(Criterion where, QuantityReading reading) {
+            // Each end taken by its own orders, which is what the end is: a position read on the
+            // other end's order is a value it does not hold, and the pair would stand a distance
+            // apart that neither of them is at.
+            WhatATermRead here = reading.of(on);
+            WhatATermRead there = reading.of(against);
             // Both sides, and not the first of them. The pair is unreadable for whatever stopped
             // either, and a reader told about one end is being told which end this happened to
             // look at first.
@@ -565,7 +566,7 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public Stands standsAt(Criterion where, Observation observation) {
+        public Stands standsAt(Criterion where, QuantityReading reading) {
             java.math.BigDecimal at = java.math.BigDecimal.ZERO;
             // Every term before anything is concluded. What stopped a reading is collected over the
             // whole form rather than taken from whichever term the map handed over first: the form
@@ -578,20 +579,11 @@ public sealed interface BorderQuantity {
             boolean noNumber = false;
             boolean wroteNothing = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
-                // Each on its own order. Read on one order for the whole form, a position written
-                // back differently from its neighbour was read as a value it does not hold.
-                //
-                // And each asked for what its own number is of: one value where a place answers the
-                // term, every value where the term is over a run of them. Asked for one either way,
-                // a total would be read off whichever element the row's reading happened to pick.
-                TermOrders orders = on.get(each.getKey());
-                WhatATermRead read = switch (each.getKey()) {
-                    case NumericTerm.FromOnePosition one ->
-                            WhatATermRead.at(orders, observation.at(one.position()));
-                    case NumericTerm.TakenOver over ->
-                            WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
-                };
-                switch (read) {
+                // Taken by the orders this form reads that term on. What the term read is the
+                // reading's to say and what it is worth to the number is the form's, and a
+                // coefficient put against a value read on another order weighs a position by a
+                // number it does not hold.
+                switch (reading.of(on.get(each.getKey()))) {
                     case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
                     case WhatATermRead.NoNumberOfTheValue _ -> noNumber = true;
                     case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
@@ -775,30 +767,72 @@ public sealed interface BorderQuantity {
     LinearForm<NumericTerm> direction();
 
     /**
-     * What this quantity's positions read as at one row, or why the row leaves it no value.
+     * What each of this quantity's terms reads as at one row.
      *
-     * <p>Every term, whatever came of any of them, for the reason {@link #standsAt} reads every
-     * term: what stopped a reading is collected over the whole quantity rather than taken from
-     * whichever position the walk began with. A row that wrote nothing at one of them leaves this
-     * quantity no value there, which is the row's own answer and outranks whatever else was met.
+     * <p>Every term, whatever came of any of them, and nothing concluded from any of them. Asking
+     * them all is how how many elements each position holds is found out, which is what says how
+     * many readings of the row there are to try, so a walk that left off as soon as it knew an
+     * answer would be choosing the readings — and the answer it knew is not the only one asked of a
+     * row, so it is not this walk's to know.
+     *
+     * <p>Each term on its own order, which is {@link #ordersOf}'s answer and not one order for the
+     * quantity: a position written back differently from its neighbour would be read as a value it
+     * does not hold, and a date read as a whole number is no number at all.
+     *
+     * <p>And each asked for what its own number is of — one value where a place answers the term,
+     * every value where the term is taken over a run of them. Asked for one either way, a total
+     * would be read off whichever element the row's reading happened to pick.
      *
      * <p>Written once for all three, because reading a position is the position's business and not
-     * the quantity's shape. What is done with the numbers afterwards — held against a criterion, or
-     * held against a line the model did not draw — is the caller's.
+     * the quantity's shape. What is made of the numbers afterwards is the quantity's, and what is
+     * asked of them is the caller's: {@link #valuesOf} hands back the numbers for a caller holding
+     * the row against a line the model did not draw, and {@link #standsAt} answers about the line it
+     * did.
      */
-    default ValuesAtARow valuesAt(Observation observation) {
-        Map<NumericTerm, Place> read = new java.util.LinkedHashMap<>();
-        Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-        boolean noValue = false;
+    default QuantityReading read(Observation observation) {
+        Map<TermOrders, WhatATermRead> answers = new java.util.LinkedHashMap<>();
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
-            WhatATermRead met = switch (term) {
+            WhatATermRead read = switch (term) {
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
                 case NumericTerm.TakenOver over ->
                         WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
             };
-            switch (met) {
+            // One entry per term, which the orders say they are of, so two could only meet where a
+            // quantity is taken of one term twice. Refused rather than let the second stand: a
+            // reading that kept one of them would answer for a term with what another one read.
+            if (answers.put(orders, read) != null) {
+                throw new IllegalStateException(
+                        "a quantity is taken of each of its terms once, and this names " + orders
+                                + " among " + terms());
+            }
+        }
+        return new QuantityReading(answers);
+    }
+
+    /**
+     * What this quantity's positions hold at the row {@code reading} was made of, or why the row
+     * leaves it no value.
+     *
+     * <p>What stopped a reading is collected over the whole quantity rather than taken from
+     * whichever position the walk began with. A row that wrote nothing at one of them leaves this
+     * quantity no value there, which is the row's own answer and outranks whatever else was met.
+     *
+     * <p>The same for all three, because what the numbers are is not the quantity's shape. What they
+     * come to under the line the model drew is, and that is {@link #standsAt}.
+     *
+     * <p>Over this quantity's own terms, and never over the entries the reading happens to hold.
+     * What a reading holds is what some quantity read; which of it is this one's to fold is this
+     * one's to say, and a fold that took what it was given would answer for one quantity with
+     * another's numbers.
+     */
+    default ValuesAtARow valuesOf(QuantityReading reading) {
+        Map<NumericTerm, Place> read = new java.util.LinkedHashMap<>();
+        Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
+        boolean noValue = false;
+        for (NumericTerm term : terms()) {
+            switch (reading.of(ordersOf(term))) {
                 case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
                 case WhatATermRead.NoNumberOfTheValue _,
                      WhatATermRead.NothingWrittenThere _ -> noValue = true;
@@ -825,9 +859,17 @@ public sealed interface BorderQuantity {
         return Map.copyOf(out);
     }
 
-    /** Whether a row stands at one item of a border on this quantity, or whether it could not be
-     *  read. */
-    Stands standsAt(Criterion where, Observation observation);
+    /**
+     * Whether the row {@code reading} was made of stands at one item of a border on this quantity,
+     * or whether it could not be read.
+     *
+     * <p>Asked of a reading and not of a row, so that a row read once can be asked this and
+     * {@link #valuesOf} both, and asked about a second criterion without being read again. What the
+     * numbers come to is each quantity's own — a position's value stands on its carrier, a distance
+     * is the difference of its ends, a form is its terms added up under their coefficients — and
+     * what they were read as is not.
+     */
+    Stands standsAt(Criterion where, QuantityReading reading);
 
     /** What a search has to solve to put a row at one item. */
     Standing standingAt(Criterion where);

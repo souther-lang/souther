@@ -22,6 +22,7 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.ObservationAtPoint;
+import souther.compiler.partition.QuantityFixtures;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.WalkResult;
 import souther.compiler.types.ValueName;
@@ -79,7 +80,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
 
         assertEquals(BorderQuantity.Stands.couldNotTell(
                         ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                form().standsAt(atTheLevel(15), run(observed)),
+                QuantityFixtures.stands(form(), atTheLevel(15), run(observed)),
                 "the elements the walk stopped at are the ones the total is over");
     }
 
@@ -93,7 +94,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         ObservedValue observed = observed(FOUR_NODES, longs(3));
 
         assertEquals(BorderQuantity.Stands.YES,
-                form().standsAt(atTheLevel(6), run(observed)),
+                QuantityFixtures.stands(form(), atTheLevel(6), run(observed)),
                 "three elements fit the budget, and their total is what the run comes to");
     }
 
@@ -112,7 +113,8 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
                 "the container survives a walk that ran out inside it");
         assertEquals(6, ((ObservedValue.Sequence) observed).elements().size(),
                 "and still holds as many elements as were written");
-        assertEquals(BorderQuantity.Stands.YES, howMany().standsAt(atTheLevel(6), at(observed)),
+        assertEquals(BorderQuantity.Stands.YES,
+                QuantityFixtures.stands(howMany(), atTheLevel(6), at(observed)),
                 "so a count of them is a number, though a limit fired inside every one");
     }
 
