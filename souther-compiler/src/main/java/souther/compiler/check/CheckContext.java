@@ -30,11 +30,13 @@ import java.util.Map;
  * answering what a declaration says out of the tree it was written in.
  *
  * <p>The questions beside them are what a check asks of a declaration it did not write:
- * {@link DeclarationKinds} which form it is, {@link NewtypeInners} what a name wraps, and
- * {@link EffectiveFieldTypes} what each field it reaches holds. Each is its own because each is
- * settled at its own point and moves at its own time, and a check handed the declaration instead
- * would be reading all three out of the tree — which is how a body came to be checked again for a
- * declaration that had only moved.
+ * {@link DeclarationKinds} which form it is, {@link NewtypeInners} what a name wraps,
+ * {@link EffectiveFieldTypes} what each field it reaches holds, and {@link FieldLayout} the order a
+ * value of it lays those fields out in. Each is its own because each is settled at its own point
+ * and moves at its own time, and a check handed the declaration instead would be reading every one
+ * of them out of the tree — which is how a body came to be checked again for a declaration that had
+ * only moved. The last two are apart for that reason and not only for tidiness: what a field holds
+ * and where it stands move at different times, and a mapping does not answer an order.
  */
 public record CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
                            NewtypeInners inners, EffectiveFieldTypes fieldTypes, FieldLayout layout,

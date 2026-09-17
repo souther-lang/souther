@@ -368,9 +368,10 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, BindingId>> compute(Db db) {
-            FieldExpansion.Of reaches = expansionOf(db, named);
-            return Answer.of(reaches == null ? Map.of()
-                    : Collections.unmodifiableMap(FieldExpansion.bindings(reaches)));
+            return Answer.of(declaredAt(db, named) instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(
+                            FieldExpansion.bindings(expansionOf(db, data)))
+                    : Map.of());
         }
     }
 
@@ -385,10 +386,8 @@ public final class Shapes {
      * <p>Asked under the identity the declaration carries rather than the address it was reached
      * by, which is what its own clauses resolve against.
      */
-    private static FieldExpansion.Of expansionOf(Db db, TypeKey named) {
-        return declaredAt(db, named) instanceof Hir.Data data
-                ? FieldExpansion.of(data.declares(), data, at -> declaredAt(db, at.key()))
-                : null;
+    private static FieldExpansion.Of expansionOf(Db db, Hir.Data data) {
+        return FieldExpansion.of(data.declares(), data, at -> declaredAt(db, at.key()));
     }
 
     /** The declaration at {@code address} with its names resolved, or null where none is. */
@@ -422,12 +421,13 @@ public final class Shapes {
 
         @Override
         public Answer<List<String>> compute(Db db) {
-            if (declaredAt(db, named) == null) {
+            Hir.Def declared = declaredAt(db, named);
+            if (declared == null) {
                 return Answer.absent();
             }
-            FieldExpansion.Of reaches = expansionOf(db, named);
-            return Answer.of(reaches == null ? List.of()
-                    : FieldExpansion.layout(reaches, FieldExpansion.Refusing.NOTHING));
+            return Answer.of(declared instanceof Hir.Data data
+                    ? FieldExpansion.layout(expansionOf(db, data), FieldExpansion.Refusing.NOTHING)
+                    : List.of());
         }
     }
 
@@ -467,16 +467,17 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, Type>> compute(Db db) {
-            if (declaredAt(db, named) == null) {
+            Hir.Def declared = declaredAt(db, named);
+            if (declared == null) {
                 return Answer.absent();
             }
-            FieldExpansion.Of reaches = expansionOf(db, named);
             // Kept in a map that iterates, because the projection fills one — and not because the
             // order it iterates in says anything. What this answers is which type stands at each
-            // name, and the order a value lays them out in is {@link FieldLayoutOf}.
-            return Answer.of(reaches == null ? Map.of()
-                    : Collections.unmodifiableMap(
-                            FieldExpansion.laidOut(reaches, FieldExpansion.Refusing.NOTHING)));
+            // name; the order a value lays them out in is {@link FieldLayoutOf}.
+            return Answer.of(declared instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(FieldExpansion.laidOut(
+                            expansionOf(db, data), FieldExpansion.Refusing.NOTHING))
+                    : Map.of());
         }
     }
 

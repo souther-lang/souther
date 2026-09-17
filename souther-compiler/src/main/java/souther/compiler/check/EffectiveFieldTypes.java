@@ -16,9 +16,8 @@ import java.util.Map;
  *
  * <p><b>A mapping and not a sequence.</b> The order this iterates in is the walk's and is no part
  * of what it answers, so nothing may take it as the order a value lays its fields out in or as the
- * order a declaration writes them. A reader that needs the order asks something that answers it —
- * {@link FieldBindings} numbers a declaration's own fields as it writes them, and how a value is
- * laid out is what builds its shape.
+ * order a declaration writes them. A reader that needs the order asks {@link FieldLayout}, which
+ * answers it and is moved by an edit that only moves a field.
  *
  * <p><b>Types and nothing else.</b> Not where a field is written, not which declaration supplied
  * it, not whether two of them collided. Those are questions about the text of the declarations the
@@ -52,10 +51,11 @@ public interface EffectiveFieldTypes {
     /**
      * The same walk over the declarations in {@code symbols}.
      *
-     * <p>For a reading that has not been handed the compilation's answer. The walk is
-     * {@link TypeOps#fieldTypes}, which owns it: what a spread brings in and in what order is
-     * decided there and nowhere else. That one reports what this leaves alone, because it is the
-     * walk the declaring module's own check is made of.
+     * <p>For a reading that has not been handed the compilation's answer. What a spread brings in
+     * is decided by {@link FieldExpansion}, which both worlds read, so a reading made here and one
+     * made from the store answer alike. What differs is what is said about a declaration that does
+     * not hold together: {@link TypeOps#fieldTypes} refuses it, because it is the reading the
+     * declaring module's own check is made of, and this is the one it is refused by.
      */
     static EffectiveFieldTypes asWritten(Symbols symbols) {
         return declared -> symbols.declaredNode(declared) instanceof Hir.Data data

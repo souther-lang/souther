@@ -1063,7 +1063,10 @@ public final class TypeOps {
     private static String spelled(FieldExpansion.Supplier held) {
         return switch (held) {
             case FieldExpansion.Supplier.Spread(Hir.Name written) -> "..." + written.written();
-            case FieldExpansion.Supplier.Own(Hir.Field written) -> written.name();
+            // What a declaration writes itself is taken in after everything it spreads, so a spread
+            // arriving meets a spread. A field of its own meeting one is the other report.
+            case FieldExpansion.Supplier.Own _ -> throw new IllegalStateException(
+                    "a spread was taken in after the declaration's own fields");
         };
     }
 

@@ -836,8 +836,12 @@ public final class DataChecker {
         // nothing builds a decoder's construction with a spread, so there is no binding to copy from
         // here; whether a field left out is one it had to write is the node's answer, as it is for
         // the construction a body writes
+        // Both read off the scope, as `fields` is: a decoder builds the declaration being checked,
+        // whose fields were walked here rather than asked of the compilation. Taking the order from
+        // one reading of the declarations and what stands at each name from another is how the two
+        // come to disagree about a name.
         checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(),
-                ctx.layout().of(ctx.data().declares()), fields, env, ctx,
+                TypeOps.fieldLayout(ctx.data(), ctx.symbols()), fields, env, ctx,
                 c.mayOmitOptionalFields());
     }
 
