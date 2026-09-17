@@ -838,7 +838,7 @@ final class Coverages {
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             ItemAssessment.WritabilityProjection projection,
-            java.util.Optional<SiteNumbering> numbering) {
+            java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
         // offered it twice — but each reading is reached under its caller's own conditions, so what
@@ -846,10 +846,37 @@ final class Coverages {
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.add(assessed(each, reading(subject.at(each), projection), observed,
-                    numbering));
+            out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
+                            wayTo(each, reaching)),
+                    observed, numbering));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The behavior's other lines, read as the inequalities they are.
+     *
+     * <p>For naming an input worth writing a row at. Where the model's other rules leave a row is
+     * where this line is what settles the answer, so an input the others keep is one an author can
+     * see the difference at — and one they refuse is a row two lines part company at and the
+     * behavior answers the same way either side of.
+     *
+     * <p>A preference and never a condition. Which rules a path actually consults is the decision's
+     * question and is measured there; what this does with the answer is choose between inputs that
+     * are each already an input the two lines part company at.
+     */
+    private static List<souther.compiler.partition.OrderedAffineBoundary> elsewhere(
+            List<Border> lines, Border but) {
+        List<souther.compiler.partition.OrderedAffineBoundary> out = new ArrayList<>();
+        for (Border each : lines) {
+            souther.compiler.partition.OrderedAffineBoundary read =
+                    each.sameReadingAs(but) ? null
+                            : souther.compiler.partition.OrderedAffineBoundary.of(each);
+            if (read != null) {
+                out.add(read);
+            }
+        }
+        return out;
     }
 
     /**
@@ -880,7 +907,7 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
-            out.add(new BorderAssessment(border.border(), items));
+            out.add(new BorderAssessment(border.border(), items, border.beside()));
         }
         return new LineReadings(out);
     }
@@ -920,6 +947,10 @@ final class Coverages {
 
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
         StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows);
+
+        /** Which other line those same rows leave standing beside this one, read through the same
+         *  walk over them, and asked only of a border whose points they have met. */
+        AnotherLineTheRowsAllow beside(boolean everyPointMet, List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
          *  this border. Three answers rather than two: a shape whose rules were never put the
@@ -995,7 +1026,37 @@ final class Coverages {
                 }
             });
         }
-        return new BorderAssessment(border, items);
+        // And which other line these same rows leave standing. Read off the same rows and the same
+        // reading of the line as the points above: a row at each of the four shows the line has not
+        // moved, and nothing about the four shows it has not turned.
+        return new BorderAssessment(border, items, absent != null
+                ? new AnotherLineTheRowsAllow.CouldNotTell(
+                        new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(absent))
+                : shape.beside(everyPointMet(items), rows));
+    }
+
+    /**
+     * Whether a row is at every point this reading of the border owes one at, and it owes at least
+     * one.
+     *
+     * <p>What says the question about the lines beside it is due. A border short of a row at one of
+     * its points is short of the rows that show where it falls, and one the rules leave no value at
+     * any point of is owed no row at all — so neither is a border the rows can be asked what else
+     * they leave standing at.
+     */
+    private static boolean everyPointMet(java.util.Map<DomainPoint, ItemAssessment> items) {
+        boolean owesOne = false;
+        for (ItemAssessment item : items.values()) {
+            if (!(item instanceof ItemAssessment.Owed owed)) {
+                continue;
+            }
+            owesOne = true;
+            if (!(owed.coverage() instanceof Measurement.Complete<ItemAssessment.Coverage>(
+                    ItemAssessment.Coverage.Hit _))) {
+                return false;
+            }
+        }
+        return owesOne;
     }
 
     /**
@@ -1009,7 +1070,9 @@ final class Coverages {
      */
     private static OneShapeOfBorder reading(
             souther.compiler.partition.MeasuredInput.BorderReading line,
-            ItemAssessment.WritabilityProjection projection) {
+            ItemAssessment.WritabilityProjection projection,
+            List<souther.compiler.partition.OrderedAffineBoundary> elsewhere,
+            souther.compiler.partition.WayToTheBorder way) {
         List<ComparisonEmissionSite> site =
                 line.border().origin().recordedAt();
         return new OneShapeOfBorder() {
@@ -1017,6 +1080,13 @@ final class Coverages {
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
                 return StandingAtAPoint.met(line, rows, criterion, site);
+            }
+
+            @Override
+            public AnotherLineTheRowsAllow beside(boolean everyPointMet,
+                                                  List<ObservedInputs> rows) {
+                return AnotherLineTheRowsAllow.of(line.border(), everyPointMet,
+                        () -> StandingAtAPoint.valuesOf(line, rows, site), elsewhere, way);
             }
 
             @Override
@@ -1319,7 +1389,32 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
-        return new BorderAssessment(a.border(), kept);
+        return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()));
+    }
+
+    /**
+     * What two readings of one line say about the lines beside it.
+     *
+     * <p>One answer, because there is one question: which lines these rows leave standing is about
+     * the line and the rows, and two readings of one line are readings of one line by the same rows.
+     * So a reading that was asked answers for both, and two that were both asked and disagree are
+     * this compiler saying two things about one measurement.
+     */
+    private static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
+                                                   AnotherLineTheRowsAllow b) {
+        // A reading that was asked answers for both, whichever of them could not be asked or could
+        // not settle it. Two readings of one line are readings by the same rows, so one of them
+        // reaching an answer is the answer.
+        if (a instanceof AnotherLineTheRowsAllow.CouldNotTell
+                || a instanceof AnotherLineTheRowsAllow.NotDueYet) {
+            return b;
+        }
+        if (b instanceof AnotherLineTheRowsAllow.CouldNotTell
+                || b instanceof AnotherLineTheRowsAllow.NotDueYet || a.equals(b)) {
+            return a;
+        }
+        throw new IllegalStateException("two readings of one line disagreeing about which lines"
+                + " the rows leave standing beside it: " + a + " and " + b);
     }
 
     /**
@@ -1600,7 +1695,7 @@ final class Coverages {
     static List<BorderAssessment> assessBetween(
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            java.util.Optional<SiteNumbering> numbering) {
+            java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
         Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
@@ -1608,7 +1703,8 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(subject.at(each),
-                            ItemAssessment.WritabilityProjection.NOT_COMPUTED),
+                            ItemAssessment.WritabilityProjection.NOT_COMPUTED,
+                            elsewhere(partitioning.between(), each), wayTo(each, reaching)),
                     observed, numbering));
         }
         return List.copyOf(out);

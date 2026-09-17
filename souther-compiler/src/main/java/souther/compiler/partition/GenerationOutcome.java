@@ -254,7 +254,13 @@ public sealed interface GenerationOutcome {
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
-                    + " no classes were derived there to compose a row from");
+                    + " no classes were derived there to compose a row from"),
+
+            /** Nothing composes a row from an input two lines answer differently at. */
+            NO_STRATEGY_FOR_AN_INPUT_TWO_LINES_PART_AT(
+                    "rows here are composed at the points of one line, and nothing composes one at"
+                            + " an input two lines answer differently at — the input is named"
+                            + " beside the finding, and a row there is the row this cannot write");
 
             private final String said;
 

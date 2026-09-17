@@ -173,7 +173,7 @@ public final class StandingAtAPoint {
             OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
             boolean stands = false;
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity, criterion, first, held);
+            Readings readings = readings(where, one, quantity, first, held);
             List<OneReadingOfARow> tried = readings.tried();
             for (OneReadingOfARow reading : tried) {
                 switch (quantity.standsAt(criterion, reading)) {
@@ -234,6 +234,116 @@ public final class StandingAtAPoint {
                     : ReadingsTried.EVERY_ONE);
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
+    }
+
+    /**
+     * What every reading of every row reads as at one line's quantity.
+     *
+     * <p>The same walk as {@link #met} and a different question. That one asks whether some reading
+     * of some row stands where the line is, and stops at the first that does; this asks what the
+     * numbers are, of all of them, because what a caller does with them is hold the rows against a
+     * line the model did not draw — and a line nobody wrote is told from the one that was written by
+     * whichever row answers differently, so leaving a row out leaves out what would have told them
+     * apart.
+     *
+     * <p><b>Which is why this says what it went without.</b> A row read is a constraint on the lines
+     * the rows allow, so fewer rows read is never fewer lines allowed: a caller concluding that the
+     * rows leave nothing else standing may do so from part of them, and one naming a line they do
+     * leave standing may not. The same asymmetry {@link Met} has, the other way up, and for the same
+     * reason — what a partial walk establishes is on the side its constraints push.
+     *
+     * <p><b>And of the rows that reached the rule, which is the same universe {@link #met} is over.</b>
+     * A row that never got an answer out of the comparison says nothing about where its line falls:
+     * its values are a point of the input and not an observation of this border, and holding a line
+     * against it would rule out a line on the strength of a row that never met one. So the rule is
+     * the one a point is met by — where meeting takes the comparison having run, a row is read only
+     * where a run was watched getting an answer out of it, and where writing the value is the whole
+     * of it, every row is read.
+     *
+     * <p>A row nothing watched is neither: it may have reached and it may not, and dropping it
+     * quietly would leave more lines standing than the rows allow. It is gone without, and this says
+     * so.
+     *
+     * @param watched every place a run through the comparison this line's rule was read from is
+     *                recorded, empty where standing at the value is the whole of reaching it
+     */
+    public static RowsRead valuesOf(MeasuredInput.BorderReading line,
+                                    List<ObservedInputs> observed,
+                                    List<ComparisonEmissionSite> watched) {
+        BorderQuantity quantity = line.quantity();
+        BehaviorInputs where = line.subject().inputs();
+        List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
+                new ArrayList<>();
+        Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();
+        boolean stoppedShort = false;
+        boolean unwatched = false;
+        for (ObservedInputs one : observed) {
+            if (!watched.isEmpty()) {
+                switch (one.watched()) {
+                    case Generator.Watched.Ran(var account) -> {
+                        if (!gotAnAnswerOutOfTheRule(watched, account)) {
+                            continue;   // it ran and never met this rule, so it says nothing here
+                        }
+                    }
+                    case Generator.Watched.NoAccount _ -> {
+                        unwatched = true;
+                        continue;
+                    }
+                }
+            }
+            Map<TermPath, Integer> held = new LinkedHashMap<>();
+            OneReadingOfARow first = new OneReadingOfARow(where, one, Map.of(), held);
+            Readings readings = readings(where, one, quantity, first, held);
+            for (OneReadingOfARow reading : readings.tried()) {
+                switch (quantity.valuesAt(reading)) {
+                    case ValuesAtARow.Read(Map<souther.compiler.inputs.NumericTerm,
+                            souther.compiler.numeric.Place> values) -> read.add(values);
+                    // The row has no value at this quantity, which is the row's own answer and
+                    // constrains nothing. Left among the reasons, every row that writes nothing
+                    // where a line is drawn would hold back a finding about lines it says nothing
+                    // about.
+                    case ValuesAtARow.NoneHere _ -> { }
+                    case ValuesAtARow.CouldNotTell it -> unreadable.addAll(it.why());
+                }
+            }
+            if (readings.whether() instanceof ReadingsTried.StoppedAtTheLimit) {
+                stoppedShort = true;
+            }
+        }
+        return new RowsRead(read, unreadable, stoppedShort
+                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS) : ReadingsTried.EVERY_ONE,
+                unwatched);
+    }
+
+    /**
+     * What the rows came to at one quantity, and what the walk over them went without.
+     *
+     * @param each      one entry per reading of a row that read as numbers, in the order they were
+     *                  walked. A row with no value at the quantity has no entry and is no absence:
+     *                  it says nothing about where any line falls
+     * @param why       whatever stopped a reading of a row that was not read
+     * @param tried     whether the readings walked are all the readings there are
+     * @param unwatched whether some row was left out for nothing having watched its run, so that
+     *                  whether it reached the rule could not be told
+     */
+    public record RowsRead(
+            List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> each,
+            Set<ReadingGap> why, ReadingsTried tried, boolean unwatched) {
+
+        public RowsRead {
+            each = List.copyOf(each);
+            why = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(why));
+            if (tried == null) {
+                throw new IllegalArgumentException(
+                        "a walk over the rows says whether it walked all of them");
+            }
+        }
+
+        /** Whether every reading of every row that reached the rule was read, which is what a
+         *  caller naming a line the rows allow has to have. */
+        public boolean everyOne() {
+            return why.isEmpty() && !unwatched && tried instanceof ReadingsTried.EveryOne;
+        }
     }
 
     /**
@@ -339,11 +449,16 @@ public final class StandingAtAPoint {
      * <p>The first is run before the rest are known: which steps the line's positions take is the
      * quantity's to say as it reads them, so it says so by being asked once. Every choice those
      * steps allow follows it.
+     *
+     * <p>Asked for the values and not for a standing, because reading the row is the whole of what
+     * the first run is for. A quantity reads every position it is over before it concludes anything
+     * either way, so the steps come back the same — and a probe put as a question about a line
+     * could only be run for the callers that hold one.
      */
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
-                                     BorderQuantity quantity, Criterion criterion,
+                                     BorderQuantity quantity,
                                      OneReadingOfARow first, Map<TermPath, Integer> held) {
-        quantity.standsAt(criterion, first);
+        quantity.valuesAt(first);
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(held)) {
             out.add(new OneReadingOfARow(where, observed, choice, held));

@@ -217,6 +217,17 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/InteractionEvidence$OfOneMeeting;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the walk over the rows at one line, which says which other lines
+                        // those rows leave standing beside it. What it went without is asymmetric —
+                        // a row read leaves fewer lines standing and never more — so it names one
+                        // only where it read every row, and a finding off it is weakened by
+                        // nothing. Taken whole so that it says so itself rather than a caller
+                        // saying it of a value that may have been asked nothing.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$OneDoes;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
                         "souther.compiler.query.Adequacy$Finding#noticed("
                                 + "Lsouther/compiler/query/FindingSubject;"
                                 + "Lsouther/compiler/query/About;)"

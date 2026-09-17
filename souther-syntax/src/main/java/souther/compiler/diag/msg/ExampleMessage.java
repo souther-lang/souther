@@ -335,6 +335,21 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * No row of the behavior answers differently under one of the lines beside this one.
+     *
+     * <p>Both lines, because one of them is what there is to act on. A border every row stands at
+     * the points of has been shown not to have moved; that it has not turned is shown by a row the
+     * turned line answers differently at, and a sentence naming only the line that was written
+     * leaves an author with nowhere to look for one.
+     */
+    @Code(DiagnosticCode.E1938)
+    record NoRowTellsThatLineFromAnother(String line, String another, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** What to write for it: an input the two answer differently at. */
+    record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
+
+    /**
      * One condition of that rule: a comparison the author wrote, which the rule takes holding.
      *
      * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the

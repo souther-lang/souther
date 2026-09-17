@@ -83,6 +83,11 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // And the figure the readings of one row are tried against: a build allowed more tries the
         // readings the walk stopped short of.
         table.put("BorderReadingsNotExhausted", "answers/MAY_CHANGE");
+        // A border nothing held against the lines beside it, which does not answer one way: a
+        // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
+        // watched is. The row is written with the one that is, so what it shows is the answer
+        // travelling rather than a constant.
+        table.put("ABorderNotHeldAgainstTheLinesBesideIt", "asks what stood in the way/MAY_CHANGE");
         // And the same figure on the other criterion: a build allowed more walks the group.
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
         // A run this reading cannot place among the rules is not placed by allowing more.
@@ -202,6 +207,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         return switch (each) {
             case Weakening.ObservationIncomplete _ -> "asks the code";
             case Weakening.BorderValueUnreadable _ -> "asks the reading";
+            // What stood in the way, because the ways do not answer alike: a strategy nobody wrote
+            // and rows all on one side are not allowances, and what a run watched is.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt _ -> "asks what stood in the way";
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BodiesNotElaborated _, Weakening.BoundaryNotDerived _,
@@ -243,6 +251,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
         out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
+                Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));

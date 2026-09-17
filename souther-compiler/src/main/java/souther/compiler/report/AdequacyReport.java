@@ -624,6 +624,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     : boundaryReadings().made().orElseGet(List::of);
         }
 
+
         /** What they establish about the arms of its body. */
         public Adequacy.BranchEvidence branch() {
             return evidence.branch();
@@ -1657,6 +1658,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // ordinary shape whose boundary measure is made in full, and holding the verdict
                 // open for it would say a model was unmeasured on the strength of the one measure
                 // that was.
+                // The lines, and what holding each of them against the lines beside it came to: two
+                // questions over one reading, so one measure that is short where either of them is
+                // ({@link BoundaryDerivation#of}).
                 add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                         MeasureWord.BOUNDARY), behavior.boundaryReadings());
                 // What the rows reach of each position, which finds a class no row is in.
@@ -2223,6 +2227,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
                     lines.size(), owed.met().size(), owed.counted(), refuted(owed),
                     inFull(bounded.status())));
+        }
+        // And the lines the rows stand at every point of and still do not pin down. Beside the
+        // count rather than in it: what the count measures is rows at the points of a line, and a
+        // line a row is at every point of is fully counted there — which is the whole of why this
+        // has a sentence of its own. A number that folded the two together would say a border was
+        // partly covered where every row it asks for is written.
+        for (ReportedFinding f : behavior.reported()) {
+            if (f.finding().about()
+                    instanceof About.ALineTheRowsDoNotTellFromAnother untold) {
+                String parting = untold.partingSaid();
+                out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
+                        mark(f.finding()), untold.line().border().label(),
+                        untold.allowed().label(),
+                        parting == null ? "" : ", and a row at `" + parting + "` would"));
+            }
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
@@ -3730,6 +3749,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                      DocumentSources sources) {
         switch (identity) {
             case ObligationIdentity.OfALine(var point) -> obligationId(into, point);
+            // The line and where it is cut, which is what a border of the document is keyed by —
+            // and no point, because what this is owed at is the line itself. Written the same way
+            // a point writes the two of them it shares, so a consumer holding either reads one
+            // vocabulary.
+            case ObligationIdentity.OfABorder(var line) -> {
+                authoredLineId(into.putObject("line"), line.line());
+                level(into.putObject("level"), line.at());
+            }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
             // The words a report writes for a class are not it: two positions of one behavior can
@@ -4818,6 +4845,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderAssessment boundary : lines.made().orElseGet(List::of)) {
             DocumentItem drawn = boundaries.addObject();
             ObjectNode b = drawn.node();
+            // What this line is owed as a line, which is what the lines beside it are asked of. The
+            // four points under it are owed at places on it and carry their own; this is the entry
+            // a finding about the line itself joins to, and there is one of it per line because a
+            // line read at several positions is one line here.
+            obligationId(b.putObject("obligationId"),
+                    new ObligationIdentity.OfABorder(boundary.border().obligation()), sources);
             b.put("axis", boundary.axis());
             // The identity, and never left out. This document says what it is about with the
             // ids the caller handed its sources over as, and `sources` explains each one; a
@@ -5551,6 +5584,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
+                    About.ALineTheRowsDoNotTellFromAnother _,
                     About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                     About.ARuleNothingClassified _,
@@ -5645,6 +5679,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // read, so what joins this to a `partition.obligations` entry is the role, where on
             // the line, and the rule — the same three that entry is keyed on.
             case About.APointOfABorder(var point) -> point.said(places);
+            // Both lines, because what this is about is the pair: one is what the model drew and
+            // the other is what its rows leave standing beside it, and a subject naming one of them
+            // says nothing a reader could act on. Spelled the one way a form is spelled, so the
+            // line that was written joins the `boundaries` entry it came from.
+            case About.ALineTheRowsDoNotTellFromAnother untold ->
+                    words(untold.line().border().label() + " / " + untold.allowed().label());
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).
@@ -6208,6 +6248,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // and this is the readings nobody made.
             case Weakening.BorderReadingsNotExhausted _ ->
                     WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED;
+            // Two words for one fact, because what to do about them differs: one wants a strategy
+            // nobody has written and the other wants a row. Which of the two it is is the fact's
+            // own answer, asked here rather than read off whichever list it arrived in.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it -> switch (it.why()) {
+                case NO_STRATEGY_FOR_THE_RULE -> WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED;
+                case THE_ROWS_ARE_ALL_ON_ONE_SIDE ->
+                        WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE;
+                case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;
+                case NO_REACHABLE_DISTINGUISHER ->
+                        WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER;
+            };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;

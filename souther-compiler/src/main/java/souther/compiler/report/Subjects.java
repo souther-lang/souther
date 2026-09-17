@@ -51,6 +51,10 @@ final class Subjects {
             // figure this compiler walks to and is what the walk met; one border is one place to
             // go back to however many rows stopped the walk there.
             case Weakening.BorderReadingsNotExhausted it -> new Subject.AtABorder(it.border());
+            // The border, and not the lines beside it. Which lines those are is the same at every
+            // run; what a reader acts on is which border was not held against them.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it ->
+                    new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             case Weakening.BodiesNotElaborated it -> new Subject.OfAModule(it.module());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());

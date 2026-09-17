@@ -468,6 +468,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "WorkDays",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "grantLeave/worked",
           "origin" : "invariant WorkDays #1",
           "kind" : "at_value",
@@ -511,6 +542,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "WorkDays",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "7"
+            }
+          },
           "axis" : "grantLeave/worked",
           "origin" : "invariant WorkDays #1",
           "kind" : "at_value",
@@ -554,6 +616,34 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "5"
+            }
+          },
           "axis" : "grantLeave/worked",
           "origin" : "comparison@0:36:30",
           "kind" : "at_value",
@@ -607,6 +697,37 @@
             "reason" : "no_rows"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Rate",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "0"
+            }
+          },
           "axis" : "grantLeave/rate",
           "origin" : "invariant Rate #1",
           "kind" : "at_value",
@@ -650,6 +771,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Rate",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "1"
+            }
+          },
           "axis" : "grantLeave/rate",
           "origin" : "invariant Rate #1",
           "kind" : "at_value",
@@ -693,6 +845,34 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
+                  "behavior" : "grantLeave",
+                  "ordinal" : 5,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "dense"
+              },
+              "at" : "0.8"
+            }
+          },
           "axis" : "grantLeave/rate",
           "origin" : "comparison@0:35:16",
           "kind" : "at_value",
@@ -1706,6 +1886,37 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
           "axis" : "judgeHours/hours",
           "origin" : "invariant Hours #1",
           "kind" : "at_value",
@@ -1749,6 +1960,37 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "200"
+            }
+          },
           "axis" : "judgeHours/hours",
           "origin" : "invariant Hours #1",
           "kind" : "at_value",
@@ -1792,6 +2034,34 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "100"
+            }
+          },
           "axis" : "judgeHours/hours",
           "origin" : "comparison@0:52:32",
           "kind" : "at_value",
@@ -1845,6 +2115,34 @@
             "reason" : "no_rows"
           } ]
         }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
+                  "behavior" : "judgeHours",
+                  "ordinal" : 4,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "45"
+            }
+          },
           "axis" : "judgeHours/hours",
           "origin" : "comparison@0:53:32",
           "kind" : "at_value",

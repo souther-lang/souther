@@ -73,6 +73,48 @@ public enum WeakeningWord {
      */
     BORDER_READINGS_NOT_EXHAUSTED,
 
+    /**
+     * Nothing here holds a border of this shape against the lines the model puts one step from it.
+     *
+     * <p>Beside the four above and not among them: those are readings of the rows, and this is a
+     * question over rows that were read. What it is short of is a strategy nobody has written, so
+     * running again allowing more comes to the same answer — which is what tells a consumer to act
+     * on it differently from {@link #BORDER_READINGS_NOT_EXHAUSTED}.
+     */
+    LINES_BESIDE_A_BORDER_NOT_TRIED,
+
+    /**
+     * The rows a border was held against all fall on one side of its line, so they pin no threshold
+     * on any line beside it.
+     *
+     * <p>Its own word beside the one above, because what to do about them differs: that one wants
+     * this compiler to grow a strategy, and this one wants a row. A border every point of which has
+     * a row never comes back this way, so a consumer meeting it is looking at a border that is
+     * short of a row as well.
+     */
+    A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
+
+    /**
+     * A row was left out of what a border was held against because nothing watched its run.
+     *
+     * <p>Beside the two above because a run allowing more need not leave the same rows out, and
+     * beside {@link #DECISION_RUN_NOT_WATCHED} because the two are about different measures: that
+     * one is a run this compiler could not place among the rules of a decision, and this is a row
+     * whose reaching a comparison could not be told. A consumer joining them would be told one
+     * thing about two.
+     */
+    A_BORDERS_RUN_NOT_WATCHED,
+
+    /**
+     * A line beside a border stands after every row, and no input the two answer differently at is
+     * one a row still arrives at the border by.
+     *
+     * <p>So the two are one line as far as this behavior goes, or the way to the border holds a
+     * condition nothing here took in — and which of those it is, is not established. A consumer acts
+     * on it as it acts on the rest: what is missing is this compiler's, and no row settles it.
+     */
+    NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

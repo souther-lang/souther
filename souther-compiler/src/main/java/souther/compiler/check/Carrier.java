@@ -269,6 +269,30 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a rule can weigh a value on this order by a number.
+     *
+     * <p>Apart from {@link #counts}, and further in. A date counts to a number and the number counts
+     * from an origin nobody wrote: twice a date is twice as many days since an epoch, which is not a
+     * date and is not a quantity any model states. The same of a time of day, a moment, and the
+     * place a case takes in its enumeration. What is left is the two orders whose numbers are the
+     * model's own — a whole number and a decimal — and a multiple of one of those is a quantity a
+     * rule can be written about.
+     *
+     * <p>Which is why a distance between two of the rest is still a quantity: {@link
+     * #sharesCountSpaceWith} is about coefficients of one and minus one, where the origins cancel.
+     * Any other pair of weights leaves the origin in, and the line is one nobody could write.
+     *
+     * <p>A switch with nothing to fall through to, as every question about these is: a ninth carrier
+     * says for itself whether its counts are numbers a model weighs.
+     */
+    default boolean canBeWeighed() {
+        return switch (this) {
+            case Whole _, Dense _ -> true;
+            case Days _, Seconds _, SecondsOfDay _, Nanos _, Ordinal _, Text _ -> false;
+        };
+    }
+
+    /**
      * Whether a value on this order stands somewhere relative to a value on that one.
      *
      * <p>What a rule comparing two positions needs of the orders they are written back on, and the

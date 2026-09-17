@@ -152,6 +152,7 @@ public final class WeakeningSet {
             // of them that are equal are one thing that went wrong.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.BodiesNotElaborated _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
@@ -172,6 +173,7 @@ public final class WeakeningSet {
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.BodiesNotElaborated _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,

@@ -29,7 +29,7 @@ import java.util.Set;
  * own — which is the parallel bookkeeping this is here to have none of.
  */
 public sealed interface ObligationIdentity
-        permits ObligationIdentity.OfALine, ObligationIdentity.OfAnArm,
+        permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder, ObligationIdentity.OfAnArm,
                 ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
                 ObligationIdentity.OfADecisionRule,
                 ObligationIdentity.OfACombinationOfDecisions,
@@ -40,6 +40,24 @@ public sealed interface ObligationIdentity
 
         public OfALine {
             Objects.requireNonNull(point, "an obligation is told apart by something");
+        }
+    }
+
+    /**
+     * A whole line, which is what the lines beside it are asked of.
+     *
+     * <p>Beside {@link OfALine} and one grain coarser. That one is a place on a line and there are
+     * four of them; this is the line itself, because what a row shows here is which of two lines the
+     * model draws and a line is what two lines are two of. Keyed on a point, the same question would
+     * be owed four times over and a row answering it would leave three of them open.
+     *
+     * <p>The line a debt is owed at and not the reading that met it, for the reason a point's is:
+     * one authored line read at several positions is one row to write.
+     */
+    record OfABorder(BorderObligationId line) implements ObligationIdentity {
+
+        public OfABorder {
+            Objects.requireNonNull(line, "an obligation is told apart by something");
         }
     }
 

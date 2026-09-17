@@ -122,6 +122,10 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
             case ObligationIdentity.OfAClass _ -> "class";
             case ObligationIdentity.OfAnArm _ -> "arm";
             case ObligationIdentity.OfALine _ -> "point";
+            // Nor for a whole line held against the lines beside it: what would answer that is an
+            // input two lines part company at, and rows here are composed at the points of one
+            // line. Worded rather than refused, as the rules below are.
+            case ObligationIdentity.OfABorder _ -> "border";
             // Nothing offers a row for a rule of a decision yet, so nothing puts one in the
             // universe a run is asked about. Worded rather than refused, so that the day one is
             // offered the count below says so instead of this failing somewhere else.

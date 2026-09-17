@@ -765,6 +765,11 @@ public final class GeneratedRows {
                                             souther.compiler.partition.ClassOfAPosition::classId))
                             .map(each -> each.classId() + " at " + each.at())
                             .collect(java.util.stream.Collectors.joining(" with "));
+            // Both lines, which is what a row here would settle between. Nothing composes one yet,
+            // so what is printed beside these words is the strategy that is missing — and the input
+            // the two part company at is named there, which is the row an author writes by hand.
+            case About.ALineTheRowsDoNotTellFromAnother untold ->
+                    untold.line().border().label() + " against " + untold.allowed().label();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is
             // asked to name. Listed rather than defaulted so that a shape added later has to be
             // given words here.

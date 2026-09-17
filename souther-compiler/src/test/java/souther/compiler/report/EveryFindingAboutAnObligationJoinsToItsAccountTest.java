@@ -215,6 +215,40 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             """;
 
     /**
+     * A line every point of which a row is at, that the rows do not tell from the line beside it.
+     *
+     * <p>The corpus reaches no such line, so the sweep below would hold over nothing. What is owed
+     * here is of the whole line — the rows sit on every point of it and still answer alike under a
+     * model weighing {@code x} one more — so the account it lands on is the line's own and not the
+     * points under it, which are four entries the same document publishes and all of them met.
+     */
+    private static final String A_LINE_THE_ROWS_DO_NOT_TELL_FROM_ANOTHER = """
+            module example.line
+
+            behavior f : (x: Int, y: Int) -> Bool
+
+            let f (x, y) = {
+                guard y <= 2 * x else false
+                guard y >= x else false
+                guard x + 2 * y < 60 else false
+
+                true
+            }
+
+            example f
+              | (0, 29)  -> false
+              | (15, 29) -> false
+              | (15, 30) -> false
+              | (16, 31) -> false
+              | (0, 0)   -> true
+              | (0, 1)   -> false
+              | (0, -1)  -> false
+              | (0, -2)  -> false
+              | (13, 23) -> true
+              | (12, 24) -> false
+            """;
+
+    /**
      * Every obligation identity the document publishes lands on exactly one entry of its account.
      *
      * <p>The population is the findings that carry an identity, which is what the document writes
@@ -520,6 +554,42 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     /**
+     * And a whole line the rows do not tell from another joins to the line and not to a point.
+     *
+     * <p>Said here as well as in the sweep, because the corpus reaches no such line. The pair this
+     * is about is the line and the points on it: every point is met, so a consumer that read the
+     * finding as being about one of them would be handed an obligation the same document says a row
+     * already sits at, and would have nothing to do about the one that is owed.
+     */
+    @Test
+    void aLineTheRowsDoNotTellFromAnotherJoinsToTheLineAndNotToAPointOnIt() {
+        JsonNode document = reportOf(A_LINE_THE_ROWS_DO_NOT_TELL_FROM_ANOTHER);
+        JsonNode behavior = onlyBehaviorOf(document);
+        List<JsonNode> lines = new ArrayList<>();
+        for (JsonNode finding : behavior.get("findings")) {
+            if ("boundary_not_told_from_another".equals(finding.get("kind").asString())) {
+                lines.add(finding);
+            }
+        }
+
+        assertEquals(List.of("-2 * x + y = 0 / -3 * x + y = 0", "y = x / y = 0",
+                        "x + 2 * y = 60 / y = 23"),
+                lines.stream().map(f -> f.get("subject").asString()).toList(),
+                () -> "each guard draws a line the rows leave another standing beside: "
+                        + behavior.get("findings"));
+        for (JsonNode line : lines) {
+            assertTrue(line.has("obligationId"),
+                    () -> "a build refuses over this, so it names what it is about: " + line);
+            JsonNode id = line.get("obligationId");
+            assertFalse(id.has("location"),
+                    () -> "what is owed is the line and nowhere on it: " + id);
+            assertEquals(1, everyEntryOf(behavior, onlyModuleOf(document)).stream()
+                            .filter(entry -> id.equals(entry.get("obligationId"))).count(),
+                    () -> "and lands on one line of the account: " + behavior.get("partition"));
+        }
+    }
+
+    /**
      * Every entry of every account this behavior and its module publish.
      *
      * <p><b>Not chosen by the kind.</b> Which account an obligation is an entry of is what its
@@ -558,6 +628,17 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             // And the cells of the pair space, where the body's decisions meet nowhere. Made here
             // for the same reason a class is.
             out.addAll(pairCellsOf(behavior));
+            // And the lines themselves, beside the points of them. What a row shows at a line held
+            // against the lines beside it is which of two lines the model draws, which is owed of
+            // the whole line and of no point on it — so the entry is the line's own.
+            JsonNode lines = partition.get("boundaries");
+            if (lines != null) {
+                for (JsonNode line : lines) {
+                    if (line.has("obligationId")) {
+                        out.add(line);
+                    }
+                }
+            }
         }
         obligationsOf(behavior.get("branch"), out);
         obligationsOf(behavior.get("decision"), out);

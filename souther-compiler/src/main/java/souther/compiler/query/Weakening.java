@@ -173,6 +173,66 @@ public sealed interface Weakening {
         }
     }
 
+    /**
+     * A border was not held against the lines the model puts one step from it.
+     *
+     * <p>Beside the two above rather than among them. Those are readings of the rows that came to
+     * nothing or were never made, and what they weaken is every question over those rows. This is
+     * the one question over them that was not put — either because nothing here holds a border of
+     * that shape against anything, or because the rows fall all on one side of the line and pin no
+     * threshold on any line beside it.
+     *
+     * <p><b>So it is not a fact about the model.</b> A line one step from this one exists whichever
+     * of the two it is, and a reader told the question does not arise would be told the opposite of
+     * what happened. Which of the two it was is the word a document writes, because what to do
+     * about them differs: one wants a row, and the other wants this compiler to grow a strategy.
+     *
+     * <p>The border and not the line beside it. Which lines are beside it is the family's answer and
+     * is the same at every run; that this one was not held against them is the fact, and it is one
+     * fact however many lines the family holds.
+     */
+    record ABorderNotHeldAgainstTheLinesBesideIt(souther.compiler.partition.Border border,
+                                                 ABorderNotHeldAgainstTheLinesBesideIt.Why why)
+            implements Weakening {
+
+        /** What stood in the way of holding it against them. */
+        public enum Why {
+            /** Nothing here holds a border of this shape against a line beside it. */
+            NO_STRATEGY_FOR_THE_RULE,
+            /** Every row the quantity has a value at falls on one side of the line, so the rows pin
+             *  no threshold on any line beside it. */
+            THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+            /** A row was left out because nothing watched its run, so whether it reached the rule
+             *  could not be told. */
+            NOTHING_WATCHED_THE_RUNS,
+            /** A line beside it stands after every row, and nothing here could show an input the
+             *  two answer differently at that a row still arrives at. */
+            NO_REACHABLE_DISTINGUISHER
+        }
+
+        public ABorderNotHeldAgainstTheLinesBesideIt {
+            java.util.Objects.requireNonNull(border, "a border that was not held is named");
+            java.util.Objects.requireNonNull(why, "a question not put says what stood in the way");
+        }
+
+        /**
+         * Asked of what stood in the way, because they do not answer alike.
+         *
+         * <p>A strategy nobody has written and rows that fall all on one side are not allowances:
+         * one wants code and the other wants a row, and every run of this compiler over this model
+         * says the same. What a run watched is an allowance — the arms are instrumented because a
+         * build asked for them — so a run allowing more need not leave the same rows out.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return switch (why) {
+                case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+                     NO_REACHABLE_DISTINGUISHER -> RunSensitivity.UNAFFECTED;
+                case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
+
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {
 

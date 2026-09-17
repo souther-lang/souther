@@ -104,7 +104,10 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
             Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
-            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;Lsouther/compiler/inputs/EmptyInput;)Lsouther/compiler/query/Measure;", 5),
+            // One more than the partition beside it, because a reading of the lines answers two
+            // questions: a reading that ran out and still could not hold a line against the lines
+            // beside it is partial, which the partition has no counterpart of.
+            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;Lsouther/compiler/inputs/EmptyInput;)Lsouther/compiler/query/Measure;", 6),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notASum(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#noRows(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
