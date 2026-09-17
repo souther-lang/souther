@@ -172,7 +172,7 @@ class WhatIsKnownOfATargetSurvivesAConditionOverAFormTest {
         NumbersAskedFor asked = NumbersAskedFor.of(LevelRegion.point(at("5")))
                 .meet(NumbersAskedFor.onlyTogether(OVER_A_FORM));
 
-        assertTrue(asked.values().parts().getFirst().onePlace(),
+        assertTrue(asked.values().onePlace(),
                 "the values left are one place on the order");
         assertFalse(asked.isOneNumber(),
                 "and trying it is still not trying the whole of what was asked");

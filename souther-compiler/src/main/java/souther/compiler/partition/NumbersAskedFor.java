@@ -112,6 +112,13 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     public static NumbersAskedFor askedOf(NumericTerm.FromOnePosition term,
                                    SearchRegion within, Carrier on,
                                    List<OnTheWay.TakenIn> cuts) {
+        // What the rules leave is where they leave it on the term's own order, so without one
+        // there is nothing to read them as. Said as every number there is, which is what is known
+        // — and a caller that walks it has walked numbers of a question nothing stated, which is
+        // what it says of its own walk ({@link AskedAt.Walked}).
+        if (on == null) {
+            return ANYTHING;
+        }
         NumbersAskedFor asked = switch (within.projectionOf(term)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
                     of(between(held, on));
@@ -186,6 +193,6 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      * class that tries one number out of it has tried one.
      */
     public boolean isOneNumber() {
-        return isWalkedWhole() && values.parts().size() == 1 && values.parts().getFirst().onePlace();
+        return isWalkedWhole() && values.onePlace();
     }
 }

@@ -49,6 +49,24 @@ public record LevelRegion(List<LevelInterval> parts) {
         return new LevelRegion(parts.stream().map(LevelInterval::canonical).toList());
     }
 
+    /**
+     * Whether this item is one value of the order and no more.
+     *
+     * <p>Asked here because what this holds is this one's to answer. Worked out by a reader
+     * counting the runs it is written as, the answer would turn on how the runs came to be written
+     * — two that touch are one set and are not one run — and a reader would be reading an identity
+     * off a spelling, which is what every other question about these values is asked here to
+     * avoid.
+     *
+     * <p>Answered of the runs this is written as, which is as far as the producers here go: every
+     * one of them crosses or takes values out of runs that were apart to begin with. A producer
+     * that could write one set as several touching runs would be answered "no" here, which is the
+     * side that claims less.
+     */
+    public boolean onePlace() {
+        return parts.size() == 1 && parts.getFirst().onePlace();
+    }
+
     /** Whether a value of the quantity stands at this item. */
     public boolean contains(Level value) {
         return parts.stream().anyMatch(part -> part.contains(value));
