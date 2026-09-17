@@ -65,12 +65,13 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
         BorderAssessment merged = Coverages.merged(new LineReadings(List.of(
                 reading(line, lookedAndComposedNothing()), reading(line, made)))).getFirst();
 
-        ARowTellingTheLinesApart.AtOneReading offered = merged.toldApart().offered().orElseThrow();
-        assertSame(made.each().getFirst().reading(), offered.reading(),
-                "the row is offered beside the reading that composed it, and not beside whichever"
+        ARowTellingTheLinesApart.AtOneReading candidate =
+                merged.toldApart().firstComposed().orElseThrow();
+        assertSame(made.each().getFirst().reading(), candidate.reading(),
+                "the row is held beside the reading that composed it, and not beside whichever"
                         + " reading the merge kept");
-        assertEquals(at(1, 3), offered.standingAt(),
-                "and the place it stands is the one that search settled");
+        assertEquals(at(1, 3), candidate.composedAt(),
+                "and the input named for it is the one that search composed at");
     }
 
     /** A reading of {@code line} that composed nothing says nothing about the other's region. */
@@ -81,7 +82,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 reading(line, composedAt(1, 3)),
                 reading(line, lookedAndComposedNothing())))).getFirst();
 
-        assertTrue(merged.toldApart().offered().isPresent(),
+        assertTrue(merged.toldApart().firstComposed().isPresent(),
                 "a reading that found nowhere to compose does not take away the row another one"
                         + " composed: the two looked in two regions");
     }

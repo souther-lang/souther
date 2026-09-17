@@ -50,29 +50,29 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * What one reading's search came to, and where the row it hands over stands.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
-     *                   {@code standingAt} is written and where a row is read back
-     * @param standingAt where the row this composed stands, in the positions the line is drawn on
-     *                   at this reading, or null where nothing was composed. The place the offered
-     *                   row is at and no other: a reader shown one place and handed a row at
-     *                   another has been shown two answers
+     *                   {@code composedAt} is written and where a row is read back
+     * @param composedAt the input this search composed a row at, in the positions the line is drawn
+     *                   on at this reading, or null where nothing was composed. What the realizer
+     *                   asked for, which is what the row was built from — and so the one thing
+     *                   there is to name for a row nothing read back
      * @param searches   what each search made at this reading came to
      */
-    public record AtOneReading(Border reading, Map<NumericTerm, Place> standingAt,
+    public record AtOneReading(Border reading, Map<NumericTerm, Place> composedAt,
                                SearchOutcomes searches) {
 
         public AtOneReading {
-            standingAt = standingAt == null ? null
-                    : Collections.unmodifiableMap(new LinkedHashMap<>(standingAt));
+            composedAt = composedAt == null ? null
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
             if (reading == null || searches == null) {
                 throw new IllegalArgumentException(
                         "a search is of a line, and says what it came to: " + reading);
             }
-            // Both ways round, so that neither can be read as the other's absence. A place with no
-            // row to hand over is a witness nothing composed; a row with nowhere named is one a
-            // reader could be offered under a sentence about somewhere else.
-            if ((standingAt == null) == searches.rowToOffer().isPresent()) {
-                throw new IllegalArgumentException("a row composed here stands somewhere and a"
-                        + " search that composed none stands nowhere: " + standingAt);
+            // Both ways round, so that neither can be read as the other's absence. An input with no
+            // row built from it is a place nothing composed; a row with nowhere named is one a
+            // reader could be shown under a sentence about somewhere else.
+            if ((composedAt == null) == searches.rowToOffer().isPresent()) {
+                throw new IllegalArgumentException("a row composed here was composed somewhere and"
+                        + " a search that composed none was composed nowhere: " + composedAt);
             }
         }
 
@@ -98,14 +98,14 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * <p>The realization and the outcomes together, because they are one answer. Taken apart, a
      * caller could hand over the place one asking reached beside the row another one composed.
      */
-    static ARowTellingTheLinesApart of(Border reading, Realization.Found offered,
+    static ARowTellingTheLinesApart of(Border reading, Realization.Found composed,
                                        SearchOutcomes searches) {
-        if (offered == null || searches.rowToOffer().isEmpty()) {
+        if (composed == null || searches.rowToOffer().isEmpty()) {
             return new ARowTellingTheLinesApart(
                     List.of(new AtOneReading(reading, null, searches)));
         }
         Map<NumericTerm, Place> at = new LinkedHashMap<>();
-        offered.fixing().forEach((target, place) -> at.put(target.term(), place));
+        composed.fixing().forEach((target, place) -> at.put(target.term(), place));
         return new ARowTellingTheLinesApart(List.of(new AtOneReading(reading, at, searches)));
     }
 
@@ -130,13 +130,19 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * The reading whose row a person is offered, where one was composed.
+     * The first reading whose search composed a row, where one did.
      *
-     * <p>The first that composed one, which is a choice about what to show and takes nothing away:
-     * what every reading came to is still here for whoever asks. In the order the readings were
-     * walked, so that an edit elsewhere in the body does not move which row is offered.
+     * <p><b>A candidate and never what a person is handed.</b> Which row goes out for this line is
+     * settled two stages later — every offered row is asked what it would answer, and a row whose
+     * going costs the offering nothing goes — so another row may end up answering this line and
+     * this one be dropped. What is offered is the offering's answer ({@link Offering#shownAt}), and
+     * a reader taking this for it is reading a choice made before the one that decides.
+     *
+     * <p>The first, in the order the readings were walked, so that an edit elsewhere in the body
+     * does not move which candidate this is. What every reading came to is still here for whoever
+     * asks.
      */
-    public Optional<AtOneReading> offered() {
+    public Optional<AtOneReading> firstComposed() {
         return each.stream().filter(one -> one.composed().isPresent()).findFirst();
     }
 
@@ -158,7 +164,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * another reason.
      */
     GenerationOutcome outcome() {
-        Optional<AtOneReading> made = offered();
+        Optional<AtOneReading> made = firstComposed();
         if (made.isPresent()) {
             return new GenerationOutcome.Generated(
                     List.of(made.orElseThrow().composed().orElseThrow().row()));

@@ -61,7 +61,7 @@ import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Offering;
-import souther.compiler.query.WhereARowStandsOnALine;
+import souther.compiler.query.InputOfARowForALine;
 import souther.compiler.query.Sites;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.RuleRequirement;
@@ -423,7 +423,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * way to tell.
      */
     public record ReportedFinding(Adequacy.Finding finding, Citation at,
-                                  WhereARowStandsOnALine offered) {
+                                  InputOfARowForALine offered) {
 
         public ReportedFinding {
             java.util.Objects.requireNonNull(finding, "a reported finding is some finding");
@@ -1244,7 +1244,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * name. Which obligations a row stands somewhere nameable on is the offering's answer, and a
      * reader picking the kinds here would be deciding it a second time.
      */
-    private static WhereARowStandsOnALine standsAt(Offering offered, Adequacy.Finding finding) {
+    private static InputOfARowForALine standsAt(Offering offered, Adequacy.Finding finding) {
         return offered == null || !(finding.about() instanceof About.OfAnObligation owed) ? null
                 : offered.shownAt(owed.obligationIdentity());
     }

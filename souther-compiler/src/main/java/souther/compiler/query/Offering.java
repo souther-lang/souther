@@ -40,7 +40,7 @@ public final class Offering {
     private final SequencedMap<String, Adequacy.Filling> searched;
     private final BorderAccount account;
     private final Set<ObligationIdentity> answered;
-    private final Map<ObligationIdentity, WhereARowStandsOnALine> shownAt;
+    private final Map<ObligationIdentity, InputOfARowForALine> shownAt;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
@@ -60,7 +60,7 @@ public final class Offering {
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
              Set<ObligationIdentity> answered,
-             Map<ObligationIdentity, WhereARowStandsOnALine> shownAt) {
+             Map<ObligationIdentity, InputOfARowForALine> shownAt) {
         this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
         this.request = request;
         this.rowsByBehavior =
@@ -97,14 +97,14 @@ public final class Offering {
     }
 
     /**
-     * Where the row a person is handed stands on {@code item}'s line, or null where no row here
-     * answers it.
+     * The input of the row a person is handed for {@code item}'s line, or null where no row here is
+     * offered for it.
      *
-     * <p>The one place a report may name for such a line. What the search composed is a candidate
-     * and what is left after the reduction is the work, and only the second of those is in front of
-     * a person.
+     * <p>The one place a report may name for such a line. What a search composed is a candidate and
+     * what is left after the reduction is the work, and only the second of those is in front of a
+     * person.
      */
-    public WhereARowStandsOnALine shownAt(ObligationIdentity item) {
+    public InputOfARowForALine shownAt(ObligationIdentity item) {
         return shownAt.get(item);
     }
 

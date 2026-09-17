@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -47,13 +48,15 @@ public record Settlements(List<ObligationIdentity> requested,
                           SequencedMap<ObligationIdentity, RowKey> composedFor,
                           SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow,
                           SequencedMap<RowKey, Map<ObligationIdentity,
-                                  WhereARowStandsOnALine>> standsAt) {
+                                  InputOfARowForALine>> standsAt,
+                          Map<ObligationIdentity, InputOfARowForALine> composedAt) {
 
     public Settlements {
         requested = List.copyOf(requested);
         composedFor = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composedFor));
         byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
         standsAt = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(standsAt));
+        composedAt = Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
     }
 
     /**
@@ -66,28 +69,38 @@ public record Settlements(List<ObligationIdentity> requested,
      * that ({@link #offers}). A place read off the search is a place from before that was decided,
      * and a report naming it sends a reader to an input the block does not hand them.
      *
+     * <p><b>Two rules, and each has its own source for the input.</b> They are the two halves of
+     * {@link #offers}: the row composed for the line is what a person was offered for it, and a row
+     * that settles the line answers it whoever it was composed for. The first is known from the
+     * search — the values it asked for are what the row was built from — and the second from
+     * reading that row against the line. Only the second of those is a reading, and a row this
+     * compiler could not read back is offered all the same
+     * ({@link ItemAssessment.Attempt.Unverified}), so a walk that took its input from the reading
+     * alone had nothing to name for exactly the rows the second half of {@code offers} keeps.
+     *
      * <p>The row composed for the line first, where the reduction kept it, and otherwise whichever
      * kept row settles it — in the order the rows are offered, which is the order a person reads
      * them in.
      *
-     * <p>Empty for a line no kept row answers, which is a line the block says nothing offers a row
-     * for. What is shown then is what the measurement saw, and that is the measurement's to say.
+     * <p>Empty for a line no kept row is offered for, which is a line the block says nothing offers
+     * a row for. What is shown then is what the measurement saw, and that is the measurement's to
+     * say.
      */
-    public Map<ObligationIdentity, WhereARowStandsOnALine> shownFor(Set<RowKey> kept) {
-        Map<ObligationIdentity, WhereARowStandsOnALine> out = new LinkedHashMap<>();
+    public Map<ObligationIdentity, InputOfARowForALine> shownFor(Set<RowKey> kept) {
+        Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
         for (ObligationIdentity item : requested) {
             RowKey composed = composedFor.get(item);
-            RowKey offers = composed != null && kept.contains(composed) ? composed : null;
-            if (offers == null) {
+            InputOfARowForALine at = null;
+            if (composed != null && kept.contains(composed)) {
+                at = composedAt.get(item);
+            } else {
                 for (RowKey rowKey : byRow.keySet()) {
                     if (kept.contains(rowKey) && byRow.get(rowKey).get(item).settles()) {
-                        offers = rowKey;
+                        at = standsAt.getOrDefault(rowKey, Map.of()).get(item);
                         break;
                     }
                 }
             }
-            WhereARowStandsOnALine at = offers == null ? null
-                    : standsAt.getOrDefault(offers, Map.of()).get(item);
             if (at != null) {
                 out.put(item, at);
             }
@@ -249,8 +262,12 @@ public record Settlements(List<ObligationIdentity> requested,
         // And where each row stands on each line it answers, which is what a report names when it
         // sends a reader to an input. Kept beside the settlements and made with them: the row was
         // read once, and a place worked out again afterwards is a second reading of it.
-        SequencedMap<RowKey, Map<ObligationIdentity, WhereARowStandsOnALine>> standsAt =
+        SequencedMap<RowKey, Map<ObligationIdentity, InputOfARowForALine>> standsAt =
                 new LinkedHashMap<>();
+        // And the input each search composed at, for the lines it composed a row for. The other
+        // half of what a person may be shown: a row the reading above could not read back is one
+        // this offers all the same, and what it was composed at is what there is to name for it.
+        Map<ObligationIdentity, InputOfARowForALine> composedAt = new LinkedHashMap<>();
         // How each behavior reads the lines the module's declarations own. A behavior's own account
         // holds the lines it is owed a row at and none of these — that is what the account is for —
         // so a walk that looked only there would find no reading of a declared line anywhere and
@@ -277,6 +294,7 @@ public record Settlements(List<ObligationIdentity> requested,
             requested.addAll(read.owed());
             if (filling != null) {
                 composedFor.putAll(read.composed(filling));
+                composedAt.putAll(read.composedAt());
             }
         }
         // And the points the module's declarations are owed, which are no behavior's own. A row of
@@ -310,7 +328,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 // happens to be asked about, at the price of running it that many times.
                 RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.toRun());
                 Map<ObligationIdentity, Settlement> here = new LinkedHashMap<>();
-                Map<ObligationIdentity, WhereARowStandsOnALine> where = new LinkedHashMap<>();
+                Map<ObligationIdentity, InputOfARowForALine> where = new LinkedHashMap<>();
                 for (ObligationIdentity item : items) {
                     ToldApartAt answered = read == null
                             ? new ToldApartAt(undetermined(one), null)
@@ -326,7 +344,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
             }
         });
-        return new Settlements(items, composedFor, byRow, standsAt);
+        return new Settlements(items, composedFor, byRow, standsAt, composedAt);
     }
 
     /**
@@ -575,11 +593,35 @@ public record Settlements(List<ObligationIdentity> requested,
             // reading that composed it says which row it is, and the first of them is the row the
             // block offers — read off any reading that has one, a line searched twice would be
             // said to have been composed for by a row nobody is offered.
-            besides.forEach((item, readings) -> readings.stream()
-                    .flatMap(one -> one.toldApart().searches().rowToOffer().stream())
-                    .findFirst()
-                    .ifPresent(built -> out.put(item, RowKey.of(behavior, built.row()))));
+            besides.forEach((item, readings) -> firstComposed(readings)
+                    .ifPresent(one -> out.put(item,
+                            RowKey.of(behavior, one.toldApart().composed().orElseThrow().row()))));
             return out;
+        }
+
+        /**
+         * The input the search composed for each line it composed a row at.
+         *
+         * <p>Off the search and not off a reading of the row. What the realizer asked for is what
+         * the row was built from, and it is the only thing there is to name for a row nothing read
+         * back — which is a row a person is offered like any other.
+         *
+         * <p>The same reading {@link #composed} takes the row from, so the row a person is handed
+         * and the input named for it come from one asking.
+         */
+        Map<ObligationIdentity, InputOfARowForALine> composedAt() {
+            Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
+            besides.forEach((item, readings) -> firstComposed(readings).ifPresent(one ->
+                    out.put(item, new InputOfARowForALine(one.reading().border(),
+                            one.toldApart().composedAt()))));
+            return out;
+        }
+
+        /** The first reading of a line whose own search composed a row, which is the one the block
+         *  offers from. */
+        private static Optional<ALineBesideOne> firstComposed(List<ALineBesideOne> readings) {
+            return readings.stream()
+                    .filter(one -> one.toldApart().composed().isPresent()).findFirst();
         }
 
         /**
@@ -877,7 +919,7 @@ public record Settlements(List<ObligationIdentity> requested,
                     // — worked out again by whoever shows it, it would be a second reading of the
                     // row, free to name a reading this one did not settle at.
                     return new ToldApartAt(new Settlement.Settles(),
-                            new WhereARowStandsOnALine(one.reading().border(), values));
+                            new InputOfARowForALine(one.reading().border(), values));
                 }
             }
             return new ToldApartAt(new Settlement.DoesNotSettle(), null);
@@ -941,7 +983,7 @@ public record Settlements(List<ObligationIdentity> requested,
      * <p>The two together because one reading of the row produced both. A place beside a settlement
      * that is not {@link Settlement.Settles} would be a row shown as answering a line it does not.
      */
-    private record ToldApartAt(Settlement said, WhereARowStandsOnALine at) {
+    private record ToldApartAt(Settlement said, InputOfARowForALine at) {
 
         private ToldApartAt {
             if (at != null && !said.settles()) {

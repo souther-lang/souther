@@ -919,16 +919,21 @@ final class Coverages {
      * What looking for a row that tells this line from the one beside it came to, or that nobody
      * asked where there is no such line.
      *
-     * <p><b>Everywhere this line refuses, and not at one point of it.</b> What tells the two lines
+     * <p><b>The refused run beside this line, and not one point of it.</b> What tells the two lines
      * apart is an input the model refuses and the other keeps, so the values to look through are
-     * the ones this line refuses — which is a run, and is what the point away from the line is in.
-     * Read as the point <em>against</em> the line instead, two things went wrong at once: a
-     * quantity whose order names no value beside the line has no such point and was never searched,
-     * and a level the rules leave nothing at came back as a proof that the model leaves nowhere to
-     * write — a proof about one level, published as a proof about every input the two part company
-     * at.
+     * refused ones — which is a run, and is what the point away from the line is in. Read as the
+     * point <em>against</em> the line instead, two things went wrong at once: a quantity whose order
+     * names no value beside the line has no such point and was never searched, and a level the rules
+     * leave nothing at came back as a proof that the model leaves nowhere to write — a proof about
+     * one level, published as a proof about every input the two part company at.
      *
-     * <p>The run whole, which is the run the {@code OUT} point is in together with the value
+     * <p>The run and not the half-space. Where a run beside a line stops is settled by the lines
+     * this position's other rules draw, so what this looks through is the values refused between
+     * this line and the next one along — a row past that is refused by a rule that has already
+     * decided, and is no row at this border. What is searched is narrower than what the rule
+     * refuses, and it is the whole of what a row here could be.
+     *
+     * <p>The run whole, which is the run the point away from the line is in together with the value
      * against the line that point leaves out. That value is refused like every other in the run,
      * and it is the nearest of them: a search starts at the line and walks away, so where the order
      * names it, it is the first thing tried.
@@ -952,7 +957,7 @@ final class Coverages {
     }
 
     /**
-     * The values {@code border} refuses, as one run, or null where the rules leave none.
+     * The refused values beside {@code border}, as one run, or null where the rules leave none.
      *
      * <p>Asked of the point that is in that run rather than worked out here. Where a run beside a
      * line stops is settled by every other rule reaching this position, and a second derivation of
@@ -1233,7 +1238,7 @@ final class Coverages {
             public ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
                                                          AnotherLineTheRowsAllow.OneDoes beside) {
                 Looked looked = looked(criterion, label, beside::tellingThemApart);
-                return ARowTellingTheLinesApart.of(border, looked.offered(), looked.outcomes());
+                return ARowTellingTheLinesApart.of(border, looked.composed(), looked.outcomes());
             }
 
             /**
@@ -1329,14 +1334,15 @@ final class Coverages {
                                      SearchOutcomes outcomes, boolean stood) {}
 
             /**
-             * What a walk over one region came to, and where the row it hands over stands.
+             * What a walk over one region came to, and the assignment the row it composed was
+             * built from.
              *
              * <p>The two together, because a caller shown one place and handed a row built at
-             * another has been shown two answers about one search. {@code offered} is the
+             * another has been shown two answers about one search. {@code composed} is the
              * realization the row in {@code outcomes} was built from, and is null exactly where no
              * row was built.
              */
-            private record Looked(SearchOutcomes outcomes, Realization.Found offered) {}
+            private record Looked(SearchOutcomes outcomes, Realization.Found composed) {}
 
             /**
              * What the values came to, said with whatever of this compiler's ended the asking.

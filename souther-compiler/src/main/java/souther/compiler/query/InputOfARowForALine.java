@@ -10,28 +10,30 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Where a row a person is handed stands on one line, as that line's own reading names the positions.
+ * The input of a row offered for one line, written as that line's reading names the positions.
  *
- * <p><b>The offered row's place, and not the composed row's.</b> A row is composed for one thing and
- * a run offers the rows whose going would cost it something ({@link Settlements#keeping}), so the
- * row that ends up in front of a person for a line need not be the one composed for it: another row
- * that tells the two lines apart answers the line as well, and the one composed for it then goes.
- * A place read off the search is a place from before that was decided.
+ * <p><b>The row's input, and not where anything was seen to stand.</b> A row offered for a line
+ * comes from one of two places and they are known two ways: the search composed it, and the values
+ * it asked for are what the row was built from; or another row already answers the line, and what
+ * it holds there is what reading that row against the line came to. A value named for the second
+ * would have nothing to say about the first — a row this compiler could not read back is a row a
+ * person is handed all the same ({@link ItemAssessment.Attempt.Unverified}), and the input it was
+ * composed at is the only thing there is to name for it.
  *
  * <p>The reading travels with the values because that is what they are written at. A line read in
  * two places is read at two sets of positions, and a place shown against the other reading names
  * positions the row says nothing about.
  *
- * @param reading the line as the reading this row was read at met it
- * @param at      where the row's positions stand on that reading
+ * @param reading the line as the reading this row belongs to met it
+ * @param at      the row's positions, on that reading
  */
-public record WhereARowStandsOnALine(Border reading, Map<NumericTerm, Place> at) {
+public record InputOfARowForALine(Border reading, Map<NumericTerm, Place> at) {
 
-    public WhereARowStandsOnALine {
+    public InputOfARowForALine {
         at = Collections.unmodifiableMap(new LinkedHashMap<>(at));
         if (reading == null || at.isEmpty()) {
             throw new IllegalArgumentException(
-                    "a row stands on a line at the positions that reading names: " + reading);
+                    "a row's input on a line is the positions that reading names: " + reading);
         }
     }
 

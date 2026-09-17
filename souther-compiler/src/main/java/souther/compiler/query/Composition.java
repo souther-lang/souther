@@ -195,7 +195,7 @@ public record Composition(OfferingRequest request,
      * a longer name on it.
      */
     Offering keeping(Set<RowKey> kept, Set<ObligationIdentity> answered,
-                     Map<ObligationIdentity, WhereARowStandsOnALine> shownAt) {
+                     Map<ObligationIdentity, InputOfARowForALine> shownAt) {
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
         rowsByBehavior.forEach((behavior, here) -> {
             List<OfferedRow> left = here.stream().filter(row -> kept.contains(row.key())).toList();
