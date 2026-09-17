@@ -102,7 +102,7 @@ class AValueFailsTheClausesItFailsAndNotTheOnesLeftStandingTest {
             int sides = judgment.settled().size() + judgment.refuted().size()
                     + unknown(judgment).size();
 
-            assertEquals(judgment.found().size(), sides,
+            assertEquals(judgment.found().inOrder().size(), sides,
                     "one clause, one answer about it: " + judgment.found());
         }
     }
@@ -180,7 +180,7 @@ class AValueFailsTheClausesItFailsAndNotTheOnesLeftStandingTest {
             Judgment judgment = judgmentOn(source);
             if (judgment.verdict() == Verdict.REFUTED_ALONE
                     || judgment.verdict() == Verdict.REFUTED_NOT_ALONE) {
-                assertTrue(judgment.found().values().stream()
+                assertTrue(judgment.found().inOrder().stream()
                                 .anyMatch(one -> one.status().refusedSomewhere()),
                         "E2010 is raised on this verdict, so a clause the value fails somewhere is"
                                 + " what it is about: " + judgment.found());
@@ -195,11 +195,11 @@ class AValueFailsTheClausesItFailsAndNotTheOnesLeftStandingTest {
 
     private static java.util.SequencedMap<Clause.Id, Clause.Ref> unknown(Judgment judgment) {
         java.util.SequencedMap<Clause.Id, Clause.Ref> side = new java.util.LinkedHashMap<>();
-        judgment.found().forEach((id, one) -> {
+        for (InvariantChecker.Judged one : judgment.found().inOrder()) {
             if (one.status() == ClauseStatus.UNKNOWN) {
-                side.put(id, one.clause());
+                side.put(one.clause().id(), one.clause());
             }
-        });
+        }
         return side;
     }
 

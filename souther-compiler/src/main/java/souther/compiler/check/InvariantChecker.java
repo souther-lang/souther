@@ -41,7 +41,6 @@ import java.util.LinkedHashSet;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -4215,7 +4214,7 @@ public final class InvariantChecker {
             }
         }
         if (owed.isEmpty()) {
-            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
+            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, ClauseJudgments.of(found));
         }
         NumericDomain<FactSubject> dom = readingOf(k.numbers(), owed);
         // The same clauses read against the same site, under what would be known here had no
@@ -4241,17 +4240,17 @@ public final class InvariantChecker {
             put(found, owing.clause(), status);
         }
         if (refutedAlone) {
-            return new Judgment(Verdict.REFUTED_ALONE, found);
+            return new Judgment(Verdict.REFUTED_ALONE, ClauseJudgments.of(found));
         }
         if (alongside) {
-            return new Judgment(Verdict.REFUTED_NOT_ALONE, found);
+            return new Judgment(Verdict.REFUTED_NOT_ALONE, ClauseJudgments.of(found));
         }
         if (unknown) {
-            return new Judgment(Verdict.UNKNOWN, found);
+            return new Judgment(Verdict.UNKNOWN, ClauseJudgments.of(found));
         }
         // Every clause that could be read is discharged. One that could not be read still stands, so
         // this is not the whole invariant proven.
-        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
+        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, ClauseJudgments.of(found));
     }
 
     /**
@@ -4310,6 +4309,62 @@ public final class InvariantChecker {
     }
 
     /**
+     * The clauses one construction was judged against, in the order they were declared, with what
+     * was proved about each.
+     *
+     * <p>A sequence and not a map, because the sequence is part of what this says: a report names
+     * the clauses in it and labels their places in it, so two of these holding the same clauses in
+     * different orders are two reports. A map keyed by the clause would say the same thing and
+     * compare as though it did not — {@code Map.equals} is about entries — and this is held inside
+     * an answer that is kept or discarded by what {@code equals} says. Written as a sequence, the
+     * comparison that comes for free is the one that is right.
+     *
+     * <p>Each clause once. Which of the three a clause came out as is one answer, and a clause
+     * reached twice — through two spreads, or read again under a rewrite — is one clause, joined
+     * where it is recorded ({@link #put}). Two entries for one clause would be this check
+     * disagreeing with itself about a clause it read, and there would be no answer to which of them
+     * a report is about.
+     *
+     * <p>Copied on the way in, since what a walk was building is not what an answer holds: an answer
+     * that went on being written into after it was answered with is one whose readers were told about
+     * it before it was what it is.
+     */
+    record ClauseJudgments(List<Judged> inOrder) {
+
+        static final ClauseJudgments NONE = new ClauseJudgments(List.of());
+
+        ClauseJudgments {
+            inOrder = List.copyOf(inOrder);
+            Set<Clause.Id> once = new LinkedHashSet<>();
+            for (Judged one : inOrder) {
+                if (!once.add(one.clause().id())) {
+                    throw new Clause.NotOneClause("clause " + one.clause().id()
+                            + " was judged twice at one construction");
+                }
+            }
+        }
+
+        /** What a walk recorded, in the order it recorded it. */
+        static ClauseJudgments of(SequencedMap<Clause.Id, Judged> recorded) {
+            return new ClauseJudgments(List.copyOf(recorded.sequencedValues()));
+        }
+
+        /** What was proved about {@code clause} here, or null where this did not read it. */
+        Judged at(Clause.Id clause) {
+            for (Judged one : inOrder) {
+                if (one.clause().id().equals(clause)) {
+                    return one;
+                }
+            }
+            return null;
+        }
+
+        boolean isEmpty() {
+            return inOrder.isEmpty();
+        }
+    }
+
+    /**
      * One clause and what was proved about it.
      *
      * <p>The pair rather than a clause on one of two lists, so that a clause cannot be on two of
@@ -4359,32 +4414,10 @@ public final class InvariantChecker {
      * fails, and {@link #unsettled()} is the two nothing known there establishes — which is the
      * question E2011 asks and E2010 does not.
      *
-     * <p>In the order the clauses were declared, and that order is part of what this says. A report
-     * names them in it and labels the places in it, so two judgments holding the same clauses in
-     * different orders are two reports. Which is why {@link #equals} does not take the map's, whose
-     * answer is about entries and not about sequence: a reading held for being the reading it was
-     * would say what the other one says.
+     * <p>In the order the clauses were declared, which {@link ClauseJudgments} holds and is part of
+     * what this says.
      */
-    record Judgment(Verdict verdict, SequencedMap<Clause.Id, Judged> found) {
-
-        /** The same as {@code other}: the same verdict, over the same clauses judged the same way,
-         *  in the same order. */
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Judgment that && verdict == that.verdict
-                    && inOrder(found).equals(inOrder(that.found));
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(verdict, inOrder(found));
-        }
-
-        /** What a map says, sequence and all — which a list says and a map does not. */
-        private static List<Map.Entry<Clause.Id, Judged>> inOrder(
-                SequencedMap<Clause.Id, Judged> found) {
-            return List.copyOf(found.sequencedEntrySet());
-        }
+    record Judgment(Verdict verdict, ClauseJudgments found) {
 
         /**
          * What two readings of one construction found, together.
@@ -4402,21 +4435,22 @@ public final class InvariantChecker {
          * warning points anywhere.
          */
         static Judgment of(Judgment a, Judgment b) {
-            SequencedMap<Clause.Id, Judged> found = new LinkedHashMap<>();
-            a.found().forEach((id, one) -> {
-                Judged also = b.found().get(id);
+            List<Judged> found = new ArrayList<>();
+            for (Judged one : a.found().inOrder()) {
+                Judged also = b.found().at(one.clause().id());
                 if (also != null) {
-                    found.put(id, Judged.merge(one, also));
+                    found.add(Judged.merge(one, also));
                 } else if (one.status().unsettled()) {
-                    found.put(id, one.whereTheOtherReadingSaysNothing());
+                    found.add(one.whereTheOtherReadingSaysNothing());
                 }
-            });
-            b.found().forEach((id, one) -> {
-                if (!a.found().containsKey(id) && one.status().unsettled()) {
-                    found.put(id, one.whereTheOtherReadingSaysNothing());
+            }
+            for (Judged one : b.found().inOrder()) {
+                if (a.found().at(one.clause().id()) == null && one.status().unsettled()) {
+                    found.add(one.whereTheOtherReadingSaysNothing());
                 }
-            });
-            return new Judgment(Verdict.of(a.verdict(), b.verdict()), found);
+            }
+            return new Judgment(Verdict.of(a.verdict(), b.verdict()),
+                    new ClauseJudgments(found));
         }
 
         /** The clauses nothing known there establishes — the ones this check could not settle and
@@ -4450,11 +4484,11 @@ public final class InvariantChecker {
 
         private SequencedMap<Clause.Id, Clause.Ref> where(Predicate<ClauseStatus> which) {
             SequencedMap<Clause.Id, Clause.Ref> side = new LinkedHashMap<>();
-            found.forEach((id, one) -> {
+            for (Judged one : found.inOrder()) {
                 if (which.test(one.status())) {
-                    side.put(id, one.clause());
+                    side.put(one.clause().id(), one.clause());
                 }
-            });
+            }
             return side;
         }
 
