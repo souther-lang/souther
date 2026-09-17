@@ -42,6 +42,12 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
                         Set<ValueName.Behavior> dependencies) {
 
     DecisionSubjects {
+        if (published == null || kinds == null || newtypes == null || inners == null) {
+            throw new IllegalArgumentException("reading what a row controls asks the declarations"
+                    + " what they say, which form each of them is, which of them wrap one value"
+                    + " and what each of those wraps, so it is handed somewhere to read every one"
+                    + " of them");
+        }
         dependencies = Set.copyOf(dependencies);
     }
 

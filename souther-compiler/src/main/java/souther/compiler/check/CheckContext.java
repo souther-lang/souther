@@ -47,10 +47,12 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                            ExpansionLineage lineage) {
 
     public CheckContext {
-        if (published == null || kinds == null || inners == null) {
-            throw new IllegalArgumentException("a check reads what the declarations it is written"
-                    + " against say and which form each of them is, so it is handed somewhere to"
-                    + " read both");
+        if (symbols == null || published == null || kinds == null || inners == null
+                || fieldTypes == null) {
+            throw new IllegalArgumentException("a check reads what a name written here means, what"
+                    + " the declarations it is written against say, which form each of them is,"
+                    + " what each of them wraps and what its fields hold, so it is handed somewhere"
+                    + " to read every one of them");
         }
     }
 
