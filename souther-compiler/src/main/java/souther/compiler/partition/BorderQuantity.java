@@ -108,8 +108,10 @@ public sealed interface BorderQuantity {
             // Asked on the order the answer is measured on, the value having been read on the order
             // it is written on. The two are one carrier for a position's own content and part for a
             // term that is what an operation answered — a time counts the seconds of its day and its
-            // hour counts by one, so a reader handed the second decodes the first as nothing.
-            return switch (reading.of(term)) {
+            // hour counts by one, so a reader handed the second decodes the first as nothing. Which
+            // is why the reading is asked for by the orders: read on the other one, this position
+            // is a number this quantity does not have.
+            return switch (reading.of(of)) {
                 case WhatATermRead.CameToNothing(ReadingGap why) -> Stands.couldNotTell(why);
                 case WhatATermRead.NoNumberOfTheValue _, WhatATermRead.NothingWrittenThere _ ->
                         Stands.NO;
@@ -319,11 +321,11 @@ public sealed interface BorderQuantity {
          */
         @Override
         public Stands standsAt(Criterion where, QuantityReading reading) {
-            // Each end taken by the term it is of, and not by where it fell in the reading. A pair
-            // read back by position stands the other way round the day a walk records its terms in
-            // another order, and which way round it stands is the sign of the distance.
-            WhatATermRead here = reading.of(on.term());
-            WhatATermRead there = reading.of(against.term());
+            // Each end taken by its own orders, which is what the end is: a position read on the
+            // other end's order is a value it does not hold, and the pair would stand a distance
+            // apart that neither of them is at.
+            WhatATermRead here = reading.of(on);
+            WhatATermRead there = reading.of(against);
             // Both sides, and not the first of them. The pair is unreadable for whatever stopped
             // either, and a reader told about one end is being told which end this happened to
             // look at first.
@@ -577,10 +579,11 @@ public sealed interface BorderQuantity {
             boolean noNumber = false;
             boolean wroteNothing = false;
             for (Map.Entry<NumericTerm, java.math.BigDecimal> each : form.coefs().entrySet()) {
-                // Taken by the term the coefficient is of. What a term read is the reading's to say
-                // and what it is worth to the number is the form's, and a coefficient put against
-                // the wrong term weighs a position the form does not weigh that way.
-                switch (reading.of(each.getKey())) {
+                // Taken by the orders this form reads that term on. What the term read is the
+                // reading's to say and what it is worth to the number is the form's, and a
+                // coefficient put against a value read on another order weighs a position by a
+                // number it does not hold.
+                switch (reading.of(on.get(each.getKey()))) {
                     case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
                     case WhatATermRead.NoNumberOfTheValue _ -> noNumber = true;
                     case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
@@ -787,17 +790,25 @@ public sealed interface BorderQuantity {
      * did.
      */
     default QuantityReading read(Observation observation) {
-        List<QuantityReading.OfATerm> terms = new java.util.ArrayList<>();
+        Map<TermOrders, WhatATermRead> answers = new java.util.LinkedHashMap<>();
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
-            terms.add(new QuantityReading.OfATerm(term, switch (term) {
+            WhatATermRead read = switch (term) {
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
                 case NumericTerm.TakenOver over ->
                         WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
-            }));
+            };
+            // One entry per term, which the orders say they are of, so two could only meet where a
+            // quantity is taken of one term twice. Refused rather than let the second stand: a
+            // reading that kept one of them would answer for a term with what another one read.
+            if (answers.put(orders, read) != null) {
+                throw new IllegalStateException(
+                        "a quantity is taken of each of its terms once, and this names " + orders
+                                + " among " + terms());
+            }
         }
-        return new QuantityReading(terms);
+        return new QuantityReading(answers);
     }
 
     /**
@@ -810,17 +821,22 @@ public sealed interface BorderQuantity {
      *
      * <p>The same for all three, because what the numbers are is not the quantity's shape. What they
      * come to under the line the model drew is, and that is {@link #standsAt}.
+     *
+     * <p>Over this quantity's own terms, and never over the entries the reading happens to hold.
+     * What a reading holds is what some quantity read; which of it is this one's to fold is this
+     * one's to say, and a fold that took what it was given would answer for one quantity with
+     * another's numbers.
      */
     default ValuesAtARow valuesOf(QuantityReading reading) {
         Map<NumericTerm, Place> read = new java.util.LinkedHashMap<>();
         Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
         boolean noValue = false;
-        for (QuantityReading.OfATerm each : reading.terms()) {
-            switch (each.read()) {
+        for (NumericTerm term : terms()) {
+            switch (reading.of(ordersOf(term))) {
                 case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
                 case WhatATermRead.NoNumberOfTheValue _,
                      WhatATermRead.NothingWrittenThere _ -> noValue = true;
-                case WhatATermRead.Number(Place value) -> read.put(each.term(), value);
+                case WhatATermRead.Number(Place value) -> read.put(term, value);
             }
         }
         if (noValue) {

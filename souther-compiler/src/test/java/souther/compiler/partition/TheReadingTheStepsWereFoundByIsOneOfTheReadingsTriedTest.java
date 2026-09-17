@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * The row is read to find out which readings of it there are, and where that reading is one of
@@ -63,8 +65,10 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(1, readings.tried().size(),
                 "a position outside a sequence gives one reading of the row");
-        assertEquals(List.of(quantityOf(FLAT).read(readings.tried().get(0))), readings.made(),
-                "and what was kept is the reading of it, so it is not read again");
+        assertEquals(1, readings.made().size(),
+                "and the reading the steps were found by is the reading of it");
+        assertSame(readings.made().getFirst(), readings.readAt(0),
+                "so asking for it hands back what was read, rather than reading the row again");
     }
 
     @Test
@@ -77,6 +81,8 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
                 "one reading per element the position holds");
         assertEquals(List.of(), readings.made(),
                 "each of them names an element, and none of them is the reading that names none");
+        assertNotSame(readings.readAt(0), readings.readAt(0),
+                "so each of them is read when it is asked for");
     }
 
     private static StandingAtAPoint.Readings readingsOf(TermPath at, List<ObservedValue> row) {

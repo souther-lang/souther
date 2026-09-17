@@ -1,11 +1,12 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrders;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * What each of one quantity's terms came to at one row, before anything is made of the numbers.
+ * What was read at one row, for each of the orders a quantity reads its terms on.
  *
  * <p>The row read, and not an answer about it. {@link BorderQuantity#standsAt} ranks what the terms
  * came to one way and {@link BorderQuantity#valuesOf} ranks it another — a position the row wrote
@@ -13,54 +14,66 @@ import java.util.List;
  * second — so neither of their answers can be had from the other, and a walk of the row that came
  * back as either would be a walk the other question has to make again.
  *
- * <p><b>A sequence and not a map from term to reading.</b> Which end of a distance is which decides
- * the sign of it, and what a map holds is the same whichever order its entries were put in. Read
- * back from a reading, the ends would be told apart by whatever order a walk happened to record
- * them in, and two readings that stand opposite ways round would be equal.
+ * <p><b>Asked for by {@link TermOrders} and not by the term.</b> What a term read depends on both
+ * which term it is and what its value was decoded on: the same position read on one order and on
+ * another are two numbers, and one of them is no number at all. Held under the term alone, a reading
+ * made on one order answers for a quantity that reads that position on another — which is a verdict
+ * about a row taken from a value it does not hold. The orders carry which term they are of
+ * ({@link TermOrders#term}), so asking with them asks both questions at once.
  *
- * <p>No criterion here. A row and a quantity make a reading; a criterion is what a reading is then
- * asked about. Read with one in hand, a second criterion would be a second walk of the row.
+ * <p><b>And there is no way to read the entries.</b> A consumer asks for the readings its own
+ * quantity needs; it does not interpret whatever entries happen to be here. Handed the pair set, a
+ * reader would fold what it was given — which is how a fold came to answer for one quantity with
+ * another's values — and every fold added would have to re-derive for itself which entries are its
+ * to read.
  *
- * <p>This package's, for the reason {@link WhatATermRead} is. What the arms of a term's reading are
- * and which of them outranks which is the quantity's business, and a reader outside that took them
- * apart for itself would be the second place that has to rank them.
+ * <p>Two quantities that read the same terms on the same orders make the same reading, and either
+ * may be answered from it. That is not a way round the above: the row was read the same way, and
+ * what differs between them is what they weigh those numbers by.
  */
-record QuantityReading(List<OfATerm> terms) {
+final class QuantityReading {
 
-    QuantityReading {
-        if (terms == null || terms.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "a quantity is taken of at least one term, so a reading of one reads at least"
-                            + " one term");
+    private final Map<TermOrders, WhatATermRead> answers;
+
+    QuantityReading(Map<TermOrders, WhatATermRead> answers) {
+        if (answers == null || answers.isEmpty()) {
+            throw new IllegalArgumentException("a quantity is taken of at least one term, so a"
+                    + " reading of one answers for at least one");
         }
-        terms = List.copyOf(terms);
+        // No order kept, because nothing reads these in any order. What a reader wants is the entry
+        // for the orders it holds, and the one place an order is wanted is a message.
+        this.answers = Map.copyOf(answers);
     }
 
     /**
-     * What the quantity read at {@code term}.
+     * What was read at {@code orders}, which this reading has to have been read on.
      *
-     * <p>Asked by the term and not by where it fell, so that a quantity reading two of them cannot
-     * take one end for the other. A reading of some other quantity is refused rather than answered
-     * for: it is not a term this went without, it is a reading of a row this is not a reading of.
+     * <p>Refused rather than answered for. A reading this was not made on is not a term this went
+     * without: it is a reading of the row under orders this quantity does not read it on, and an
+     * answer to it would be a number the row does not hold at a position it does.
      */
-    WhatATermRead of(NumericTerm term) {
-        for (OfATerm each : terms) {
-            if (each.term().equals(term)) {
-                return each.read();
-            }
+    WhatATermRead of(TermOrders orders) {
+        WhatATermRead answer = answers.get(orders);
+        if (answer == null) {
+            throw new IllegalArgumentException("this row was read at " + answersFor()
+                    + " and was asked what it read at " + orders);
         }
-        throw new IllegalArgumentException("this reads " + terms.stream().map(OfATerm::term).toList()
-                + " and was asked what it read at " + term);
+        return answer;
     }
 
-    /** What one term came to, beside the term it is of. */
-    record OfATerm(NumericTerm term, WhatATermRead read) {
+    /**
+     * What this was read at, in one order.
+     *
+     * <p>Spelled and sorted rather than taken in the order the entries are held: nothing here keeps
+     * an order, a message that changes between runs cannot be compared between runs, and this is
+     * the only place any of them is looked at outside the entry a caller asked for.
+     */
+    private List<String> answersFor() {
+        return answers.keySet().stream().map(TermOrders::toString).sorted().toList();
+    }
 
-        OfATerm {
-            if (term == null || read == null) {
-                throw new IllegalArgumentException(
-                        "a term's reading is a term and what it came to: " + term + " " + read);
-            }
-        }
+    @Override
+    public String toString() {
+        return "QuantityReading" + answersFor();
     }
 }
