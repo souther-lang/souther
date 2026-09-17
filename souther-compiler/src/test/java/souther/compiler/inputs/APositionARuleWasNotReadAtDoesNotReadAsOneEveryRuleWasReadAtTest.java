@@ -164,7 +164,8 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
-                out.add(InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES));
+                out.add(InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES,
+                        RepositoryModels.knownTo(compilation)));
             }
         }
     }

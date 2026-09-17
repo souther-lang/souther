@@ -1,9 +1,17 @@
 package souther.compiler.conformance;
 
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.values.KnownExtents;
+import souther.compiler.values.StringMachineAnswers;
+import souther.compiler.values.TextExtent;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,12 +40,60 @@ public final class RepositoryModels {
 
     private static final List<Compilation> ALL = compileEverything();
 
+    /** What each of them has worked out about where its sets stop, made when first asked. */
+    private static final Map<Compilation, DeclarationReadings> KNOWN = new IdentityHashMap<>();
+
     private RepositoryModels() {
     }
 
     /** Every model this repository carries, each with everything about it answered. */
     public static List<Compilation> all() {
         return ALL;
+    }
+
+    /**
+     * What one of these models already knows, to be handed to every reading made of it.
+     *
+     * <p>Where a set's strings stop is settled by the set and by an allowance minted for that set,
+     * so it is one answer for the model and not one per reading ({@link KnownExtents}). A test that
+     * reads a declaration once has nothing to gain from this; one that reads every declaration of
+     * every model, or one declaration under every settling of its coordinates, meets the same sets
+     * again at each of them and walks each of them again without it.
+     *
+     * <p><b>This and nothing else.</b> What a reading of a declaration came to is what such a test
+     * is usually about, so no reading is lent here — a lender that handed one would be answering
+     * the question instead of sharing the work under it.
+     */
+    public static synchronized DeclarationReadings knownTo(Compilation compilation) {
+        return KNOWN.computeIfAbsent(compilation, _ -> knowingWhereSetsStop());
+    }
+
+    private static DeclarationReadings knowingWhereSetsStop() {
+        Map<ValueSet, TextExtent> stops = new HashMap<>();
+        KnownExtents extents = new KnownExtents() {
+
+            @Override
+            public TextExtent of(ValueSet set) {
+                return stops.get(set);
+            }
+
+            @Override
+            public void remember(ValueSet set, TextExtent extent) {
+                stops.put(set, extent);
+            }
+        };
+        return new DeclarationReadings() {
+
+            @Override
+            public StringMachineAnswers of(TypeKey declaration) {
+                return StringMachineAnswers.unborrowed(extents);
+            }
+
+            @Override
+            public KnownExtents extents() {
+                return extents;
+            }
+        };
     }
 
     private static List<Compilation> compileEverything() {
