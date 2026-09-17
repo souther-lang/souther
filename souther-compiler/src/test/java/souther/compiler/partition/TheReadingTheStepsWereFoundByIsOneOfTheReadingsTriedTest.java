@@ -15,7 +15,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -90,8 +89,7 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
         BehaviorInputs where = new BehaviorInputs(List.of("flat", "lines"),
                 List.of(Type.Prim.INT, new Type.ListOf(named("Line"))), rules, POLICY);
         return StandingAtAPoint.readings(where,
-                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantityOf(at),
-                new LinkedHashMap<>());
+                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantityOf(at));
     }
 
     private static BorderQuantity quantityOf(TermPath at) {
