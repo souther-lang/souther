@@ -186,9 +186,12 @@ public final class CoverageSubsumption {
                 }
                 try (Stream<Path> files = Files.walk(tests)) {
                     for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
-                        // At the start of a line of its own, which is where an annotation on a class
-                        // is written. Searched for anywhere in the text, the word in a sentence
-                        // about the annotation would answer as the annotation.
+                        // At the start of a line of its own, which is where the annotation on an
+                        // outermost class is written and the only place it may be written at all.
+                        // Searched for anywhere in the text, the word in a sentence about the
+                        // annotation would answer as the annotation; searched for at any
+                        // indentation, it would find one inside a class, which would defer part of
+                        // a file while everything here reads the file as one class.
                         String source = Files.readString(file);
                         if (source.lines().noneMatch(line -> line.equals("@Nightly"))) {
                             continue;

@@ -63,6 +63,13 @@ public final class RepositoryModels {
      * <p><b>This and nothing else.</b> What a reading of a declaration came to is what such a test
      * is usually about, so no reading is lent here — a lender that handed one would be answering
      * the question instead of sharing the work under it.
+     *
+     * <p><b>For the compilations {@link #all()} hands out and no others.</b> What is kept here is
+     * knowledge of one revision, and a compilation is not one: the same object takes another set of
+     * sources when it is updated, and what its sets are is then settled by sources these answers
+     * were not worked out under. These are never updated — they are the models as this repository
+     * carries them, compiled once for the JVM — so the object stands in for the revision here and
+     * would not anywhere else.
      */
     public static synchronized DeclarationReadings knownTo(Compilation compilation) {
         return KNOWN.computeIfAbsent(compilation, _ -> knowingWhereSetsStop());

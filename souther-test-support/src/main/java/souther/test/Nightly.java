@@ -17,6 +17,11 @@ import java.lang.annotation.Target;
  *
  * <p>The tag is what surefire reads, and it is spelled here once. A plain run leaves the tag out
  * through {@code test.excluded.groups}; a run that means to ask these empties that property.
+ *
+ * <p><b>At the top of a file and not inside one.</b> A tag at a class covers the {@code @Nested}
+ * classes in it, so this would also be legal at one — and the readers of it would then disagree,
+ * since {@code bin/CoverageSubsumption} reads a file of test source as one class. What is deferred
+ * is a whole file, and {@code WhatIsDeferredToTheNightlyIsAWholeTestClassTest} is what asks for it.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
