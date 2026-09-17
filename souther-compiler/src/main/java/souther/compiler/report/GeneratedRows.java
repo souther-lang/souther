@@ -600,9 +600,15 @@ public final class GeneratedRows {
                 // about the class either way; an arm's is looked for at the classes a way into it
                 // leaves, and named for those it read as the class's line — the same words twice,
                 // so the arm's news was dropped as a repeat of the class's (issue #1009).
+                // A line held against the lines beside it is named for the finding too, and for the
+                // same reason: the search is made at a point of the line, so the place it names is
+                // a point a row already stands at — printed, it reads as a row missing where one
+                // is written.
                 case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(came ->
                         say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                                 each.finding().about() instanceof About.AnArmNoRowGoesThrough
+                                        || each.finding().about()
+                                                instanceof About.ALineTheRowsDoNotTellFromAnother
                                         ? about(each.finding(), rendering, places)
                                         : came.why().subject(),
                                 behavior, saidOf(came, rendering, places))));
@@ -765,9 +771,9 @@ public final class GeneratedRows {
                                             souther.compiler.partition.ClassOfAPosition::classId))
                             .map(each -> each.classId() + " at " + each.at())
                             .collect(java.util.stream.Collectors.joining(" with "));
-            // Both lines, which is what a row here would settle between. Nothing composes one yet,
-            // so what is printed beside these words is the strategy that is missing — and the input
-            // the two part company at is named there, which is the row an author writes by hand.
+            // Both lines, which is what a row here would settle between. What is printed beside
+            // these words is what the search for such a row came to, and a row that was composed
+            // is offered above rather than said here.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     untold.line().border().label() + " against " + untold.allowed().label();
             // Findings row synthesis is not about, which `shown` leaves out and nothing here is

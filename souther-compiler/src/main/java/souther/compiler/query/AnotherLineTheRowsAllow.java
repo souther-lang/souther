@@ -2,7 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
@@ -64,22 +66,65 @@ public sealed interface AnotherLineTheRowsAllow {
     /**
      * This one they do not, and this is where the two part company.
      *
+     * <p><b>What is missing here is a condition and not a place.</b> The inputs that would show
+     * which of the two lines the model draws are every input this line keeps and the model's
+     * refuses, and {@link #tellsApartAt} is one of them — the one the rows themselves lead to. A
+     * search asked for the place would be held to whichever input the walk over the rows reached
+     * first, and an input it cannot compose a row at would come back as work nobody can do while
+     * the rest of the set went unlooked at. So the condition is what travels
+     * ({@link #tellingThemApart}), and the place is what the measurement saw.
+     *
      * @param direction   the line one step from the model's that every row answers alike under
      * @param cut         where along it the threshold falls that keeps every row where it is
+     * @param keptOn      the side of that threshold this line keeps a row on, which is the side the
+     *                    model's own rule is satisfied on
      * @param tellsApartAt an input the two lines answer differently at, or null where none was
-     *                    worked out. What a row there would show is the whole of the work this
-     *                    names, so it is said wherever it can be
+     *                    worked out. What the measurement itself reached, and never where a row has
+     *                    to be written: it is a witness of the condition and not the condition
      */
-    record OneDoes(QuantityKey direction, BigDecimal cut,
+    record OneDoes(QuantityKey direction, BigDecimal cut, Towards keptOn,
                    Map<NumericTerm, Place> tellsApartAt) implements AnotherLineTheRowsAllow {
 
         public OneDoes {
-            if (direction == null || cut == null) {
-                throw new IllegalArgumentException("a line the rows allow is a direction and a"
-                        + " place along it: " + direction + " " + cut);
+            if (direction == null || cut == null || keptOn == null) {
+                throw new IllegalArgumentException("a line the rows allow is a direction, a"
+                        + " place along it and a side it keeps: " + direction + " " + cut + " "
+                        + keptOn);
             }
             tellsApartAt = tellsApartAt == null ? null
                     : Collections.unmodifiableMap(new LinkedHashMap<>(tellsApartAt));
+        }
+
+        /**
+         * Where a row that tells the two lines apart has to stand, as a refinement of {@code
+         * within}.
+         *
+         * <p>Half of the condition and the half that is this line's. The other half is the model's
+         * own line, which a row at its {@code OFF} point already satisfies by standing there — so a
+         * row inside this region at that point is one the model refuses and this line keeps, which
+         * is the whole of what tells them apart.
+         *
+         * <p>Which also says why the rows already written are outside it. {@code cut} is the
+         * threshold that keeps every row the model keeps and refuses every row it refuses, so a row
+         * in the file answers alike under both lines — a search handed the rows to avoid would be
+         * listing what the condition already leaves out.
+         */
+        public SearchRegion tellingThemApart(SearchRegion within) {
+            return within.assuming(new LinearForm<>(cut.negate(), direction.direction()),
+                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE);
+        }
+
+        /**
+         * Whether this line keeps a row whose positions read as {@code values}.
+         *
+         * <p>The same question {@link OrderedAffineBoundary#satisfiedBy} puts to the line the model
+         * drew, put to the line it did not. A row the two answer differently at is one that tells
+         * them apart, which is the whole of what a row here is asked for — so both halves of that
+         * are read the same way, and neither is an arrangement of the other.
+         */
+        public boolean keeps(Map<NumericTerm, Place> values) {
+            return AnotherLineTheRowsAllow.keeps(keptOn, cut,
+                    OrderedAffineBoundary.along(direction.direction(), values));
         }
 
         /** How a report names the line, which is the direction spelled as an author writes a form. */
@@ -377,7 +422,7 @@ public sealed interface AnotherLineTheRowsAllow {
             if (parting == null) {
                 return new CouldNotTell(new Unsettled.NoReachableDistinguisher());
             }
-            return new OneDoes(other, cut, parting);
+            return new OneDoes(other, cut, boundary.satisfiedOn(), parting);
         }
         // Nothing stands, which the rows that were read establish however few of them there were:
         // a row read leaves fewer lines standing and never more, so a line none of these allows is

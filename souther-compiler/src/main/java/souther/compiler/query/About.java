@@ -4,13 +4,17 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -298,12 +302,25 @@ public sealed interface About {
             return (AnotherLineTheRowsAllow.OneDoes) line.beside();
         }
 
-        /** The input the two part company at, as an author would write the positions — or null
-         *  where none was worked out. */
-        public String partingSaid() {
-            return allowed().tellsApartAt() == null ? null
-                    : souther.compiler.partition.OrderedAffineBoundary.saidAt(
-                            line.border().cut().of(), allowed().tellsApartAt());
+        /**
+         * The input a reader is shown, as an author would write the positions — or null where
+         * nothing named one.
+         *
+         * <p><b>Chosen here and once.</b> There are two inputs the two lines part company at that
+         * this could name: where a row was composed, and where the measurement itself saw them
+         * part. A reader is shown one of them, and it has to be the one they are handed a row at —
+         * so a row that was composed names the place, and the measurement's own witness is what is
+         * left to say when none was.
+         *
+         * <p>Which is why the choice is not made at the measurement. What the rows leave standing
+         * beside a line is settled before anybody asks for a row there, and a sentence written then
+         * would name a place a later search had no part in choosing.
+         */
+        public String shownSaid() {
+            Map<NumericTerm, Place> at = line.toldApart().standingAt() != null
+                    ? line.toldApart().standingAt() : allowed().tellsApartAt();
+            return at == null ? null
+                    : OrderedAffineBoundary.saidAt(line.border().cut().of(), at);
         }
 
         @Override

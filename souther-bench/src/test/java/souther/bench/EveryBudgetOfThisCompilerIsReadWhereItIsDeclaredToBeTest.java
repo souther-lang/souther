@@ -121,9 +121,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "stops walking a line at the places it tries and says which figure"),
-            Map.entry("souther.compiler.query.Coverages$2#search("
-                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;)"
-                            + "Lsouther/compiler/query/SearchOutcomes;",
+            Map.entry("souther.compiler.query.Coverages$2#looked("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;)"
+                            + "Lsouther/compiler/query/Coverages$2$Looked;",
                     "stops asking a point for another value to stand a row on, and answers with"
                             + " what the values it did try came to"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("

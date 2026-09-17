@@ -7,6 +7,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
 import souther.compiler.partition.RuleReachNumbering;
@@ -29,6 +30,7 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -51,6 +53,7 @@ import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Measuring one behavior's rows against the distinctions its model draws.
@@ -907,9 +910,50 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
-            out.add(new BorderAssessment(border.border(), items, border.beside()));
+            out.add(new BorderAssessment(border.border(), items, border.beside(),
+                    tellingApart(border, search)));
         }
         return new LineReadings(out);
+    }
+
+    /**
+     * What looking for a row that tells this line from the one beside it came to, or that nobody
+     * asked where there is no such line.
+     *
+     * <p><b>At the line's own {@code OFF} point and nowhere else.</b> What tells the two lines
+     * apart is an input the model refuses and the other keeps, and the model refuses everything at
+     * that point by definition of it — so the criterion is the one the point already has, and the
+     * whole of what is added is the condition that the other line keeps a row there
+     * ({@link AnotherLineTheRowsAllow.OneDoes#tellingThemApart}).
+     *
+     * <p>Asked whether or not a row already stands at that point. A row at the point shows the line
+     * has not moved and says nothing about which way it runs, which is what raised this question:
+     * the point being met is what makes the question due rather than what answers it.
+     *
+     * <p>Nothing where the line has one {@code OFF} point in two places. A rule that names a value
+     * has a point outside it on each side, and no line beside such a rule is named in the first
+     * place — so this is the shape of the answer rather than a case to choose in.
+     */
+    private static ARowTellingTheLinesApart tellingApart(BorderAssessment border,
+                                                         OneSearchOfABorder search) {
+        if (!(border.beside() instanceof AnotherLineTheRowsAllow.OneDoes named)) {
+            return ARowTellingTheLinesApart.notAsked();
+        }
+        DomainPoint off = null;
+        for (DomainPoint point : border.items().keySet()) {
+            if (border.border().roleOf(point) == PointRole.OFF) {
+                if (off != null) {
+                    return ARowTellingTheLinesApart.notAsked();
+                }
+                off = point;
+            }
+        }
+        if (off == null || !(border.border().demand(off) instanceof Demand.Owed owed)) {
+            // The rules leave nothing outside this line, so there is nowhere a row could stand that
+            // the model refuses — and an input the two lines part company at is one of those.
+            return ARowTellingTheLinesApart.notAsked();
+        }
+        return search.tellingApart(owed.criterion(), border.border().label(off), named);
     }
 
     /**
@@ -974,6 +1018,18 @@ final class Coverages {
          * carry whichever way was tried first.
          */
         SearchOutcomes search(Criterion criterion, String label);
+
+        /**
+         * What looking for a row that tells this line from {@code beside} came to.
+         *
+         * <p>The same criterion the line's {@code OFF} point is at, inside the region where the
+         * line beside it keeps a row. A row there is one the model refuses and that line keeps,
+         * which is the whole of what tells the two apart — so nothing here has to be told which
+         * places the rows already stand at: a row in the file answers alike under both lines and is
+         * outside this region by the same arithmetic that put the threshold where it is.
+         */
+        ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
+                                              AnotherLineTheRowsAllow.OneDoes beside);
     }
 
     /**
@@ -1149,23 +1205,45 @@ final class Coverages {
 
             @Override
             public SearchOutcomes search(Criterion criterion, String label) {
+                return looked(criterion, label, UnaryOperator.identity()).outcomes();
+            }
+
+            @Override
+            public ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
+                                                         AnotherLineTheRowsAllow.OneDoes beside) {
+                Looked looked = looked(criterion, label, beside::tellingThemApart);
+                return ARowTellingTheLinesApart.of(looked.offered(), looked.outcomes());
+            }
+
+            /**
+             * What looking for a row at {@code criterion} came to, inside the region {@code
+             * narrowing} leaves.
+             *
+             * <p>One walk for both questions. A point of the line and an input that tells the line
+             * from the one beside it are looked for the same way — a place the criterion accepts,
+             * a row built there, and the row read back — and what differs is the region. Written
+             * twice, the second would be the first without whatever the first learned since.
+             */
+            private Looked looked(Criterion criterion, String label,
+                                  UnaryOperator<SearchRegion> narrowing) {
                 // Nothing to build against. Told apart from nobody having asked, which is not a
                 // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
-                    return SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
-                            ItemAssessment.Attempt.Reason.NO_CLASSES));
+                    return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
+                            ItemAssessment.Attempt.Reason.NO_CLASSES)), null);
                 }
                 // A way one position would have to take two of its cases to reach, which no value
                 // is. Said in that word and not in the one for a walk that tried what the rules
                 // leave and reached nothing: nothing was walked here, and what settles it is that
                 // the two cases are not in one value.
                 if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
+                    return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                             new souther.compiler.partition.Generator.UnresolvedCombination(
                                     java.util.List.of(label),
                                     souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within));
+                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within)), null);
                 }
+                SearchRegion region = narrowing.apply(able.region());
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
@@ -1178,18 +1256,20 @@ final class Coverages {
                 // the search answered a point it had one more value for.
                 ValuesTried tried = ValuesTried.NONE;
                 SearchOutcomes last = null;
+                Realization.Found first = null;
                 for (int value = 0;
                         value < CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum(); value++) {
-                    Searching came = searchingWith(criterion, label, able, tried);
+                    Searching came = searchingWith(criterion, label, able, region, tried);
                     if (came.stood()) {
-                        return came.outcomes();
+                        return new Looked(came.outcomes(), came.realized());
                     }
                     // Nothing was composed this time round. On the first asking that is the point's
                     // answer; on a later one it is the answer to a question this narrowed by
                     // leaving a value out, and what the point came to is what the value that was
                     // composed came to — said with whatever of this compiler's ended the asking.
                     if (came.realized() == null) {
-                        return last == null ? came.outcomes() : endedBy(last, came.came());
+                        return new Looked(last == null ? came.outcomes()
+                                : endedBy(last, came.came()), first);
                     }
                     // The row a reader is offered is the first one composed. Every asking after it
                     // is put a narrower question — the values already tried are not there to be
@@ -1197,6 +1277,7 @@ final class Coverages {
                     // it for a reason of this search's rather than of the model's.
                     if (last == null) {
                         last = came.outcomes();
+                        first = came.realized();
                     }
                     // Every way of standing the dependencies in was built and none of them stood,
                     // so this is the value that did not answer and not one of the rows it was built
@@ -1211,8 +1292,8 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return endedBy(last, realizer.realize(quantity.standingAt(criterion), able.region(),
-                        looking, tried));
+                return new Looked(endedBy(last, realizer.realize(quantity.standingAt(criterion),
+                        region, looking, tried)), first);
             }
 
             /**
@@ -1225,6 +1306,16 @@ final class Coverages {
              */
             private record Searching(Realization came, Realization.Found realized,
                                      SearchOutcomes outcomes, boolean stood) {}
+
+            /**
+             * What a walk over one region came to, and where the row it hands over stands.
+             *
+             * <p>The two together, because a caller shown one place and handed a row built at
+             * another has been shown two answers about one search. {@code offered} is the
+             * realization the row in {@code outcomes} was built from, and is null exactly where no
+             * row was built.
+             */
+            private record Looked(SearchOutcomes outcomes, Realization.Found offered) {}
 
             /**
              * What the values came to, said with whatever of this compiler's ended the asking.
@@ -1299,9 +1390,10 @@ final class Coverages {
             }
 
             private Searching searchingWith(Criterion criterion, String label,
-                    souther.compiler.partition.Reachability.Reaching able, ValuesTried tried) {
+                    souther.compiler.partition.Reachability.Reaching able,
+                    SearchRegion region, ValuesTried tried) {
                 Realization answered = realizer.realize(quantity.standingAt(criterion),
-                        able.region(), looking, tried);
+                        region, looking, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
                         // Asking nothing of what the dependencies answer. A point of a line is a
@@ -1389,7 +1481,29 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
-        return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()));
+        return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
+                whicheverLooked(a.toldApart(), b.toldApart()));
+    }
+
+    /**
+     * What two readings of one line came to when each was asked for a row that tells it from the
+     * line beside it.
+     *
+     * <p>A row from either is a row, and the one a reader is offered is the first that composed
+     * one. The two were looked for in two regions — a reading is reached under its caller's own
+     * conditions — so one of them finding nowhere to compose is not an answer about the other's
+     * region, and neither is read as one: what comes back is the row where there is one, and what
+     * the reading that looked said where there is not.
+     */
+    private static ARowTellingTheLinesApart whicheverLooked(ARowTellingTheLinesApart a,
+                                                            ARowTellingTheLinesApart b) {
+        if (a.searches().rowToOffer().isPresent()) {
+            return a;
+        }
+        if (b.searches().rowToOffer().isPresent()) {
+            return b;
+        }
+        return a.searches().ran() ? a : b;
     }
 
     /**

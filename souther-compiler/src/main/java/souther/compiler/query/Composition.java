@@ -90,6 +90,7 @@ public record Composition(OfferingRequest request,
             take(byBehavior, behavior,
                     filling == null ? List.of() : filling.composed().rows(),
                     atTheLines(owed.get(behavior)),
+                    filling == null ? List.of() : filling.tellingLinesApart(),
                     filling == null ? List.of() : filling.rules().byRule().values());
         }
         SequencedMap<String, List<OfferedRow>> out = new LinkedHashMap<>();
@@ -105,6 +106,7 @@ public record Composition(OfferingRequest request,
     private static void take(SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior,
                              String behavior, List<Generator.GeneratedRow> cells,
                              List<Generator.GeneratedRow> lines,
+                             List<Generator.GeneratedRow> apart,
                              Collection<Generator.GeneratedRow> rules) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
@@ -126,6 +128,14 @@ public record Composition(OfferingRequest request,
         // is that the row is for the rule, and that it also stands at a line is the account's
         // answer and not this row's label.
         for (Generator.GeneratedRow row : lines) {
+            RowKey key = RowKey.of(behavior, row);
+            here.putIfAbsent(key, new OfferedRow(key, row.inputs(), row.answers(), List.of()));
+        }
+        // And the rows that tell a line from the line beside it, joined the same way. Such a row
+        // stands at a point of its line as well — that is where it is composed — so a row already
+        // here for that point keeps the entry it has, and what this row is offered for is said in
+        // the account of the line rather than by a word over it.
+        for (Generator.GeneratedRow row : apart) {
             RowKey key = RowKey.of(behavior, row);
             here.putIfAbsent(key, new OfferedRow(key, row.inputs(), row.answers(), List.of()));
         }

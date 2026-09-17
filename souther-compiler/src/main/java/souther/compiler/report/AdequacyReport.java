@@ -2236,11 +2236,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about()
                     instanceof About.ALineTheRowsDoNotTellFromAnother untold) {
-                String parting = untold.partingSaid();
+                String shown = untold.shownSaid();
                 out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
                         mark(f.finding()), untold.line().border().label(),
                         untold.allowed().label(),
-                        parting == null ? "" : ", and a row at `" + parting + "` would"));
+                        shown == null ? "" : ", and a row at `" + shown + "` would"));
             }
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
