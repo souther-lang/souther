@@ -106,9 +106,15 @@ public final class ClosedState<A> {
         this.status = status;
     }
 
-    /** What {@code constraints} leave, worked out. */
+    /**
+     * What {@code constraints} leave, worked out.
+     *
+     * @param order the one order the positions of a form are walked in, for the readings below that
+     *              work a bound out at each of them — see {@link CanonicalOrder}
+     */
     public static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
-                                        Function<A, Granularity> spacing) {
+                                        Function<A, Granularity> spacing,
+                                        CanonicalOrder<A> order) {
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints);
         if (differences.holdsNothing()) {
             return empty(differences);
@@ -127,7 +133,7 @@ public final class ClosedState<A> {
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
-            AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing);
+            AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing, order);
             if (found instanceof AffineReduction.Reduction.NothingIsLeft) {
                 return empty(differences);
             }

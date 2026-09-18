@@ -358,7 +358,8 @@ final class ReadQuantities implements Quantities {
             if (under.holds(opened.opening())) {
                 made.put(root, opened.rules().given(under(root)).constraintsOver(
                         at -> called(root, at, under),
-                        subject -> new InputAtom.Anonymous(root.toString(), subject)));
+                        subject -> new InputAtom.Anonymous(root.toString(), subject),
+                        InputAtom.inOneOrder()));
             }
         });
         Map<TermPath, FieldDomains.Carried<InputAtom>> answer = Collections.unmodifiableMap(made);
@@ -545,7 +546,7 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = ConstraintState.top();
+        ConstraintState<InputAtom> made = ConstraintState.top(InputAtom.inOneOrder());
         // What the values of this space cost to work out. One for the space and not one per
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the

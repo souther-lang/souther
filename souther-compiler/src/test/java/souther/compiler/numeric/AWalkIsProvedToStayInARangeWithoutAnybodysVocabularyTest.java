@@ -101,14 +101,14 @@ class AWalkIsProvedToStayInARangeWithoutAnybodysVocabularyTest {
     /** A walk that starts at nought and adds every value it is handed. */
     private static String addingFrom(long seed, NumericDomain.Bounds element) {
         return show(Induction.proves(element, walked ->
-                new Adding(NumericDomain.<Atom>top().assuming(Atom.ELEMENT, walked, WHOLE_NUMBERS),
+                new Adding(NumericDomain.top(CanonicalOrder.<Atom>asTheyCompare()).assuming(Atom.ELEMENT, walked, WHOLE_NUMBERS),
                         walked, at(seed))));
     }
 
     /** And one that starts at one and multiplies. */
     private static String multiplyingFrom(long seed, NumericDomain.Bounds element) {
         return show(Induction.proves(element, walked ->
-                new Multiplying(NumericDomain.<Atom>top().assuming(Atom.ELEMENT, walked, WHOLE_NUMBERS),
+                new Multiplying(NumericDomain.top(CanonicalOrder.<Atom>asTheyCompare()).assuming(Atom.ELEMENT, walked, WHOLE_NUMBERS),
                         walked, at(seed))));
     }
 

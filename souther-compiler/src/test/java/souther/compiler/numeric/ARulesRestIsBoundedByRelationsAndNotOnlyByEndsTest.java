@@ -60,7 +60,7 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
      */
     @Test
     void aPositionIsBoundedByARelationOverTheRestOfItsRule() {
-        NumericDomain<String> rules = NumericDomain.<String>top()
+        NumericDomain<String> rules = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
                 .assume(form("z", 10, "x", -1, "y", 1), Rel.EQ, WHOLE)
                 .assume(form("x", 1, "y", -1), Rel.GE, WHOLE);
 
@@ -77,7 +77,7 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
      */
     @Test
     void withoutTheRelationTheSameRuleBoundsNothing() {
-        NumericDomain<String> rules = NumericDomain.<String>top()
+        NumericDomain<String> rules = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
                 .assume(form("z", 10, "x", -1, "y", 1), Rel.EQ, WHOLE);
 
         assertFalse(rules.entails(form("z", 1), Rel.GE));
@@ -94,7 +94,7 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
      */
     @Test
     void aRelationTheDifferencesCannotHoldBoundsTheRestAsWell() {
-        NumericDomain<String> rules = NumericDomain.<String>top()
+        NumericDomain<String> rules = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
                 .assume(form("z", 10, "x", -10, "y", 1), Rel.EQ, WHOLE)
                 .assume(form("x", 10, "y", -1), Rel.GE, WHOLE);
 
@@ -111,7 +111,7 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
      */
     @Test
     void aChainOfRulesStillComposesThroughTheRounds() {
-        NumericDomain<String> rules = NumericDomain.<String>top()
+        NumericDomain<String> rules = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
                 .assume(form("x", 2, "y", -1), Rel.GE, WHOLE)
                 .assume(form("y", 2, "z", -1), Rel.GE, WHOLE)
                 .assume(form("z", 1, null, -40), Rel.GE, WHOLE);

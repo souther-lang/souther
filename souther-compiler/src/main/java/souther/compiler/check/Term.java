@@ -413,6 +413,91 @@ final class Term {
         };
     }
 
+    /**
+     * What stands for this term where a walk of several has to take them in one order.
+     *
+     * <p><b>The same walk the hash takes, written out instead of added up.</b> What a term is told
+     * apart by is its shape, what that shape carries and its parts, and {@link #hashOf} already says
+     * how each kind of carried thing is read without ever reaching which object it is. So the order
+     * is read off the same places, and two terms that are equal are written alike here for the same
+     * reason they are hashed alike.
+     *
+     * <p><b>And not off {@link #rendered}.</b> That is for a person: it drops what the algebra tells
+     * two apart by — an evaluation renders as what was written and where, and two evaluations of one
+     * line in one place are two values. A walk put in an order by renderings would take such a pair
+     * for one term and weigh one of them twice and the other never.
+     *
+     * <p><b>Weaker than equality, and said so.</b> What a value names as standing for it is only
+     * ever something its equality agrees with ({@link SaysWhatStandsForIt}), so two terms written
+     * alike here are not thereby one term. That is the whole of what an order may be built on, and
+     * where the gap is reached it is refused rather than chosen through — see
+     * {@link souther.compiler.numeric.CanonicalForm#entriesIn}.
+     */
+    String standsForText() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(shape.name()).append('(').append(textOf(of));
+        if (shape == Shape.EQ) {
+            // An equality is between two values and not from one to the other, so the two are
+            // written in one order however they were built — the same thing the hash does by
+            // adding them.
+            String one = parts.get(0).standsForText();
+            String other = parts.get(1).standsForText();
+            sb.append(one.compareTo(other) <= 0 ? one + "," + other : other + "," + one);
+        } else {
+            for (Term part : parts) {
+                sb.append(',').append(part.standsForText());
+            }
+        }
+        return sb.append(')').toString();
+    }
+
+    /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */
+    private static String textOf(Object value) {
+        if (value == null) {
+            return "";
+        }
+        Class<?> type = value.getClass();
+        return switch (ruleFor(type)) {
+            case ITS_OWN_HASH -> value.toString();
+            case AN_ENUM_BY_NAME -> ((Enum<?>) value).name();
+            case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentTextOf(value, type);
+            case ITS_ELEMENTS -> elementTextOf((List<?>) value);
+            case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
+            case NONE_HERE -> throw new IllegalStateException(
+                    "nothing says what a term carrying a " + type.getName() + " is walked by");
+        };
+    }
+
+    private static String componentTextOf(Object value, Class<?> type) {
+        StringBuilder sb = new StringBuilder(type.getName()).append('{');
+        for (java.lang.invoke.MethodHandle accessor : ACCESSORS.get(type)) {
+            try {
+                sb.append(textOf((Object) accessor.invokeExact(value))).append(';');
+            } catch (Throwable e) {
+                throw new IllegalStateException("a " + type.getName() + " does not answer one of"
+                        + " what it holds", e);
+            }
+        }
+        return sb.append('}').toString();
+    }
+
+    private static String elementTextOf(List<?> values) {
+        StringBuilder sb = new StringBuilder("[");
+        for (Object value : values) {
+            sb.append(textOf(value)).append(';');
+        }
+        return sb.append(']').toString();
+    }
+
+    /** What a set holds, written so that the answer does not depend on the order it hands them over
+     *  in — which is what its own equality reads, the same reason {@link #unorderedOf} adds them. */
+    private static String unorderedTextOf(java.util.Set<?> values) {
+        List<String> each = new java.util.ArrayList<>();
+        values.forEach(value -> each.add(textOf(value)));
+        each.sort(null);
+        return each.toString();
+    }
+
     /** What a set holds, taken so that the answer does not depend on the order it hands them over
      *  in — which is what its own equality reads, and a hash that read more would give two equal
      *  sets two hashes. */

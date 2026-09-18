@@ -87,7 +87,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
 
     /** Every position bounded on its own, which is a system every certificate holds of. */
     private static NumericDomain<String> bounded(Map<String, Granularity> kinds) {
-        NumericDomain<String> domain = NumericDomain.top();
+        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.<String>asTheyCompare());
         for (String position : kinds.keySet()) {
             domain = domain.assume(
                     LinearForm.<String>atom(position), Rel.GE, kinds);

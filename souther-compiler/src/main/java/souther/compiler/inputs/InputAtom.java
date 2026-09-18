@@ -2,6 +2,9 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleKey;
+import souther.compiler.numeric.CanonicalOrder;
+
+import java.util.Comparator;
 
 /**
  * One subject the rules reaching a behavior's input are about, in the words of the input rather than
@@ -124,5 +127,24 @@ sealed interface InputAtom {
         public String toString() {
             return root + ":<" + subject + ">";
         }
+    }
+
+    /**
+     * The one order a walk of several of these takes them in.
+     *
+     * <p>A named number is read off where it sits, which is what its equality reads and nothing
+     * else, so two of them are one to this exactly where they are one number. One carried under a
+     * name of its own is told apart by the subject it stands for, and what that subject is is the
+     * other reading's business — this puts them in an order by what each is written as, which is as
+     * much as anything out here can say about it.
+     *
+     * <p>Which leaves a pair that is written alike and is not one number. There is no choosing
+     * between such a pair — a walk that took them for one would weigh one twice and the other
+     * never — so where one is met it is refused, at
+     * {@link souther.compiler.numeric.CanonicalForm#entriesIn}.
+     */
+    static CanonicalOrder<InputAtom> inOneOrder() {
+        return Comparator.<InputAtom, Integer>comparing(atom -> atom instanceof Named ? 0 : 1)
+                .thenComparing(String::valueOf)::compare;
     }
 }

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
@@ -245,7 +246,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     /** What {@link NumericDomain} says about a position, which is three answers and not two. */
     @Test
     void aDomainSaysNothingAboutAnAtomAndSaysWhereOneIsWithNoEnds() {
-        NumericDomain<String> nothing = NumericDomain.top();
+        NumericDomain<String> nothing = NumericDomain.top(CanonicalOrder.<String>asTheyCompare());
         assertInstanceOf(NumericDomain.Projection.NotSpokenOf.class, nothing.projectionOf("x"),
                 "no rule names it, so nothing about it follows from these rules");
         NumericDomain<String> related = nothing.assume(
@@ -273,7 +274,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
-        ConstraintState<String> nowhere = ConstraintState.<String>top()
+        ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.<String>asTheyCompare())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
                 .taking(LinearForm.<String>constant(BigDecimal.valueOf(-1))
@@ -337,7 +338,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         Map<NumberAt<RuleKey>, Count> fixed = new LinkedHashMap<>();
         fixed.put(NumberAt.valueOf(RuleKey.of("y")), new Count(BigDecimal.valueOf(at)));
         return domains.given(fixed)
-                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other)
+                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
+                        CanonicalOrder.<String>asTheyCompare())
                 .constraints().isBottom();
     }
 

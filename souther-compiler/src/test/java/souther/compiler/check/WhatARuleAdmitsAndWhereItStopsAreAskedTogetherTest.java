@@ -240,7 +240,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
                 .at(X, new OrderedInterval(null, Endpoint.inclusive(Text.of("A"))))
                 .meet(OrderedIntervals.at(Y, new OrderedInterval(
                         Endpoint.inclusive(Text.of("D")), null)));
-        ConstraintState<FactSubject> state = ConstraintState.<FactSubject>top()
+        ConstraintState<FactSubject> state = ConstraintState.top(FactSubject.inOneOrder())
                 .takingRead(new Confinement.Planned<>(here.joinLiveApart(there), ends,
                         Map.of(X, Carrier.TEXT, Y, Carrier.TEXT)).resolve(sets), sets);
 

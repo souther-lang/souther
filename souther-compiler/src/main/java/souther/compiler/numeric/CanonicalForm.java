@@ -2,9 +2,11 @@ package souther.compiler.numeric;
 
 import souther.compiler.values.InOneOrder;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -33,16 +35,20 @@ import java.util.function.Function;
  * a rule twice the same as asserting it once, and it is the property everything downstream leans on
  * when it stops caring what order the rules arrived in.
  *
- * <p><b>Held in the order it was written, which is not yet one the form settles.</b> A reader walks
- * these positions to work a bound out at each of them, so the order they come in reaches an answer,
- * and two forms that say one thing ought to hand out one walk. Copied into a map that keeps no
- * order, the walk was one the runtime made up afresh on every run and the same model was answered
- * two ways on two runs of one compiler — so what a caller wrote is kept, and a reader wanting one
- * order takes one the positions themselves decide.
+ * <p><b>Unordered, and walked through an order the positions themselves decide.</b> What this holds
+ * is a mapping and nothing more: it answers what a position weighs and whether the form names one.
+ * A reader that walks the positions — to work a bound out at each of them, or to say which of them a
+ * rule left unbounded — has the order it walked in inside its answer, so it asks for one rather than
+ * taking what the mapping happens to hand over ({@link #entriesIn}).
  *
- * <p>Which is not what they are written as. A position renders for a person to read and two of them
- * rendering alike are not one position ({@link souther.compiler.check.Term}), so a walk put in an
- * order by the renderings would weigh one of such a pair twice and the other never.
+ * <p>Which order that is belongs to the atom domain and not here. This is generic over what a
+ * position is and has nothing to say about how two of them are told apart; the domain does, and
+ * saying it here would be one policy for every domain or a policy inside a value that says its
+ * contents are the whole of it. {@link CanonicalOrder} is that boundary.
+ *
+ * <p>And not what the positions are written as. A position renders for a person to read, and two of
+ * them rendering alike are not one position ({@link souther.compiler.check.Term}) — so an order
+ * taken off the renderings would weigh one of such a pair twice and the other never.
  */
 public record CanonicalForm<A>(Map<A, Rational> coefs) {
 
@@ -101,6 +107,41 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      *           the threshold a value falls on
      */
     public record Scaled<A>(CanonicalForm<A> form, Rational by) {}
+
+    /**
+     * What this form weighs, in the one order {@code order} puts its positions in.
+     *
+     * <p><b>What a walk of a form reads, and what {@link #coefs} is not for.</b> The mapping answers
+     * what a position weighs and whether the form names it, which are questions about what it holds;
+     * a walk is a question about what to take first, and the mapping has no answer to it. Two forms
+     * that are equal hand this reader one sequence, which is the whole of what an order is asked
+     * for.
+     *
+     * @throws IllegalStateException where two positions this form names compare equal and are not
+     *         one. An order that cannot tell them apart would have this walk weigh one of them
+     *         twice and the other never, and which of the two it was would be how the rule was
+     *         typed — so the pair is named rather than chosen between
+     */
+    public List<Map.Entry<A, Rational>> entriesIn(CanonicalOrder<A> order) {
+        List<Map.Entry<A, Rational>> out = new ArrayList<>(coefs.entrySet());
+        out.sort(Map.Entry.comparingByKey(order));
+        for (int at = 1; at < out.size(); at++) {
+            A before = out.get(at - 1).getKey();
+            A here = out.get(at).getKey();
+            if (order.compare(before, here) == 0) {
+                throw new IllegalStateException("two positions this form weighs are one to the"
+                        + " order it is walked in and are not one position: " + before + " and "
+                        + here);
+            }
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The positions this form weighs, in the one order {@code order} puts them in — see
+     *  {@link #entriesIn}, whose refusal this carries. */
+    public List<A> atomsIn(CanonicalOrder<A> order) {
+        return entriesIn(order).stream().map(Map.Entry::getKey).toList();
+    }
 
     /**
      * The values this form can add up to, over positions spaced as {@code spacing} says.

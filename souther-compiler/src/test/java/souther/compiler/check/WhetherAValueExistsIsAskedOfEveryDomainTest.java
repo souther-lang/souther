@@ -53,7 +53,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     /** Nothing taken in leaves every value there was. */
     @Test
     void aStateNothingWasTakenIntoHoldsWhateverItHeld() {
-        assertFalse(ConstraintState.<FactSubject>top().isBottom());
+        assertFalse(ConstraintState.top(FactSubject.inOneOrder()).isBottom());
     }
 
     /** Numbers that cannot both hold, which is the one the reading always asked. */
@@ -125,19 +125,19 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
 
     private static ConstraintState<FactSubject> numbersAtBottom() {
         // `1 <= 0`, which is how a reading already says that what it stands in is never reached.
-        return ConstraintState.<FactSubject>top()
+        return ConstraintState.top(FactSubject.inOneOrder())
                 .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
     }
 
     private static ConstraintState<FactSubject> factsAtBottom() {
-        return ConstraintState.<FactSubject>top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
+        return ConstraintState.top(FactSubject.inOneOrder()).taking(A_PREDICATE, true).taking(A_PREDICATE, false);
     }
 
     private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingRead(
+        return ConstraintState.top(FactSubject.inOneOrder()).takingRead(
                 new Confinement.Planned<>(says("A").meet(says("B")), OrderedIntervals.top(),
                         Map.<FactSubject, Carrier>of()).resolve(sets), sets);
     }
@@ -148,7 +148,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
-        return ConstraintState.<FactSubject>top()
+        return ConstraintState.top(FactSubject.inOneOrder())
                 .taking(OrderedIntervals.at(A_POSITION,
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)), Map.of())
                 .taking(OrderedIntervals.at(A_POSITION,
@@ -158,7 +158,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     /** The values pinned at one string, and the order left the strings above another. */
     private static ConstraintState<FactSubject> setBesideARangeItIsOutside() {
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingRead(
+        return ConstraintState.top(FactSubject.inOneOrder()).takingRead(
                 new Confinement.Planned<>(says("A"),
                         OrderedIntervals.at(A_POSITION, new OrderedInterval(
                                 Endpoint.inclusive(souther.compiler.numeric.Text.of("B")), null)),
@@ -166,7 +166,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     }
 
     private static ConstraintState<FactSubject> shownAtBottom() {
-        return ConstraintState.<FactSubject>top().shownToHoldNothing();
+        return ConstraintState.top(FactSubject.inOneOrder()).shownToHoldNothing();
     }
 
     /**
@@ -196,6 +196,6 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
      * domain in it has nothing to say. */
     @Test
     void aDomainWithNothingToSayIsNotADomainThatHoldsNothing() {
-        assertFalse(NumericDomain.<FactSubject>top().isBottom());
+        assertFalse(NumericDomain.top(FactSubject.inOneOrder()).isBottom());
     }
 }

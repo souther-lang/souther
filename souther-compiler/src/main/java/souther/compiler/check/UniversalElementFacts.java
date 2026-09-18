@@ -310,7 +310,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      * A place whose spacing was never recorded is one no range can be asserted about, and is left
      * out rather than asserted into a domain that would refuse it. */
     private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
-        NumericDomain<FactSubject> given = NumericDomain.top();
+        NumericDomain<FactSubject> given = NumericDomain.top(FactSubject.inOneOrder());
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
             Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(one.getKey()));
             if (!spacing.isEmpty()) {

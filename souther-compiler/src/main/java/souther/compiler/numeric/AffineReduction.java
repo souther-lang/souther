@@ -90,7 +90,8 @@ public final class AffineReduction {
      * @param spacing     how each position's values are spaced, for the reason
      *                    {@link AffineConstraint#of} wants it
      */
-    public static <A> Reduction<A> over(FormReach<A> reading, Function<A, Granularity> spacing) {
+    public static <A> Reduction<A> over(FormReach<A> reading, Function<A, Granularity> spacing,
+                                        CanonicalOrder<A> order) {
         Box<A> from = reading.ends();
         List<AffineConstraint<A>> constraints = reading.rules();
         Map<A, RationalCut> atLeast = new LinkedHashMap<>();
@@ -102,7 +103,10 @@ public final class AffineReduction {
                 return new Reduction.NothingIsLeft<>();
             }
             for (AffineConstraint.HalfSpace<A> half : halves) {
-                for (A atom : half.form().coefs().keySet()) {
+                // Walked in the one order the positions decide. A bound worked out at each of them
+                // is written into a reading the next of them is read against, so what this takes
+                // first reaches the answer.
+                for (A atom : half.form().atomsIn(order)) {
                     if (!record(half, atom, from, reading, each, spacing, atLeast, atMost)) {
                         return new Reduction.NothingIsLeft<>();
                     }
@@ -183,10 +187,10 @@ public final class AffineReduction {
                 Map.of(atom, weight), rest.at().minus(half.bound().at()),
                 strict ? Rel.LT : Rel.LE, spacing);
         switch (read) {
-            case AffineConstraint.Read.HoldsNever<A> ignored -> {
+            case AffineConstraint.Read.HoldsNever<A> _ -> {
                 return false;
             }
-            case AffineConstraint.Read.HoldsAlways<A> ignored -> {
+            case AffineConstraint.Read.HoldsAlways<A> _ -> {
                 return true;
             }
             case AffineConstraint.Read.Stated<A> stated

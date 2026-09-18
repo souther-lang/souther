@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
@@ -63,9 +64,16 @@ import java.util.SequencedMap;
 public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
                                  Confinement.Conjoined<A> confinement, boolean shown) {
 
-    /** Nothing taken in, so nothing ruled out. */
-    public static <A> ConstraintState<A> top() {
-        return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
+    /**
+     * Nothing taken in, so nothing ruled out.
+     *
+     * @param order the one order the positions of this domain are walked in, which the numbers need
+     *              wherever they work a bound out at each position of a form — see
+     *              {@link CanonicalOrder}. Asked for here because this is generic over what a
+     *              position is and the caller is not
+     */
+    public static <A> ConstraintState<A> top(CanonicalOrder<A> order) {
+        return new ConstraintState<>(NumericDomain.top(order), PredicateFacts.none(),
                 Confinement.Conjoined.top(), false);
     }
 
@@ -345,10 +353,15 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * by the shape of the names, and a renaming of its own for each is enough. Whichever it is, it
      * is the caller's to say, and to say where the names are made rather than here.
      */
-    public <B> ConstraintState<B> renamed(InjectiveRenaming<A, B> naming) {
+    public <B> ConstraintState<B> renamed(InjectiveRenaming<A, B> naming,
+                                          CanonicalOrder<B> order) {
         // The fold in `over` cannot fire: `naming` refuses a second subject at a name some other
         // subject already has, so no two atoms of this state reach one name to be added together.
-        return new ConstraintState<>(numbers.over(naming::apply), facts.renamed(naming::apply),
+        //
+        // And the order comes with the names rather than being carried across. What puts two of the
+        // caller's names in an order is a fact about that vocabulary, which is the caller's to say
+        // for the same reason the names are.
+        return new ConstraintState<>(numbers.over(naming::apply, order), facts.renamed(naming::apply),
                 confinement.renamed(naming::apply), shown);
     }
 

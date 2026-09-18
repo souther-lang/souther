@@ -83,7 +83,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
 
     private static Reduction.Tightened<String> reduce(List<AffineConstraint<String>> rules,
                                                       Box<String> from, Granularity spacing) {
-        Reduction<String> reduced = AffineReduction.over(reading(rules, from), atom -> spacing);
+        Reduction<String> reduced = AffineReduction.over(reading(rules, from), atom -> spacing,
+                CanonicalOrder.<String>asTheyCompare());
         assertInstanceOf(Reduction.Tightened.class, reduced);
         return (Reduction.Tightened<String>) reduced;
     }
@@ -235,7 +236,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 rule(weighing("a", 1), -3, Rel.NE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
                 AffineReduction.over(reading(List.of(hole), between("a", 3, 3)),
-                        atom -> Granularity.DISCRETE));
+                        atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare()));
     }
 
     /** A rule over several positions can empty a system the difference bounds see nothing wrong
@@ -246,7 +247,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 rule(weighing("a", 1, "b", 1), -5, Rel.LE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
                 AffineReduction.over(reading(List.of(rule), between("a", 10, 20, "b", 10, 20)),
-                        atom -> Granularity.DISCRETE));
+                        atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare()));
     }
 
     // --- against the points ------------------------------------------------------------------------
@@ -272,7 +273,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                         () -> "the differences hold nothing, but " + written + " admits " + admitted);
                 continue;
             }
-            Reduction<String> found = AffineReduction.over(reading, atom -> Granularity.DISCRETE);
+            Reduction<String> found = AffineReduction.over(reading, atom -> Granularity.DISCRETE,
+                    CanonicalOrder.<String>asTheyCompare());
             if (found instanceof Reduction.NothingIsLeft) {
                 assertTrue(admitted.isEmpty(),
                         () -> "said nothing is left, but " + written + " admits " + admitted);
@@ -321,9 +323,11 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 continue;   // the differences hold nothing, which the closure answers before a round
             }
             Reduction<String> asWritten =
-                    AffineReduction.over(asRead, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(asRead, atom -> Granularity.DISCRETE,
+                            CanonicalOrder.<String>asTheyCompare());
             Reduction<String> reordered =
-                    AffineReduction.over(reread, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(reread, atom -> Granularity.DISCRETE,
+                            CanonicalOrder.<String>asTheyCompare());
             assertEquals(asWritten, reordered,
                     () -> "the reduction moved when the rules were reordered: " + stated);
         }
@@ -345,9 +349,11 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 continue;   // the differences hold nothing, which the closure answers before a round
             }
             Reduction<String> overWide =
-                    AffineReduction.over(readWide, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(readWide, atom -> Granularity.DISCRETE,
+                            CanonicalOrder.<String>asTheyCompare());
             Reduction<String> overNarrow =
-                    AffineReduction.over(readNarrow, atom -> Granularity.DISCRETE);
+                    AffineReduction.over(readNarrow, atom -> Granularity.DISCRETE,
+                            CanonicalOrder.<String>asTheyCompare());
             if (!(overWide instanceof Reduction.Tightened<String> loose)) {
                 continue;   // the wider box was already empty, so there is nothing wider to be
             }
