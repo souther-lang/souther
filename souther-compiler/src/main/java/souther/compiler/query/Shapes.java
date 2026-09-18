@@ -574,14 +574,12 @@ public final class Shapes {
                 return Answer.of(new PublishedDeclarationResult.Found(
                         DeclarationMeaning.ofLanguage(declared)));
             }
-            // Which of the two absences it is, asked of whether anything declares the name at all —
-            // the same question the expanded side asks to tell them apart, so the two boundaries
-            // divide the cases one way rather than each its own. What the attempt found travels
-            // with the answer: a reader told there is a declaration it could not have is short of
-            // what it says and of the reason both.
+            // Which of the two absences it is, asked of whether the name resolves to a declaration
+            // at all — the same question the expanded side asks to tell them apart, so the two
+            // boundaries divide the cases by one question rather than each by its own.
             return ClausesExpandedFor.declarationOf(db, named) == null
                     ? Answer.of(new PublishedDeclarationResult.NotDeclared(named))
-                    : Answer.of(new PublishedDeclarationResult.Unavailable(named), mine.reports());
+                    : Answer.of(new PublishedDeclarationResult.Unavailable(named));
         }
     }
 

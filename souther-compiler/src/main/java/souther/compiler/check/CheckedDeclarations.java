@@ -58,11 +58,12 @@ public final class CheckedDeclarations implements souther.compiler.observe.Decla
             case PublishedDeclarationResult.Unavailable _ ->
                     throw new IllegalStateException("`" + declared + "` is declared by a module"
                             + " and this reading cannot reach what it declares");
-            // And a row of a declaration nothing declares is a row this compile had no business
-            // holding: what it was compared against was settled somewhere this cannot see.
+            // And which shape to hand over is asked by a declaration's own identity, which this
+            // compile made. A name it has no declaration of arriving here is this compiler handing
+            // over an identity for a declaration it does not have.
             case PublishedDeclarationResult.NotDeclared _ ->
-                    throw new IllegalStateException("`" + declared + "` is a declaration this"
-                            + " compilation resolved and nothing here declares");
+                    throw new IllegalStateException("`" + declared + "` is asked for as a"
+                            + " declaration of this compilation and resolves to none");
         };
     }
 
