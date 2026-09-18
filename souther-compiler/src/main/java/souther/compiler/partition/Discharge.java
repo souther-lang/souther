@@ -69,13 +69,30 @@ public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
      * arm it is about, and what the search was asked for is the arm and every splice of it. Asked
      * with the site's own probe as though it were the whole key, such a reader found nothing
      * whenever the arm stood in the body more than once.
+     *
+     * <p>Every entry read and not the first that matches. A probe is one place in one body, so at
+     * most one arm is recorded at it — and answered with whichever entry came first, two writings
+     * of one discharge would answer a reader two ways wherever that stopped being true. So the
+     * answer is the one arm claiming the place, and several claiming it is refused.
+     *
+     * <p>Counted rather than gathered. What the refusal has to say is that a place is held twice,
+     * and which arms those are is read off the discharge by whoever is looking — gathered here they
+     * would be named in the order the entries happen to be held, which is the order this says
+     * nothing is answered from.
      */
     public ArmDisposition at(souther.compiler.coverage.ArmProbe probe) {
+        ArmDisposition only = null;
+        int claiming = 0;
         for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms.entrySet()) {
             if (each.getKey().recordedAt(probe)) {
-                return each.getValue();
+                claiming++;
+                only = each.getValue();
             }
         }
-        return null;
+        if (claiming > 1) {
+            throw new IllegalStateException("a place is recorded against more than one arm: "
+                    + probe + " is held by " + claiming + " of them");
+        }
+        return only;
     }
 }

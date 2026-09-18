@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.reading.PathAccess;
+import souther.compiler.values.InOneOrder;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -57,29 +59,33 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         // would reach a reader as two classes with half the figures apiece.
         unresolved = CameToNothing.joined(unresolved);
         reasons = List.copyOf(reasons);
+        // What was answered for is named in one order whichever order the answers were written in.
+        // A discharge holds no order of its entries — two runs that answered the same obligations
+        // in two orders are one discharge — so a sentence that walked them as they are held would
+        // say two things about one value.
         if (!discharge.classes().keySet().equals(new LinkedHashSet<>(plan.classesOwed()))) {
             throw new IllegalStateException(
                     "the classes this run was asked for and the ones it answered for are not the"
                             + " same: asked " + plan.classesOwed()
-                            + ", answered " + discharge.classes().keySet());
+                            + ", answered " + InOneOrder.of(discharge.classes().keySet()));
         }
         if (!discharge.arms().keySet().equals(new LinkedHashSet<>(plan.armsOwed()))) {
             throw new IllegalStateException(
                     "the arms this run was asked for and the ones it answered for are not the same:"
                             + " asked " + plan.armsOwed()
-                            + ", answered " + discharge.arms().keySet());
+                            + ", answered " + InOneOrder.of(discharge.arms().keySet()));
         }
         if (!discharge.pairs().keySet().equals(new LinkedHashSet<>(plan.pairsOwed()))) {
             throw new IllegalStateException(
                     "the combinations this run was asked for and the ones it answered for are not"
                             + " the same: asked " + plan.pairsOwed()
-                            + ", answered " + discharge.pairs().keySet());
+                            + ", answered " + InOneOrder.of(discharge.pairs().keySet()));
         }
         if (!discharge.meetings().keySet().equals(new LinkedHashSet<>(plan.meetingsOwed()))) {
             throw new IllegalStateException(
                     "the meetings this run was asked for and the ones it answered for are not the"
                             + " same: asked " + plan.meetingsOwed()
-                            + ", answered " + discharge.meetings().keySet());
+                            + ", answered " + InOneOrder.of(discharge.meetings().keySet()));
         }
         // And the rows against what the answers point at, in both directions. A row nothing points
         // at is one nobody was offered — it would come out of the projection below with nothing to
@@ -107,9 +113,13 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             }
         }
         if (!answered.equals(composed.keySet())) {
+            // Both sides in one order. What the answers point at is gathered by walking the
+            // discharge, which holds no order of its entries, so a sentence that named them as
+            // they were gathered would read two ways for one discharge.
             throw new IllegalStateException(
                     "the rows this run composed and the rows its answers point at are not the same:"
-                            + " composed " + composed.keySet() + ", pointed at " + answered);
+                            + " composed " + InOneOrder.of(composed.keySet())
+                            + ", pointed at " + InOneOrder.of(answered));
         }
     }
 
@@ -349,8 +359,14 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
      * however a map happened to be walked.
      */
     public List<Generator.GeneratedRow> rows() {
+        // By the number each row is filed under, which is what a reader is offered them by. Taken
+        // off the map as it is held, the list would be in the order the search happened to compose
+        // them in — an order two equal results were built two ways, so what a reader is shown would
+        // not be settled by what this result is.
+        List<RowId> ids = new ArrayList<>(composed.keySet());
+        ids.sort(Comparator.comparingInt(RowId::value));
         List<Generator.GeneratedRow> out = new ArrayList<>();
-        for (RowId id : composed.keySet()) {
+        for (RowId id : ids) {
             out.add(rowFor(id));
         }
         return List.copyOf(out);
