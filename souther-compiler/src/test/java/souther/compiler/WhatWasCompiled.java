@@ -208,6 +208,26 @@ public final class WhatWasCompiled {
         return found;
     }
 
+    /**
+     * {@code named} and every compiled type that is one, however many types in between.
+     *
+     * <p>For a rule about values of a kind rather than about one spelling of it. A term arrives
+     * under the name of its case as readily as under its own, and a set written as "the name, or
+     * anything whose name begins with it and a dollar" is a guess about spelling that takes in a
+     * type merely written inside one — where what makes a value answer for the kind is being one.
+     */
+    public static Set<String> everyKindOf(String named) {
+        Set<String> found = new LinkedHashSet<>();
+        found.add(named);
+        ClassDesc asked = ClassDesc.of(named);
+        for (ClassModel each : compiled().all()) {
+            if (reaches(each, asked, new LinkedHashSet<>())) {
+                found.add(named(each));
+            }
+        }
+        return found;
+    }
+
     /** Every type {@code name} names — what it implements, calls, holds, catches or hands over. */
     public static Set<String> typesNamedBy(String name) {
         Set<String> named = new LinkedHashSet<>();
