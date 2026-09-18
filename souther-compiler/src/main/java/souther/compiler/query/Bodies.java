@@ -3182,7 +3182,7 @@ public final class Bodies {
             Map<String, Set<ValueName.Behavior>> references = new LinkedHashMap<>();
             for (String behavior : owned) {
                 Set<ValueName.Behavior> reached =
-                        referencedBy(db, name, behavior, composed);
+                        implementationReferences(db, name, behavior, composed);
                 if (reached == null) {
                     continue;
                 }
@@ -3209,14 +3209,31 @@ public final class Bodies {
         }
 
         /**
-         * What this module's implementation of {@code behavior} references, or null where that
-         * cannot be read.
+         * Which implementations this module's implementation of {@code behavior} constructs, or
+         * null where that cannot be read.
          *
-         * <p>Asked of the implementation this module emits, which is why a composition is read from
-         * its stages rather than from a body it has not got. A {@code let} body's own check has to
-         * have come out as well: a body nothing elaborated has no class here whatever it reaches.
+         * <p><b>Not what the behavior reaches.</b> {@link BehaviorsReached} answers which behaviors
+         * a body names, and the emitter says of the same call that "neither is a question about what
+         * the call reaches": a callee implemented elsewhere is constructed, and one supplied to the
+         * class being emitted is read off a field of it. Only the first is a class that has to be
+         * there. Taken as reachability, a behavior is unrunnable because an implementation it never
+         * links against was not made — and a row of it could have run against a stand-in.
+         *
+         * <p>So what a body declares it depends on is taken away. Those arrive as fields, supplied
+         * by whoever constructs this one, and a row supplies them itself; the dependency's own
+         * module owes its implementation to whoever asks for it there and not to this class.
+         *
+         * <p>A composition is every one of its stages. It applies a stage by constructing it, so a
+         * stage is a class that has to be there — which is why a composition's references are read
+         * from the stages and not from a body it has not got.
+         *
+         * <p>A {@code let} body's own check has to have come out as well: a body nothing elaborated
+         * has no class here whatever it links against. And where the requirements of the module
+         * cannot be read, what a body is supplied is unknown rather than nothing — read as nothing,
+         * this would take away an implementation on the strength of not having looked.
          */
-        private static Set<ValueName.Behavior> referencedBy(Db db, String module, String behavior,
+        private static Set<ValueName.Behavior> implementationReferences(Db db, String module,
+                String behavior,
                 Map<ValueName.Behavior, souther.compiler.core.Composition> composed) {
             souther.compiler.core.Composition pipe = composed == null ? null
                     : composed.get(new ValueName.Behavior(module, behavior));
@@ -3227,10 +3244,19 @@ public final class Bodies {
             }
             Answer<Set<ValueName.Behavior>> reached =
                     db.ask(new BehaviorsReached(module, behavior));
-            if (!db.ask(new CheckedBehavior(module, behavior)).present() || !reached.present()) {
+            Map<String, List<BehaviorRequirement>> supplied =
+                    db.ask(new Requirements(module)).value();
+            if (!db.ask(new CheckedBehavior(module, behavior)).present() || !reached.present()
+                    || supplied == null) {
                 return null;
             }
-            return reached.value();
+            Set<ValueName.Behavior> injected = new LinkedHashSet<>();
+            for (BehaviorRequirement each : supplied.getOrDefault(behavior, List.of())) {
+                injected.add(each.dependency());
+            }
+            Set<ValueName.Behavior> constructs = new LinkedHashSet<>(reached.value());
+            constructs.removeAll(injected);
+            return constructs;
         }
 
         /**
