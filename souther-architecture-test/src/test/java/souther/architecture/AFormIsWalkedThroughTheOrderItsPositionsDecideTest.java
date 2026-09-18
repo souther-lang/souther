@@ -63,12 +63,17 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
      * Every reader that walks a form's coefficients into something whose answer sees the order, and
      * what was found when it was read.
      *
-     * <p>None, which is where this was headed: every walk of a form's positions asks the atom
-     * domain for the order it takes them in. A reader reaching this rule is red until somebody
-     * reads it and says which it is — a walk whose answer is a sum, a union or a conjunction, or a
-     * walk whose answer has the order in it and has to move.
+     * <p>Every walk of a form's positions asks the atom domain for the order it takes them in, so
+     * what is left here is a reader whose answer happens to be a sequence and whose sequence was
+     * not decided by a walk. A reader reaching this rule is red until somebody reads it and says
+     * which it is — that, or a walk whose answer has the order in it and has to move.
      */
-    private static final Map<String, String> READ_AND_SETTLED = Map.of();
+    private static final Map<String, String> READ_AND_SETTLED = Map.of(
+            "souther/compiler/numeric/AffineReduction#sidedBy"
+                    + "(Lsouther/compiler/numeric/AffineConstraint$Disequality;"
+                    + "Lsouther/compiler/numeric/FormReach;)Ljava/util/List;",
+            "what it hands back holds at most one half-space, and which one is settled by which"
+                    + " side of the value the sum is proved to lie rather than by any walk");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

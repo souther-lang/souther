@@ -97,7 +97,11 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
                     + " reason once in the order the rules were written, which the entries carry",
             "souther/compiler/values/Standing#<init>(Ljava/util/List;Ljava/util/Set;)V",
             "the entries are the rules in the order they were written and the positions are a set"
-                    + " asked for membership, so neither is read for where anything came");
+                    + " asked for membership, so neither is read for where anything came",
+            "souther/compiler/values/AdmissibleValues#unreadAffecting"
+                    + "(Ljava/lang/Object;)Ljava/util/List;",
+            "the positions are handed on to be asked for membership, and what comes back is every"
+                    + " reason once in the order the parts of the clause were met");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
@@ -131,6 +135,10 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
                 "a position taken out of a block's walk by hand was not found: " + found);
         assertTrue(isAmong(found, here, "theFirstOfThemAsAList"),
                 "a position taken out of a block by where it is in a list was not found: " + found);
+        assertTrue(isAmong(found, here, "intoASequence"),
+                "a walk poured into a sequence by a collection this rule does not name was not"
+                        + " found, so what it looks for is how the answer was built rather than"
+                        + " what the answer is: " + found);
         assertTrue(isAmong(found, here, "oneOf"),
                 "a position taken by where it is inside a helper that shares its name with one"
                         + " taking no walk was not found, so a method of that name is being read"
@@ -228,6 +236,16 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
          *  name has two methods to choose between and may choose this one. */
         static String oneOf(int number) {
             return String.valueOf(number);
+        }
+
+        /** And a sequence handed back that was built by nothing this rule names. Written so that
+         *  what the rule looks for is what the answer is rather than how it was made. */
+        static <A> List<A> theSequenceAHelperMakes(souther.compiler.values.Sameness.Block<A> block) {
+            return intoASequence(block.members());
+        }
+
+        private static <T> List<T> intoASequence(java.util.Collection<T> these) {
+            return new java.util.LinkedList<>(these);
         }
     }
 

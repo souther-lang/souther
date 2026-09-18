@@ -45,6 +45,16 @@ import java.util.Set;
  * <p>Method references are calls. A walk handed to {@code this::something} arrives there as surely
  * as one handed over by name, and the name is in the handle the call site was built with.
  *
+ * <p><b>What this does not follow, said rather than left to be found.</b> A walk handed through a
+ * parameter that is not a collection does not arrive anywhere this looks — which is what a walk
+ * given to something taking {@code Object} is, and what every functional interface's own method
+ * takes once its type has been erased. A method reference is still followed, because the handle
+ * names the method it stands for and that method takes what it takes; an instance of such an
+ * interface held in a field and called later is not. Widening to {@code Object} would make every
+ * method that takes anything at all a place a walk may be, which is not a reading of anything. So
+ * this is a limit of what these rules say, and a reader that hands a walk through one of those is
+ * one the census behind issue #1760 sees and this does not.
+ *
  * <p><b>And it stops where the order does.</b> A walk handed to something that sorts it, or that
  * answers with the one element a collection was proved to hold, does not arrive on the other side in
  * the order it left in — so what happens there is about the order that place decided and not about
@@ -297,14 +307,55 @@ final class WhoHoldsWhatAReaderHandedOver {
             "java/lang/String#join");
 
     /**
+     * What a method hands back that has an order in it.
+     *
+     * <p><b>Asked of the type and not of how it was built, because the spelling is endless.</b> A
+     * walk poured into a list has the order in the answer whether the list was made by
+     * {@code List.copyOf}, by {@code toList}, by {@code new ArrayList<>(…)}, by
+     * {@code new LinkedList<>(…)} or by something nobody here has thought of — what makes it the
+     * defect is that the thing handed back is equal to another only where the two are in one order.
+     * Named by what is called, this would be a list somebody has to keep adding to, and the day it
+     * is one short it says a reader is fine.
+     *
+     * <p>So a method holding a walk whose answer is one of these is read. Some of them turn out to
+     * be walks of something else, or walks whose order came from somewhere that decided it — that
+     * is a fact about the body, and it is written down where the rule is rather than guessed at
+     * here.
+     *
+     * <p>A set is not one of these, however it is held. A {@code LinkedHashSet} keeps the order it
+     * was filled in and is equal to any set of the same things, so handing one back does not put
+     * the order in the answer — what a reader of it then does is that reader's to answer for.
+     */
+    private static final Set<String> AN_ANSWER_WITH_AN_ORDER_IN_IT = Set.of(
+            "Ljava/util/List;", "Ljava/util/SequencedCollection;", "Ljava/util/Deque;",
+            "Ljava/util/Queue;", "Ljava/util/Iterator;", "Ljava/util/stream/Stream;",
+            "Ljava/lang/String;", "Ljava/lang/CharSequence;", "Ljava/lang/StringBuilder;",
+            "Ljava/util/StringJoiner;");
+
+    /** Whether what this method hands back is something two of which are one only where they are in
+     *  one order — a sequence, a text, or an array of either. */
+    private static boolean theAnswerHasAnOrderInIt(MethodModel method) {
+        String gives = method.methodTypeSymbol().returnType().descriptorString();
+        return gives.startsWith("[") || AN_ANSWER_WITH_AN_ORDER_IN_IT.contains(gives);
+    }
+
+    /**
      * Whether this method reads a walk for where things are in it.
      *
-     * <p>Asked of what the method calls and not of what the walk it holds reaches. A method with
-     * one of these in it either does it to what it was handed, which is the defect, or does it to
-     * something else while holding a walk, which is a method doing two things and is worth being
-     * told about either way.
+     * <p>Asked of what the method calls and of what it hands back, and not of what the walk it
+     * holds reaches. A method with one of these in it either does it to what it was handed, which
+     * is the defect, or does it to something else while holding a walk, which is a method doing two
+     * things and is worth being told about either way.
      */
     static boolean readsAWalkForWhereThingsAre(MethodModel method) {
+        if (theAnswerHasAnOrderInIt(method)) {
+            return true;
+        }
+        return takesSomethingByWhereItIs(method);
+    }
+
+    /** The reads that are one whatever the method goes on to hand back. */
+    private static boolean takesSomethingByWhereItIs(MethodModel method) {
         List<InvokeInstruction> made = method.code().stream()
                 .flatMap(code -> code.elementStream())
                 .filter(InvokeInstruction.class::isInstance)
