@@ -78,6 +78,24 @@ public final class BoundaryDerivation {
         }
     }
 
+    /**
+     * Nothing read the body, so what lines its own rules draw was never asked.
+     *
+     * <p>This measure's own, for the reason every reason here is: what a reader does about a border
+     * measure that is short of a reading is not what they do about a partition one, and a word
+     * shared between them would be one sentence for two pieces of work. The same fact behind both,
+     * and the same distinction from {@link TheReadingDidNotRunOut}: that one was made and stopped
+     * on something it can name.
+     */
+    public enum BodyWasNotRead implements FailureReason {
+        BODY_WAS_NOT_READ;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
+    }
+
     /** What a behavior measured at its stages rather than at itself comes to. */
     public static Measure<List<BorderAssessment>> noSubject() {
         return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
@@ -96,21 +114,40 @@ public final class BoundaryDerivation {
         if (inputIsEmpty != null) {
             return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
         }
-        if (closure instanceof MeasureClosure.OfTheBorder.Closed closed) {
-            if (at.isEmpty()) {
-                return new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
+        // A switch over the three, for the reason the partition beside it is one.
+        return switch (closure) {
+            case MeasureClosure.OfTheBorder.Closed closed -> {
+                if (at.isEmpty()) {
+                    yield new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
+                }
+                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
+                yield beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
+                        : new Measurement.Partial<>(List.copyOf(at), beside);
             }
-            WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
-            return beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
-                    : new Measurement.Partial<>(List.copyOf(at), beside);
-        }
-        WeakeningSet by =
-                PartitionDerivation.weakening(((MeasureClosure.OfTheBorder.Open) closure).by());
-        return at.isEmpty()
-                ? new Measurement.FailedToMeasure<>(
-                        TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
-                : new Measurement.Partial<>(List.copyOf(at),
-                        by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+            // Nothing read the body. What a closed border with nothing at it says is that no rule
+            // of this model draws a line, and one rule of a body draws a line at every number it
+            // names — so answering that here would prove it off a reading nobody made.
+            case MeasureClosure.OfTheBorder.BodyNotRead unread -> {
+                // What it went without: the reading of the body, and whatever the readings that
+                // were made found beside it. Those are theirs to name and are not about the body.
+                WeakeningSet without = WeakeningSet.of(
+                        new Weakening.BodyNotInEvaluation(unread.behavior()))
+                        .union(PartitionDerivation.weakening(unread.besides()));
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                BodyWasNotRead.BODY_WAS_NOT_READ, without)
+                        : new Measurement.Partial<>(List.copyOf(at), without.union(
+                                whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+            }
+            case MeasureClosure.OfTheBorder.Open open -> {
+                WeakeningSet by = PartitionDerivation.weakening(open.by());
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
+                        : new Measurement.Partial<>(List.copyOf(at),
+                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+            }
+        };
     }
 
     /**

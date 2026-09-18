@@ -5,11 +5,11 @@ import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
@@ -299,7 +299,7 @@ public interface LevelSpace {
      * {@code 300x + 600y} moves in three hundreds however small a step {@code x} takes.
      */
     static LevelSpace steppingBy(BigDecimal step) {
-        return new Lattice(step, new AdditiveImage.OverWholeNumbers(Rational.of(step))) {
+        return new Lattice(step, new AdditiveImage.OverWholeNumbers(ExactRatio.of(step))) {
 
             /** Every multiple of the step, so a run has a first value and a last wherever it is
              *  bounded. */
@@ -333,7 +333,7 @@ public interface LevelSpace {
      */
     static LevelSpace overFiniteDecimals(BigDecimal generator) {
         return new Lattice(generator,
-                new AdditiveImage.OverFiniteDecimals(Rational.of(generator))) {
+                new AdditiveImage.OverFiniteDecimals(ExactRatio.of(generator))) {
 
             /**
              * The level itself where this takes it, and no first value past it where it does not.
@@ -430,7 +430,7 @@ public interface LevelSpace {
         if (step.signum() == 0) {
             return BigDecimal.ONE;
         }
-        Rational left = new AdditiveImage.OverFiniteDecimals(Rational.of(step.abs())).generator();
+        ExactRatio left = new AdditiveImage.OverFiniteDecimals(ExactRatio.of(step.abs())).generator();
         BigDecimal written = left.asWrittenDecimal();
         if (written == null) {
             throw new IllegalStateException(
@@ -542,8 +542,8 @@ public interface LevelSpace {
      * it as well: a residue that is not one of these multiples is one no assignment lands on.
      */
     static BigDecimal stepOf(java.util.Collection<BigDecimal> coefs) {
-        Rational divisor = AdditiveImage.divisorOf(
-                coefs.stream().map(Rational::of).toList());
+        ExactRatio divisor = AdditiveImage.divisorOf(
+                coefs.stream().map(ExactRatio::of).toList());
         // Spelled at the scale the coefficients were written at, which is what it was spelled at
         // before this asked somewhere else for the number. A divisor of the written coefficients
         // divides each of them, so writing it out at their scale never rounds — and the scale is
@@ -582,7 +582,7 @@ public interface LevelSpace {
 
         /** Whether this takes a number at all, which is what its multiplier is allowed to be. */
         boolean reaches(BigDecimal at) {
-            return image.contains(Rational.of(at));
+            return image.contains(ExactRatio.of(at));
         }
 
         @Override

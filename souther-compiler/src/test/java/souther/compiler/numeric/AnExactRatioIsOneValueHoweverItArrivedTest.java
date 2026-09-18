@@ -19,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnExactRatioIsOneValueHoweverItArrivedTest {
 
-    private static Rational ratio(long numerator, long denominator) {
-        return Rational.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
+    private static ExactRatio ratio(long numerator, long denominator) {
+        return ExactRatio.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
     }
 
     @Test
@@ -38,7 +38,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void zeroIsOneValueWhateverItWasOver() {
-        assertEquals(Rational.ZERO, ratio(0, 7));
+        assertEquals(ExactRatio.ZERO, ratio(0, 7));
         assertTrue(ratio(0, 7).isZero());
     }
 
@@ -49,26 +49,26 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void arithmeticIsExactWhereDecimalsWouldRound() {
-        Rational third = ratio(1, 3);
-        assertEquals(Rational.ONE, third.plus(third).plus(third),
+        ExactRatio third = ratio(1, 3);
+        assertEquals(ExactRatio.ONE, third.plus(third).plus(third),
                 "three thirds are one, which is what rounding a third at any scale loses");
         assertEquals(ratio(1, 9), third.times(third));
-        assertEquals(Rational.ONE, third.dividedBy(third));
+        assertEquals(ExactRatio.ONE, third.dividedBy(third));
         assertEquals(ratio(-1, 3), third.negated());
     }
 
     @Test
     void dividingByZeroIsACallersMistake() {
-        assertThrows(ArithmeticException.class, () -> Rational.ONE.dividedBy(Rational.ZERO));
+        assertThrows(ArithmeticException.class, () -> ExactRatio.ONE.dividedBy(ExactRatio.ZERO));
     }
 
     @Test
     void aWrittenDecimalArrivesExactly() {
-        assertEquals(ratio(1, 2), Rational.of(new BigDecimal("0.5")));
-        assertEquals(ratio(1, 8), Rational.of(new BigDecimal("0.125")));
-        assertEquals(Rational.of(300), Rational.of(new BigDecimal("3E+2")),
+        assertEquals(ratio(1, 2), ExactRatio.of(new BigDecimal("0.5")));
+        assertEquals(ratio(1, 8), ExactRatio.of(new BigDecimal("0.125")));
+        assertEquals(ExactRatio.of(300), ExactRatio.of(new BigDecimal("3E+2")),
                 "a negative scale is a whole number written as a multiple of ten");
-        assertEquals(ratio(-7, 100), Rational.of(new BigDecimal("-0.07")));
+        assertEquals(ratio(-7, 100), ExactRatio.of(new BigDecimal("-0.07")));
     }
 
     @Test
@@ -76,7 +76,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertEquals(new BigDecimal("0.5"), ratio(1, 2).asWrittenDecimal());
         assertEquals(new BigDecimal("0.125"), ratio(1, 8).asWrittenDecimal());
         assertEquals(new BigDecimal("0.12"), ratio(3, 25).asWrittenDecimal());
-        assertEquals(new BigDecimal("7"), Rational.of(7).asWrittenDecimal());
+        assertEquals(new BigDecimal("7"), ExactRatio.of(7).asWrittenDecimal());
         assertEquals(new BigDecimal("-0.05"), ratio(-1, 20).asWrittenDecimal());
     }
 
@@ -102,10 +102,10 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertEquals(BigInteger.ONE, ratio(1, 3).ceiling());
         assertEquals(BigInteger.valueOf(-1), ratio(-1, 3).floor());
         assertEquals(BigInteger.ZERO, ratio(-1, 3).ceiling());
-        assertEquals(BigInteger.TWO, Rational.of(2).floor());
-        assertEquals(BigInteger.TWO, Rational.of(2).ceiling(),
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).floor());
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).ceiling(),
                 "a whole number is its own floor and its own ceiling");
-        assertTrue(Rational.of(2).isWhole());
+        assertTrue(ExactRatio.of(2).isWhole());
     }
 
     /**
@@ -114,24 +114,24 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
      */
     @Test
     void theGreatestCommonDivisorIsTheLargestBothAreMultiplesOf() {
-        assertEquals(ratio(1, 6), Rational.gcd(ratio(1, 3), ratio(1, 2)));
-        assertEquals(Rational.of(3), Rational.gcd(Rational.of(3), Rational.of(6)));
-        assertEquals(Rational.of(300), Rational.gcd(Rational.of(300), Rational.of(600)),
+        assertEquals(ratio(1, 6), ExactRatio.gcd(ratio(1, 3), ratio(1, 2)));
+        assertEquals(ExactRatio.of(3), ExactRatio.gcd(ExactRatio.of(3), ExactRatio.of(6)));
+        assertEquals(ExactRatio.of(300), ExactRatio.gcd(ExactRatio.of(300), ExactRatio.of(600)),
                 "which is what turns `300s + 600c <= 4800` into `s + 2c <= 16`");
-        assertEquals(Rational.ONE, Rational.gcd(Rational.of(2), Rational.of(3)));
+        assertEquals(ExactRatio.ONE, ExactRatio.gcd(ExactRatio.of(2), ExactRatio.of(3)));
     }
 
     @Test
     void zeroDividesNothingSoItIsTheIdentityHere() {
-        assertEquals(Rational.of(3), Rational.gcd(Rational.ZERO, Rational.of(3)));
-        assertEquals(Rational.of(3), Rational.gcd(Rational.of(3), Rational.ZERO));
-        assertEquals(Rational.ZERO, Rational.gcd(Rational.ZERO, Rational.ZERO));
+        assertEquals(ExactRatio.of(3), ExactRatio.gcd(ExactRatio.ZERO, ExactRatio.of(3)));
+        assertEquals(ExactRatio.of(3), ExactRatio.gcd(ExactRatio.of(3), ExactRatio.ZERO));
+        assertEquals(ExactRatio.ZERO, ExactRatio.gcd(ExactRatio.ZERO, ExactRatio.ZERO));
     }
 
     @Test
     void aDivisorHasNoSign() {
-        assertEquals(Rational.of(3), Rational.gcd(Rational.of(-3), Rational.of(6)));
-        assertEquals(Rational.of(3), Rational.gcd(Rational.of(-3), Rational.of(-6)));
+        assertEquals(ExactRatio.of(3), ExactRatio.gcd(ExactRatio.of(-3), ExactRatio.of(6)));
+        assertEquals(ExactRatio.of(3), ExactRatio.gcd(ExactRatio.of(-3), ExactRatio.of(-6)));
     }
 
     @Test
@@ -139,8 +139,8 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertTrue(ratio(1, 3).compareTo(ratio(1, 2)) < 0);
         assertTrue(ratio(1, 3).compareTo(ratio(2, 6)) == 0);
         assertTrue(ratio(-1, 3).compareTo(ratio(1, 3)) < 0);
-        assertTrue(Rational.of(10_000_000_000L).times(Rational.of(10_000_000_000L))
-                .compareTo(Rational.of(Long.MAX_VALUE)) > 0,
+        assertTrue(ExactRatio.of(10_000_000_000L).times(ExactRatio.of(10_000_000_000L))
+                .compareTo(ExactRatio.of(Long.MAX_VALUE)) > 0,
                 "and past where a long stops, since comparing cross-multiplies");
     }
 }

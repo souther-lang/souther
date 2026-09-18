@@ -1022,7 +1022,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** Where this compilation numbered the places a run through each construct is recorded. */
     private static CoverageSites.Plan placesOf(Compilation compilation, String module) {
         Bodies.Elaborated checked =
-                compilation.db().ask(new Bodies.Checked(module)).value();
+                compilation.db().ask(new Bodies.Observable(module)).value();
         return checked == null ? CoverageSites.Plan.NONE : checked.plan();
     }
 
@@ -2279,24 +2279,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // the product of its positions is a neighbouring technique it is not held to. Asked of the
         // evidence rather than worked out here, so that what is printed and what a build refuses
         // over are the same choice.
-        if (behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
-                var meetings)) {
-            interaction(out, meetings);
-        } else if (partitioned.counted()) {
-            String combinations = combinations(partition.pairs());
-            if (!combinations.isEmpty()) {
-                out.append(String.format("    combination %s%n", combinations));
-                // And which of them no row is in, one to a line, as every gap is named. Summed,
-                // the count says how much of the space the rows cover and nothing about where the
-                // rest of it is — and where it is is the whole of what a reader acts on.
-                for (ReportedFinding f : behavior.reported()) {
-                    if (f.finding().about()
-                            instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                        out.append(String.format("      %s no row is in %s%n",
-                                mark(f.finding()), twoClasses(combination)));
+        //
+        // A switch over the three the criterion has, so a behavior nothing read a body of is not
+        // the same as one whose body was read and brings no decisions together. Written as a test
+        // for the first and an else for the rest, a reading nobody made printed the space of the
+        // positions — telling a reader that this behavior is held to the neighbouring technique,
+        // which is a statement about the model that nothing measured.
+        switch (behavior.evidence().combinations()) {
+        case CombinationCriterion.Interactions(var meetings) -> interaction(out, meetings);
+        case null -> { }
+        case CombinationCriterion.PairFallback _ -> {
+            if (partitioned.counted()) {
+                String combinations = combinations(partition.pairs());
+                if (!combinations.isEmpty()) {
+                    out.append(String.format("    combination %s%n", combinations));
+                    // And which of them no row is in, one to a line, as every gap is named.
+                    // Summed, the count says how much of the space the rows cover and nothing
+                    // about where the rest of it is — and where it is is what a reader acts on.
+                    for (ReportedFinding f : behavior.reported()) {
+                        if (f.finding().about() instanceof
+                                About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
+                            out.append(String.format("      %s no row is in %s%n",
+                                    mark(f.finding()), twoClasses(combination)));
+                        }
                     }
                 }
             }
+        }
         }
         // Counted over the obligations and named as such. A border owes a row at up to four points,
         // so a count of borders would say a border with one point met and three missed was as
@@ -5156,7 +5165,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             switch (each.why()) {
                 case UndividedPosition.Why.Absent _ -> undivided.add(each.at().toString());
                 case UndividedPosition.Why.CannotDerive _,
-                     UndividedPosition.Why.StatedWithoutALine _ -> { }
+                     UndividedPosition.Why.StatedWithoutALine _,
+                // Nor a position of a behavior whose body this image has none of. What is short
+                // there is the reading of the body, which the measure beside this list says it
+                // went without — written here as well, a consumer would be told it once per
+                // position of a behavior nothing read anything of.
+                     UndividedPosition.Why.BodyNotInEvaluation _ -> { }
             }
         });
         // The position and what stopped it, kept as the product they are. Which limit a position is
@@ -6472,7 +6486,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // at the position says, and is not what this word promises.
                 case ClosureGap.LineNotDerived _ -> WeakeningWord.RULE_UNREAD;
             };
-            case Weakening.BodiesNotElaborated _ -> WeakeningWord.BODIES_NOT_ELABORATED;
+            case Weakening.BodyNotInEvaluation _ -> WeakeningWord.BODY_NOT_IN_EVALUATION;
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;

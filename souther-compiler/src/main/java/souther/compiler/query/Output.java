@@ -84,7 +84,7 @@ public final class Output {
 
         @Override
         public Answer<Map<String, ClassFileImage>> compute(Db db) {
-            Inputs in = inputs(db, name);
+            Inputs in = inputs(db, name, Elaboration.WHOLE);
             if (in == null) {
                 return Answer.absent();
             }
@@ -128,9 +128,15 @@ public final class Output {
         /**
          * The parts of a generation both {@link Classes} and {@link Evaluated} need, asked once.
          *
-         * <p>Both answer with a module's bytecode and differ only in whether each arm records that it
-         * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
-         * stop being the same program, which is the one thing a measurement of them may not do.
+         * <p>Both answer with a module's bytecode. Where the module came out whole and every
+         * implementation it owns may be run they are one program and differ only in whether each
+         * arm records that it ran, and two copies of this would be two chances for the measured
+         * classes and the shipped ones to stop being that. Short of either they are not: a module
+         * that did not come out whole has nothing to ship, and one whose caller of another module's
+         * unmade implementation may not be run is measured against what is left of it. So the
+         * sameness is a property of a module whose implementations are all runnable rather than of
+         * every compile, and which of the two elaborations an artifact reads is the one thing asked
+         * apart ({@link Elaboration}).
          */
         record Inputs(Hir.Module lowered, DerivedSymbols scope,
                       souther.compiler.check.PublishedDeclarations published,
@@ -159,8 +165,34 @@ public final class Output {
             }
         }
 
-        static Inputs inputs(Db db, String name) {
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+        /**
+         * Which of a module's bodies an artifact is entitled to run.
+         *
+         * <p>An argument and not two copies of the reading below. What a generation reads of a
+         * module — its names, its signatures, what its declarations say, what its rules state — is
+         * one answer whichever artifact is being made; the artifacts differ in which implementations
+         * they may hold, and in nothing else. Asked twice instead, the shipped classes and the
+         * measured ones would be two programs told apart by nobody.
+         */
+        enum Elaboration {
+            /**
+             * Every body of the module, which is the only thing there is to publish. A module one
+             * of whose bodies did not come out has no whole to ship, so this is absent for it.
+             */
+            WHOLE,
+            /**
+             * The bodies that may be run. Where the module came out whole this is that same answer,
+             * so what a row is observed against is the program that ships; where it did not, it is
+             * what is left after taking away what cannot be run.
+             */
+            OBSERVABLE
+        }
+
+        static Inputs inputs(Db db, String name, Elaboration of) {
+            Answer<Bodies.Elaborated> checked = switch (of) {
+                case WHOLE -> db.ask(new Bodies.Checked(name));
+                case OBSERVABLE -> db.ask(new Bodies.Observable(name));
+            };
             // What each composed behavior routes, settled where the composition was checked. The
             // emitter used to walk the declaration for it a second time.
             Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compositions =
@@ -402,7 +434,7 @@ public final class Output {
 
         @Override
         public Answer<EvaluationArtifact> compute(Db db) {
-            Classes.Inputs in = Classes.inputs(db, name);
+            Classes.Inputs in = Classes.inputs(db, name, Classes.Elaboration.OBSERVABLE);
             if (in == null) {
                 return Answer.absent();
             }

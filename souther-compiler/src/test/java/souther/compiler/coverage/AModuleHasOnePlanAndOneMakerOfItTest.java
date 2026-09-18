@@ -50,9 +50,13 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
 
     /** Who walks a module's bodies for its places, and what makes it the one that may. */
     private static final Map<String, String> MAY_WALK = Map.of(
-            "souther.compiler.query.Bodies.Checked.compute", "the check that holds the bodies. It"
-                    + " walks them once, judges the claims against what that walk found, and keeps"
-                    + " the plan on the answer, so every reader downstream is looking at that one");
+            "souther.compiler.query.Bodies.elaborationOf", "where an elaboration is assembled from"
+                    + " the bodies it is of. It walks them once, judges the claims against what"
+                    + " that walk found, and keeps the plan on the answer, so a reader of that"
+                    + " elaboration is looking at the plan its own bodies made. A module that came"
+                    + " out whole and the bodies of it that may be run are two elaborations and"
+                    + " each owns one plan; what is fixed is that neither is walked twice, not that"
+                    + " there is one plan in the world");
 
     /** Who puts a plan together field by field, and what makes it the one that may. */
     private static final Map<String, String> MAY_CONSTRUCT = Map.of(

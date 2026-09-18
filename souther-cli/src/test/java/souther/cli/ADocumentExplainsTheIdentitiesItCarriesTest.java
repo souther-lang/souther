@@ -39,9 +39,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ADocumentExplainsTheIdentitiesItCarriesTest {
 
-    /** A model whose rows are never evaluated: the `constructs` clause promises a construction the
-     * body does not make, which is raised before anything runs. Its report carries a reason about
-     * the source, whose subject is that source's identity. */
+    /**
+     * A model whose rows are never evaluated: a composition names a stage that does not exist, so
+     * the module has no meaning to emit and nothing of it runs. Its report carries a reason about
+     * the source, whose subject is that source's identity.
+     *
+     * <p>A name and not a body, because that is what leaves the whole source unobserved. A body
+     * that does not check leaves the bodies that do check runnable and their rows observed, and the
+     * reason such a row carries is about the row rather than about the source — which is the
+     * identity this test is here to read.
+     */
     private static String stopped(String module, String type) {
         return String.format("""
                 module %s
@@ -50,12 +57,13 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                     invariant value >= 0
 
                 behavior passThrough : (a: %s) -> %s
-                    constructs %s
                 let passThrough (a) = a
+
+                behavior onwards = passThrough >-> nosuch
 
                 example passThrough
                     | "through" : (%s(1)) -> %s(1)
-                """, module, type, type, type, type, type, type);
+                """, module, type, type, type, type, type);
     }
 
     /** A model with an arm no row goes through, which is the other way an identity is written: the

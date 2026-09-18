@@ -75,6 +75,9 @@ class WhatIsSealedIsNoLongerWrittenTest {
         ways.put("putAll", out -> out.putAll(Map.of(LAMBDA, EmittedBytes.of(LAMBDA))));
         ways.put("putAll, of nothing", out -> out.putAll(Map.of()));
         ways.put("rewrite", out -> out.rewrite(QUOTE, _ -> EmittedBytes.of(QUOTE, "afterwards")));
+        // What the manifest says about a behavior is part of what a reader holds, so recording one
+        // after the classes were handed over would change an answer somebody already has.
+        ways.put("leftOut", out -> out.leftOut("quote"));
         return ways;
     }
 

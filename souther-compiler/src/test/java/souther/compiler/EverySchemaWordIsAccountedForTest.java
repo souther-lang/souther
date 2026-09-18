@@ -387,7 +387,7 @@ class EverySchemaWordIsAccountedForTest {
             // the writer spelled its words as literals and nothing could be pointed at them.
             new Vocabulary("keptOpenBy[].kind",
                     List.of("$defs", "adequacyOpening", "properties", "kind"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.publish.AdequacyOpeningWord.class),
@@ -414,7 +414,12 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
                             "properties", "kind"),
                     DECISION_WORDS),
+            // `bodies_not_elaborated` said of one behavior's arms that its module had not been
+            // elaborated, which is one quantifier too wide: an evaluation image holds some of a
+            // module's bodies and not others, so the measure now says the behavior whose body was
+            // not read. Retired rather than gone, for the reason `probe_mapping_lost` is.
             Vocabulary.of("branch.reason", List.of("$defs", "branch", "properties", "reason"),
+                    Set.of("bodies_not_elaborated"),
                     Adequacy.BranchEvidence.class),
             // Why nobody read which rules of a body's decision the rows took. Its own field beside
             // the branch's, because the two measures fall short of different things: an arm is one
@@ -642,7 +647,7 @@ class EverySchemaWordIsAccountedForTest {
             // observation codes, and named the row without its source, so two rows of one behavior
             // were one word. Retired rather than gone, for the reason `probe_mapping_lost` is.
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",

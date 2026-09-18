@@ -64,7 +64,7 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
 
     /**
      * The set to narrow a search by: what the declarations leave the position, or every value there
-     * is where nothing worked one out.
+     * is where the reading answered for no position at that path.
      *
      * <p>For a search asked whether values exist that meet a question — never for one that writes
      * the value it finds into a row. What such a search answers is about the region, not about what
@@ -72,27 +72,113 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
      * have rather than a set it may narrow by: narrowed by that, the question would be narrower
      * than what was established.
      *
+     * <p>One answer for the two states that hold no set, and this is the question where they come
+     * to the same thing: neither narrows anything, so a reading that stopped and a path the values
+     * stand below are both the identity of the crossing here. What tells them apart is what may be
+     * written ({@link #toComposeFrom}).
+     *
      * <p>{@link ValueSet#ANY} here is the identity of the crossing and never an answer about what
      * the position admits.
      */
     public ValueSet toNarrowBy(NumericTerm.FromOnePosition term) {
-        return valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
-                ? set : ValueSet.ANY;
+        return switch (valuesAt(term)) {
+            case AdmittedValues.Admitted.Values(ValueSet set) -> set;
+            case AdmittedValues.Admitted.NotWorkedOut _,
+                 AdmittedValues.Admitted.StandsUnderTheCases _ -> ValueSet.ANY;
+        };
     }
 
     /**
-     * The set to compose a value out of, or null where nothing worked one out.
-     *
-     * <p>For a search whose answer is written into a row. A value composed out of a set nobody
-     * established is a row offered at a position whose rules were never read, so there is nothing
-     * to compose from and the search says so in the word it has for composing nothing.
+     * What a search whose answer is written into a row composes a value out of.
      *
      * <p><b>The other answer to the same three states, and both are named here because the question
      * decides which.</b> Written at each search instead, one reading of the input composed a value
      * out of what nothing established while another beside it refused to — and which of the two a
      * position got depended on which reading reached it first.
+     *
+     * <p>Three answers and not a set or nothing, because this is the question the three states come
+     * apart on. A set nobody established composes nothing: a row offered at a position whose rules
+     * were never read is one this compiler cannot stand behind. A path the reading puts no position
+     * at composes from the run alone, and what becomes of the row is the construction's to say.
      */
-    public ValueSet toComposeFrom(NumericTerm.FromOnePosition term) {
-        return valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set) ? set : null;
+    public ComposingFrom toComposeFrom(NumericTerm.FromOnePosition term) {
+        return switch (valuesAt(term)) {
+            case AdmittedValues.Admitted.Values(ValueSet set) ->
+                    new ComposingFrom.TheSetThePositionAdmits(set);
+            case AdmittedValues.Admitted.NotWorkedOut _ -> new ComposingFrom.NothingWorkedItOut();
+            case AdmittedValues.Admitted.StandsUnderTheCases _ -> new ComposingFrom.TheRunAlone();
+        };
+    }
+
+    /**
+     * What a value written into a row at one position is composed out of.
+     *
+     * <p>The action beside the fact, and a type of its own because the two are not the same answer.
+     * What a position admits is what the declarations left it ({@link AdmittedValues.Admitted}); this
+     * is what a search may put a value together from, which the question decides — and two of these
+     * cross the run with the same set while saying unlike things about the model.
+     *
+     * <p>Which set that is is read here and at no search, so that a search added later does not
+     * decide it again ({@link #toCrossTheRunWith}).
+     */
+    public sealed interface ComposingFrom {
+
+        /**
+         * The set to cross the run with, or null where nothing composes a value here.
+         *
+         * <p>Declared rather than switched over, so that a state added to this is a state whose
+         * answer somebody writes. Matched on instead, a new one would be composed out of whatever
+         * the condition beside it happened to leave it with.
+         */
+        ValueSet toCrossTheRunWith();
+
+        /** What the declarations leave the position, which a value written there is one of. */
+        record TheSetThePositionAdmits(ValueSet set) implements ComposingFrom {
+
+            public TheSetThePositionAdmits {
+                if (set == null) {
+                    throw new IllegalArgumentException(
+                            "a position whose set was read composes from it, and one whose set was"
+                                    + " not composes from nothing rather than from null");
+                }
+            }
+
+            @Override
+            public ValueSet toCrossTheRunWith() {
+                return set;
+            }
+        }
+
+        /**
+         * The run, with nothing of this reading's narrowing it, because the path is no position of
+         * this reading and the value stands below it.
+         *
+         * <p>{@link ValueSet#ANY} is the identity of the crossing here and no answer about what any
+         * position admits. There are no rules of this path to have read — a name the cases of a sum
+         * share is written above the values answering it — so a value is offered and whatever writes
+         * the row says whether it can be written.
+         */
+        record TheRunAlone() implements ComposingFrom {
+
+            @Override
+            public ValueSet toCrossTheRunWith() {
+                return ValueSet.ANY;
+            }
+        }
+
+        /**
+         * Nothing, because nothing worked out what the position holds.
+         *
+         * <p>A row composed here would be offered at a position whose rules this compiler never
+         * read, so the search comes back in the word it has for composing nothing rather than
+         * offering a value against a set nobody established.
+         */
+        record NothingWorkedItOut() implements ComposingFrom {
+
+            @Override
+            public ValueSet toCrossTheRunWith() {
+                return null;
+            }
+        }
     }
 }

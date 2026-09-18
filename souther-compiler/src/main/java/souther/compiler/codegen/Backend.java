@@ -502,20 +502,38 @@ public final class Backend {
                         SpecImplementation.Implemented implemented =
                                 implementations.get(spec.name());
                         if (implemented != null) {
-                            // What this emitter takes, said here rather than by the reading that
-                            // divided the parameters: an editor reads a definition whose parameters
-                            // do not line up and answers what it can about it, and this may not run
-                            // on one at all. The division is the same either way; what differs is
-                            // who may act on it.
-                            if (!implemented.hasCompleteShape()) {
-                                throw new IllegalStateException("`" + module.name() + "."
-                                        + spec.name() + "` is emitted from an implementation whose"
-                                        + " parameters the declaration does not account for");
+                            // The logic, where this elaboration entitles a class for it. What it
+                            // entitles is the emission, and it is asked here rather than worked out
+                            // beside it — so what is emitted and what the elaboration was numbered
+                            // over cannot be two answers. The bodies it holds are not that
+                            // question: a body may be here for a behavior whose implementation this
+                            // image may not carry, and a composition has no body at all.
+                            if (checked.emits().contains(spec.name())) {
+                                // What this emitter takes, said here rather than by the reading
+                                // that divided the parameters: an editor reads a definition whose
+                                // parameters do not line up and answers what it can about it, and
+                                // this may not run on one at all. The division is the same either
+                                // way; what differs is who may act on it.
+                                if (!implemented.hasCompleteShape()) {
+                                    throw new IllegalStateException("`" + module.name() + "."
+                                            + spec.name() + "` is emitted from an implementation"
+                                            + " whose parameters the declaration does not account"
+                                            + " for");
+                                }
+                                // a fn-implemented behavior: the $Impl holds the logic, the public
+                                // interface (behaviorClass) is what Java code declares (spec
+                                // §jvm-anonymous-union).
+                                out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
+                                        b.generateSpecFn(spec, implemented, requiredNames,
+                                                requiredSuccess, requiredParam));
+                            } else {
+                                // Written down where it is decided. What is missing from the classes
+                                // cannot say whether this compile owed one, and a row about the
+                                // behavior is told two different things by the two answers.
+                                out.leftOut(spec.name());
                             }
-                            // a fn-implemented behavior: the $Impl holds the logic, the public interface
-                            // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
-                            out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
-                                    b.generateSpecFn(spec, implemented, requiredNames, requiredSuccess, requiredParam));
+                            // The declaration whether or not the logic behind it is here, so what
+                            // this module offers a caller is what its source says either way.
                             List<Type> pts = new ArrayList<>();
                             for (Hir.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));
@@ -539,9 +557,17 @@ public final class Backend {
                         // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
                     case Hir.PipeBehavior pipe -> {
-                        out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
-                                b.generatePipe(pipe, composedOf(compositions, named), requiredNames,
-                                        sigs, behaviorDeps));
+                        // The same question the body above asks, and asked of the same answer. A
+                        // composition applies its stages by constructing their implementations, so
+                        // one whose stage is not in this image is a class referencing a class
+                        // nothing emitted.
+                        if (checked.emits().contains(pipe.name())) {
+                            out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
+                                    b.generatePipe(pipe, composedOf(compositions, named),
+                                            requiredNames, sigs, behaviorDeps));
+                        } else {
+                            out.leftOut(pipe.name());
+                        }
                         Sig sig = declaredSig(module.name(), pipe, sigs);
                         out.put(new GeneratedClass.BehaviorInterface(module.name(), pipe.name()),
                                 b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
@@ -1481,7 +1507,7 @@ public final class Backend {
      * The declaration a type name written in a module being generated names.
      *
      * <p>Answered for the same reason {@link #reachedBy} is: what reaches the backend is an
-     * elaboration {@code Bodies.Checked} handed over, and it hands one over only where
+     * elaboration a check handed over, and one is handed over only where
      * {@code Names.Sound} holds of the module — which resolution makes false as soon as it reports
      * a name denoting nothing.
      */
@@ -1495,11 +1521,15 @@ public final class Backend {
     /**
      * The name a dependency or a pipeline stage is reached by.
      *
-     * <p>Every name in a module reaching the backend was answered. {@code Bodies.Checked} hands over
-     * an elaboration only where {@code Names.Sound} holds of the module, and that is false as soon
-     * as resolution reports a name denoting nothing; {@code Output.Classes} builds what it generates
+     * <p>Every name in a module reaching the backend was answered. An elaboration is handed over
+     * only where {@code Names.Sound} holds of the module — whole or partial, both rest on it, and it
+     * is false as soon as resolution reports a name denoting nothing; what is generated is built
      * from that answer and from nothing else. So one arriving here is not a mistake in the source —
      * it is this module being emitted with a hole in it, which is the thing that gate is for.
+     *
+     * <p>What a partial elaboration leaves out is an implementation and never a name. A behavior
+     * whose implementation may not be made is declared here as its source declares it, so nothing
+     * about which names resolve moves with what happened to check.
      */
     private static ValueName.Behavior reachedBy(Hir.Var named) {
         return switch (named) {

@@ -26,14 +26,14 @@ import java.math.RoundingMode;
  * <p>Always in lowest terms with a positive denominator, so two ratios of equal value are one value
  * — {@link #equals} decides it, and a canonical form built out of these is compared by its map.
  */
-public record Rational(BigInteger numerator, BigInteger denominator) implements Comparable<Rational> {
+public record ExactRatio(BigInteger numerator, BigInteger denominator) implements Comparable<ExactRatio> {
 
-    public static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE);
-    public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE);
+    public static final ExactRatio ZERO = new ExactRatio(BigInteger.ZERO, BigInteger.ONE);
+    public static final ExactRatio ONE = new ExactRatio(BigInteger.ONE, BigInteger.ONE);
 
     private static final BigInteger FIVE = BigInteger.valueOf(5);
 
-    public Rational {
+    public ExactRatio {
         if (numerator == null || denominator == null) {
             throw new IllegalArgumentException("a ratio is two whole numbers");
         }
@@ -51,16 +51,16 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
         }
     }
 
-    public static Rational of(long whole) {
-        return new Rational(BigInteger.valueOf(whole), BigInteger.ONE);
+    public static ExactRatio of(long whole) {
+        return new ExactRatio(BigInteger.valueOf(whole), BigInteger.ONE);
     }
 
-    public static Rational of(BigInteger whole) {
-        return new Rational(whole, BigInteger.ONE);
+    public static ExactRatio of(BigInteger whole) {
+        return new ExactRatio(whole, BigInteger.ONE);
     }
 
-    public static Rational of(BigInteger numerator, BigInteger denominator) {
-        return new Rational(numerator, denominator);
+    public static ExactRatio of(BigInteger numerator, BigInteger denominator) {
+        return new ExactRatio(numerator, denominator);
     }
 
     /**
@@ -70,26 +70,26 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
      * with scale {@code s} is its unscaled value over {@code 10^s}. A negative scale is a decimal
      * written as a multiple of a power of ten and is a whole number.
      */
-    public static Rational of(BigDecimal at) {
+    public static ExactRatio of(BigDecimal at) {
         BigInteger unscaled = at.unscaledValue();
         int scale = at.scale();
         return scale >= 0
-                ? new Rational(unscaled, BigInteger.TEN.pow(scale))
-                : new Rational(unscaled.multiply(BigInteger.TEN.pow(-scale)), BigInteger.ONE);
+                ? new ExactRatio(unscaled, BigInteger.TEN.pow(scale))
+                : new ExactRatio(unscaled.multiply(BigInteger.TEN.pow(-scale)), BigInteger.ONE);
     }
 
-    public Rational plus(Rational other) {
-        return new Rational(
+    public ExactRatio plus(ExactRatio other) {
+        return new ExactRatio(
                 numerator.multiply(other.denominator).add(other.numerator.multiply(denominator)),
                 denominator.multiply(other.denominator));
     }
 
-    public Rational minus(Rational other) {
+    public ExactRatio minus(ExactRatio other) {
         return plus(other.negated());
     }
 
-    public Rational times(Rational other) {
-        return new Rational(numerator.multiply(other.numerator),
+    public ExactRatio times(ExactRatio other) {
+        return new ExactRatio(numerator.multiply(other.numerator),
                 denominator.multiply(other.denominator));
     }
 
@@ -97,19 +97,19 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
      *
      *  @throws ArithmeticException where {@code other} is zero, which is a caller's mistake and not
      *          a value this can hold */
-    public Rational dividedBy(Rational other) {
+    public ExactRatio dividedBy(ExactRatio other) {
         if (other.signum() == 0) {
             throw new ArithmeticException("divided by zero");
         }
-        return new Rational(numerator.multiply(other.denominator),
+        return new ExactRatio(numerator.multiply(other.denominator),
                 denominator.multiply(other.numerator));
     }
 
-    public Rational negated() {
-        return new Rational(numerator.negate(), denominator);
+    public ExactRatio negated() {
+        return new ExactRatio(numerator.negate(), denominator);
     }
 
-    public Rational abs() {
+    public ExactRatio abs() {
         return signum() < 0 ? negated() : this;
     }
 
@@ -127,7 +127,7 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
     }
 
     @Override
-    public int compareTo(Rational other) {
+    public int compareTo(ExactRatio other) {
         return numerator.multiply(other.denominator).compareTo(other.numerator.multiply(denominator));
     }
 
@@ -152,7 +152,7 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
      * sixth and of nothing larger. Zero divides nothing and is divided by everything, so it is the
      * identity here: a coefficient that is zero is a position the form does not name.
      */
-    public static Rational gcd(Rational a, Rational b) {
+    public static ExactRatio gcd(ExactRatio a, ExactRatio b) {
         if (a.isZero()) {
             return b.abs();
         }
@@ -162,7 +162,7 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
         BigInteger tops = a.numerator.abs().gcd(b.numerator.abs());
         BigInteger common = a.denominator.gcd(b.denominator);
         BigInteger bottoms = a.denominator.divide(common).multiply(b.denominator);
-        return new Rational(tops, bottoms);
+        return new ExactRatio(tops, bottoms);
     }
 
     /**
@@ -210,7 +210,7 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
      * caller that had already refused both when it was moved here, and a method on a value takes its
      * own callers.
      */
-    public Rational unitsRemoved() {
+    public ExactRatio unitsRemoved() {
         if (isZero()) {
             return ZERO;
         }
@@ -224,7 +224,7 @@ public record Rational(BigInteger numerator, BigInteger denominator) implements 
                 bottom = bottom.divide(unit);
             }
         }
-        return Rational.of(top, bottom);
+        return ExactRatio.of(top, bottom);
     }
 
     /**

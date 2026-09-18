@@ -5,27 +5,27 @@ package souther.compiler.numeric;
  *
  * <p>The same shape as {@link Endpoint} and not the same thing. An endpoint is where a range stops
  * on a carrier's order and is spelled in the decimals a carrier counts in; this is where the algebra
- * stops while it is still reasoning, and is spelled in {@link Rational} because that is what
+ * stops while it is still reasoning, and is spelled in {@link ExactRatio} because that is what
  * dividing produces. One becomes the other once, at the edge where a bound is handed to a reader.
  *
  * <p>One type for both of the algebra's bounds. A bound on a position and a bound on the difference
  * of two of them are the same statement — a value and whether it is reached — so the rules for
  * composing them get written once rather than once per bound.
  */
-public record RationalCut(Rational at, boolean inclusive) {
+public record ExactCut(ExactRatio at, boolean inclusive) {
 
-    public RationalCut {
+    public ExactCut {
         if (at == null) {
             throw new IllegalArgumentException("a cut stops at a value; use null for no cut");
         }
     }
 
-    public static RationalCut inclusive(Rational at) {
-        return new RationalCut(at, true);
+    public static ExactCut inclusive(ExactRatio at) {
+        return new ExactCut(at, true);
     }
 
-    public static RationalCut exclusive(Rational at) {
-        return new RationalCut(at, false);
+    public static ExactCut exclusive(ExactRatio at) {
+        return new ExactCut(at, false);
     }
 
     /**
@@ -37,8 +37,8 @@ public record RationalCut(Rational at, boolean inclusive) {
      * dropped — a path summing to a bound its hops cannot both reach still bounds, and calling it
      * reachable puts a row at a pair nothing can be.
      */
-    public static RationalCut meetingBoth(RationalCut a, RationalCut b) {
-        return new RationalCut(a.at.plus(b.at), a.inclusive && b.inclusive);
+    public static ExactCut meetingBoth(ExactCut a, ExactCut b) {
+        return new ExactCut(a.at.plus(b.at), a.inclusive && b.inclusive);
     }
 
     /**
@@ -50,7 +50,7 @@ public record RationalCut(Rational at, boolean inclusive) {
      * either side — so an order over cuts alone would be right about the strictness and wrong about
      * the value, on one side or the other, however it was written.
      */
-    public static RationalCut tighterLower(RationalCut a, RationalCut b) {
+    public static ExactCut tighterLower(ExactCut a, ExactCut b) {
         if (a == null || b == null) {
             return a == null ? b : a;
         }
@@ -70,7 +70,7 @@ public record RationalCut(Rational at, boolean inclusive) {
      * <p>Named for the side it is about, and this type is not {@link Comparable}: see
      * {@link #tighterLower} for which half of the comparison depends on the side and which does not.
      */
-    public static RationalCut tighterUpper(RationalCut a, RationalCut b) {
+    public static ExactCut tighterUpper(ExactCut a, ExactCut b) {
         if (a == null || b == null) {
             return a == null ? b : a;
         }

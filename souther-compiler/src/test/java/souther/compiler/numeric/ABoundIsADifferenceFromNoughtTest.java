@@ -28,12 +28,12 @@ class ABoundIsADifferenceFromNoughtTest {
     private static final String B = "b";
     private static final String C = "c";
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Rational ratio(long numerator, long denominator) {
-        return Rational.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
+    private static ExactRatio ratio(long numerator, long denominator) {
+        return ExactRatio.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
     }
 
     /** A little builder for `Σ c·x + k rel 0`, read the way the algebra reads it. */
@@ -46,13 +46,13 @@ class ABoundIsADifferenceFromNoughtTest {
             this.spacing = spacing;
         }
 
-        Rules say(Map<String, Rational> coefs, Rational constant, Rel rel) {
+        Rules say(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {
             Read<String> read = AffineConstraint.of(coefs, constant, rel, atom -> spacing);
             stated.add(stated(read));
             return this;
         }
 
-        Rules say(Map<String, Rational> coefs, long constant, Rel rel) {
+        Rules say(Map<String, ExactRatio> coefs, long constant, Rel rel) {
             return say(coefs, num(constant), rel);
         }
 
@@ -65,8 +65,8 @@ class ABoundIsADifferenceFromNoughtTest {
         return new Rules(Granularity.DISCRETE);
     }
 
-    private static Map<String, Rational> weighing(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
             out.put((String) pairs[i], num((Integer) pairs[i + 1]));
         }
@@ -81,8 +81,8 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 1), -10, Rel.LE)
                 .say(weighing(A, 1), -3, Rel.GE)
                 .closed();
-        assertEquals(RationalCut.inclusive(num(10)), closed.upperBoundOf(A));
-        assertEquals(RationalCut.inclusive(num(3)), closed.lowerBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(10)), closed.upperBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(3)), closed.lowerBoundOf(A));
         assertFalse(closed.holdsNothing());
     }
 
@@ -93,7 +93,7 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 1, B, -1), 0, Rel.LE)      // a - b <= 0
                 .say(weighing(B, 1), -1440, Rel.LE)         // b <= 1440
                 .closed();
-        assertEquals(RationalCut.inclusive(num(1440)), closed.upperBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(1440)), closed.upperBoundOf(A));
         assertNull(closed.lowerBoundOf(A), "and nothing bounds it below");
     }
 
@@ -103,7 +103,7 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 1, B, -1), -2, Rel.LE)     // a - b <= 2
                 .say(weighing(B, 1, C, -1), -5, Rel.LE)     // b - c <= 5
                 .closed();
-        assertEquals(RationalCut.inclusive(num(7)), closed.differenceBound(A, C));
+        assertEquals(ExactCut.inclusive(num(7)), closed.differenceBound(A, C));
     }
 
     /** A path reaches its far end only where every hop on it does. */
@@ -113,7 +113,7 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 1, B, -1), -2, Rel.LE)     // a - b <= 2
                 .say(weighing(B, 1, C, -1), -5, Rel.LT)     // b - c < 5
                 .closed();
-        assertEquals(RationalCut.exclusive(num(7)), closed.differenceBound(A, C));
+        assertEquals(ExactCut.exclusive(num(7)), closed.differenceBound(A, C));
     }
 
     @Test
@@ -122,12 +122,12 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 1), -10, Rel.LE)
                 .say(weighing(A, 1), -4, Rel.LE)
                 .closed();
-        assertEquals(RationalCut.inclusive(num(4)), closed.upperBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(4)), closed.upperBoundOf(A));
     }
 
     @Test
     void aPositionIsNoDistanceFromItself() {
-        assertEquals(RationalCut.inclusive(Rational.ZERO),
+        assertEquals(ExactCut.inclusive(ExactRatio.ZERO),
                 whole().say(weighing(A, 1), -10, Rel.LE).closed().differenceBound(A, A));
     }
 
@@ -137,7 +137,7 @@ class ABoundIsADifferenceFromNoughtTest {
      *  coefficients as they were typed, it was neither shape and left {@code a} unbounded. */
     @Test
     void aScaledBoundIsABound() {
-        assertEquals(RationalCut.inclusive(num(5)),
+        assertEquals(ExactCut.inclusive(num(5)),
                 whole().say(weighing(A, 2), -10, Rel.LE).closed().upperBoundOf(A));
     }
 
@@ -149,14 +149,14 @@ class ABoundIsADifferenceFromNoughtTest {
                 .say(weighing(A, 2, B, -2), -4, Rel.LE)
                 .say(weighing(B, 1), -10, Rel.LE)
                 .closed();
-        assertEquals(RationalCut.inclusive(num(12)), closed.upperBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(12)), closed.upperBoundOf(A));
     }
 
     @Test
     void anEqualityIsBothBounds() {
         DifferenceBounds<String> closed = whole().say(weighing(A, 1), -7, Rel.EQ).closed();
-        assertEquals(RationalCut.inclusive(num(7)), closed.upperBoundOf(A));
-        assertEquals(RationalCut.inclusive(num(7)), closed.lowerBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(7)), closed.upperBoundOf(A));
+        assertEquals(ExactCut.inclusive(num(7)), closed.lowerBoundOf(A));
     }
 
     // --- what it does not hold ---------------------------------------------------------------------
@@ -190,7 +190,7 @@ class ABoundIsADifferenceFromNoughtTest {
     @Test
     void aHoleIsNotABound() {
         AffineConstraint<String> hole = stated(
-                AffineConstraint.of(weighing(A, 1), Rational.ZERO, Rel.NE,
+                AffineConstraint.of(weighing(A, 1), ExactRatio.ZERO, Rel.NE,
                         atom -> Granularity.DISCRETE));
         assertFalse(DifferenceBounds.canHold(hole, CanonicalOrder.<String>asTheyCompare()));
     }

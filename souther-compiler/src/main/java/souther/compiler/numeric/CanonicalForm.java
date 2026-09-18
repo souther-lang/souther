@@ -50,7 +50,7 @@ import java.util.function.Function;
  * them rendering alike are not one position ({@link souther.compiler.check.Term}) — so an order
  * taken off the renderings would weigh one of such a pair twice and the other never.
  */
-public record CanonicalForm<A>(Map<A, Rational> coefs) {
+public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
 
     public CanonicalForm {
         if (coefs == null || coefs.isEmpty()) {
@@ -87,10 +87,10 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      *         {@code null} where nothing is left — a form that weighs no position is a constant, and
      *         what a constant comparison settles is not a constraint about anybody
      */
-    public static <A> Scaled<A> of(Map<A, Rational> coefs) {
+    public static <A> Scaled<A> of(Map<A, ExactRatio> coefs) {
         // The mapping being built, in no order — what a form holds is in none, and one kept here
         // would be one a reader could start taking again on the way in.
-        Map<A, Rational> weighed = new HashMap<>();
+        Map<A, ExactRatio> weighed = new HashMap<>();
         coefs.forEach((atom, coef) -> {
             if (!coef.isZero()) {
                 weighed.put(atom, coef);
@@ -101,8 +101,8 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         }
         // What every weight shares, which is a question about the weights and not about which of
         // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
-        Rational shared = AdditiveImage.divisorOf(weighed.values());
-        Map<A, Rational> primitive = new HashMap<>();
+        ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
+        Map<A, ExactRatio> primitive = new HashMap<>();
         weighed.forEach((atom, coef) -> primitive.put(atom, coef.dividedBy(shared)));
         return new Scaled<>(new CanonicalForm<>(primitive), shared);
     }
@@ -113,7 +113,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      * @param by never zero and always positive, so dividing a threshold by it leaves which side of
      *           the threshold a value falls on
      */
-    public record Scaled<A>(CanonicalForm<A> form, Rational by) {}
+    public record Scaled<A>(CanonicalForm<A> form, ExactRatio by) {}
 
     /**
      * What this form weighs, in the one order {@code order} puts its positions in.
@@ -129,8 +129,8 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      *         twice and the other never, and which of the two it was would be how the rule was
      *         typed — so the pair is named rather than chosen between
      */
-    public List<Map.Entry<A, Rational>> entriesIn(CanonicalOrder<A> order) {
-        List<Map.Entry<A, Rational>> out = new ArrayList<>(coefs.entrySet());
+    public List<Map.Entry<A, ExactRatio>> entriesIn(CanonicalOrder<A> order) {
+        List<Map.Entry<A, ExactRatio>> out = new ArrayList<>(coefs.entrySet());
         out.sort(Map.Entry.comparingByKey(order));
         for (int at = 1; at < out.size(); at++) {
             A before = out.get(at - 1).getKey();
@@ -181,7 +181,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      * this safe to be as simple as it looks.
      */
     public <B> CanonicalForm<B> over(Renaming<A, B> naming) {
-        Map<B, Rational> out = new HashMap<>();
+        Map<B, ExactRatio> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
         return new CanonicalForm<>(out);
     }
@@ -189,7 +189,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
-        Map<A, Rational> out = new HashMap<>();
+        Map<A, ExactRatio> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
         return new CanonicalForm<>(out);
     }
@@ -205,7 +205,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      */
     @Override
     public String toString() {
-        java.util.Map<String, Rational> named = new java.util.TreeMap<>();
+        java.util.Map<String, ExactRatio> named = new java.util.TreeMap<>();
         coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
         StringBuilder out = new StringBuilder();
         named.forEach((atom, coef) -> {

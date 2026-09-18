@@ -25,10 +25,10 @@ class PuttingTwoSetsOfReasonsTogetherIsTheSameEitherWayRoundTest {
     @Test
     void theSideItIsFoldedFromFirstSettlesNothing() {
         WeakeningSet one = WeakeningSet.of(
-                new Weakening.BodiesNotElaborated("demo.a"),
+                new Weakening.BodyNotInEvaluation("a"),
                 metAt(new SourcePos(1, 0)));
         WeakeningSet other = WeakeningSet.of(
-                new Weakening.BodiesNotElaborated("demo.b"),
+                new Weakening.BodyNotInEvaluation("b"),
                 metAt(new SourcePos(2, 0)));
 
         assertEquals(one.union(other), other.union(one),

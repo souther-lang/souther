@@ -19,19 +19,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
 
-    private static Rational ratio(long numerator, long denominator) {
-        return Rational.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
+    private static ExactRatio ratio(long numerator, long denominator) {
+        return ExactRatio.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
     }
 
-    private static Map<String, Rational> form(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> form(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
-            out.put((String) pairs[i], Rational.of((long) (int) (Integer) pairs[i + 1]));
+            out.put((String) pairs[i], ExactRatio.of((long) (int) (Integer) pairs[i + 1]));
         }
         return out;
     }
 
-    private static AdditiveImage over(Map<String, Rational> coefs, Granularity everywhere) {
+    private static AdditiveImage over(Map<String, ExactRatio> coefs, Granularity everywhere) {
         return AdditiveImage.of(coefs, atom -> everywhere);
     }
 
@@ -40,17 +40,17 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void aFormOverWholeNumbersTakesTheMultiplesOfItsDivisor() {
         AdditiveImage image = over(form("s", 300, "c", 600), Granularity.DISCRETE);
-        assertEquals(Rational.of(300), image.generator());
-        assertTrue(image.contains(Rational.of(4800)));
-        assertTrue(image.contains(Rational.of(-900)));
-        assertFalse(image.contains(Rational.of(4900)));
+        assertEquals(ExactRatio.of(300), image.generator());
+        assertTrue(image.contains(ExactRatio.of(4800)));
+        assertTrue(image.contains(ExactRatio.of(-900)));
+        assertFalse(image.contains(ExactRatio.of(4900)));
     }
 
     @Test
     void coprimeCoefficientsReachEveryWholeNumber() {
         AdditiveImage image = over(form("a", 2, "b", 3), Granularity.DISCRETE);
-        assertEquals(Rational.ONE, image.generator());
-        assertTrue(image.contains(Rational.of(1)), "two and three make one, which is Bezout's");
+        assertEquals(ExactRatio.ONE, image.generator());
+        assertTrue(image.contains(ExactRatio.of(1)), "two and three make one, which is Bezout's");
     }
 
     /** The rule {@code NumericDomain} already applies to one position, one level up: a bound
@@ -58,25 +58,25 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void anUpperCutMovesOntoTheValueBelowIt() {
         AdditiveImage image = over(form("a", 1), Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(Rational.of(3)),
-                image.tightenUpper(RationalCut.inclusive(ratio(7, 2))));
-        assertEquals(RationalCut.inclusive(Rational.of(2)),
-                image.tightenUpper(RationalCut.exclusive(Rational.of(3))),
+        assertEquals(ExactCut.inclusive(ExactRatio.of(3)),
+                image.tightenUpper(ExactCut.inclusive(ratio(7, 2))));
+        assertEquals(ExactCut.inclusive(ExactRatio.of(2)),
+                image.tightenUpper(ExactCut.exclusive(ExactRatio.of(3))),
                 "`a < 3` over whole numbers is `a <= 2`");
-        assertEquals(RationalCut.inclusive(Rational.of(3)),
-                image.tightenUpper(RationalCut.inclusive(Rational.of(3))),
+        assertEquals(ExactCut.inclusive(ExactRatio.of(3)),
+                image.tightenUpper(ExactCut.inclusive(ExactRatio.of(3))),
                 "and a bound already on a value it takes does not move");
     }
 
     @Test
     void aLowerCutMovesOntoTheValueAboveIt() {
         AdditiveImage image = over(form("a", 1), Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(Rational.of(4)),
-                image.tightenLower(RationalCut.inclusive(ratio(7, 2))));
-        assertEquals(RationalCut.inclusive(Rational.of(4)),
-                image.tightenLower(RationalCut.exclusive(Rational.of(3))));
-        assertEquals(RationalCut.inclusive(Rational.of(-3)),
-                image.tightenLower(RationalCut.inclusive(ratio(-7, 2))),
+        assertEquals(ExactCut.inclusive(ExactRatio.of(4)),
+                image.tightenLower(ExactCut.inclusive(ratio(7, 2))));
+        assertEquals(ExactCut.inclusive(ExactRatio.of(4)),
+                image.tightenLower(ExactCut.exclusive(ExactRatio.of(3))));
+        assertEquals(ExactCut.inclusive(ExactRatio.of(-3)),
+                image.tightenLower(ExactCut.inclusive(ratio(-7, 2))),
                 "and the same below zero, where rounding toward zero would go the wrong way");
     }
 
@@ -85,15 +85,15 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void aCutBetweenTheFormsValuesIsTightenedOntoOne() {
         AdditiveImage image = over(form("x", 2, "y", 2), Granularity.DISCRETE);
-        assertEquals(Rational.of(2), image.generator());
-        assertEquals(RationalCut.inclusive(Rational.of(2)),
-                image.tightenUpper(RationalCut.inclusive(Rational.of(3))),
+        assertEquals(ExactRatio.of(2), image.generator());
+        assertEquals(ExactCut.inclusive(ExactRatio.of(2)),
+                image.tightenUpper(ExactCut.inclusive(ExactRatio.of(3))),
                 "`2x + 2y <= 3` is `2x + 2y <= 2`, which is `x + y <= 1`");
     }
 
     @Test
     void aDivisorTheCoefficientsShareCanBeADecimal() {
-        Map<String, Rational> halves = new LinkedHashMap<>();
+        Map<String, ExactRatio> halves = new LinkedHashMap<>();
         halves.put("a", ratio(1, 2));
         halves.put("b", ratio(1, 4));
         AdditiveImage image = AdditiveImage.of(halves, atom -> Granularity.DISCRETE);
@@ -109,18 +109,18 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void aFormOverDecimalsDoesNotReachWhatItsDivisorDoesNotDivide() {
         AdditiveImage image = over(form("a", 3), Granularity.DENSE);
-        assertEquals(Rational.of(3), image.generator());
-        assertFalse(image.contains(Rational.of(1)), "a third is not a decimal anybody writes");
-        assertTrue(image.contains(Rational.of(3)));
+        assertEquals(ExactRatio.of(3), image.generator());
+        assertFalse(image.contains(ExactRatio.of(1)), "a third is not a decimal anybody writes");
+        assertTrue(image.contains(ExactRatio.of(3)));
         assertTrue(image.contains(ratio(3, 10)), "and it is still dense: a tenth of three is one");
     }
 
     @Test
     void tenIsAUnitSoTwoAndFiveAre() {
-        assertEquals(Rational.ONE, over(form("a", 2), Granularity.DENSE).generator());
-        assertEquals(Rational.ONE, over(form("a", 5), Granularity.DENSE).generator());
-        assertEquals(Rational.ONE, over(form("a", 10), Granularity.DENSE).generator());
-        assertEquals(Rational.of(3), over(form("a", 6), Granularity.DENSE).generator(),
+        assertEquals(ExactRatio.ONE, over(form("a", 2), Granularity.DENSE).generator());
+        assertEquals(ExactRatio.ONE, over(form("a", 5), Granularity.DENSE).generator());
+        assertEquals(ExactRatio.ONE, over(form("a", 10), Granularity.DENSE).generator());
+        assertEquals(ExactRatio.of(3), over(form("a", 6), Granularity.DENSE).generator(),
                 "six is a two and a three, and only the three is left");
         assertTrue(over(form("a", 2), Granularity.DENSE).contains(ratio(1, 100)));
     }
@@ -130,15 +130,15 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void anUnreachedUpperCutBecomesStrictWhereItStands() {
         AdditiveImage image = over(form("a", 3), Granularity.DENSE);
-        assertEquals(RationalCut.exclusive(Rational.of(1)),
-                image.tightenUpper(RationalCut.inclusive(Rational.of(1))));
-        assertEquals(RationalCut.exclusive(Rational.of(1)),
-                image.tightenUpper(RationalCut.exclusive(Rational.of(1))));
-        assertEquals(RationalCut.inclusive(Rational.of(3)),
-                image.tightenUpper(RationalCut.inclusive(Rational.of(3))),
+        assertEquals(ExactCut.exclusive(ExactRatio.of(1)),
+                image.tightenUpper(ExactCut.inclusive(ExactRatio.of(1))));
+        assertEquals(ExactCut.exclusive(ExactRatio.of(1)),
+                image.tightenUpper(ExactCut.exclusive(ExactRatio.of(1))));
+        assertEquals(ExactCut.inclusive(ExactRatio.of(3)),
+                image.tightenUpper(ExactCut.inclusive(ExactRatio.of(3))),
                 "and a cut at a value it does reach keeps the value");
-        assertEquals(RationalCut.exclusive(Rational.of(3)),
-                image.tightenUpper(RationalCut.exclusive(Rational.of(3))),
+        assertEquals(ExactCut.exclusive(ExactRatio.of(3)),
+                image.tightenUpper(ExactCut.exclusive(ExactRatio.of(3))),
                 "including when the rule was written to exclude it");
     }
 
@@ -159,7 +159,7 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
         kinds.put("y", Granularity.DENSE);
         AdditiveImage image = AdditiveImage.of(form("x", 1, "y", 3), kinds::get);
         assertTrue(image.contains(ratio(1, 10)), "at x = -2, y = 0.7");
-        assertEquals(Rational.of(-2).plus(Rational.of(3).times(ratio(7, 10))), ratio(1, 10),
+        assertEquals(ExactRatio.of(-2).plus(ExactRatio.of(3).times(ratio(7, 10))), ratio(1, 10),
                 "which is not a claim about the image but arithmetic anyone can do");
         assertFalse(over(form("x", 1, "y", 3), Granularity.DISCRETE).contains(ratio(1, 10)),
                 "where the exact answer over whole numbers refuses it");
@@ -170,7 +170,7 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
     @Test
     void aFormNamingNoPositionIsNotAskedAboutHere() {
         assertThrows(IllegalArgumentException.class,
-                () -> AdditiveImage.of(Map.<String, Rational>of(), atom -> Granularity.DISCRETE));
+                () -> AdditiveImage.of(Map.<String, ExactRatio>of(), atom -> Granularity.DISCRETE));
     }
 
     @Test
@@ -181,8 +181,8 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
 
     @Test
     void aZeroCoefficientIsAPositionTheFormDoesNotName() {
-        Map<String, Rational> withZero = new LinkedHashMap<>();
-        withZero.put("a", Rational.ZERO);
+        Map<String, ExactRatio> withZero = new LinkedHashMap<>();
+        withZero.put("a", ExactRatio.ZERO);
         assertThrows(IllegalArgumentException.class,
                 () -> AdditiveImage.of(withZero, atom -> Granularity.DISCRETE));
     }

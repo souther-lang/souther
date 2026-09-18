@@ -21,21 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
 
-    private static Rational at(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio at(long whole) {
+        return ExactRatio.of(whole);
     }
 
     /** Every value the answer names does leave a residue the image reaches. */
-    private static void leavesSomethingReached(AdditiveImage image, Rational coefficient,
-                                               Rational target, AffinePreimage answer) {
+    private static void leavesSomethingReached(AdditiveImage image, ExactRatio coefficient,
+                                               ExactRatio target, AffinePreimage answer) {
         for (long step = -3; step <= 3; step++) {
-            Rational x = switch (answer) {
+            ExactRatio x = switch (answer) {
                 case AffinePreimage.None ignored -> null;
                 case AffinePreimage.Stepping on -> on.from().plus(on.by().times(at(step)));
                 // A tenth of the generator is a finite decimal, so it is a member and it is not one
                 // a progression would have named.
                 case AffinePreimage.Filling on ->
-                        on.from().plus(on.by().times(new Rational(BigInteger.valueOf(step),
+                        on.from().plus(on.by().times(new ExactRatio(BigInteger.valueOf(step),
                                 BigInteger.TEN)));
             };
             if (x != null) {
@@ -113,10 +113,10 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
         AffinePreimage byHalves =
-                rest.affinePreimage(new Rational(BigInteger.valueOf(3), BigInteger.TWO), at(3),
+                rest.affinePreimage(new ExactRatio(BigInteger.valueOf(3), BigInteger.TWO), at(3),
                         Granularity.DENSE);
-        assertEquals(new AffinePreimage.Filling(Rational.ZERO, Rational.ONE), byHalves);
-        leavesSomethingReached(rest, new Rational(BigInteger.valueOf(3), BigInteger.TWO), at(3),
+        assertEquals(new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.ONE), byHalves);
+        leavesSomethingReached(rest, new ExactRatio(BigInteger.valueOf(3), BigInteger.TWO), at(3),
                 byHalves);
 
         assertEquals(new AffinePreimage.Filling(at(1), at(3)),
@@ -136,14 +136,14 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aCosetComesBackAtTheSameMemberHoweverItWasFound() {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
-        assertEquals(new AffinePreimage.Filling(Rational.ZERO, at(3)),
+        assertEquals(new AffinePreimage.Filling(ExactRatio.ZERO, at(3)),
                 rest.affinePreimage(at(2), at(6), Granularity.DENSE));
-        assertEquals(rest.affinePreimage(Rational.ONE, at(1), Granularity.DENSE),
-                rest.affinePreimage(Rational.ONE,
-                        Rational.of(new java.math.BigDecimal("1.3")), Granularity.DENSE));
-        assertEquals(new AffinePreimage.Filling(Rational.ONE, at(3)),
+        assertEquals(rest.affinePreimage(ExactRatio.ONE, at(1), Granularity.DENSE),
+                rest.affinePreimage(ExactRatio.ONE,
+                        ExactRatio.of(new java.math.BigDecimal("1.3")), Granularity.DENSE));
+        assertEquals(new AffinePreimage.Filling(ExactRatio.ONE, at(3)),
                 new AffinePreimage.Filling(
-                        Rational.of(new java.math.BigDecimal("1.3")), at(3)));
+                        ExactRatio.of(new java.math.BigDecimal("1.3")), at(3)));
         assertEquals(new AffinePreimage.Stepping(at(1), at(2), Granularity.DISCRETE),
                 new AffinePreimage.Stepping(at(7), at(2), Granularity.DISCRETE));
     }
@@ -154,14 +154,14 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
      *
      * <p>Nothing divides into zero, or everything does — either way what is left of it is itself,
      * and a loop looking for the last factor of two in it does not end. The caller this was written
-     * for had refused zero before it asked, and moving it onto {@link Rational} took the body and
+     * for had refused zero before it asked, and moving it onto {@link ExactRatio} took the body and
      * left the refusal behind.
      */
     @Test
     void takingTheUnitsOutOfAValueAnswersForEveryValue() {
-        assertEquals(Rational.ZERO, Rational.ZERO.unitsRemoved());
+        assertEquals(ExactRatio.ZERO, ExactRatio.ZERO.unitsRemoved());
         assertEquals(at(3), at(3).unitsRemoved());
-        assertEquals(Rational.ONE, at(20).unitsRemoved());
+        assertEquals(ExactRatio.ONE, at(20).unitsRemoved());
         // One below zero is a unit as well, so three and minus three generate the same decimals.
         assertEquals(at(3), at(-3).unitsRemoved());
     }
@@ -178,21 +178,21 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     @Test
     void aProgressionIsWrittenInTheNumbersThePositionHolds() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+                () -> new AffinePreimage.Stepping(new ExactRatio(BigInteger.ONE, BigInteger.TWO),
                         at(2), Granularity.DISCRETE));
         // And the same progression is what a position whose values fill is left with, so the
         // refusal is about the position and not about the halves.
-        assertEquals(new Rational(BigInteger.ONE, BigInteger.TWO),
-                new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.TWO),
+        assertEquals(new ExactRatio(BigInteger.ONE, BigInteger.TWO),
+                new AffinePreimage.Stepping(new ExactRatio(BigInteger.ONE, BigInteger.TWO),
                         at(2), Granularity.DENSE).from());
         // And a coset of the decimals: a generator that is no whole number once the units are out of
         // it, and a member that is no decimal a model writes.
         assertThrows(IllegalArgumentException.class,
-                () -> new AffinePreimage.Filling(Rational.ZERO,
-                        new Rational(BigInteger.valueOf(3), BigInteger.valueOf(7))));
+                () -> new AffinePreimage.Filling(ExactRatio.ZERO,
+                        new ExactRatio(BigInteger.valueOf(3), BigInteger.valueOf(7))));
         assertThrows(IllegalArgumentException.class,
                 () -> new AffinePreimage.Filling(
-                        new Rational(BigInteger.ONE, BigInteger.valueOf(3)), at(2)));
+                        new ExactRatio(BigInteger.ONE, BigInteger.valueOf(3)), at(2)));
     }
 
     /**
@@ -213,18 +213,18 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aPositionThatFillsIsAnsweredInValuesItHolds() {
         AdditiveImage rest = new AdditiveImage.OverWholeNumbers(at(2));
 
-        AffinePreimage answer = rest.affinePreimage(at(3), Rational.ONE, Granularity.DENSE);
+        AffinePreimage answer = rest.affinePreimage(at(3), ExactRatio.ONE, Granularity.DENSE);
 
-        assertEquals(new AffinePreimage.Stepping(Rational.ONE, at(2), Granularity.DENSE), answer);
-        leavesSomethingReached(rest, at(3), Rational.ONE, answer);
+        assertEquals(new AffinePreimage.Stepping(ExactRatio.ONE, at(2), Granularity.DENSE), answer);
+        leavesSomethingReached(rest, at(3), ExactRatio.ONE, answer);
     }
 
     /** And a progression whose members its position does not hold is refused where it is built. */
     @Test
     void aProgressionNamesValuesItsPositionHolds() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AffinePreimage.Stepping(new Rational(BigInteger.ONE, BigInteger.valueOf(3)),
-                        new Rational(BigInteger.TWO, BigInteger.valueOf(3)), Granularity.DENSE));
+                () -> new AffinePreimage.Stepping(new ExactRatio(BigInteger.ONE, BigInteger.valueOf(3)),
+                        new ExactRatio(BigInteger.TWO, BigInteger.valueOf(3)), Granularity.DENSE));
     }
 
     /**
@@ -255,14 +255,14 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aWeightOfOneAgainstAResidueThatFillsIsStillACongruence() {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
-        AffinePreimage answer = rest.affinePreimage(Rational.ONE, Rational.ONE,
+        AffinePreimage answer = rest.affinePreimage(ExactRatio.ONE, ExactRatio.ONE,
                 Granularity.DISCRETE);
 
         assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
-        leavesSomethingReached(rest, Rational.ONE, Rational.ONE, answer);
+        leavesSomethingReached(rest, ExactRatio.ONE, ExactRatio.ONE, answer);
         // Two of the values it leaves out, which is what "every whole number" got wrong.
-        assertTrue(!rest.contains(Rational.ONE.minus(at(0))));
-        assertTrue(!rest.contains(Rational.ONE.minus(at(2))));
+        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(0))));
+        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(2))));
     }
 
     /**
@@ -277,10 +277,10 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
     void aWeightTheDecimalsSwallowLeavesTheQuestionToTheTargetAlone() {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
-        assertEquals(new AffinePreimage.Stepping(Rational.ZERO, Rational.ONE, Granularity.DISCRETE),
+        assertEquals(new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, Granularity.DISCRETE),
                 rest.affinePreimage(at(6), at(3), Granularity.DISCRETE));
         assertEquals(new AffinePreimage.None(),
-                rest.affinePreimage(at(6), Rational.ONE, Granularity.DISCRETE));
+                rest.affinePreimage(at(6), ExactRatio.ONE, Granularity.DISCRETE));
     }
 
     /** And a target no value of the position moves into the image leaves nothing. */
@@ -289,7 +289,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         AdditiveImage rest = new AdditiveImage.OverFiniteDecimals(at(3));
 
         assertEquals(new AffinePreimage.None(),
-                rest.affinePreimage(at(3), new Rational(BigInteger.ONE, BigInteger.valueOf(7)),
+                rest.affinePreimage(at(3), new ExactRatio(BigInteger.ONE, BigInteger.valueOf(7)),
                         Granularity.DISCRETE));
     }
 
@@ -297,7 +297,7 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
      *  coset of two is every decimal there is. */
     @Test
     void aGeneratorMadeOfUnitsHoldsEveryDecimal() {
-        assertEquals(new AffinePreimage.Filling(Rational.ZERO, Rational.ONE),
-                new AffinePreimage.Filling(Rational.ZERO, at(2)));
+        assertEquals(new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.ONE),
+                new AffinePreimage.Filling(ExactRatio.ZERO, at(2)));
     }
 }

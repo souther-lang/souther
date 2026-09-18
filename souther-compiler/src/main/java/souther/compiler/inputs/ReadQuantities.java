@@ -9,12 +9,12 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Rel;
-import souther.compiler.numeric.RationalCut;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -1508,9 +1508,9 @@ final class ReadQuantities implements Quantities {
 
     /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no
      *  number for — a text position has a floor and nothing for the arithmetic to relate. */
-    private static RationalCut asCut(Endpoint end) {
+    private static ExactCut asCut(Endpoint end) {
         return end == null || !(end.at() instanceof Count at) ? null
-                : new RationalCut(Rational.of(at.at()), end.inclusive());
+                : new ExactCut(ExactRatio.of(at.at()), end.inclusive());
     }
 
 }

@@ -7,7 +7,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.PlacesApart;
-import souther.compiler.numeric.Rational;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
@@ -68,8 +68,8 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     }
 
     /** Whether {@code at} is one of {@code from + by·d} for a decimal {@code d} a model writes. */
-    private static boolean onTheCoset(Count at, Rational from, Rational by) {
-        return Rational.of(at.at()).minus(from).dividedBy(by).asWrittenDecimal() != null;
+    private static boolean onTheCoset(Count at, ExactRatio from, ExactRatio by) {
+        return ExactRatio.of(at.at()).minus(from).dividedBy(by).asWrittenDecimal() != null;
     }
 
     private static Count named(CandidateDomain of) {
@@ -86,12 +86,12 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void aMemberOnAnExcludedEndIsSteppedOffRatherThanGivenUpOn() {
         CandidateDomain may = CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("0", false, "4"));
 
         Count at = named(may);
         assertTrue(between("0", false, "4").admits(at), "the run holds it: " + at);
-        assertTrue(onTheCoset(at, Rational.ZERO, Rational.of(3)),
+        assertTrue(onTheCoset(at, ExactRatio.ZERO, ExactRatio.of(3)),
                 "and it is a decimal multiple of three: " + at);
     }
 
@@ -106,11 +106,11 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void aRunNarrowerThanTheGeneratorStillHoldsAMember() {
         CandidateDomain may = CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("0", false, "0.05"));
 
         assertTrue(between("0", false, "0.05").admits(named(may)), named(may).toString());
-        assertTrue(onTheCoset(named(may), Rational.ZERO, Rational.of(3)), named(may).toString());
+        assertTrue(onTheCoset(named(may), ExactRatio.ZERO, ExactRatio.of(3)), named(may).toString());
     }
 
     /**
@@ -123,11 +123,11 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void aRunNarrowerThanAnyFixedNumberOfPlacesStillNamesAMember() {
         CandidateDomain may = CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("0", false, "5e-25"));
 
         assertTrue(between("0", false, "5e-25").admits(named(may)), named(may).toString());
-        assertTrue(onTheCoset(named(may), Rational.ZERO, Rational.of(3)), named(may).toString());
+        assertTrue(onTheCoset(named(may), ExactRatio.ZERO, ExactRatio.of(3)), named(may).toString());
     }
 
     /**
@@ -143,11 +143,11 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void aRunDownToOnePointDecidesWhetherThatPointIsAMember() {
         assertInstanceOf(CandidateDomain.None.class, CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("2", true, "2")));
 
         assertEquals(Count.of(new BigDecimal("3")), named(CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("3", true, "3"))));
     }
 
@@ -156,7 +156,7 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void endsThatHaveCrossedAreTheEmptyAnswer() {
         assertInstanceOf(CandidateDomain.None.class, CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("4", true, "1")));
     }
 
@@ -165,7 +165,7 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
     @Test
     void aMemberOnAnIncludedEndIsTheOneNamed() {
         CandidateDomain may = CandidateDomain.of(
-                new AffinePreimage.Filling(Rational.ZERO, Rational.of(3)),
+                new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.of(3)),
                 between("0", true, "4"));
 
         assertEquals(Count.of(BigDecimal.ZERO), named(may));

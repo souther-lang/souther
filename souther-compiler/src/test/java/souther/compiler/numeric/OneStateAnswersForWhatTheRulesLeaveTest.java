@@ -35,14 +35,14 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
     private static final int HIGH = 4;
     private static final int CASES = 300;
 
-    private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
+    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Map<String, Rational> weighing(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
             out.put((String) pairs[i], num((Integer) pairs[i + 1]));
         }
@@ -57,7 +57,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         return ((Read.Stated<String>) read).constraint();
     }
 
-    private static AffineConstraint<String> rule(Map<String, Rational> coefs, long constant,
+    private static AffineConstraint<String> rule(Map<String, ExactRatio> coefs, long constant,
                                                  Rel rel) {
         return stated(AffineConstraint.of(coefs, num(constant), rel,
                 atom -> Granularity.DISCRETE));
@@ -83,8 +83,8 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
                 rule(weighing("choco", 1), -6, Rel.LE),
                 rule(weighing("straw", 300, "choco", 600), -4800, Rel.LE)));
 
-        assertEquals(RationalCut.inclusive(num(16)), closed.box().mostOf("straw"));
-        assertEquals(RationalCut.inclusive(num(6)), closed.box().mostOf("choco"),
+        assertEquals(ExactCut.inclusive(num(16)), closed.box().mostOf("straw"));
+        assertEquals(ExactCut.inclusive(num(6)), closed.box().mostOf("choco"),
                 "its own rule is the tighter one here and stays");
     }
 
@@ -96,7 +96,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
                 rule(weighing("straw", 1), -10, Rel.LE),
                 rule(weighing("choco", 1), 0, Rel.GE),
                 rule(weighing("straw", 300, "choco", 600), -4800, Rel.LE)));
-        assertEquals(RationalCut.inclusive(num(10)), closed.box().mostOf("straw"));
+        assertEquals(ExactCut.inclusive(num(10)), closed.box().mostOf("straw"));
     }
 
     /**
@@ -119,8 +119,8 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         rules.add(rule(weighing("x" + links, 3, "y", 2), -12, Rel.LE));   // the far end is under four
 
         ClosedState<String> closed = closing(rules);
-        assertEquals(RationalCut.inclusive(num(4)), closed.box().mostOf("x" + links));
-        assertEquals(RationalCut.inclusive(num(4)), closed.box().mostOf("x0"),
+        assertEquals(ExactCut.inclusive(num(4)), closed.box().mostOf("x" + links));
+        assertEquals(ExactCut.inclusive(num(4)), closed.box().mostOf("x0"),
                 "and the near end is under it too, " + links + " links away");
     }
 
@@ -141,8 +141,8 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
                 rule(weighing("b", 2, "c", -1), -4, Rel.GE),      // first round: b >= 2
                 rule(weighing("a", 1, "b", 3), -20, Rel.LE)));    // second round: a <= 14
 
-        assertEquals(RationalCut.inclusive(num(2)), closed.box().leastOf("b"));
-        assertEquals(RationalCut.inclusive(num(14)), closed.box().mostOf("a"),
+        assertEquals(ExactCut.inclusive(num(2)), closed.box().leastOf("b"));
+        assertEquals(ExactCut.inclusive(num(14)), closed.box().mostOf("a"),
                 "which one round cannot say, since it reads b at nought or above");
     }
 
@@ -231,7 +231,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
                     () -> "said nothing is left, but " + written + " admits " + admitted.size());
             for (Map<String, Integer> point : admitted) {
                 for (String position : POSITIONS) {
-                    Rational at = num(point.get(position));
+                    ExactRatio at = num(point.get(position));
                     assertTrue(admits(closed.box().leastOf(position), at, false)
                                     && admits(closed.box().mostOf(position), at, true),
                             () -> "refused a point the rules admit: " + point + " under " + written
@@ -253,7 +253,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
                 "narrowed " + narrowed + " and " + empties + " were empty, so this checked little");
     }
 
-    private static boolean admits(RationalCut cut, Rational value, boolean above) {
+    private static boolean admits(ExactCut cut, ExactRatio value, boolean above) {
         if (cut == null) {
             return true;
         }
@@ -266,7 +266,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         List<Written> out = new ArrayList<>();
         int howMany = 1 + dice.nextInt(3);
         for (int i = 0; i < howMany; i++) {
-            Map<String, Rational> coefs = new LinkedHashMap<>();
+            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             for (String position : POSITIONS) {
                 int weight = dice.nextInt(5) - 2;
                 if (weight != 0) {
@@ -330,8 +330,8 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
     }
 
     private static boolean holdsAt(Written rule, Map<String, Integer> point) {
-        Rational total = rule.constant();
-        for (Map.Entry<String, Rational> each : rule.coefs().entrySet()) {
+        ExactRatio total = rule.constant();
+        for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
             total = total.plus(each.getValue().times(num(point.get(each.getKey()))));
         }
         int sign = total.signum();

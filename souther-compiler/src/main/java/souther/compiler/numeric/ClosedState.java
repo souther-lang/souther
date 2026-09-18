@@ -179,11 +179,11 @@ public final class ClosedState<A> {
      */
     private static <A> boolean theRulesLeaveAFormNothing(FormReach<A> reading,
                                                          List<AffineConstraint<A>> constraints) {
-        Set<Map<A, Rational>> asked = new LinkedHashSet<>();
+        Set<Map<A, ExactRatio>> asked = new LinkedHashSet<>();
         for (AffineConstraint<A> each : constraints) {
-            Map<A, Rational> form = each.form().coefs();
+            Map<A, ExactRatio> form = each.form().coefs();
             if (form.size() > 1 && asked.add(form)
-                    && reading.of(form, Rational.ZERO).isEmpty()) {
+                    && reading.of(form, ExactRatio.ZERO).isEmpty()) {
                 return true;
             }
         }
@@ -231,14 +231,14 @@ public final class ClosedState<A> {
 
     /** What the closed differences leave each position on its own. */
     private static <A> Box<A> boxOf(DifferenceBounds<A> differences, Set<A> positions) {
-        Map<A, RationalCut> least = new LinkedHashMap<>();
-        Map<A, RationalCut> most = new LinkedHashMap<>();
+        Map<A, ExactCut> least = new LinkedHashMap<>();
+        Map<A, ExactCut> most = new LinkedHashMap<>();
         for (A position : positions) {
-            RationalCut low = differences.lowerBoundOf(position);
+            ExactCut low = differences.lowerBoundOf(position);
             if (low != null) {
                 least.put(position, low);
             }
-            RationalCut high = differences.upperBoundOf(position);
+            ExactCut high = differences.upperBoundOf(position);
             if (high != null) {
                 most.put(position, high);
             }
@@ -258,25 +258,25 @@ public final class ClosedState<A> {
      */
     private static <A> Box<A> throughDifferences(Box<A> box, DifferenceBounds<A> differences,
                                                  Set<A> positions) {
-        Map<A, RationalCut> least = new LinkedHashMap<>();
-        Map<A, RationalCut> most = new LinkedHashMap<>();
+        Map<A, ExactCut> least = new LinkedHashMap<>();
+        Map<A, ExactCut> most = new LinkedHashMap<>();
         for (A here : positions) {
-            RationalCut high = box.mostOf(here);
-            RationalCut low = box.leastOf(here);
+            ExactCut high = box.mostOf(here);
+            ExactCut low = box.leastOf(here);
             for (A there : positions) {
                 if (here.equals(there)) {
                     continue;
                 }
                 // `here - there <= d` with `there <= h` puts `here` at `h + d`.
-                RationalCut apart = differences.differenceBound(here, there);
+                ExactCut apart = differences.differenceBound(here, there);
                 if (apart != null && box.mostOf(there) != null) {
-                    high = RationalCut.tighterUpper(high,
-                            RationalCut.meetingBoth(box.mostOf(there), apart));
+                    high = ExactCut.tighterUpper(high,
+                            ExactCut.meetingBoth(box.mostOf(there), apart));
                 }
                 // `there - here <= d` with `there >= l` puts `here` at `l - d`.
-                RationalCut back = differences.differenceBound(there, here);
+                ExactCut back = differences.differenceBound(there, here);
                 if (back != null && box.leastOf(there) != null) {
-                    low = RationalCut.tighterLower(low, new RationalCut(
+                    low = ExactCut.tighterLower(low, new ExactCut(
                             box.leastOf(there).at().minus(back.at()),
                             box.leastOf(there).inclusive() && back.inclusive()));
                 }

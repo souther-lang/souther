@@ -29,7 +29,7 @@ import java.util.Set;
  * general sum is held elsewhere and reasoned about approximately — so what holds overall is one
  * direction only: where this says nothing is left, nothing is.
  *
- * <p>Exact throughout. The edges are {@link Rational}, and a bound only becomes a decimal somebody
+ * <p>Exact throughout. The edges are {@link ExactRatio}, and a bound only becomes a decimal somebody
  * can read at the edge where it is handed over. Closed on decimals rounded to a fixed number of
  * digits, a system with no solution comes back with one — the arithmetic that separates the two ends
  * of {@code 3a = 1} is finer than the rounding.
@@ -61,10 +61,10 @@ public final class DifferenceBounds<A> {
         }
     }
 
-    private final Map<Node<A>, Map<Node<A>, RationalCut>> closed;
+    private final Map<Node<A>, Map<Node<A>, ExactCut>> closed;
     private final boolean holdsNothing;
 
-    private DifferenceBounds(Map<Node<A>, Map<Node<A>, RationalCut>> closed, boolean holdsNothing) {
+    private DifferenceBounds(Map<Node<A>, Map<Node<A>, ExactCut>> closed, boolean holdsNothing) {
         this.closed = closed;
         this.holdsNothing = holdsNothing;
     }
@@ -79,11 +79,11 @@ public final class DifferenceBounds<A> {
      */
     public static <A> DifferenceBounds<A> over(Iterable<AffineConstraint<A>> constraints,
                                                CanonicalOrder<A> order) {
-        Map<Node<A>, Map<Node<A>, RationalCut>> edges = new LinkedHashMap<>();
+        Map<Node<A>, Map<Node<A>, ExactCut>> edges = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
             for (Edge<A> edge : edgesOf(each, order)) {
                 edges.computeIfAbsent(edge.from(), k -> new LinkedHashMap<>())
-                        .merge(edge.to(), edge.at(), RationalCut::tighterUpper);
+                        .merge(edge.to(), edge.at(), ExactCut::tighterUpper);
             }
         }
         return closing(edges);
@@ -130,11 +130,11 @@ public final class DifferenceBounds<A> {
      * the positions decide all the same: a walk of a form is where an order the form does not hold
      * gets into an answer, and the way to keep it out is to have no walk that could.
      */
-    private static <A> Edge<A> edgeOf(CanonicalForm<A> form, RationalCut bound,
+    private static <A> Edge<A> edgeOf(CanonicalForm<A> form, ExactCut bound,
                                       CanonicalOrder<A> order) {
-        List<Map.Entry<A, Rational>> coefs = form.entriesIn(order);
+        List<Map.Entry<A, ExactRatio>> coefs = form.entriesIn(order);
         if (coefs.size() == 1) {
-            Map.Entry<A, Rational> only = coefs.getFirst();
+            Map.Entry<A, ExactRatio> only = coefs.getFirst();
             Node<A> position = new Node.OfAPosition<>(only.getKey());
             Node<A> nought = new Node.Nought<A>();
             return only.getValue().signum() > 0
@@ -146,10 +146,10 @@ public final class DifferenceBounds<A> {
         }
         A up = null;
         A down = null;
-        for (Map.Entry<A, Rational> each : coefs) {
-            if (each.getValue().equals(Rational.ONE)) {
+        for (Map.Entry<A, ExactRatio> each : coefs) {
+            if (each.getValue().equals(ExactRatio.ONE)) {
                 up = each.getKey();
-            } else if (each.getValue().equals(Rational.ONE.negated())) {
+            } else if (each.getValue().equals(ExactRatio.ONE.negated())) {
                 down = each.getKey();
             } else {
                 return null;   // a sum, or a weighted difference, which is not of this shape
@@ -160,7 +160,7 @@ public final class DifferenceBounds<A> {
     }
 
     /** {@code from - to <= at}. */
-    private record Edge<A>(Node<A> from, Node<A> to, RationalCut at) {}
+    private record Edge<A>(Node<A> from, Node<A> to, ExactCut at) {}
 
     /**
      * The edges closed over each other, and whether what is left holds anything.
@@ -170,29 +170,29 @@ public final class DifferenceBounds<A> {
      * said about {@code a} alone. A path reaches its far end only where every hop on it does, which
      * is why the strictness travels with the sum rather than being decided at the end.
      */
-    private static <A> DifferenceBounds<A> closing(Map<Node<A>, Map<Node<A>, RationalCut>> edges) {
+    private static <A> DifferenceBounds<A> closing(Map<Node<A>, Map<Node<A>, ExactCut>> edges) {
         Set<Node<A>> nodes = new LinkedHashSet<>(edges.keySet());
         edges.values().forEach(row -> nodes.addAll(row.keySet()));
-        Map<Node<A>, Map<Node<A>, RationalCut>> shortest = new LinkedHashMap<>();
+        Map<Node<A>, Map<Node<A>, ExactCut>> shortest = new LinkedHashMap<>();
         edges.forEach((from, row) -> shortest.put(from, new LinkedHashMap<>(row)));
         for (Node<A> through : nodes) {
-            Map<Node<A>, RationalCut> onwards = shortest.get(through);
+            Map<Node<A>, ExactCut> onwards = shortest.get(through);
             if (onwards == null) {
                 continue;
             }
-            List<Map.Entry<Node<A>, RationalCut>> hops = List.copyOf(onwards.entrySet());
+            List<Map.Entry<Node<A>, ExactCut>> hops = List.copyOf(onwards.entrySet());
             for (Node<A> from : nodes) {
                 if (from.equals(through)) {
                     continue;
                 }
-                RationalCut reaching = at(shortest, from, through);
+                ExactCut reaching = at(shortest, from, through);
                 if (reaching == null) {
                     continue;
                 }
-                for (Map.Entry<Node<A>, RationalCut> hop : hops) {
-                    RationalCut round = RationalCut.meetingBoth(reaching, hop.getValue());
-                    RationalCut known = at(shortest, from, hop.getKey());
-                    if (RationalCut.tighterUpper(known, round) == round) {
+                for (Map.Entry<Node<A>, ExactCut> hop : hops) {
+                    ExactCut round = ExactCut.meetingBoth(reaching, hop.getValue());
+                    ExactCut known = at(shortest, from, hop.getKey());
+                    if (ExactCut.tighterUpper(known, round) == round) {
                         shortest.computeIfAbsent(from, k -> new LinkedHashMap<>())
                                 .put(hop.getKey(), round);
                     }
@@ -203,7 +203,7 @@ public final class DifferenceBounds<A> {
         // is a contradiction, and so is one summing to nought without reaching it.
         boolean nothing = false;
         for (Node<A> node : nodes) {
-            RationalCut cycle = at(shortest, node, node);
+            ExactCut cycle = at(shortest, node, node);
             if (cycle != null && (cycle.at().signum() < 0
                     || (cycle.at().isZero() && !cycle.inclusive()))) {
                 nothing = true;
@@ -213,9 +213,9 @@ public final class DifferenceBounds<A> {
         return new DifferenceBounds<>(shortest, nothing);
     }
 
-    private static <A> RationalCut at(Map<Node<A>, Map<Node<A>, RationalCut>> table,
+    private static <A> ExactCut at(Map<Node<A>, Map<Node<A>, ExactCut>> table,
                                       Node<A> from, Node<A> to) {
-        Map<Node<A>, RationalCut> row = table.get(from);
+        Map<Node<A>, ExactCut> row = table.get(from);
         return row == null ? null : row.get(to);
     }
 
@@ -231,7 +231,7 @@ public final class DifferenceBounds<A> {
     }
 
     /** The tightest {@code atom <= …} this proves, or {@code null} where it proves none. */
-    public RationalCut upperBoundOf(A atom) {
+    public ExactCut upperBoundOf(A atom) {
         return whereThereAreValues(at(closed, new Node.OfAPosition<>(atom), new Node.Nought<A>()));
     }
 
@@ -241,16 +241,16 @@ public final class DifferenceBounds<A> {
      * <p>An edge the other way says {@code 0 - a <= w}, which is {@code a >= -w} — the same cut on
      * the other side of nought, keeping whether the value itself is reached.
      */
-    public RationalCut lowerBoundOf(A atom) {
-        RationalCut below =
+    public ExactCut lowerBoundOf(A atom) {
+        ExactCut below =
                 whereThereAreValues(at(closed, new Node.Nought<A>(), new Node.OfAPosition<>(atom)));
-        return below == null ? null : new RationalCut(below.at().negated(), below.inclusive());
+        return below == null ? null : new ExactCut(below.at().negated(), below.inclusive());
     }
 
     /** The tightest {@code a - b <= …} this proves, or {@code null} where it proves none. */
-    public RationalCut differenceBound(A a, A b) {
+    public ExactCut differenceBound(A a, A b) {
         if (a.equals(b)) {
-            return whereThereAreValues(RationalCut.inclusive(Rational.ZERO));
+            return whereThereAreValues(ExactCut.inclusive(ExactRatio.ZERO));
         }
         return whereThereAreValues(
                 at(closed, new Node.OfAPosition<>(a), new Node.OfAPosition<>(b)));
@@ -269,7 +269,7 @@ public final class DifferenceBounds<A> {
      * looking for rows in a value nobody can build. Whether anything is left is
      * {@link #holdsNothing}, and it is the question to ask first.
      */
-    private RationalCut whereThereAreValues(RationalCut answer) {
+    private ExactCut whereThereAreValues(ExactCut answer) {
         if (holdsNothing) {
             throw new IllegalStateException(
                     "nothing is left, so no bound is the tightest; ask holdsNothing first");

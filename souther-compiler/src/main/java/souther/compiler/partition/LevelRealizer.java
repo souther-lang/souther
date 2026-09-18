@@ -333,7 +333,7 @@ public final class LevelRealizer {
         // Composed from and not narrowed by, because the place walked here is written into a row.
         // A pair standing at a value out of a set nobody established is the same row this class
         // declines to offer at one position, offered because it was reached through two.
-        ValueSet admits = looking.toComposeFrom(anchored);
+        ValueSet admits = looking.toComposeFrom(anchored).toCrossTheRunWith();
         if (admits == null) {
             return null;
         }
@@ -606,10 +606,10 @@ public final class LevelRealizer {
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                Map<NumericTerm, souther.compiler.numeric.Rational> coefs = new LinkedHashMap<>();
+                Map<NumericTerm, souther.compiler.numeric.ExactRatio> coefs = new LinkedHashMap<>();
                 for (int j = i; j < terms.size(); j++) {
                     coefs.put(terms.get(j).getKey().term(),
-                            souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
+                            souther.compiler.numeric.ExactRatio.of(terms.get(j).getValue()));
                 }
                 // Each term's own spacing, which is what the image was always asking for: a sum of
                 // whole numbers lands on whole numbers, and one decimal among them makes it dense.
@@ -686,8 +686,8 @@ public final class LevelRealizer {
             // afterwards to leave.
             CandidateDomain may = CandidateDomain.of(
                     fromHere[i + 1].affinePreimage(
-                            souther.compiler.numeric.Rational.of(coef),
-                            souther.compiler.numeric.Rational.of(owed),
+                            souther.compiler.numeric.ExactRatio.of(coef),
+                            souther.compiler.numeric.ExactRatio.of(owed),
                             carriers[i].spacing()),
                     left);
             return switch (may) {
@@ -1062,10 +1062,13 @@ public final class LevelRealizer {
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
-            case Criterion.Within within ->
-                    looking.toComposeFrom(term) instanceof ValueSet admits
-                            ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
-                            : null;
+            // A path the reading puts no position at is not that, and the run is what a value there
+            // is composed from.
+            case Criterion.Within within -> {
+                ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
+                yield admits == null ? null
+                        : someValueIn(within, carrier, bounds, admits, apart, looking::meter);
+            }
         };
         if (offered == null) {
             return null;

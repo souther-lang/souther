@@ -18,6 +18,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
@@ -180,10 +181,39 @@ public final class Partitions {
             for (PositionMeasurements at : measurements) {
                 PendingPosition pending = PendingPosition.of(at.position(), at.hasMeasures());
                 if (pending != null) {
-                    out.add(pending.complete(at.inspection()));
+                    out.add(withheldWhereNothingRead(pending.complete(at.inspection())));
                 }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * The same answer, less the one conclusion a reading nobody made cannot support.
+         *
+         * <p>{@link UndividedPosition.Why.Absent} says the model divides the position no way at
+         * all, and what proves it is every rule about the position having been read and none of
+         * them dividing it. Where nothing read the body, the rules it writes were not among them —
+         * so the phases that did run answered for what they saw and the conclusion is one nobody
+         * is entitled to draw.
+         *
+         * <p>Only that one. A position the walk could not enter and one a rule was filed at say
+         * what they say whether or not a body was read, and taking them out here would lose a
+         * finding an author can act on to a fact about a different part of the reading.
+         *
+         * <p>And it becomes the answer for that, rather than the one for a reading that did not
+         * get far enough. That one promises a reader something standing at the position and a
+         * finding published at it, and a body this image has none of is true of every position of
+         * the behavior at once and stands at none of them.
+         *
+         * <p>Withheld here rather than concluded elsewhere: {@code Absent} has one producer, and
+         * this is the reader that holds both the position's answer and what the measure's reading
+         * came to.
+         */
+        private UndividedPosition withheldWhereNothingRead(UndividedPosition said) {
+            return partitionClosure instanceof MeasureClosure.OfThePartition.BodyNotRead
+                    && said.why() instanceof UndividedPosition.Why.Absent
+                    ? UndividedPosition.bodyNotInEvaluation(said.at())
+                    : said;
         }
 
         /**
@@ -1026,8 +1056,10 @@ public final class Partitions {
         // and the allowance for composing them is never asked for a machine. It is still handed in
         // rather than made: an allowance is what a compilation's grant becomes, and one made here
         // would be a meter at every position that nobody granted.
+        // A reading of the thresholds is a reading that was made, whatever it found.
         return withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
-                rulesWithoutALine, between, reaching);
+                rulesWithoutALine, between, reaching,
+                new MeasureClosure.Drawing.FromTheReading());
     }
 
     /**
@@ -1048,7 +1080,8 @@ public final class Partitions {
                                             RuleReadingContext ruleReading,
                                             RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,
-                                            ReachingCuts reaching) {
+                                            ReachingCuts reaching,
+                                            MeasureClosure.Drawing drawing) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1117,7 +1150,16 @@ public final class Partitions {
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
-        MeasureClosure.Both closed = MeasureClosure.of(base.positions(), asked, read);
+        // Drawn from the reading that was made, or said to be the absence of one. A body this
+        // elaboration has none of was not read: the classes above are what the declarations and
+        // the clauses came to, and what the body's own rules add to them is unknown — so neither
+        // measure may conclude over it, and neither may name a question either.
+        MeasureClosure.Both closed = switch (drawing) {
+            case MeasureClosure.Drawing.FromTheReading _ ->
+                    MeasureClosure.of(base.positions(), asked, read);
+            case MeasureClosure.Drawing.NoneWasMade it -> MeasureClosure.bodyNotRead(
+                    it.behavior(), MeasureClosure.of(base.positions(), asked, read));
+        };
         return new Partitioning(measurements, asked, base.uncertain(),
                 // Read after every position was measured, so that what a position's classes would
                 // not compose is in it. Taken before, the list is what the producers handed over and
@@ -2589,13 +2631,14 @@ public final class Partitions {
 
     /**
      * What a search composing a value at one of this phase's positions is given: the sets the
-     * declarations leave them, and what looking for a value in one may cost.
+     * declarations leave them, where a name of one value stands in another, and what looking for a
+     * value in one may cost.
      *
      * <p>Here because this is where what a position admits is already in hand and where what writing
      * one value out may cost is already granted. A search reaching for either would be a second
      * answer about the model beside an allowance nothing granted it.
      */
-    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements) {
+    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements, NameReach reach) {
         java.util.Map<TermPath, ValueSet> sets = new LinkedHashMap<>();
         for (PositionMeasurements at : measurements) {
             // Every position the reading measured, including the ones whose rules leave them
@@ -2603,7 +2646,12 @@ public final class Partitions {
             // a map with a hole in it cannot tell a caller which of the two it is looking at.
             sets.put(at.position().path(), at.position().admits());
         }
-        return new WitnessSearch(AdmittedValues.of(sets), PatternPlan.Budget.OF_A_WITNESS::meter);
+        // And what the same walk saw of the names that stand somewhere other than the position of
+        // the same name one step down, so that a path this measurement has no position at is told
+        // from a position it was left short of. Worked out from the measurements alone, the two
+        // would be one hole in one map.
+        return new WitnessSearch(AdmittedValues.of(sets, reach),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 
     private Partitions() {}
