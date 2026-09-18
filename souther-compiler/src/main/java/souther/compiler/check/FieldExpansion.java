@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * What a declaration reaches through its spreads, as the structure it is.
@@ -223,9 +224,15 @@ public final class FieldExpansion {
      * <p>A name reached twice takes the type the last of them wrote. Which is the answer for a
      * reader that answers about whatever is written; {@code refusing} is what the pass that holds a
      * declaration to its rules says instead.
+     *
+     * <p><b>Walked by the name it is keyed on.</b> Two expansions reaching the same fields answer
+     * the same mapping, and a mapping's equality cannot see which order it was filled in — so an
+     * answer that came back in the order the expansion happened to walk would be one a reader
+     * could take a layout off while nothing comparing two of them saw any difference. Here the
+     * order is a function of the names, which is what every reader of this already holds it to.
      */
     public static Map<String, Type> types(Of of, Refusing refusing) {
-        Map<String, Type> out = new LinkedHashMap<>();
+        Map<String, Type> out = new TreeMap<>();
         held(of, refusing).forEach((name, held) -> out.put(name, held.type()));
         return out;
     }

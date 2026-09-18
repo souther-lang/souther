@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * What a module emits: one class under one JVM name, held beside the Souther identity it was emitted
@@ -214,7 +215,12 @@ public final class Emissions {
      */
     public Map<String, ClassFileImage> seal() {
         if (sealed == null) {
-            Map<String, ClassFileImage> out = new LinkedHashMap<>();
+            // Under the binary name, and walked in it. What order the classes were emitted in is a
+            // fact about how the generation ran and not about what it answered with — two
+            // generations that emitted the same classes in either order answer the same thing, and
+            // a mapping keyed by name cannot tell them apart. So nothing here hands out the one
+            // and lets a reader take the other off it.
+            Map<String, ClassFileImage> out = new TreeMap<>();
             byName.forEach((name, emission) ->
                     out.put(name.binaryName(), ClassFileImage.of(emission.bytes())));
             sealed = Collections.unmodifiableMap(out);
