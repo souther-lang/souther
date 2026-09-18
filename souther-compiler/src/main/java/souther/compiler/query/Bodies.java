@@ -3086,6 +3086,20 @@ public final class Bodies {
             owned = Ordered.set(new LinkedHashSet<>(owned));
             runnable = Ordered.set(new LinkedHashSet<>(runnable));
         }
+
+        /**
+         * Whether every implementation this module owns may be run.
+         *
+         * <p>Asked here rather than by whoever wants it, because what it is for is deciding that an
+         * evaluation may read the whole module's own check instead of this answer — and a caller
+         * deciding that from anything else is deciding it from a narrower question. A module's own
+         * check is one of those: a body here is checked against the signatures of what it calls and
+         * never against their bodies, so it comes out whole while an implementation it reaches in
+         * another module was never made.
+         */
+        public boolean everyOneRunnable() {
+            return runnable.containsAll(owned);
+        }
     }
 
     /**
@@ -3287,11 +3301,17 @@ public final class Bodies {
      * denoting nothing, no type nobody could name — and the universal one {@link Checked} adds over
      * every body of the module is the one this does without.
      *
-     * <p><b>The whole module's answer where there is one.</b> Asked of {@link Checked} first and
-     * handed back as it came, so a module that came out whole is observed against the program it
-     * ships rather than against a second elaboration equal to it. Built again here, the two would
-     * hold equal plans filed under different objects, and what a run recorded would be numbered
-     * against one of them and read against the other.
+     * <p><b>The whole module's answer where every implementation of it may be run.</b> Handed back
+     * as {@link Checked} came to it, so such a module is observed against the program it ships
+     * rather than against a second elaboration equal to it. Built again here, the two would hold
+     * equal plans filed under different objects, and what a run recorded would be numbered against
+     * one of them and read against the other.
+     *
+     * <p>Two conditions and not one, because they are two questions. That the module came out whole
+     * is what makes there be a shipped program to be identical to; that every implementation it owns
+     * may be run is what makes this answer the same one. A module whose own check came out and whose
+     * caller of another module's unmade implementation did not is short of the second and not of the
+     * first ({@link Implementations#everyOneRunnable}).
      *
      * <p>Nothing is reported from here. What a contradicted claim refuses is a build, and a build
      * refuses over the module it would ship; a refusal raised from an artifact nothing ships would
@@ -3307,10 +3327,6 @@ public final class Bodies {
 
         @Override
         public Answer<Elaborated> compute(Db db) {
-            Answer<Elaborated> whole = db.ask(new Checked(name));
-            if (whole.present()) {
-                return Answer.of(whole.value());
-            }
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<ModuleCheck.Of> module = db.ask(new ModuleCheck(name));
             if (!settled.present() || !module.present()
@@ -3320,6 +3336,15 @@ public final class Bodies {
             Implementations runs = db.ask(new RunnableImplementations(name)).value();
             if (runs == null) {
                 return Answer.absent();
+            }
+            // Asked of the closure and not of this module's own check, which is a narrower question
+            // than the one being shortcut: a body here checks against the signatures of what it
+            // calls, so this module comes out whole while an implementation it reaches in another
+            // module was never made. Shortcut on the check, the classes an evaluation loads would
+            // hold a caller of a class nothing emitted.
+            Answer<Elaborated> whole = db.ask(new Checked(name));
+            if (whole.present() && runs.everyOneRunnable()) {
+                return Answer.of(whole.value());
             }
             // In the order the module declares them, which is what the numbering is of. Taken from
             // the declarations and filtered, rather than walked out of the set: a set says which

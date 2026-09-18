@@ -3,12 +3,16 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Severity;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.ArmObservation;
 
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -141,6 +145,33 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
                         + " about " + refused.refusals());
         assertEquals(Set.of(), refused.runnable("example.down"));
         assertEquals(Set.of(), refused.runnable("example.up"));
+    }
+
+    /**
+     * And what an evaluation of that caller's module is entitled to emit is nothing.
+     *
+     * <p>The answer above is what may be run; this is the elaboration an evaluation reads and the
+     * classes it loads. They come apart wherever the elaboration is chosen by a narrower question
+     * than the closure — the caller's own module comes out whole, so a shortcut taken on that alone
+     * hands an evaluation the shipped program and its class constructing one nothing emitted.
+     */
+    @Test
+    void andAnEvaluationOfThatCallersModuleIsEntitledToEmitNothing() {
+        Compiled refused = compile("0", DOWN, UP);
+
+        Answer<Bodies.Elaborated> observed =
+                refused.compilation().db().ask(new Bodies.Observable("example.up"));
+        assertTrue(observed.present(), "the module's names came out, so there is an answer here");
+        assertEquals(Set.of(), observed.value().emits(),
+                "nothing of this module may be run, so it is entitled to no implementation");
+
+        Set<String> classes = refused.compilation().db()
+                .ask(new Output.Evaluated("example.up", ArmObservation.RECORD))
+                .value().classes().keySet();
+        assertFalse(classes.contains(SoutherJvmAbi.nameOf(
+                        new GeneratedClass.BehaviorImpl("example.up", "use")).binaryName()),
+                () -> "`use` reaches an implementation nothing made and something implements it: "
+                        + classes);
     }
 
     /** And where the module it imports from came out, the caller may be run. */

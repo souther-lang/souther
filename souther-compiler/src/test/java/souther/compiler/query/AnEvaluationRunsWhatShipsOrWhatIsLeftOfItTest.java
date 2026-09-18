@@ -87,7 +87,7 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
     /**
      * A refused body leaves nothing to ship and leaves the bodies that may be run.
      *
-     * <p>Which bodies those are is {@link Bodies.RunnableBehaviors}'s answer, and that this
+     * <p>Which bodies those are is {@link Bodies.RunnableImplementations}'s answer, and that this
      * elaboration holds exactly them is what makes it the emission: what it does not hold is what
      * the backend has no body here to emit.
      */

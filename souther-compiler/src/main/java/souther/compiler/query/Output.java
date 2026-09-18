@@ -128,13 +128,15 @@ public final class Output {
         /**
          * The parts of a generation both {@link Classes} and {@link Evaluated} need, asked once.
          *
-         * <p>Both answer with a module's bytecode. Where the module came out whole they are one
-         * program and differ only in whether each arm records that it ran, and two copies of this
-         * would be two chances for the measured classes and the shipped ones to stop being that.
-         * Where it did not come out whole there is nothing to ship, and what is measured is the
-         * implementations that may be run — so the sameness is a property of a whole module rather
-         * than of every compile, and which of the two elaborations an artifact reads is the one
-         * thing asked apart ({@link Elaboration}).
+         * <p>Both answer with a module's bytecode. Where the module came out whole and every
+         * implementation it owns may be run they are one program and differ only in whether each
+         * arm records that it ran, and two copies of this would be two chances for the measured
+         * classes and the shipped ones to stop being that. Short of either they are not: a module
+         * that did not come out whole has nothing to ship, and one whose caller of another module's
+         * unmade implementation may not be run is measured against what is left of it. So the
+         * sameness is a property of a module whose implementations are all runnable rather than of
+         * every compile, and which of the two elaborations an artifact reads is the one thing asked
+         * apart ({@link Elaboration}).
          */
         record Inputs(Hir.Module lowered, DerivedSymbols scope,
                       souther.compiler.check.PublishedDeclarations published,
