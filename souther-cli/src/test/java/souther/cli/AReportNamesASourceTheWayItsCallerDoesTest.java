@@ -47,6 +47,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
      * <p>A name and not a body. A body that does not check leaves the bodies that do check runnable
      * and their rows observed, which is a source that produced an observation — and what a source
      * that produced none is called is what these tests are about.
+     *
+     * <p>Its row is written without a name, which is the row whose identity needs the file it is
+     * written in to be said.
      */
     private static String stopped(String module, String type) {
         return String.format("""
@@ -61,7 +64,7 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
                 behavior onwards = passThrough >-> nosuch
 
                 example passThrough
-                    | "through" : (%s(1)) -> %s(1)
+                    | (%s(1)) -> %s(1)
                 """, module, type, type, type, type, type);
     }
 
@@ -78,7 +81,7 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
     void aSingleSourceIsNamedAndNotNumbered() throws Exception {
         Streams ran = run(Map.of("zeroname.sou", stopped("example.zeroname", "Amount")));
 
-        assertTrue(ran.out().contains("no rows were read from `zeroname.sou`"), ran.out());
+        assertTrue(ran.out().contains("`passThrough #1 in zeroname.sou`"), ran.out());
         assertFalse(ran.out().contains("`0`"), "an id is not a name: " + ran.out());
     }
 
@@ -92,9 +95,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Streams ran = run(sources);
 
         assertTrue(blockOf(ran.out(), "example.other")
-                        .contains("no rows were read from `other.sou`"), ran.out());
+                        .contains("`passThrough #1 in other.sou`"), ran.out());
         assertTrue(blockOf(ran.out(), "example.zeroname")
-                        .contains("no rows were read from `zeroname.sou`"), ran.out());
+                        .contains("`passThrough #1 in zeroname.sou`"), ran.out());
     }
 
     /**
@@ -114,9 +117,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Streams ran = run(sources);
 
         assertTrue(blockOf(ran.out(), "example.a")
-                        .contains("no rows were read from `a/model.sou`"), ran.out());
+                        .contains("`passThrough #1 in a/model.sou`"), ran.out());
         assertTrue(blockOf(ran.out(), "example.b")
-                        .contains("no rows were read from `b/model.sou`"), ran.out());
+                        .contains("`passThrough #1 in b/model.sou`"), ran.out());
     }
 
     /** The rows written beside the report read the same way, being read in the same terminal. */
@@ -126,8 +129,8 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
                 "--generate");
 
         assertTrue(ran.out().contains(
-                        "// generation stopped for `passThrough`: no rows were read from"
-                                + " `zeroname.sou`"), ran.out());
+                        "// generation stopped for `passThrough`: nothing was observed for"
+                                + " `passThrough #1 in zeroname.sou`"), ran.out());
     }
 
     /**
@@ -137,6 +140,10 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
      * across runs nor a key. Turning the JSON's subject into one would move the defect rather than
      * fix it: the document would then say what a person should be shown and no longer say which
      * source it is about.
+     *
+     * <p>A row nothing was observed for is named by the source it is written in as well as by the
+     * behavior it is of, so the same question is asked of it: what is written is the id this run
+     * files that source under, and the name is given where the line is rendered.
      */
     @Test
     void theJsonSubjectIsStillTheSourceId() throws Exception {
@@ -150,12 +157,11 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Map<String, String> subjects = new LinkedHashMap<>();
         for (JsonNode module : modules) {
             for (JsonNode gap : module.get("incompleteness")) {
-                if ("source".equals(gap.get("scope").asString())) {
-                    subjects.put(module.get("module").asString(), gap.get("subject").asString());
-                }
+                subjects.put(module.get("module").asString(), gap.get("subject").asString());
             }
         }
-        assertEquals(Map.of("example.other", "0", "example.zeroname", "1"), subjects, ran.out());
+        assertEquals(Map.of("example.other", "passThrough/0/#1",
+                        "example.zeroname", "passThrough/1/#1"), subjects, ran.out());
     }
 
     /**

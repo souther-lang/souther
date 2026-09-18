@@ -7,9 +7,15 @@ import souther.compiler.source.SourceId;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
+import souther.compiler.observe.Target;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,6 +41,52 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
+    }
+
+    /**
+     * And a row of a source with no observation says that of the row.
+     *
+     * <p>The other producer of the same code, about the other kind of subject. What the one above
+     * says is true of a file whose contents nothing could read — nothing in it was read — and said
+     * of a row it would claim that of a behavior whose other rows came back.
+     */
+    @Test
+    void aRowNothingWasObservedForSaysItOfTheRow() {
+        String said = Reasons.said(new Incompleteness(
+                Incompleteness.Code.OBSERVATION_ABSENT,
+                new Target.OfRow(new RowRef("take", new SourceId("1"),
+                        new RowIdentity.Unnamed(2))),
+                java.util.Optional.empty()).identity(),
+                new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
+
+        assertEquals("nothing was observed for `take #2 in trip.sou`, so what it covers is unknown",
+                said);
+    }
+
+    /**
+     * And it is said of nothing else, whatever a caller hands over.
+     *
+     * <p>Two producers and two sentences, so anything else is a thing nobody has said what happened
+     * to. Answered by whichever of the two came second, a reader would be told that no rows were
+     * read from a behavior — which is the shape of claim this code was split in two to stop making.
+     * The type does not refuse the pairing: a code and what it is about are a product, and which
+     * pairings a producer writes is not something either half carries.
+     */
+    @Test
+    void andNothingElseIsSaidToHaveBeenObservedOrNot() {
+        SourceRendering naming = new SourceRendering(id -> "trip.sou", SourceLayouts.NONE);
+        for (Target target : List.of(new Target.OfBehavior("take"),
+                new Target.OfModule("example.trip"),
+                new Target.AtPosition("take", "request.cost"))) {
+            Incompleteness.Fact wrong = new Incompleteness(
+                    Incompleteness.Code.OBSERVATION_ABSENT, target,
+                    java.util.Optional.empty()).identity();
+
+            IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                    () -> Reasons.said(wrong, naming), () -> "what it says of " + target);
+            assertTrue(refused.getMessage().contains("nothing observed is about a row or"),
+                    () -> "what it says is: " + refused.getMessage());
+        }
     }
 
     /**
@@ -118,17 +170,35 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
      * sentence: it tells a reader what the code was and nothing about what happened. Every code left
      * here is one a report is written in, and one whose producers have been read far enough to say
      * so in words.
+     *
+     * <p>Each asked about something it is written about. A code and what it happened to are a
+     * product and not every pairing is a thing that happened, so a sweep handing all of them one
+     * subject asks some of them what they say about a state nothing produces — and the answer to
+     * that is a sentence nobody should be reading rather than a sentence.
      */
     @Test
     void noCodeIsPrintedAsItsOwnName() {
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
-            String said = Reasons.said(Incompleteness.of(code,
-                    Incompleteness.Scope.BEHAVIOR, "submit").identity(),
+            String said = Reasons.said(new Incompleteness(code, somethingItIsAbout(code),
+                    java.util.Optional.empty()).identity(),
                     SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
             assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
                     code + " is printed as itself");
             assertTrue(said.contains("submit"), code + " does not say what it is about: " + said);
         }
+    }
+
+    /**
+     * Something {@code code} is written about, named for `submit` whichever it is.
+     *
+     * <p>One code reads what it is about, so one code needs this. It is a row here; that it also
+     * says the other thing it is about is asked above, where both are written out.
+     */
+    private static Target somethingItIsAbout(Incompleteness.Code code) {
+        return code == Incompleteness.Code.OBSERVATION_ABSENT
+                ? new Target.OfRow(new RowRef("submit", new SourceId("1"),
+                        new RowIdentity.Unnamed(1)))
+                : new Target.OfBehavior("submit");
     }
 }
