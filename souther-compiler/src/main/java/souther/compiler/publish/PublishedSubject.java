@@ -96,8 +96,12 @@ public sealed interface PublishedSubject {
      * a name is not addressable from outside this compiler — its own identity says so — so what is
      * written for it is which of its behavior's rows in that source it is, and a reader is not
      * handed a number as though they could look it up by it.
+     *
+     * <p>The source as the compilation identifies it, for the reason {@link OfASource} holds one:
+     * which source a row is written in is part of saying which row, so a document naming it here
+     * would be naming it while the entries were still being arranged.
      */
-    record OfARow(String behavior, String source, String name, Integer ordinal)
+    record OfARow(String behavior, SourceId source, String name, Integer ordinal)
             implements PublishedSubject {
 
         public OfARow {
@@ -114,7 +118,7 @@ public sealed interface PublishedSubject {
 
         @Override
         public String identity() {
-            return behavior + "/" + source + "/" + (name == null ? "#" + ordinal : name);
+            return behavior + "/" + source.value() + "/" + (name == null ? "#" + ordinal : name);
         }
     }
 

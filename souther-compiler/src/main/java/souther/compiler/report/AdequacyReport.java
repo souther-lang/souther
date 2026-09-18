@@ -6121,7 +6121,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     into.put("source", sources.written(it.source()));
             case PublishedSubject.OfARow it -> {
                 into.put("behavior", it.behavior());
-                into.put("source", it.source());
+                // Named here and not where it was projected, as a source subject is: which source
+                // a row is written in is an identity this document now owes an explanation of.
+                into.put("source", sources.written(it.source()));
                 if (it.name() == null) {
                     into.put("ordinal", it.ordinal());
                 } else {
@@ -6303,10 +6305,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // compiler can address it by a number.
             case Subject.OfARow it -> switch (it.rowRef().identity()) {
                 case RowIdentity.Named named -> new PublishedSubject.OfARow(it.rowRef().behavior(),
-                        sources.written(it.rowRef().source()), named.name(), null);
+                        it.rowRef().source(), named.name(), null);
                 case RowIdentity.Unnamed unnamed -> new PublishedSubject.OfARow(
-                        it.rowRef().behavior(), sources.written(it.rowRef().source()), null,
-                        unnamed.ordinal());
+                        it.rowRef().behavior(), it.rowRef().source(), null, unnamed.ordinal());
             };
             case Subject.AtASpelledPosition it ->
                     new PublishedSubject.AtASpelledPosition(it.behavior(), it.path());
