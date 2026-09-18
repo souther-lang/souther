@@ -260,11 +260,8 @@ public final class ExampleVerifier {
         // What is wrong with the answer rather than with the row, said here because here is the
         // whole of what this caller gets. A bulk run says it once for the behavior and every row of
         // it is in one report; a row handed over on its own is the only place its reader looks, so
-        // one stopping at ANSWERER_ESTABLISHMENT would otherwise carry the phase and nothing that
-        // says why.
-        if (target.handing() instanceof Handing.NotEstablished(Agreement why)) {
-            said.add(cannotBeHeldTo(row.pos(), target.name(), why));
-        }
+        // one stopping with nothing said would otherwise carry a phase and nothing that says why.
+        whyNothingWasHandedOver(target, row.pos()).ifPresent(said::add);
         List<RowOutcome> outcomes = new ArrayList<>();
         checkRow(target, sig, outCases(sig.outputType()), row, said, outcomes);
         if (outcomes.size() != 1) {
@@ -835,9 +832,9 @@ public final class ExampleVerifier {
         // Said once for the behavior in this source: not once for each of its rows, and not once for
         // each block they are written in. One answer and one module disagreeing is one fact, and a
         // behavior's rows may be written in as many blocks as they belong in.
-        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
-                && said.add(target.name())) {
-            out.add(cannotBeHeldTo(ex.pos(), target.name(), target.agreement()));
+        java.util.Optional<Diagnostic> why = whyNothingWasHandedOver(target, ex.pos());
+        if (why.isPresent() && said.add(target.name())) {
+            out.add(why.get());
         }
         Sig sig = sigs.get(module.targeted(target.name()));
         if (sig == null) {
@@ -981,6 +978,32 @@ public final class ExampleVerifier {
                                 named, declared.get(), published.classes(),
                                 symbols.library()));
             };
+        };
+    }
+
+    /**
+     * What to tell a reader about a behavior whose rows were not handed over, where there is
+     * anything to tell them that is not already written somewhere else.
+     *
+     * <p>A switch over what may be handed a behavior's values, so an answer this was never shown is
+     * a compile error here rather than a row carrying a phase and nothing that says why. Which of
+     * the arms is owed a sentence is the question, and it is asked once: both the caller running one
+     * row and the walk over a whole block read this, and asked in two places one of them would keep
+     * an arm the other had answered for.
+     *
+     * <p>Empty is an answer and not a gap. A row that was handed over has nothing wrong with what
+     * answers it; a behavior nothing implements is waiting and its own report says so; and an
+     * implementation this compile owed and did not make was refused where the body is written, so a
+     * second sentence here would say what an author has already been told, against a row rather
+     * than against the line it is about.
+     */
+    private java.util.Optional<Diagnostic> whyNothingWasHandedOver(ExampleTarget target,
+                                                                   SourcePos at) {
+        return switch (target.handing()) {
+            case Handing.MayApply _, Handing.NothingApplies _, Handing.NotMade _ ->
+                    java.util.Optional.empty();
+            case Handing.NotEstablished(Agreement why) ->
+                    java.util.Optional.of(cannotBeHeldTo(at, target.name(), why));
         };
     }
 

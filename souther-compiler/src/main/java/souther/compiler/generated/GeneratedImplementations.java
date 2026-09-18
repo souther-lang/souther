@@ -65,12 +65,13 @@ public record GeneratedImplementations(String module, Set<String> behaviors,
         }
     }
 
-    /** Whether this compile generated an implementation for {@code behavior}. */
-    public boolean has(String behavior) {
-        return behaviors.contains(behavior);
-    }
-
-    /** What this compile came to about {@code behavior}'s implementation. */
+    /**
+     * What this compile came to about {@code behavior}'s implementation.
+     *
+     * <p>The one way to ask. A membership test beside this would answer the question its coarser
+     * half asks — whether a class is here — and a reader taking that for the whole of it gives a
+     * behavior this compile owed and did not make the answer it gives one nobody owes.
+     */
     public Standing standingOf(String behavior) {
         if (behaviors.contains(behavior)) {
             return Standing.GENERATED;

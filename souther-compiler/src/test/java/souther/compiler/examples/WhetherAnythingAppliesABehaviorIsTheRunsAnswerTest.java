@@ -152,10 +152,13 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         GeneratedImplementations generated = artifactOf(compiled(), "example.applying").implementations();
 
         assertEquals("example.applying", generated.module());
-        assertTrue(generated.has("double"),
+        assertEquals(GeneratedImplementations.Standing.GENERATED, generated.standingOf("double"),
                 "it emitted an implementation for the behavior with a body");
         assertEquals(Set.of("double"), generated.behaviors(),
                 "and for nothing else: a behavior with no `let` is not implemented here");
+        assertEquals(GeneratedImplementations.Standing.ELSEWHERE,
+                generated.standingOf("suppliedFromOutside"),
+                "and a behavior with no `let` is nobody's here to have made");
     }
 
     /**
