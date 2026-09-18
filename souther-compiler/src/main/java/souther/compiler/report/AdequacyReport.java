@@ -1452,20 +1452,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (!adequacyGaps().isEmpty()) {
             return AdequacyStatus.NOT_SATISFIED;
         }
-        // Every measure the verdict rests on came to an answer nothing weakened. A measurement made
-        // in part is one whose gaps may not be gaps, and one that could not be finished came to no
-        // answer at all — neither settles a verdict.
-        //
-        // The support evidence and the domain measures, which are two questions. This used to ask
-        // the second and then reach past it for a list of reasons: a reason about a measure nothing
-        // rests on held the verdict open, and a reason no measure carried held it open on nobody's
-        // authority (issue #996).
-        return Stream.concat(requiredSupport().stream(), requiredEvidence().stream())
-                        .map(Owned::value)
-                        .allMatch(m -> m instanceof Measurement.Complete<?>)
-                        && requiredObligations().stream().map(Owned::value).noneMatch(
-                                owed -> owed.disposition() instanceof ObligationDisposition.Undecided)
-                ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
+        // Asked of the uncertainties themselves rather than of the measures a second time. A
+        // measure short of anything leaves an entry there and a measure complete in every part
+        // leaves none, so the two questions have one answer — worked out twice, they are two that
+        // can differ, and a report saying it is undetermined while naming nothing that holds it
+        // open is what that difference looks like.
+        return unresolved().isEmpty() ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
+    }
+
+    /**
+     * What this scope found and what it has not answered, as one value and before either is
+     * ranked.
+     *
+     * <p>Where a question about the entries themselves is asked. The verdict outranks: a scope with
+     * a gap is refused and {@link #whatKeepsTheVerdictOpen()} is then empty, which is right for a
+     * reader of that verdict and wrong for anyone asking what the analysis came to
+     * ({@link AdequacyAssessment}).
+     */
+    public AdequacyAssessment assessment() {
+        return new AdequacyAssessment(adequacyGaps(), unresolved());
     }
 
     /**
@@ -1490,9 +1495,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * document.
      */
     public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
-        if (adequacy() != AdequacyStatus.UNDETERMINED) {
-            return List.of();
-        }
+        return adequacy() == AdequacyStatus.UNDETERMINED ? unresolved() : List.of();
+    }
+
+    /**
+     * Everything this scope has not answered, whatever its verdict makes of them.
+     *
+     * <p>Beneath the ranking and read by both sides of it. A scope with a gap is refused and shows
+     * none of these to a reader of its verdict, and the entries are there either way — a module
+     * whose bodies were never made is short of them beside a sibling the rows refuse, and the two
+     * facts are about different things.
+     */
+    private List<AdequacyOpening> unresolved() {
         // The facts first, folded once. Two measures that went without the same thing went without
         // one thing, and putting them together is what says so.
         WeakeningSet facts = WeakeningSet.none();
