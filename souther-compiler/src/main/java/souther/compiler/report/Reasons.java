@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Target;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.CompositionShortfall;
@@ -83,11 +84,21 @@ final class Reasons {
             // it holds; the other is a row of a source that produced no observation, and that row
             // is what went unread. Written as one sentence over both subjects, it said of a row
             // what is only true of a file.
-            case OBSERVATION_ABSENT -> gap.scope() == Incompleteness.Scope.ROW
-                    ? String.format(
-                            "nothing was observed for `%s`, so what it covers is unknown", subject)
-                    : String.format(
-                            "no rows were read from `%s`, so what they cover is unknown", subject);
+            //
+            // Over what it is about and not over the scope that follows from it, and with the rest
+            // refused rather than left to whichever sentence came second. The two kinds are the two
+            // this compiler writes; a third would be a thing nobody has said what happened to, and
+            // taking the file's sentence for it is how a reader is told something that was never
+            // established. Read off the sum, so an arm added to it is answered for here.
+            case OBSERVATION_ABSENT -> switch (gap.target()) {
+                case Target.OfRow _ -> String.format(
+                        "nothing was observed for `%s`, so what it covers is unknown", subject);
+                case Target.OfSource _ -> String.format(
+                        "no rows were read from `%s`, so what they cover is unknown", subject);
+                case Target.OfBehavior _, Target.OfModule _, Target.AtPosition _ ->
+                        throw new IllegalArgumentException("nothing observed is about a row or"
+                                + " about a source nothing could read the contents of: " + gap);
+            };
             case LINKAGE_FAILED -> String.format(
                     "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(

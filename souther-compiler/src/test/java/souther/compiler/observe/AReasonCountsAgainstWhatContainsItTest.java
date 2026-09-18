@@ -47,11 +47,12 @@ class AReasonCountsAgainstWhatContainsItTest {
      * A source counts against every behavior because of what is written there, not because a source
      * is larger than a behavior.
      *
-     * <p>Both places that write a {@code SOURCE} write it for a source that was not evaluated at
-     * all, and which behaviors wrote rows in it is exactly what could not be read. So every one of
-     * them is missing rows the source may have held. A source whose contents were known would need
-     * the compilation to say which behaviors those were, and nothing writes one — this is the claim
-     * to read again if something does.
+     * <p>The one place that writes a {@code SOURCE} writes it for a source nothing could read the
+     * contents of, and which rows it holds is exactly what could not be read. So every behavior is
+     * missing rows the source may have held. A source whose contents were known would need the
+     * compilation to say which behaviors wrote rows there, and nothing writes one of those — where
+     * the rows are known the absence is written of each of them, which answers for itself. This is
+     * the claim to read again if a {@code SOURCE} is written for a source something could read.
      */
     @Test
     void aSourceThatWasNotEvaluatedCountsAgainstEveryBehavior() {
