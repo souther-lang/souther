@@ -1321,9 +1321,15 @@ public final class AdmissibleValues<A> {
     public Emptiness anyAlternativeAdmits(AskedOfEachBlock<A> asked, AskedOfARelation<A> relating) {
         if (held() instanceof Held.Alternatives<A> it) {
             Emptiness any = Emptiness.identityForJoin();
-            for (Alternative<A> box : it.boxes()) {
+            // In the order the reading says and not the order its alternatives arrived in. The
+            // questions asked under this walk spend one allowance between them and the walk stops
+            // as soon as it is settled, so which of them is asked while there is still something
+            // left is decided here — and decided by the writing, the same reading written the
+            // other way round came back undecided where this one came back answered.
+            for (Alternative<A> box : PlanOrder.inOrder(it.boxes(), PlanOrder::orderOf)) {
                 Emptiness stands = Emptiness.identityForMeet();
-                for (Map.Entry<Sameness.Block<A>, ValueSet> each : box.at().entrySet()) {
+                for (Map.Entry<Sameness.Block<A>, ValueSet> each
+                        : PlanOrder.inOrder(box.at().entrySet(), PlanOrder::orderOf)) {
                     stands = stands.met(asked.of(each.getKey(), each.getValue()));
                     if (stands.endsAMeet()) {
                         break;
@@ -1369,7 +1375,8 @@ public final class AdmissibleValues<A> {
             return Refusal.nowhere();
         }
         Refusal<A> everywhere = null;
-        for (Alternative<A> box : it.boxes()) {
+        // The same order as the walk above, and for the same reason: both spend the one allowance.
+        for (Alternative<A> box : PlanOrder.inOrder(it.boxes(), PlanOrder::orderOf)) {
             Refusal<A> here = refusalIn(box, asked, relating);
             if (here.isNowhere()) {
                 return Refusal.nowhere();
@@ -1400,9 +1407,24 @@ public final class AdmissibleValues<A> {
         // The block and not its positions. What was refused is the one value those positions
         // share, and each of them may be left something on its own — taken apart here, the
         // proof would say a lack is at a place whose own rules are fine with it.
-        return Refusal.ofAnAlternative(box.at(),
+        // Asked in the order the alternative says. These questions spend the allowance the walk
+        // above is spending, so which of them is asked while there is still something left is
+        // decided the same way — by what the alternative is, and not by how it was written down.
+        return Refusal.ofAnAlternative(inTheOrderTheReadingSays(box.at(), PlanOrder::orderOf),
                 (block, set) -> asked.of(block, set).isEmpty(),
                 WhatARelationShows.askedOf(relating, box.apart(), box.product()));
+    }
+
+    /** What an alternative holds, to be walked in the order the reading settles rather than the
+     *  order it was put together in. */
+    private static <A, V> Map<Sameness.Block<A>, V> inTheOrderTheReadingSays(
+            Map<Sameness.Block<A>, V> at,
+            java.util.function.Function<Map.Entry<Sameness.Block<A>, V>, String> keyed) {
+        Map<Sameness.Block<A>, V> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<Sameness.Block<A>, V> each : PlanOrder.inOrder(at.entrySet(), keyed)) {
+            out.put(each.getKey(), each.getValue());
+        }
+        return out;
     }
 
     /**

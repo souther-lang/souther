@@ -240,6 +240,65 @@ final class PlanOrder {
                         + " one: " + named;
     }
 
+    /**
+     * The order the work under one allowance is done in, read off what the work is about.
+     *
+     * <p>Beside {@link #of(AdmissibleValues)}, which writes a whole reading down so that two
+     * readings can be told apart. What is wanted here is smaller and is asked far more often: of
+     * two things still to be worked out, which is done first. It matters because they are spending
+     * one allowance between them — a question reached after it has run out is answered "could not
+     * tell" rather than answered — so the order decides what comes back, and an order taken from
+     * the collection the work happened to arrive in would decide it by the writing again.
+     *
+     * <p>Built without building anything it is ordering. A key here reads a block's name and a set
+     * already worked out, which is what the walk is holding anyway; it never asks for a machine.
+     * That is the whole difference between arranging the spending and doing it.
+     */
+    static <T> java.util.List<T> inOrder(java.util.Collection<T> work,
+                                         java.util.function.Function<T, String> keyed) {
+        // The key once per item and not once per comparison: a sort that rebuilds them would put
+        // the cost of arranging the work on the same footing as the work.
+        record Ordered<T>(String key, T value) {}
+        return work.stream()
+                .map(each -> new Ordered<>(keyed.apply(each), each))
+                .sorted(java.util.Comparator.comparing(Ordered::key))
+                .map(Ordered::value)
+                .toList();
+    }
+
+    /** How one block and what it admits there are written. */
+    static String orderOf(java.util.Map.Entry<?, ValueSet> at) {
+        StringBuilder one = new StringBuilder(String.valueOf(at.getKey()));
+        one.append('=');
+        write(at.getValue(), one);
+        return one.toString();
+    }
+
+    /** How one block and the description it is still held by are written. */
+    static String orderOfADescription(java.util.Map.Entry<?, AdmittedPlan> at) {
+        return at.getKey() + "=" + of(at.getValue());
+    }
+
+    /** How one alternative of a reading is written. */
+    static String orderOf(AdmissibleValues.Alternative<?> box) {
+        StringBuilder one = new StringBuilder();
+        written(box.at(), one);
+        written(box.apart(), one);
+        return one.toString();
+    }
+
+    /** How one alternative of a description is written. */
+    static String orderOf(PlannedHeld.Alternative<?> box) {
+        StringBuilder one = new StringBuilder();
+        one.append(box.at().size()).append(';');
+        for (String each : inOrder(box.at().entrySet(), PlanOrder::orderOfADescription).stream()
+                .map(PlanOrder::orderOfADescription).toList()) {
+            one.append(each).append(';');
+        }
+        one.append(box.stated());
+        return one.toString();
+    }
+
     static void write(ValueSet set, StringBuilder out) {
         switch (set) {
             case ValueSet.Finite it -> {
