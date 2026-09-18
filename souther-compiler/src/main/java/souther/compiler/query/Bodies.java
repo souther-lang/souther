@@ -2867,6 +2867,7 @@ public final class Bodies {
         private final SuppliedRules supplied;
         private final Map<String, AnalysisBody> analysed;
         private final CoverageSites.Plan plan;
+        private final Set<String> emits;
 
         private Elaborated(ModuleBodies of,
                            Map<String, Core> emittedHelpers,
@@ -2875,7 +2876,8 @@ public final class Bodies {
                            DecisionSources decisions,
                            SuppliedRules supplied,
                            Map<String, AnalysisBody> analysed,
-                           CoverageSites.Plan plan) {
+                           CoverageSites.Plan plan,
+                           Set<String> emits) {
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
@@ -2884,6 +2886,24 @@ public final class Bodies {
             this.decisions = decisions;
             this.analysed = Map.copyOf(analysed);
             this.plan = plan;
+            this.emits = Ordered.set(new LinkedHashSet<>(emits));
+        }
+
+        /**
+         * Which of the module's implementations this elaboration entitles a class for.
+         *
+         * <p>The emission, said once and here. A module emits an implementation for a behavior
+         * written with a {@code let} and for one written as a {@code >->} composition, and an
+         * elaboration of some of a module is one whose other implementations have no class in it —
+         * so what the backend may emit is asked of this rather than worked out beside it. Read off
+         * {@link #behaviorBodies()} instead, a composition would be answered for by a map of bodies
+         * it is not in, which is how an implementation nobody vouched for came to be emitted.
+         *
+         * <p>Every name in here is one this module owns. A behavior something outside supplies is
+         * not an implementation of this module's and is not entitled to one.
+         */
+        public Set<String> emits() {
+            return emits;
         }
 
         /**
@@ -2917,13 +2937,18 @@ public final class Bodies {
                     && claims.equals(that.claims)
                     && elements.equals(that.elements)
                     && decisions.equals(that.decisions)
-                    && supplied.equals(that.supplied);
+                    && supplied.equals(that.supplied)
+                    // What it entitles a class for, because that is what is emitted from it. Two
+                    // elaborations holding one set of bodies and entitling different classes are
+                    // two programs, and a check that came to the second would be taken for the
+                    // first.
+                    && emits.equals(that.emits);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(of, emittedHelpers, claims, elements,
-                    decisions, supplied);
+                    decisions, supplied, emits);
         }
 
         /** Whose module these are the bodies of. */
@@ -3043,29 +3068,67 @@ public final class Bodies {
     }
 
     /**
-     * The behaviors of one module whose bodies can be run: their own came out, and so did every
-     * body they reach.
+     * The implementations one module owns, and which of them may be run.
      *
-     * <p>A behavior's own check is not that answer. What one body is checked against is the
+     * <p>Two sets and not one, because a reader of this asks two questions. What a module owns
+     * decides whether a reference to one of its behaviors is a reference to something this compiler
+     * was to make; which of those may be run decides whether it was made. A reference to a behavior
+     * its module never implements is supplied from outside and is nobody's here to vouch for, and
+     * answered with one set those two are the same absence.
+     *
+     * @param owned    the behaviors of the module an implementation is emitted for, in the order it
+     *                 declares them
+     * @param runnable the ones of those whose implementation may be made here
+     */
+    public record Implementations(Set<String> owned, Set<String> runnable) {
+
+        public Implementations {
+            owned = Ordered.set(new LinkedHashSet<>(owned));
+            runnable = Ordered.set(new LinkedHashSet<>(runnable));
+        }
+    }
+
+    /**
+     * Which of one module's implementations may be run: their own came out, and so did everything
+     * the implementation references.
+     *
+     * <p><b>Over implementations and not over bodies.</b> A module emits an implementation for a
+     * behavior written with a {@code let} and for one written as a {@code >->} composition, and
+     * both are a class a row is applied through. A composition has no body of its own, so an answer
+     * read off the bodies has nothing to say about one — and a composition whose stage is not here
+     * is a class referencing one that was not emitted.
+     *
+     * <p><b>And over what the implementation references, which is what the backend resolves.</b> A
+     * body's call and a composition's stage both reach the declaring module's implementation
+     * ({@code CodegenContext.cdBehaviorImpl}), whichever module that is. So the closure is taken
+     * over {@link ValueName.Behavior} and crosses module boundaries: a caller here reaching an
+     * implementation another module owns and did not make is a caller that may not be made either.
+     * Cut at this module, the answer would vouch for a class referencing one nothing emitted.
+     *
+     * <p>A behavior's own check is not the answer. What one body is checked against is the
      * signatures and the stated relations of what it calls ({@link CalleeSigsForBody}) and never
      * another body, so a behavior calling one whose body was refused checks exactly as it would
-     * have — and a call to a body nothing emitted is a call to nothing at run time. So what may be
-     * run is a closure and not a predicate of one declaration.
+     * have. So this is a closure and not a predicate of one declaration.
      *
-     * <p>Answered by taking away rather than by building up. A body that did not come out is out,
-     * and so is anything reaching one that is out; what is left over is what may be run. Written the
-     * other way, a cycle of clean bodies proves itself and two behaviors calling each other would be
-     * runnable on nothing but each other's word.
+     * <p>Answered by taking away rather than by building up. An implementation that did not come out
+     * is out, and so is anything reaching one that is out; what is left over is what may be run.
+     * Written the other way, a cycle of clean bodies proves itself and two behaviors calling each
+     * other would be runnable on nothing but each other's word.
      *
-     * <p>A behavior whose frontier could not be read is out too. What it reaches is then unknown
-     * rather than empty, and reading it as empty is this answer saying a body reaches nothing on the
-     * strength of not having looked.
+     * <p>An implementation whose references could not be read is out too. What it reaches is then
+     * unknown rather than empty, and reading it as empty is this answer saying something references
+     * nothing on the strength of not having looked. A module this one imports that answers nothing
+     * is out for the same reason.
      *
-     * <p>Absent where the module did not settle. No behavior is runnable then either, but that is a
+     * <p>The walk across modules terminates because the language refuses a cycle of them
+     * ({@code E1501}): a module reached from here cannot reach back, so asking it this question
+     * cannot arrive here again.
+     *
+     * <p>Absent where the module did not settle. Nothing of it may be run then either, but that is a
      * different thing to say, and a reader gating on this must not take "nothing may be run" from an
      * answer that was never made.
      */
-    public record RunnableBehaviors(String name) implements Key<Set<String>> {
+    public record RunnableImplementations(String name) implements Key<Implementations> {
 
         @Override
         public String module() {
@@ -3073,50 +3136,95 @@ public final class Bodies {
         }
 
         @Override
-        public Answer<Set<String>> compute(Db db) {
+        public Answer<Implementations> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<ModuleCheck.Of> module = db.ask(new ModuleCheck(name));
             if (!settled.present() || !module.present()) {
                 return Answer.absent();
             }
-            List<String> implemented = bodiesCheckedIn(db, name);
-            Set<String> out = new LinkedHashSet<>();
-            Map<String, Set<String>> reaches = new LinkedHashMap<>();
-            for (String behavior : implemented) {
-                Answer<Set<ValueName.Behavior>> reached =
-                        db.ask(new BehaviorsReached(name, behavior));
-                if (!db.ask(new CheckedBehavior(name, behavior)).present() || !reached.present()) {
+            Set<String> owned = implementationsOwnedBy(db, name, settled.value());
+            // Written out, because this package declares a `Composition` of its own and an import
+            // would make the bare name mean the other one.
+            Map<ValueName.Behavior, souther.compiler.core.Composition> composed =
+                    db.ask(new Compositions.Of(name)).value();
+            Set<String> runnable = new LinkedHashSet<>();
+            Map<String, Set<ValueName.Behavior>> references = new LinkedHashMap<>();
+            for (String behavior : owned) {
+                Set<ValueName.Behavior> reached =
+                        referencedBy(db, name, behavior, composed);
+                if (reached == null) {
                     continue;
                 }
-                Set<String> here = new LinkedHashSet<>();
-                for (ValueName.Behavior each : reached.value()) {
-                    // This module's own, because a behavior another module declares is emitted with
-                    // that module and is gated where that module is.
-                    if (name.equals(each.module())) {
-                        here.add(each.name());
-                    }
-                }
-                reaches.put(behavior, here);
-                out.add(behavior);
+                references.put(behavior, reached);
+                runnable.add(behavior);
             }
-            // Until nothing more falls out. One pass takes away only what reaches a body directly,
-            // and what reached that one is as unrunnable as it is.
+            // Until nothing more falls out. One pass takes away only what reaches an implementation
+            // directly, and what reached that one is as unrunnable as it is.
             boolean fell = true;
             while (fell) {
                 fell = false;
-                for (String behavior : List.copyOf(out)) {
-                    for (String each : reaches.get(behavior)) {
-                        // A behavior of this module with no body of its own is supplied from outside
-                        // and is not one of these, so reaching it takes nothing away.
-                        if (implemented.contains(each) && !out.contains(each)) {
-                            out.remove(behavior);
-                            fell = true;
-                            break;
+                for (String behavior : List.copyOf(runnable)) {
+                    for (ValueName.Behavior each : references.get(behavior)) {
+                        if (available(db, name, each, owned, runnable)) {
+                            continue;
                         }
+                        runnable.remove(behavior);
+                        fell = true;
+                        break;
                     }
                 }
             }
-            return Answer.of(Ordered.set(out));
+            return Answer.of(new Implementations(owned, runnable));
+        }
+
+        /**
+         * What this module's implementation of {@code behavior} references, or null where that
+         * cannot be read.
+         *
+         * <p>Asked of the implementation this module emits, which is why a composition is read from
+         * its stages rather than from a body it has not got. A {@code let} body's own check has to
+         * have come out as well: a body nothing elaborated has no class here whatever it reaches.
+         */
+        private static Set<ValueName.Behavior> referencedBy(Db db, String module, String behavior,
+                Map<ValueName.Behavior, souther.compiler.core.Composition> composed) {
+            souther.compiler.core.Composition pipe = composed == null ? null
+                    : composed.get(new ValueName.Behavior(module, behavior));
+            if (pipe != null) {
+                Set<ValueName.Behavior> stages = new LinkedHashSet<>();
+                pipe.stages().forEach(stage -> stages.add(stage.behavior()));
+                return stages;
+            }
+            Answer<Set<ValueName.Behavior>> reached =
+                    db.ask(new BehaviorsReached(module, behavior));
+            if (!db.ask(new CheckedBehavior(module, behavior)).present() || !reached.present()) {
+                return null;
+            }
+            return reached.value();
+        }
+
+        /**
+         * Whether the implementation {@code reference} names can be run.
+         *
+         * <p>Asked of the module that declares it, because that is the module that emits it. Its own
+         * answer says both halves: a behavior it does not own is supplied from outside and reaching
+         * it takes nothing away, and one it owns and cannot run is a class that was not made.
+         *
+         * <p>A module that answers nothing is out. Nothing of it is emitted, so a reference into it
+         * reaches no class — the same as a reference to one it could not make.
+         */
+        private static boolean available(Db db, String module, ValueName.Behavior reference,
+                                         Set<String> ownedHere, Set<String> runnableHere) {
+            if (module.equals(reference.module())) {
+                return !ownedHere.contains(reference.name())
+                        || runnableHere.contains(reference.name());
+            }
+            Implementations there =
+                    db.ask(new RunnableImplementations(reference.module())).value();
+            if (there == null) {
+                return false;
+            }
+            return !there.owned().contains(reference.name())
+                    || there.runnable().contains(reference.name());
         }
     }
 
@@ -3158,8 +3266,12 @@ public final class Bodies {
             if (!bodiesCheck || !emittable(db, name, settled.value(), module.value())) {
                 return Answer.absent();
             }
-            Elaborated whole =
-                    elaborationOf(db, name, settled.value(), module.value(), implemented);
+            // Every implementation the module owns, because this is the answer for a module that
+            // came out whole: what may be emitted from it is what it wrote. Read from the
+            // declarations and not from the closure over them, which is a question about what may
+            // be run and is asked of an evaluation rather than of a check.
+            Elaborated whole = elaborationOf(db, name, settled.value(), module.value(),
+                    implemented, implementationsOwnedBy(db, name, settled.value()));
             return Answer.of(whole, contradicted(db, name, whole.claims()));
         }
     }
@@ -3205,21 +3317,51 @@ public final class Bodies {
                     || !emittable(db, name, settled.value(), module.value())) {
                 return Answer.absent();
             }
-            Set<String> runnable = db.ask(new RunnableBehaviors(name)).value();
-            if (runnable == null) {
+            Implementations runs = db.ask(new RunnableImplementations(name)).value();
+            if (runs == null) {
                 return Answer.absent();
             }
             // In the order the module declares them, which is what the numbering is of. Taken from
             // the declarations and filtered, rather than walked out of the set: a set says which
             // bodies these are and nothing about the order they were written in.
-            List<String> emitting = new ArrayList<>();
+            //
+            // The bodies alone, because that is what an elaboration holds. Which implementations
+            // may be emitted is the wider set beside it, and a composition is in that one and in no
+            // map of bodies.
+            List<String> elaborating = new ArrayList<>();
             for (String behavior : bodiesCheckedIn(db, name)) {
-                if (runnable.contains(behavior)) {
-                    emitting.add(behavior);
+                if (runs.runnable().contains(behavior)) {
+                    elaborating.add(behavior);
                 }
             }
-            return Answer.of(elaborationOf(db, name, settled.value(), module.value(), emitting));
+            return Answer.of(elaborationOf(db, name, settled.value(), module.value(),
+                    elaborating, runs.runnable()));
         }
+    }
+
+    /**
+     * Which of a module's behaviors it emits an implementation for, in the order it declares them.
+     *
+     * <p>A behavior written with a {@code let} and one written as a {@code >->} composition, which
+     * are the two a module emits a class to apply. Read off the declarations rather than off the
+     * compositions the check settled, because this is asked while a module is being checked: what
+     * routes a composition's stages is settled from the module's lowering and from what the compile
+     * has published, and a reading of that from here would put the publishing of one module behind
+     * the check of another.
+     *
+     * <p>Which of these may be run is a further question and is not this one
+     * ({@link RunnableImplementations}). What a module owns does not move with what happened to
+     * check: a behavior whose implementation could not be made is still one this module was to
+     * implement, and that is the whole difference between the two absences a row can meet.
+     */
+    private static Set<String> implementationsOwnedBy(Db db, String module, Hir.Module settled) {
+        Set<String> owned = new LinkedHashSet<>(bodiesCheckedIn(db, module));
+        for (Hir.BehaviorDef behavior : settled.behaviors()) {
+            if (behavior instanceof Hir.PipeBehavior pipe) {
+                owned.add(pipe.name());
+            }
+        }
+        return owned;
     }
 
     /**
@@ -3254,9 +3396,14 @@ public final class Bodies {
      * <p>Every number below is made from exactly these bodies. The plan is what the emitter writes
      * into the bytecode and what a report reads back, so an elaboration of some of a module's
      * bodies is numbered over those and over nothing it is not going to emit.
+     *
+     * <p>{@code emits} is which of the module's implementations this elaboration entitles a class
+     * for, which is wider than {@code elaborating}: a {@code >->} composition is an implementation
+     * with no body, so it is in the first and in neither the bodies nor any number made from them.
      */
     private static Elaborated elaborationOf(Db db, String name, Hir.Module settled,
-                                            ModuleCheck.Of module, List<String> emitting) {
+                                            ModuleCheck.Of module, List<String> elaborating,
+                                            Set<String> emits) {
         java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
         Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
         Map<String, ElementBindings> elements = new LinkedHashMap<>();
@@ -3267,7 +3414,7 @@ public final class Bodies {
                 DecisionSource> decisions = new LinkedHashMap<>();
         Map<BindingOwner,
                 SuppliedRules.Handed> supplied = new LinkedHashMap<>();
-        for (String behavior : emitting) {
+        for (String behavior : elaborating) {
             Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
             if (!core.present()) {
                 throw new IllegalStateException("`" + name + "." + behavior + "` is named in an"
@@ -3319,7 +3466,7 @@ public final class Bodies {
         CoverageSites.Plan plan =
                 CoverageSites.of(of, read, handed);
         return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
-                read, handed, analysed, plan);
+                read, handed, analysed, plan, emits);
     }
 
     /**

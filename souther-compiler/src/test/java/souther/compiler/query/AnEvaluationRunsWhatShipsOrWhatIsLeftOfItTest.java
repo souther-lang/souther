@@ -6,6 +6,9 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ArmObservation;
+import souther.compiler.observe.Disposition;
+import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.RowOutcome;
 import souther.compiler.generated.EvaluationArtifact;
 
 import java.util.List;
@@ -45,6 +48,8 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
             behavior apart : (n: Int) -> Int
             let apart (n) = n
 
+            behavior onwards = apart >-> thrice
+
             behavior thrice : (n: Int) -> Seat
             let thrice (n) = twice(n)
 
@@ -54,6 +59,9 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
             behavior mint : (n: Int) -> Seat
                 constructs Seat
             let mint (n) = Seat(%s)
+
+            example twice
+                | "one" : (1) -> Seat(1)
             """;
 
     /**
@@ -112,18 +120,45 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
         assertTrue(run.present(), "a module with a body left out is still one a row can be run in");
         Set<String> classes = run.value().classes().keySet();
 
-        for (String behavior : List.of("apart", "thrice", "twice", "mint")) {
+        for (String behavior : List.of("apart", "onwards", "thrice", "twice", "mint")) {
             assertTrue(classes.contains(declarationOf(behavior)),
                     () -> "`" + behavior + "` is declared by this module and its declaration is"
                             + " not in " + classes);
         }
         assertTrue(classes.contains(implementationOf("apart")),
                 () -> "`apart` may be run and nothing implements it: " + classes);
-        for (String behavior : List.of("thrice", "twice", "mint")) {
+        // `onwards` among them, and it is the one a map of bodies could not have answered for: it
+        // has no body, and it applies `thrice` by constructing what this image does not hold.
+        for (String behavior : List.of("onwards", "thrice", "twice", "mint")) {
             assertFalse(classes.contains(implementationOf(behavior)),
                     () -> "`" + behavior + "` may not be run and something implements it: "
                             + classes);
         }
+    }
+
+    /**
+     * And a row about one of them is undecided, saying that this compile made no implementation.
+     *
+     * <p>The whole of the way through, from what the emission left out to what a person is told
+     * about the row. Held at the row rather than at any step of it: every step between is a value
+     * this test could have built, and what has to hold is that a model reaches the end of them.
+     *
+     * <p>Not pending, which is the answer for a behavior nothing implements. A row that says it
+     * waits sends an author looking for a stand-in nobody owes it.
+     */
+    @Test
+    void aRowOfAnImplementationThatWasNotMadeIsUndecidedAndSaysWhy() {
+        Compilation refused = compile("0");
+
+        Output.RowsRead.Of read = refused.db().ask(new Output.RowsRead("demo")).value();
+        List<RowOutcome> ran = new java.util.ArrayList<>(read.byBehavior().get("twice").ran());
+
+        assertEquals(1, ran.size(), () -> "the row written for `twice` is what this reads: " + ran);
+        RowOutcome row = ran.getFirst();
+        assertEquals(Disposition.INCOMPLETE, row.disposition(),
+                () -> "nothing was found out about this row: " + row);
+        assertEquals(FailurePhase.IMPLEMENTATION_NOT_MADE, row.failurePhase(),
+                () -> "and what stopped it is this compile having made no implementation: " + row);
     }
 
     /** Asked of the ABI rather than spelled here, so this reads the names that were emitted. */
