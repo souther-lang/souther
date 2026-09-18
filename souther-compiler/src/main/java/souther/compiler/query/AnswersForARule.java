@@ -18,6 +18,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -83,64 +84,90 @@ record AnswersForARule(RequiredDependencies requires,
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
         List<List<Alternative>> apiece = new ArrayList<>();
+        List<DemandGap> said = new ArrayList<>();
         for (RequiredDependencies.Required each : requires.inOrder()) {
             StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
-            if (here instanceof StandingIn.None(var why, var gaps)) {
+            if (here instanceof StandingIn.None(var why, var toldOf)) {
+                // Nothing stands this dependency in, so no row of this comes of any of it and
+                // nothing was met — of this dependency or of the ones after it, which are not
+                // asked at all. What each of those demands is is the account's to say, and it
+                // says it of everything the way stated rather than of what this walk reached.
+                said.addAll(toldOf);
                 return List.of(new StandInAttempt(new AnswersStoodIn.NothingComposed(why),
-                        account(demanded, gaps)));
+                        account(demanded, said, List.of())));
             }
+            said.addAll(((StandingIn.Any) here).said());
             apiece.add(((StandingIn.Any) here).alternatives());
         }
         List<StandInAttempt> out = new ArrayList<>();
         for (List<Alternative> combination : everyCombinationOf(apiece)) {
-            // The account of the row this combination is, and not of every value that was tried
-            // for it. A union answer is composed case by case and a case that came to nothing is
-            // not what the row carries — read as the row's shortfall, a row composed against
-            // everything the way asks would be reported as short of it.
-            List<DemandGap> gaps = new ArrayList<>(demanded.declined());
+            // What this row met, and not what was tried for it. A union answer is composed case by
+            // case and a case that came to nothing is not what the row carries — read as the row's
+            // shortfall, a row composed against everything the way asks would be reported as short
+            // of it.
             List<StoodInAnswer> stood = new ArrayList<>();
+            List<AnswerDemand> met = new ArrayList<>();
             for (Alternative each : combination) {
                 stood.add(each.stood());
-                gaps.addAll(each.unaccounted());
+                met.addAll(each.met());
             }
             out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood),
-                    account(demanded, gaps)));
+                    account(demanded, said, met)));
         }
         return List.copyOf(out);
     }
 
     /**
-     * One way of standing one dependency in, and what that value was not composed against.
+     * One way of standing one dependency in, and what that value was composed against.
      *
-     * <p>Beside the value because it is the value's. Two candidates for one answer are two rows and
-     * each was composed against what it was composed against, so an account gathered over the
-     * dependency would say of the row that was offered what another row could not do.
+     * <p>What it met rather than what it missed, because the account is taken as the difference:
+     * what a row is short of is what the way stated and this did not meet, and a list of misses is
+     * one every stage that ends an asking has to remember to add to.
      */
-    private record Alternative(StoodInAnswer stood, List<DemandGap> unaccounted) {
+    private record Alternative(StoodInAnswer stood, List<AnswerDemand> met) {
 
         private Alternative {
-            unaccounted = List.copyOf(unaccounted);
+            met = List.copyOf(met);
         }
     }
 
     /**
      * What the answer side of the way came to, as one value beside whatever was stood in.
      *
-     * <p>Both of what it holds come from here rather than from the caller: which conditions this
-     * side answered for is the reading's ({@link AnswersDemanded#takenUp()}) and what it fell short
-     * of is what the stages below wrote down. Worked out where the two are in hand, so that the
-     * reconciliation of the two projections is not a reading anybody downstream repeats.
+     * <p><b>Every demand the way stated, and not the ones a walk reached.</b> The account is what
+     * the row was not composed against, so it is the difference between what the way asks and what
+     * the row met — taken here, where the whole of what the way asks is in hand. Accumulated as a
+     * walk goes instead, a demand is lost wherever an asking ends early: the dependency whose
+     * stand-in came to nothing is not asked about again, the ones after it are not asked at all,
+     * and the conditions of every one of them are ones the reading took up, so the account of the
+     * way over the input drops them too and nothing anywhere names them.
+     *
+     * <p>What a composer said of a demand is kept where it said something, since it says which
+     * stage let the demand go and why; a demand nothing said anything about is what this adds.
      */
-    private static CompositionAccount account(AnswersDemanded demanded,
-                                              List<DemandGap> unaccounted) {
+    private static CompositionAccount account(AnswersDemanded demanded, List<DemandGap> said,
+                                              Collection<AnswerDemand> met) {
+        List<DemandGap> gaps = new ArrayList<>(demanded.declined());
+        gaps.addAll(said);
+        for (AnswerDemand each : demanded.stated()) {
+            if (!met.contains(each) && !named(said, each)) {
+                gaps.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer()));
+            }
+        }
         // One entry per demand nothing was composed against, however many times it was asked. A
         // union answer is composed for case by case and a demand none of them carries comes back
         // once per case, which is this reading's arithmetic rather than anything about the
         // condition.
         return new CompositionAccount(List.of(),
-                unaccounted.isEmpty() ? List.of()
-                        : List.copyOf(new LinkedHashSet<>(unaccounted)),
+                gaps.isEmpty() ? List.of() : List.copyOf(new LinkedHashSet<>(gaps)),
                 demanded.takenUp());
+    }
+
+    /** Whether one of these already says what became of {@code demand}. */
+    private static boolean named(List<DemandGap> said, AnswerDemand demand) {
+        return said.stream().anyMatch(gap -> gap instanceof DemandGap.Uncomposed(
+                AnswerDemand of, var _) && of.equals(demand));
     }
 
     /**
@@ -176,11 +203,20 @@ record AnswersForARule(RequiredDependencies requires,
      */
     private sealed interface StandingIn {
 
-        /** The ways it can be answered, each with what that value was not composed against. */
-        record Any(List<Alternative> alternatives) implements StandingIn {
+        /**
+         * The ways it can be answered, each with what that value met, and what the composers said
+         * of the demands no value met.
+         *
+         * <p>The second is what was said and never what is owed. Which demands the row is short of
+         * is the difference {@link #account} takes; what is here is the wording for the ones a
+         * stage had something to say about, so a stage added beside them can enrich the account
+         * and cannot take anything out of it.
+         */
+        record Any(List<Alternative> alternatives, List<DemandGap> said) implements StandingIn {
 
             public Any {
                 alternatives = List.copyOf(alternatives);
+                said = List.copyOf(said);
                 if (alternatives.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a dependency something stands in for has a way of standing in");
@@ -189,11 +225,11 @@ record AnswersForARule(RequiredDependencies requires,
         }
 
         /** Nothing does, in the words a search comes back with. */
-        record None(Generator.UnresolvedCombination.Reason why, List<DemandGap> unaccounted)
+        record None(Generator.UnresolvedCombination.Reason why, List<DemandGap> said)
                 implements StandingIn {
 
             public None {
-                unaccounted = List.copyOf(unaccounted);
+                said = List.copyOf(said);
             }
         }
     }
@@ -217,16 +253,19 @@ record AnswersForARule(RequiredDependencies requires,
             return byTheModule(required, List.of());
         }
         Map<InjectedAnswer, List<Candidate>> values = new LinkedHashMap<>();
+        List<DemandGap> said = new ArrayList<>();
         for (Map.Entry<InjectedAnswer, List<AnswerDemand>> each : asked.entrySet()) {
             Composing composed = composed(required, each.getValue());
+            said.addAll(composed.written());
             if (composed.values().isEmpty()) {
                 // The row leans on the table the module states, which is a row that runs and not
-                // a row composed against what the way asks. What it was not composed against
-                // travels with it: a run of such a row that lands somewhere else says something
-                // about a value nothing here could build, and nothing about the model.
-                List<DemandGap> none = whereNothingComposed(each.getValue(), composed.written());
-                return stated(required.dependency()) ? byTheModule(required, none)
-                        : nothingStandsIn(none);
+                // a row composed against what the way asks. Nothing of this dependency is met by
+                // it — not the asking that came to nothing, not the askings a value was composed
+                // for and the row does not write, and not the ones after this one, which are not
+                // asked at all. Which demands those are is the account's to say, and it says it of
+                // what the way stated rather than of what this loop reached.
+                return stated(required.dependency()) ? byTheModule(required, said)
+                        : nothingStandsIn(said);
             }
             values.put(each.getKey(), composed.values());
         }
@@ -236,18 +275,18 @@ record AnswersForARule(RequiredDependencies requires,
             for (Candidate each : serving) {
                 alternatives.add(new Alternative(
                         new StoodInAnswer.OnTheRow(required.dependency(), each.value()),
-                        each.unaccounted()));
+                        each.met()));
             }
-            return new StandingIn.Any(alternatives);
+            return new StandingIn.Any(alternatives, said);
         }
         // The way wants the dependency to answer differently at different calls, which wants a
         // table — written once for a module and part of the environment several rows share rather
         // than part of a row. Nothing here composes one, so the row leans on the one the module
         // states, and where the module states none there is nothing for this way to be tried with.
         //
-        // Every demand of every asking, because a row leaning on the table meets none of them: the
+        // Said of every demand of every asking, because that is what such a row does not meet: the
         // values that were composed answer one asking apiece and the row writes none of them.
-        List<DemandGap> everyAsking = new ArrayList<>();
+        List<DemandGap> everyAsking = new ArrayList<>(said);
         asked.values().forEach(demands -> demands.forEach(demand ->
                 everyAsking.add(new DemandGap.Uncomposed(demand,
                         new DemandGap.WhyNotComposed.OneValueAnswersEveryCall()))));
@@ -277,16 +316,20 @@ record AnswersForARule(RequiredDependencies requires,
                 && ExampleStatements.answersEveryCall(table.read());
     }
 
+    /**
+     * A row that leans on the table the module states, which meets nothing the way asks of the
+     * dependency: what the row writes for it is nothing, and what the table answers is the
+     * module's word rather than this way's.
+     */
     private static StandingIn byTheModule(RequiredDependencies.Required required,
-                                          List<DemandGap> unaccounted) {
+                                          List<DemandGap> said) {
         return new StandingIn.Any(List.of(new Alternative(
-                new StoodInAnswer.InTheModule(required.dependency()), unaccounted)));
+                new StoodInAnswer.InTheModule(required.dependency()), List.of())), said);
     }
 
-    private static StandingIn nothingStandsIn(List<DemandGap> unaccounted) {
+    private static StandingIn nothingStandsIn(List<DemandGap> said) {
         return new StandingIn.None(
-                Generator.UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
-                unaccounted);
+                Generator.UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY, said);
     }
 
     /**
@@ -347,34 +390,27 @@ record AnswersForARule(RequiredDependencies requires,
                     AnAnswerComposed.of(each.standing(), each.demands());
             written.addAll(attempt.unaccounted());
             if (attempt.outcome() instanceof AnAnswerComposed.Outcome.Composed(var value)) {
-                out.add(new Candidate(each.caseOfTheAnswer(), value, attempt.unaccounted()));
+                out.add(new Candidate(each.caseOfTheAnswer(), value,
+                        met(demands, attempt.unaccounted())));
             }
         }
         return new Composing(out, written);
     }
 
     /**
-     * What nothing was composed against, where nothing was composed at all.
+     * What a composed value meets of the asking, which is what was asked less what the composing
+     * says it could not put under the value.
      *
-     * <p>Every demand of the asking, and not only the ones a composer wrote something down about.
-     * A row with no value of this compiler's leans on whatever the module states and meets none of
-     * what the way asks of the dependency — so an account of the composers' own answers is short by
-     * every demand that reached no composer: a shape nothing here composes a value of has no
-     * subject to put them to, and a stage that refuses before the composer is asked has nothing to
-     * say about them either.
-     *
-     * <p>Taken as the difference rather than written at each of those places. A demand this leaves
-     * out is a row reported as composed against the whole of what the way asks when it met none of
-     * it, and an arm somebody has to remember to write is an arm the next stage forgets.
+     * <p>Asked of the asking and not of what was handed to the composer. Choosing the case of a
+     * union answers the demand that named it and that demand does not travel on
+     * ({@link AnswerSubjects#against}), so a value read as meeting only what it was handed would
+     * be read as short of the case it is a value of.
      */
-    private static List<DemandGap> whereNothingComposed(List<AnswerDemand> demands,
-                                                        List<DemandGap> written) {
-        List<DemandGap> out = new ArrayList<>(written);
+    private static List<AnswerDemand> met(List<AnswerDemand> demands, List<DemandGap> unaccounted) {
+        List<AnswerDemand> out = new ArrayList<>();
         for (AnswerDemand each : demands) {
-            if (written.stream().noneMatch(gap -> gap instanceof DemandGap.Uncomposed(
-                    AnswerDemand named, var _) && named.equals(each))) {
-                out.add(new DemandGap.Uncomposed(each,
-                        new DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer()));
+            if (!named(unaccounted, each)) {
+                out.add(each);
             }
         }
         return out;
@@ -406,19 +442,19 @@ record AnswersForARule(RequiredDependencies requires,
      *                        not a union
      */
     private record Candidate(TypeSymbol caseOfTheAnswer, FixtureTemplate value,
-                             List<DemandGap> unaccounted) {
+                             List<AnswerDemand> met) {
 
         private Candidate {
-            unaccounted = List.copyOf(unaccounted);
+            met = List.copyOf(met);
         }
 
-        /** This value, with what it was not composed against for another asking it serves too. */
+        /** This value, with what it meets of another asking it serves too. */
         Candidate and(Candidate serving) {
-            if (serving == null || serving.unaccounted.isEmpty()) {
+            if (serving == null || serving.met.isEmpty()) {
                 return this;
             }
-            List<DemandGap> both = new ArrayList<>(unaccounted);
-            both.addAll(serving.unaccounted);
+            List<AnswerDemand> both = new ArrayList<>(met);
+            both.addAll(serving.met);
             return new Candidate(caseOfTheAnswer, value, both);
         }
 
