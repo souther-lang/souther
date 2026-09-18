@@ -1086,6 +1086,29 @@ public final class Adequacy {
         }
     }
 
+    /**
+     * What one elaboration holds of one behavior's body, classified before anything reads it.
+     *
+     * <p>The one place the two absences are told apart. A tree and a {@code null} are two facts
+     * under one shape, and a reader handed the second decides again — or stops deciding, and says
+     * what the body states on the strength of not having looked. Answered here, what interprets a
+     * body is handed which of the three it has.
+     *
+     * <p>The model's answer comes from the declarations and this elaboration's from what it holds,
+     * and neither is a question about what a body says.
+     */
+    private static souther.compiler.partition.BodyReading bodyReading(
+            Db db, String module, Bodies.Elaborated checked, String behavior) {
+        if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
+            return new souther.compiler.partition.BodyReading.Read(
+                    checked.behaviorBodies().get(behavior),
+                    checked.analysisBodies().get(behavior));
+        }
+        return givenABody(db.ask(new Bodies.Implementation(module)).value(), behavior)
+                ? new souther.compiler.partition.BodyReading.NotInElaboration()
+                : new souther.compiler.partition.BodyReading.NoBody();
+    }
+
     /** Whether the model gives this behavior a body of its own, read off the declarations. */
     private static boolean givenABody(
             Map<String, souther.compiler.check.BehaviorImplementation> implementations,
@@ -1972,19 +1995,18 @@ public final class Adequacy {
             }
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Observable(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Coverages.Partitioned read = Coverages.partitioningOf(spec,
-                    domain.reading(reading.value()), bodies.get(behavior),
+                    domain.reading(reading.value()),
+                    // Which of the three this elaboration holds, settled before anything reads a
+                    // body. The other reading of the same body travels with it, which is where a
+                    // rule about the strings at a position still stands as the author wrote it.
+                    bodyReading(db, name, checked, behavior),
                     plan,
                     arrivalsOf(db.ask(new PathReached(name)).value(), spec),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
-                    // The other reading of the same body, which is where a rule about the strings
-                    // at a position still stands as the operation the author wrote.
-                    checked == null ? null : checked.analysisBodies().get(behavior),
                     // One allowance for this measure, made here and handed on. Asked for again
                     // further in, a position would be allowed its machines once per caller and what
                     // the two came to would be bought by nobody.

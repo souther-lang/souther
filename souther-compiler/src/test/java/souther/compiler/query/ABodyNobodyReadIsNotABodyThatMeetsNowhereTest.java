@@ -26,7 +26,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
 
-    /** The module whose implementation is refused, so a caller of it may not be run. */
+    /**
+     * The module whose implementation is refused, so a caller of it may not be run.
+     *
+     * <p>{@code %s} is what it constructs: refused, and the caller's body goes unread; accepted,
+     * and the same body is read. The two readings below differ in that and in nothing else.
+     */
     private static final String DOWN = """
             module probe.down exposing ( Seat, twice )
 
@@ -38,7 +43,7 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
 
             behavior mint : (n: Int) -> Seat
                 constructs Seat
-            let mint (n) = Seat(0)
+            let mint (n) = Seat(%s)
             """;
 
     /**
@@ -78,7 +83,12 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
             """;
 
     private static Compilation measured() {
-        Compilation compilation = Compilation.ofSources(List.of(DOWN, UP), ModulePath.EMPTY);
+        return measured("0");
+    }
+
+    private static Compilation measured(String constructs) {
+        Compilation compilation =
+                Compilation.ofSources(List.of(DOWN.formatted(constructs), UP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
@@ -157,5 +167,36 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
 
         assertTrue(block.contains("example omitted"),
                 () -> "the positions of this body still ask for rows: " + block);
+    }
+
+    /**
+     * And neither measure concludes over the rules it never read.
+     *
+     * <p>One rule of a body makes both: {@code guard n > 10} divides the position it is about and
+     * draws a line at the number it names. Read, both measures close over it; unread, a closed
+     * partition would say the model divides that position no further and a closed border would say
+     * no rule of the model draws a line — which is the proof {@code NoRuleDrawsALine} takes.
+     *
+     * <p>Held as the difference between the two readings rather than as a state written out here.
+     * What has to hold is that the absence of a reading is not the absence of the rules.
+     */
+    @Test
+    void neitherMeasureConcludesOverRulesItNeverRead() {
+        String read = String.valueOf(measured("1").db()
+                .ask(new Adequacy.Dividing("probe.up", "omitted")).value());
+        String unread = String.valueOf(measured("0").db()
+                .ask(new Adequacy.Dividing("probe.up", "omitted")).value());
+
+        assertTrue(read.contains("partitionClosure=PartitionClosed")
+                        && read.contains("borderClosure=BorderClosed"),
+                () -> "read, both measures run out: " + read);
+        assertTrue(read.contains("id=omitted/n, term=n, classes=[Partition"),
+                () -> "and the guard divides the position it is about: " + read);
+
+        assertTrue(unread.contains("partitionClosure=PartitionBodyNotRead")
+                        && unread.contains("borderClosure=BorderBodyNotRead"),
+                () -> "unread, neither concludes: " + unread);
+        assertFalse(unread.contains("id=omitted/n, term=n, classes=[Partition"),
+                () -> "the guard is not recovered from a body nobody read: " + unread);
     }
 }

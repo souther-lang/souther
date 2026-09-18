@@ -96,14 +96,21 @@ final class Coverages {
      */
     static Partitioned partitioningOf(Hir.SpecBehavior behavior,
                                       souther.compiler.inputs.InputReading read,
-                                      Core body,
+                                      souther.compiler.partition.BodyReading reading,
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
                                       souther.compiler.check.StatedContract stated,
-                                      souther.compiler.check.AnalysisBody analysis,
                                       souther.compiler.values.Allowance<
                                               souther.compiler.inputs.NumericTerm.FromOnePosition>
                                               distinctions) {
+        // Which of the three this elaboration holds, settled before anything reads a body. A tree
+        // and a `null` are two facts under one shape, and every reader below would tell them apart
+        // again or stop telling them apart at all.
+        Core body = reading instanceof souther.compiler.partition.BodyReading.Read it
+                ? it.emitted() : null;
+        souther.compiler.check.AnalysisBody analysis =
+                reading instanceof souther.compiler.partition.BodyReading.Read it
+                        ? it.analysis() : null;
         ReadingPolicy policy = read.domain().policy();
         // The one world the rules of this behavior's declarations are read in, which is the reading
         // this input already made of them.
@@ -173,7 +180,17 @@ final class Coverages {
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
-                guards.reaching()), quantities,
+                guards.reaching(),
+                // Classified above and projected here onto the one question a conclusion turns on.
+                switch (reading) {
+                    case souther.compiler.partition.BodyReading.Read _,
+                         souther.compiler.partition.BodyReading.NoBody _ ->
+                            new souther.compiler.partition.MeasureClosure
+                                    .Drawing.FromTheReading();
+                    case souther.compiler.partition.BodyReading.NotInElaboration _ ->
+                            new souther.compiler.partition.MeasureClosure
+                                    .Drawing.NoneWasMade(read.symbols().module());
+                }), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.

@@ -3690,11 +3690,13 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "reason" : "body_was_not_read",
+          "weakening" : [ "bodies_not_elaborated" ]
         },
         "boundariesMeasure" : {
           "status" : "unavailable",
-          "reason" : "no_rule_draws_a_line"
+          "reason" : "body_was_not_read",
+          "weakening" : [ "bodies_not_elaborated" ]
         },
         "axes" : [ ],
         "claimsOffAxis" : [ ],

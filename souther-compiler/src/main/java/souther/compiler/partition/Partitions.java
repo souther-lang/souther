@@ -1026,8 +1026,10 @@ public final class Partitions {
         // and the allowance for composing them is never asked for a machine. It is still handed in
         // rather than made: an allowance is what a compilation's grant becomes, and one made here
         // would be a meter at every position that nobody granted.
+        // A reading of the thresholds is a reading that was made, whatever it found.
         return withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
-                rulesWithoutALine, between, reaching);
+                rulesWithoutALine, between, reaching,
+                new MeasureClosure.Drawing.FromTheReading());
     }
 
     /**
@@ -1048,7 +1050,8 @@ public final class Partitions {
                                             RuleReadingContext ruleReading,
                                             RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,
-                                            ReachingCuts reaching) {
+                                            ReachingCuts reaching,
+                                            MeasureClosure.Drawing drawing) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1117,7 +1120,16 @@ public final class Partitions {
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
-        MeasureClosure.Both closed = MeasureClosure.of(base.positions(), asked, read);
+        // Drawn from the reading that was made, or said to be the absence of one. A body this
+        // elaboration has none of was not read: the classes above are what the declarations and
+        // the clauses came to, and what the body's own rules add to them is unknown — so neither
+        // measure may conclude over it, and neither may name a question either.
+        MeasureClosure.Both closed = switch (drawing) {
+            case MeasureClosure.Drawing.FromTheReading _ ->
+                    MeasureClosure.of(base.positions(), asked, read);
+            case MeasureClosure.Drawing.NoneWasMade it -> MeasureClosure.bodyNotRead(
+                    it.module(), MeasureClosure.of(base.positions(), asked, read));
+        };
         return new Partitioning(measurements, asked, base.uncertain(),
                 // Read after every position was measured, so that what a position's classes would
                 // not compose is in it. Taken before, the list is what the producers handed over and

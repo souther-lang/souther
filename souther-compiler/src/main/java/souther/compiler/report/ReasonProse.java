@@ -228,6 +228,18 @@ record ReasonProse(Introduction introduction, String said) {
             case ItemAssessment.Coverage.CouldNotAsk it -> switch (it) {
                 case ARMS_UNREADABLE -> "the arms could not be measured";
             };
+            // One sentence for both measures. What is missing is the reading of the body, which
+            // is the same fact whichever of the two was asking — and a reader told it twice in two
+            // wordings would go looking for two things.
+            case BoundaryDerivation.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what lines its own rules draw is"
+                                + " unknown";
+            };
+            case PartitionDerivation.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what its own rules divide is unknown";
+            };
             case PartitionDerivation.TheReadingDidNotRunOut it -> switch (it) {
                 case THE_READING_DID_NOT_RUN_OUT ->
                         "no partition axis was derived at any position";
