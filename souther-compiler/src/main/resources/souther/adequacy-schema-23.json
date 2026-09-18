@@ -2697,6 +2697,7 @@
                   "nothing_composes_one",
                   "all_candidates_rejected",
                   "nothing_stands_in_for_a_dependency",
+                  "a_row_was_composed_without_part_of_the_way",
                   "a_table_is_what_this_needs",
                   "the_search_left_something_untried",
                   "the_rules_leave_nothing_there",

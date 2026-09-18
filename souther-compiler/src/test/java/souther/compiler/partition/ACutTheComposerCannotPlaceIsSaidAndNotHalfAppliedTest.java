@@ -83,12 +83,12 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100),
                 cut(new NumericTerm.ValueOf(TermPath.of("r").then("elsewhere"))));
 
-        assertEquals(1, attempt.unrepresented().size(),
+        assertEquals(1, attempt.unrepresented().onTheWay().size(),
                 "the one cut it was handed and could not place: " + attempt.unrepresented());
         assertInstanceOf(ReachabilityGap.Why.NoValueComposedForItsPositions.class,
                 assertInstanceOf(ReachabilityGap.Uncomposed.class,
-                        attempt.unrepresented().get(0)).why());
-        assertEquals(WHERE, attempt.unrepresented().get(0).anchor(),
+                        attempt.unrepresented().onTheWay().get(0)).why());
+        assertEquals(WHERE, attempt.unrepresented().onTheWay().get(0).anchor(),
                 "said of the condition, which is what a reader is sent to");
     }
 
@@ -111,9 +111,9 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt = composing(axisAt("r.lines"), Count.of(2),
                 cut(aTotalOver("a")), cut(aTotalOver("b")));
 
-        assertFalse(attempt.unrepresented().isEmpty(),
+        assertFalse(attempt.unrepresented().onTheWay().isEmpty(),
                 "the cuts it was handed and could not place: " + attempt.unrepresented());
-        for (ReachabilityGap gap : attempt.unrepresented()) {
+        for (ReachabilityGap gap : attempt.unrepresented().onTheWay()) {
             assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
                     assertInstanceOf(ReachabilityGap.Uncomposed.class, gap).why(),
                     () -> "said as numbers of one location this writes no value for, and not as a"
@@ -149,7 +149,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt = composing(length, Count.of(4),
                 cut(new NumericTerm.ValueOf(length.term().position())));
 
-        assertTrue(attempt.unrepresented().isEmpty(),
+        assertTrue(attempt.unrepresented().onTheWay().isEmpty(),
                 "the value of the location and a number taken of it are written together: "
                         + attempt.unrepresented());
     }
@@ -166,7 +166,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt =
                 composing(costAxis(), Count.of(100), cut(costAxis().term()));
 
-        assertTrue(attempt.unrepresented().isEmpty(),
+        assertTrue(attempt.unrepresented().onTheWay().isEmpty(),
                 "every condition it was handed was one it put a value under: "
                         + attempt.unrepresented());
     }

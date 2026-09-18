@@ -7,15 +7,19 @@ import souther.compiler.partition.AnAnswerComposed;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.AnswersStoodIn;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InjectedAnswer;
+import souther.compiler.partition.StandInAttempt;
 import souther.compiler.partition.StoodInAnswer;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -75,28 +79,44 @@ record AnswersForARule(RequiredDependencies requires,
      * search some of the rows a way admits and report about the model as though it had searched
      * them all.
      */
-    List<AnswersStoodIn> of(AnswersDemanded demanded) {
-        if (!demanded.whole()) {
-            // The way asks something of an answer that nothing here states, so a value composed
-            // against the rest would be composed against part of what the row has to be.
-            return List.of(new AnswersStoodIn.NothingComposed(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
-        }
+    List<StandInAttempt> of(AnswersDemanded demanded) {
+        List<DemandGap> unaccounted = new ArrayList<>(demanded.declined());
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
         List<List<StoodInAnswer>> apiece = new ArrayList<>();
         for (RequiredDependencies.Required each : requires.inOrder()) {
             StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
-            if (here instanceof StandingIn.None(var why)) {
-                return List.of(new AnswersStoodIn.NothingComposed(why));
+            unaccounted.addAll(here.unaccounted());
+            if (here instanceof StandingIn.None(var why, var _)) {
+                return List.of(new StandInAttempt(new AnswersStoodIn.NothingComposed(why),
+                        account(demanded, unaccounted)));
             }
             apiece.add(((StandingIn.Any) here).alternatives());
         }
-        List<AnswersStoodIn> out = new ArrayList<>();
+        CompositionAccount account = account(demanded, unaccounted);
+        List<StandInAttempt> out = new ArrayList<>();
         for (List<StoodInAnswer> combination : everyCombinationOf(apiece)) {
-            out.add(new AnswersStoodIn.Stood(combination));
+            out.add(new StandInAttempt(new AnswersStoodIn.Stood(combination), account));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * What the answer side of the way came to, as one value beside whatever was stood in.
+     *
+     * <p>Both of what it holds come from here rather than from the caller: which conditions this
+     * side answered for is the reading's ({@link AnswersDemanded#takenUp()}) and what it fell short
+     * of is what the stages below wrote down. Worked out where the two are in hand, so that the
+     * reconciliation of the two projections is not a reading anybody downstream repeats.
+     */
+    private static CompositionAccount account(AnswersDemanded demanded,
+                                              List<DemandGap> unaccounted) {
+        // One entry per demand nothing was composed against, however many times it was asked. A
+        // union answer is composed for case by case and a demand none of them carries comes back
+        // once per case, which is this reading's arithmetic rather than anything about the
+        // condition.
+        return new CompositionAccount(List.of(),
+                List.copyOf(new LinkedHashSet<>(unaccounted)), demanded.takenUp());
     }
 
     /**
@@ -132,11 +152,17 @@ record AnswersForARule(RequiredDependencies requires,
      */
     private sealed interface StandingIn {
 
+        /** What of the way this dependency's value was not composed against, which either answer
+         *  may have. */
+        List<DemandGap> unaccounted();
+
         /** The ways it can be answered, every one of which composes a row. */
-        record Any(List<StoodInAnswer> alternatives) implements StandingIn {
+        record Any(List<StoodInAnswer> alternatives, List<DemandGap> unaccounted)
+                implements StandingIn {
 
             public Any {
                 alternatives = List.copyOf(alternatives);
+                unaccounted = List.copyOf(unaccounted);
                 if (alternatives.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a dependency something stands in for has a way of standing in");
@@ -145,7 +171,13 @@ record AnswersForARule(RequiredDependencies requires,
         }
 
         /** Nothing does, in the words a search comes back with. */
-        record None(Generator.UnresolvedCombination.Reason why) implements StandingIn {}
+        record None(Generator.UnresolvedCombination.Reason why, List<DemandGap> unaccounted)
+                implements StandingIn {
+
+            public None {
+                unaccounted = List.copyOf(unaccounted);
+            }
+        }
     }
 
     /**
@@ -164,15 +196,22 @@ record AnswersForARule(RequiredDependencies requires,
     private StandingIn standingIn(RequiredDependencies.Required required,
                                   Map<InjectedAnswer, List<AnswerDemand>> asked) {
         if (asked.isEmpty() && stated(required.dependency())) {
-            return byTheModule(required);
+            return byTheModule(required, List.of());
         }
+        List<DemandGap> unaccounted = new ArrayList<>();
         Map<InjectedAnswer, List<Candidate>> values = new LinkedHashMap<>();
         for (Map.Entry<InjectedAnswer, List<AnswerDemand>> each : asked.entrySet()) {
-            List<Candidate> composed = composed(required, each.getValue());
-            if (composed.isEmpty()) {
-                return stated(required.dependency()) ? byTheModule(required) : nothingStandsIn();
+            Composing composed = composed(required, each.getValue());
+            unaccounted.addAll(composed.unaccounted());
+            if (composed.values().isEmpty()) {
+                // The row leans on the table the module states, which is a row that runs and not
+                // a row composed against what the way asks. What it was not composed against
+                // travels with it: a run of such a row that lands somewhere else says something
+                // about a value nothing here could build, and nothing about the model.
+                return stated(required.dependency()) ? byTheModule(required, unaccounted)
+                        : nothingStandsIn(unaccounted);
             }
-            values.put(each.getKey(), composed);
+            values.put(each.getKey(), composed.values());
         }
         List<Candidate> serving = servingEveryAsking(required, values);
         if (!serving.isEmpty()) {
@@ -180,15 +219,16 @@ record AnswersForARule(RequiredDependencies requires,
             for (Candidate each : serving) {
                 alternatives.add(new StoodInAnswer.OnTheRow(required.dependency(), each.value()));
             }
-            return new StandingIn.Any(alternatives);
+            return new StandingIn.Any(alternatives, unaccounted);
         }
         // The way wants the dependency to answer differently at different calls, which wants a
         // table — written once for a module and part of the environment several rows share rather
         // than part of a row. Nothing here composes one, so the row leans on the one the module
         // states, and where the module states none there is nothing for this way to be tried with.
-        return stated(required.dependency()) ? byTheModule(required)
+        return stated(required.dependency()) ? byTheModule(required, unaccounted)
                 : new StandingIn.None(
-                        Generator.UnresolvedCombination.Reason.A_TABLE_IS_WHAT_THIS_NEEDS);
+                        Generator.UnresolvedCombination.Reason.A_TABLE_IS_WHAT_THIS_NEEDS,
+                        unaccounted);
     }
 
     /**
@@ -211,14 +251,16 @@ record AnswersForARule(RequiredDependencies requires,
                 && ExampleStatements.answersEveryCall(table.read());
     }
 
-    private static StandingIn byTheModule(RequiredDependencies.Required required) {
+    private static StandingIn byTheModule(RequiredDependencies.Required required,
+                                          List<DemandGap> unaccounted) {
         return new StandingIn.Any(
-                List.of(new StoodInAnswer.InTheModule(required.dependency())));
+                List.of(new StoodInAnswer.InTheModule(required.dependency())), unaccounted);
     }
 
-    private static StandingIn nothingStandsIn() {
+    private static StandingIn nothingStandsIn(List<DemandGap> unaccounted) {
         return new StandingIn.None(
-                Generator.UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY);
+                Generator.UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
+                unaccounted);
     }
 
     /**
@@ -240,7 +282,7 @@ record AnswersForARule(RequiredDependencies requires,
     private List<Candidate> servingEveryAsking(RequiredDependencies.Required required,
                                                Map<InjectedAnswer, List<Candidate>> values) {
         if (values.isEmpty()) {
-            return composed(required, List.of());
+            return composed(required, List.of()).values();
         }
         Map<WhatARowWrites, Candidate> serving = null;
         for (List<Candidate> each : values.values()) {
@@ -255,22 +297,44 @@ record AnswersForARule(RequiredDependencies requires,
         return List.copyOf(serving.values());
     }
 
-    /** Every value of the dependency's answer meeting {@code demands}, and none where none was
-     *  composed. */
-    private List<Candidate> composed(RequiredDependencies.Required required,
-                                     List<AnswerDemand> demands) {
+    /**
+     * Every value of the dependency's answer meeting {@code demands}, and what no value was
+     * composed against.
+     *
+     * <p>Both, and the second is not read off the first being short. A value composed for one case
+     * of a union and nothing composed for another leave one candidate and a demand that reached
+     * nothing; an account taken from the empty list would be written only where every case came to
+     * nothing.
+     */
+    private Composing composed(RequiredDependencies.Required required,
+                               List<AnswerDemand> demands) {
         AnswerSubjects subjects = standing.get(required.dependency());
         if (subjects == null) {
-            return List.of();
+            // No position stands at what the dependency answers, so there is nothing here to
+            // compose over and no demand that anything fell short of. What a reader is told is the
+            // word beside it.
+            return new Composing(List.of(), List.of());
         }
         List<Candidate> out = new ArrayList<>();
+        List<DemandGap> unaccounted = new ArrayList<>();
         for (AnswerSubjects.Feasible each : subjects.against(demands)) {
-            if (AnAnswerComposed.of(each.standing(), each.demands())
-                    instanceof AnAnswerComposed.Outcome.Composed(var value)) {
+            AnAnswerComposed.Attempt attempt =
+                    AnAnswerComposed.of(each.standing(), each.demands());
+            unaccounted.addAll(attempt.unaccounted());
+            if (attempt.outcome() instanceof AnAnswerComposed.Outcome.Composed(var value)) {
                 out.add(new Candidate(each.caseOfTheAnswer(), value));
             }
         }
-        return List.copyOf(out);
+        return new Composing(out, unaccounted);
+    }
+
+    /** The values composed for one asking, and what none of them was composed against. */
+    private record Composing(List<Candidate> values, List<DemandGap> unaccounted) {
+
+        private Composing {
+            values = List.copyOf(values);
+            unaccounted = List.copyOf(unaccounted);
+        }
     }
 
     /**

@@ -103,21 +103,22 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
     }
 
     private static Generator.BoundaryAttempt proved() {
-        return new Generator.BoundaryAttempt.Unresolved(leavesNothing(), List.of());
+        return new Generator.BoundaryAttempt.Unresolved(leavesNothing(), NOTHING_LEFT_OUT);
     }
 
     private static Generator.BoundaryAttempt cannotBeBoth() {
-        return new Generator.BoundaryAttempt.Unresolved(positionCannotBeBoth(), List.of());
+        return new Generator.BoundaryAttempt.Unresolved(positionCannotBeBoth(), NOTHING_LEFT_OUT);
     }
 
     private static Generator.BoundaryAttempt cameTo(
             Generator.UnresolvedCombination.Reason reason) {
-        return new Generator.BoundaryAttempt.Unresolved(word(reason), List.of());
+        return new Generator.BoundaryAttempt.Unresolved(word(reason), NOTHING_LEFT_OUT);
     }
 
     private static Generator.BoundaryAttempt built() {
         return new Generator.BoundaryAttempt.Built(new Generator.GeneratedRow(
-                new Generator.Purpose.ForAPoint("a rule of the decision"), List.of()), List.of());
+                new Generator.Purpose.ForAPoint("a rule of the decision"), List.of()),
+                NOTHING_LEFT_OUT);
     }
 
     private static Generator.BoundaryAttempt stopped() {
@@ -125,6 +126,10 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
         return new Generator.BoundaryAttempt.Stopped(new Generator.UnresolvedCombination(
                 List.of("a rule of the decision"),
                 Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                EnumSet.of(budget), Set.of(), List.of());
+                EnumSet.of(budget), Set.of(), NOTHING_LEFT_OUT);
     }
+
+    /** These searches are about what a rule's answer is made of and not about what was left out. */
+    private static final souther.compiler.partition.CompositionAccount NOTHING_LEFT_OUT =
+            souther.compiler.partition.CompositionAccount.NOTHING;
 }

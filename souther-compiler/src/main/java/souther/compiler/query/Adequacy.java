@@ -2171,9 +2171,9 @@ public final class Adequacy {
                     // easiest row in the file to write by hand, and a requirement carrying this
                     // reason would say otherwise.
                     case Generator.BoundaryAttempt.NoRow none ->
-                            RuleSettlement.nothingToTryWith(none.why());
+                            RuleSettlement.nothingToTryWith(none.why(), none.unrepresented());
                     case Generator.BoundaryAttempt.Built built ->
-                            RuleSettlement.of(whereItWent(built.row().toRun(), probe, taken, ruled));
+                            whatItsRunSettles(built, probe, taken, ruled);
                 };
                 established = established == null || establishes(here) > establishes(established)
                         ? here : established;
@@ -2183,7 +2183,36 @@ public final class Adequacy {
             return established != null ? established
                     : RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
                             List.of("a rule of the decision"),
-                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
+                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED),
+                            souther.compiler.partition.CompositionAccount.NOTHING);
+        }
+
+        /**
+         * What the run of a composed row settles about the rule it was composed for.
+         *
+         * <p>Which is what the run did, wherever the row was composed against the whole of what the
+         * way asks. Where it was not, the run is an attempt and not an answer: a row meeting less
+         * than the way asks reaches whatever it reaches, and reading that as the rule having been
+         * gone past would report this compiler's shortfall as something the model does.
+         *
+         * <p><b>The one direction, and not both.</b> A row that took the rule took it however it
+         * was composed — the run is what says so, and a witness is a witness. What an incomplete
+         * row cannot do is stand as the negative, so that is the answer this replaces.
+         */
+        private static RuleSettlement whatItsRunSettles(
+                Generator.BoundaryAttempt.Built built, Coverages.Probe probe,
+                souther.compiler.partition.RulesTaken taken,
+                souther.compiler.partition.DecisionReading.Ruled ruled) {
+            RuleRequirement went = whereItWent(built.row().toRun(), probe, taken, ruled);
+            if (went instanceof RuleRequirement.Required
+                    || !built.unrepresented().leftSomethingOut()) {
+                return RuleSettlement.of(went, built.unrepresented());
+            }
+            return RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
+                    List.of("a rule of the decision"),
+                    Generator.UnresolvedCombination.Reason
+                            .A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY),
+                    built.unrepresented());
         }
 
         /**
@@ -2427,7 +2456,7 @@ public final class Adequacy {
                 // is not something this can tell — where a row goes is read by whoever asked — so
                 // all of them go back and none is chosen here.
                 List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                for (AnswersStoodIn stood : answers.of(demands)) {
+                for (souther.compiler.partition.StandInAttempt stood : answers.of(demands)) {
                     out.add(Generator.probeFixing(subject, label, fixing, asking, reaching, check,
                             stood));
                 }
@@ -4434,13 +4463,16 @@ public final class Adequacy {
          * a row carries decides which of the body's ways it goes down. Each is searched with, and
          * what the search comes to is what all of them came to together.
          */
-        private static List<AnswersStoodIn> supplying(
+        private static List<souther.compiler.partition.StandInAttempt> supplying(
                 Db db, String module, String behavior,
                 souther.compiler.partition.MeasuredInput subject) {
             AnswersForARule answers = answering(db, module, behavior, subject);
             return answers == null
-                    ? List.of(new AnswersStoodIn.NothingComposed(Generator
-                            .UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY))
+                    ? List.of(new souther.compiler.partition.StandInAttempt(
+                            new AnswersStoodIn.NothingComposed(Generator
+                                    .UnresolvedCombination.Reason
+                                    .NOTHING_STANDS_IN_FOR_A_DEPENDENCY),
+                            souther.compiler.partition.CompositionAccount.NOTHING))
                     : answers.of(souther.compiler.partition.AnswersDemanded.NOTHING);
         }
 
@@ -5021,7 +5053,7 @@ public final class Adequacy {
                 List<Generator.Baseline> baselines,
                 Optional<SiteNumbering> numbering, RowReading observed,
                 BoundaryValues building,
-                Generator.Trial trial, List<AnswersStoodIn> stood,
+                Generator.Trial trial, List<souther.compiler.partition.StandInAttempt> stood,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
@@ -5055,9 +5087,11 @@ public final class Adequacy {
             // the body's ways a candidate goes down, so a search of one case answers about the model
             // only where the model has one case to answer about.
             List<souther.compiler.partition.FillResult> searched = new ArrayList<>();
-            for (AnswersStoodIn each : stood) {
+            for (souther.compiler.partition.StandInAttempt each : stood) {
+                // The outcome alone, because these are the answers of a way that asks nothing of
+                // them: there is no demand here for anything to have fallen short of.
                 searched.add(Generator.fill(asked, existing, check, met,
-                        trial, baselines, each, budget));
+                        trial, baselines, each.outcome(), budget));
             }
             return souther.compiler.partition.FillResult.acrossRuns(searched);
         }

@@ -117,13 +117,13 @@ final class DecisionPath {
      */
     AnswersDemanded demands() {
         List<AnswerDemand> stated = new ArrayList<>();
-        List<ConditionReportAnchor> declined = new ArrayList<>();
+        List<DemandGap.Unstated> declined = new ArrayList<>();
         for (Consulted each : consulted) {
-            AnswerDemand demand = demanded(each);
-            if (demand != null) {
-                stated.add(demand);
-            } else if (asksSomethingOfAnAnswer(each.answer())) {
-                declined.add(each.states().anchor());
+            switch (asked(each)) {
+                case Asked.Stated(var demand) -> stated.add(demand);
+                case Asked.NotStated(var why) ->
+                        declined.add(new DemandGap.Unstated(each.states().anchor(), why));
+                case Asked.OfTheInput _ -> { }
             }
         }
         return stated.isEmpty() && declined.isEmpty()
@@ -131,86 +131,115 @@ final class DecisionPath {
     }
 
     /**
-     * What one consulted condition asks of an answer, or null where it asks nothing this can state.
+     * What one consulted condition asks of an answer.
      *
-     * <p>Null covers two things a reader tells apart elsewhere: a condition about the input alone,
-     * which asks nothing of any answer, and a condition about an answer this has no way of stating.
-     * Which of the two it is is {@link #asksSomethingOfAnAnswer}'s, asked of the column rather than
-     * worked out from the absence here.
+     * <p>Three answers and not a demand beside an absence. A condition about the input alone asks
+     * nothing of any answer and a condition about an answer this cannot state is a shortfall of
+     * this reading, and an absence standing for both is a second reading of the same column
+     * deciding which it was — two answers to one question with nothing holding them together.
      */
-    private static AnswerDemand demanded(Consulted one) {
+    private sealed interface Asked {
+
+        /** What a value standing the dependency in has to satisfy. */
+        record Stated(AnswerDemand demand) implements Asked {}
+
+        /** A condition about an answer this reading has no way of putting to a composer. */
+        record NotStated(DemandGap.WhyNotStated why) implements Asked {}
+
+        /** A condition about the input alone, which this side has nothing to say about. */
+        record OfTheInput() implements Asked {}
+    }
+
+    private static final Asked OF_THE_INPUT = new Asked.OfTheInput();
+
+    private static Asked asked(Consulted one) {
         ConditionReportAnchor anchor = one.states().anchor();
         return switch (one.answer()) {
             case DecidedCondition.Narrowed(var condition, var to) ->
                     condition.of() instanceof DecisionSubject.AnAnswer at
-                            ? new AnswerDemand.ACase(at.answered(), anchor, at.steps(), to) : null;
+                            ? new Asked.Stated(
+                                    new AnswerDemand.ACase(at.answered(), anchor, at.steps(), to))
+                            : OF_THE_INPUT;
             // A truth of the answer itself and not of a place inside one. A `Bool` divides a
             // position into two values and puts nothing under it, so what a demand about a field
             // of an answer would ask is something nothing here composes against — stated all the
             // same, it would sit among the demands a value is built to meet while nothing built
             // one to meet it, and the way would read as one whose demands were all stated.
-            case DecidedCondition.Stood(var condition, var held) ->
-                    condition.of() instanceof DecisionSubject.AnAnswer at && at.steps().isEmpty()
-                            ? new AnswerDemand.ATruth(at.answered(), anchor, at.steps(), held)
-                            : null;
+            case DecidedCondition.Stood(var condition, var held) -> {
+                if (!(condition.of() instanceof DecisionSubject.AnAnswer at)) {
+                    yield OF_THE_INPUT;
+                }
+                yield at.steps().isEmpty()
+                        ? new Asked.Stated(
+                                new AnswerDemand.ATruth(at.answered(), anchor, at.steps(), held))
+                        : new Asked.NotStated(
+                                new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer());
+            }
             case DecidedCondition.Compared(var condition, var held) -> switch (condition) {
                 case DecisionCondition.AComparison it -> compared(it, held, anchor);
                 // A place on a carrier's own order, which is a value and not a form. What this
                 // stage composes against an answer is a form, so a column of that shape is left
                 // unstated here for the reason a form over two answers is.
-                case DecisionCondition.AnOrderedComparison _ -> null;
+                case DecisionCondition.AnOrderedComparison(var term, var _, var _) ->
+                        term instanceof DecisionAtom.OfAnAnswer
+                                ? new Asked.NotStated(
+                                        new DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder())
+                                : OF_THE_INPUT;
             };
-            case DecidedCondition.Unread _ -> null;
+            case DecidedCondition.Unread _ -> OF_THE_INPUT;
         };
     }
 
     /**
-     * A comparison as a demand on one answer, or null where it is about anything else.
+     * A comparison as a demand on one answer, or what stopped it from being one.
      *
      * <p>Of one answer and of nothing beside it. A form over two answers, or over an answer and a
      * number of the input, is one statement about the pair and nothing here composes two values to
      * it together — so it is left unstated, which is what a way carries as a condition a row may
      * not satisfy rather than as one that is not there.
+     *
+     * <p>A form naming no answer at all is neither of those. It is the input's, and this side has
+     * nothing to say about it.
      */
-    private static AnswerDemand compared(DecisionCondition.AComparison condition, boolean held,
-                                         ConditionReportAnchor anchor) {
+    private static Asked compared(DecisionCondition.AComparison condition, boolean held,
+                                  ConditionReportAnchor anchor) {
         InjectedAnswer only = null;
+        boolean anyOfAnAnswer = false;
         for (DecisionAtom atom : condition.form().coefs().keySet()) {
             if (!(atom instanceof DecisionAtom.OfAnAnswer(var at))) {
-                return null;
+                continue;
             }
+            anyOfAnAnswer = true;
             if (only != null && !only.equals(at.answered())) {
-                return null;
+                only = null;
+                break;
             }
             only = at.answered();
+        }
+        if (!anyOfAnAnswer) {
+            return OF_THE_INPUT;
+        }
+        if (only == null || condition.form().coefs().size() > countOf(condition, only)) {
+            return new Asked.NotStated(
+                    new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer());
         }
         // The side the path took, which is what a row has to satisfy. The column faces the way its
         // proposition does whichever side was taken, so the denial is taken here rather than left
         // for a composer to work out from a flag travelling beside the form.
-        return only == null ? null : new AnswerDemand.AComparison(only, anchor, condition.form(),
-                held ? condition.proposition() : condition.proposition().denied());
+        return new Asked.Stated(new AnswerDemand.AComparison(only, anchor, condition.form(),
+                held ? condition.proposition() : condition.proposition().denied()));
     }
 
-    /**
-     * Whether a column is about an answer at all.
-     *
-     * <p>Asked of the column and not of what a demand came to. A condition about the input alone is
-     * one this has nothing to say about, and counting it as declined would report every body that
-     * decides on its own input as a body whose answers could not be stated.
-     */
-    private static boolean asksSomethingOfAnAnswer(DecidedCondition answer) {
-        return switch (answer.condition()) {
-            case DecisionCondition.ACase(var of) -> of instanceof DecisionSubject.AnAnswer;
-            case DecisionCondition.ATruth(var of) -> of instanceof DecisionSubject.AnAnswer;
-            case DecisionCondition.AComparison(var form, var _) -> form.coefs().keySet().stream()
-                    .anyMatch(DecisionAtom.OfAnAnswer.class::isInstance);
-            // A position against a written place on its own order. The place is what the rule wrote
-            // and the position is what the body compared, so what a column of this shape can be
-            // about is the one term it names.
-            case DecisionCondition.AnOrderedComparison(var term, var _, var _) ->
-                    term instanceof DecisionAtom.OfAnAnswer;
-            case DecisionCondition.AConditionNotRead _ -> false;
-        };
+    /** How many of the form's terms are places inside {@code answer}, which is all of them where
+     *  the form is a demand on it alone. */
+    private static int countOf(DecisionCondition.AComparison condition, InjectedAnswer answer) {
+        int found = 0;
+        for (DecisionAtom atom : condition.form().coefs().keySet()) {
+            if (atom instanceof DecisionAtom.OfAnAnswer(var at) && answer.equals(at.answered())) {
+                found++;
+            }
+        }
+        return found;
     }
 
     /** Both paths' conditions, or null where between them they answer one column two ways. */

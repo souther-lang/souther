@@ -401,6 +401,21 @@ public final class Generator {
              */
             NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
             /**
+             * A row was composed and part of what the way asks was not in it.
+             *
+             * <p>Not one of the words above, and the difference is what a reader may conclude from
+             * the run. A row was built and it ran; what it did is what a row meeting less than the
+             * way asks does, so where it went says nothing about the way it was composed for. Said
+             * as nothing having been composed, the account would be denying a row that exists; said
+             * as a row like any other, a run that landed elsewhere would stand as the model
+             * refusing the way.
+             *
+             * <p>A fact about this compiler. What the row was composed without is in the account
+             * beside this word ({@link CompositionAccount}), which is where a reader is told which
+             * condition it was and what stopped it.
+             */
+            A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
+            /**
              * The row needs a dependency to answer by what it was applied to, and nothing here
              * writes a table.
              *
@@ -612,6 +627,7 @@ public final class Generator {
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED,
                          NOT_ALL_CANDIDATES_COULD_BE_OFFERED, THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
+                         A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
@@ -703,6 +719,7 @@ public final class Generator {
                     case ALL_CANDIDATES_REJECTED, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                          THE_RULES_LEAVE_NOTHING_THERE,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
+                         A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
                          ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
                          NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
                          THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
@@ -3035,7 +3052,7 @@ public final class Generator {
          * <p>Empty is the ordinary case and says so: every condition the walk stated was one this
          * put a value under.
          */
-        List<ReachabilityGap> unrepresented();
+        CompositionAccount unrepresented();
 
         /**
          * A value with the edge in it, built and accepted.
@@ -3052,12 +3069,11 @@ public final class Generator {
          * makes this cheap to hold and worth holding: the next word added beside these has the same
          * question to answer, and this is where it gets asked.
          */
-        record Built(GeneratedRow row, List<ReachabilityGap> unrepresented)
+        record Built(GeneratedRow row, CompositionAccount unrepresented)
                 implements BoundaryAttempt {
 
             public Built {
-                unrepresented = List.copyOf(unrepresented);
-                for (ReachabilityGap gap : unrepresented) {
+                for (ReachabilityGap gap : unrepresented.onTheWay()) {
                     if (gap instanceof ReachabilityGap.ProvedImpossible) {
                         throw new IllegalArgumentException("a row was built for a way the rules"
                                 + " leave nothing standing on, which is a row that does not arrive:"
@@ -3084,11 +3100,10 @@ public final class Generator {
         }
 
         /** No row came of it, and why. Never a statement that none exists. */
-        record Unresolved(UnresolvedCombination why, List<ReachabilityGap> unrepresented)
+        record Unresolved(UnresolvedCombination why, CompositionAccount unrepresented)
                 implements NoRow {
 
             public Unresolved {
-                unrepresented = List.copyOf(unrepresented);
             }
         }
 
@@ -3105,11 +3120,10 @@ public final class Generator {
          */
         record Stopped(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
                        java.util.Set<CompositionRepertoire> notAllOf,
-                       List<ReachabilityGap> unrepresented)
+                       CompositionAccount unrepresented)
                 implements NoRow {
 
             public Stopped {
-                unrepresented = List.copyOf(unrepresented);
                 by = java.util.Set.copyOf(by);
                 notAllOf = java.util.Set.copyOf(notAllOf);
                 if (by.isEmpty()) {
@@ -3127,7 +3141,7 @@ public final class Generator {
 
             /** One at the label given, in the word its budgets come back with. */
             static Stopped at(String label, java.util.Set<CompositionBudget> by,
-                              List<ReachabilityGap> unrepresented) {
+                              CompositionAccount unrepresented) {
                 return at(label, null, by, java.util.Set.of(), unrepresented);
             }
 
@@ -3135,7 +3149,7 @@ public final class Generator {
              *  separately walked some of a population. */
             static Stopped at(String label, String detail, java.util.Set<CompositionBudget> by,
                               java.util.Set<CompositionRepertoire> notAllOf,
-                              List<ReachabilityGap> unrepresented) {
+                              CompositionAccount unrepresented) {
                 return at(label, detail, new LinkedHashMap<>(), by, notAllOf, unrepresented);
             }
 
@@ -3151,7 +3165,7 @@ public final class Generator {
                               SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                               java.util.Set<CompositionBudget> by,
                               java.util.Set<CompositionRepertoire> notAllOf,
-                              List<ReachabilityGap> unrepresented) {
+                              CompositionAccount unrepresented) {
                 return new Stopped(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.wordFor(by), detail, Optional.empty(),
                         alsoShort), by, notAllOf, unrepresented);
@@ -3172,11 +3186,10 @@ public final class Generator {
          * it differs, and that is what travels here.
          */
         record Unexhausted(UnresolvedCombination why, java.util.Set<CompositionRepertoire> writes,
-                           List<ReachabilityGap> unrepresented)
+                           CompositionAccount unrepresented)
                 implements NoRow {
 
             public Unexhausted {
-                unrepresented = List.copyOf(unrepresented);
                 writes = java.util.Set.copyOf(writes);
                 if (writes.isEmpty()) {
                     throw new IllegalArgumentException(
@@ -3187,7 +3200,7 @@ public final class Generator {
             /** One at the label given, of a search that has something to say about what it saw. */
             static Unexhausted at(String label, String detail,
                                   java.util.Set<CompositionRepertoire> writes,
-                                  List<ReachabilityGap> unrepresented) {
+                                  CompositionAccount unrepresented) {
                 return at(label, detail, new LinkedHashMap<>(), writes, unrepresented);
             }
 
@@ -3195,7 +3208,7 @@ public final class Generator {
             static Unexhausted at(String label, String detail,
                                   SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                                   java.util.Set<CompositionRepertoire> writes,
-                                  List<ReachabilityGap> unrepresented) {
+                                  CompositionAccount unrepresented) {
                 return new Unexhausted(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, detail,
                         Optional.empty(), alsoShort), writes, unrepresented);
@@ -3218,11 +3231,10 @@ public final class Generator {
          * for look like one the model admits no row at.
          */
         record Limited(UnresolvedCombination why, Set<CompositionBudget> by,
-                       List<ReachabilityGap> unrepresented)
+                       CompositionAccount unrepresented)
                 implements NoRow {
 
             public Limited {
-                unrepresented = List.copyOf(unrepresented);
                 by = Set.copyOf(by);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
@@ -3233,7 +3245,7 @@ public final class Generator {
             /** One at the label given, in the word the search itself came back with. */
             static Limited at(String label, UnresolvedCombination.Reason why, String detail,
                               java.util.Set<CompositionBudget> by,
-                              List<ReachabilityGap> unrepresented) {
+                              CompositionAccount unrepresented) {
                 return new Limited(new UnresolvedCombination(List.of(label), why, detail), by,
                         unrepresented);
             }
@@ -3247,11 +3259,10 @@ public final class Generator {
          * is owed it about a search that never happened, which is what its word says.
          */
         record Unplanned(UnresolvedCombination why, Set<CompositionBudget> by,
-                         List<ReachabilityGap> unrepresented)
+                         CompositionAccount unrepresented)
                 implements NoRow {
 
             public Unplanned {
-                unrepresented = List.copyOf(unrepresented);
                 by = Set.copyOf(by);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
@@ -3261,7 +3272,7 @@ public final class Generator {
 
             /** One at the label given, in the word a reading nothing searched comes back with. */
             static Unplanned at(String label, Set<CompositionBudget> by,
-                                List<ReachabilityGap> unrepresented) {
+                                CompositionAccount unrepresented) {
                 return new Unplanned(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
                         by, unrepresented);
@@ -3307,7 +3318,7 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check) {
         return probeFixing(subject, label, fixing, asking, reaching, check,
-                AnswersStoodIn.REQUIRING_NOTHING);
+                StandInAttempt.REQUIRING_NOTHING);
     }
 
     /**
@@ -3317,12 +3328,16 @@ public final class Generator {
      * without them is a row nothing applies, so a point answered with one is a point nothing was
      * composed for — said here, where what the search came to is said, instead of by a reader that
      * takes a built row apart and rebuilds it.
+     *
+     * <p>And what standing them in was arrived at without joins what the search for this point's
+     * own values was. Both are conditions of one way, read through two projections, and a reader of
+     * the attempt is owed them as one account.
      */
     public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
                                               Map<RealizationTarget, Place> fixing,
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
-                                              AnswersStoodIn stood) {
+                                              StandInAttempt stood) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -3340,7 +3355,7 @@ public final class Generator {
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
-        Standing where = alsoOnTheWay(subject, fixing, reaching);
+        Standing where = alsoOnTheWay(subject, fixing, reaching).with(stood.account());
         // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
         // to compose for this point and the rest of this would be composing one. What comes back is
         // the model's word, which is the same word the realizer's proof comes back with and is
@@ -3350,7 +3365,7 @@ public final class Generator {
         // does not arrive, and handing it over with the proof attached asks every reader of it to
         // know that the second component can take the first one away — which is what they were
         // written before this word existed and is not what {@link BoundaryAttempt.Built} means.
-        for (ReachabilityGap gap : where.unrepresented()) {
+        for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                         UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
@@ -3504,7 +3519,7 @@ public final class Generator {
                         "a composed row is not something to say a point came to nothing in");
             };
         }
-        return switch (stood) {
+        return switch (stood.outcome()) {
             // The values stand at the point and nothing stands in for what the behavior requires,
             // so there is no row here to offer. Said as what the search came to, because a row a
             // person cannot run is not a row this composed.
@@ -3538,7 +3553,7 @@ public final class Generator {
     private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
                                          Reachability.Reaching reaching) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
-        List<ReachabilityGap> unrepresented = new ArrayList<>();
+        List<ReachabilityGap> gaps = new ArrayList<>();
         souther.compiler.inputs.SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             here = here.given(each.getKey().term(), each.getValue());
@@ -3553,7 +3568,7 @@ public final class Generator {
                     && here.projectionOf(affine.form())
                             instanceof souther.compiler.numeric.NumericDomain.FormProjection
                                     .NothingIsLeft) {
-                unrepresented.add(new ReachabilityGap.ProvedImpossible(cut));
+                gaps.add(new ReachabilityGap.ProvedImpossible(cut));
                 continue;
             }
             List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
@@ -3620,7 +3635,7 @@ public final class Generator {
                         -> null;
             };
             if (standing == null) {
-                unrepresented.add(switch (found) {
+                gaps.add(switch (found) {
                     case NumericWitness.Standing.ProvedImpossible _ ->
                             new ReachabilityGap.ProvedImpossible(cut);
                     case NumericWitness.Standing.NotFound it when !it.stoppedBy().isEmpty() ->
@@ -3638,7 +3653,7 @@ public final class Generator {
                 out.put(new RealizationTarget.AtOnePosition(each.getKey()), each.getValue());
             }
         }
-        return new Standing(out, unrepresented);
+        return new Standing(out, CompositionAccount.ofTheInput(gaps));
     }
 
     /**
@@ -3701,7 +3716,13 @@ public final class Generator {
      * "no row was seen reaching it" beside a way that says everything on it was taken in.
      */
     private record Standing(Map<RealizationTarget, Place> at,
-                            List<ReachabilityGap> unrepresented) {}
+                            CompositionAccount unrepresented) {
+
+        /** The same, with what standing the dependencies in was arrived at without on it. */
+        Standing with(CompositionAccount answers) {
+            return new Standing(at, unrepresented.and(answers));
+        }
+    }
 
     /**
      * {@code check}, refusing any candidate at this parameter that does not read back at the place
@@ -6075,7 +6096,7 @@ public final class Generator {
          * walked in part travels with them all the same, since a stop does not make it untrue.
          */
         BoundaryAttempt cameToNothing(String label,
-                                      List<ReachabilityGap> unrepresented) {
+                                      CompositionAccount unrepresented) {
             if (!stoppedBy().isEmpty()) {
                 return BoundaryAttempt.Stopped.at(label, detail(), stoppedBy(), notAllOf(),
                         unrepresented);

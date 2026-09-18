@@ -66,9 +66,9 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     void theComposerSaysTheRulesLeftNothingRatherThanThatItComposedNothing() {
         Generator.BoundaryAttempt attempt = composing(NothingTheRulesLeave.REGION, CUT);
 
-        assertEquals(1, attempt.unrepresented().size(),
+        assertEquals(1, attempt.unrepresented().onTheWay().size(),
                 () -> "the one condition it was handed: " + attempt.unrepresented());
-        ReachabilityGap said = attempt.unrepresented().get(0);
+        ReachabilityGap said = attempt.unrepresented().onTheWay().get(0);
         assertInstanceOf(ReachabilityGap.ProvedImpossible.class, said,
                 "the rules settled it, which is not the composer having fallen short");
         assertEquals(WHERE, said.anchor(),
@@ -111,8 +111,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 "a way that stands is a way a row is built on").row();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Generator.BoundaryAttempt.Built(row,
-                        List.of(new ReachabilityGap.ProvedImpossible(CUT))),
+                () -> new Generator.BoundaryAttempt.Built(row, CompositionAccount.ofTheInput(
+                        List.of(new ReachabilityGap.ProvedImpossible(CUT)))),
                 "a row on a way that leaves nothing standing is a row that does not arrive");
     }
 
@@ -129,9 +129,10 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     void aConditionNothingCouldBePlacedUnderIsStillTheComposersOwnWord() {
         Generator.BoundaryAttempt attempt = composing(NothingTheRulesSay.REGION, ELSEWHERE);
 
-        assertEquals(1, attempt.unrepresented().size(),
+        assertEquals(1, attempt.unrepresented().onTheWay().size(),
                 () -> "the one condition it was handed: " + attempt.unrepresented());
-        assertInstanceOf(ReachabilityGap.Uncomposed.class, attempt.unrepresented().get(0),
+        assertInstanceOf(ReachabilityGap.Uncomposed.class,
+                attempt.unrepresented().onTheWay().get(0),
                 "nothing was proved, so what is said is what this compiler did not manage");
     }
 
@@ -150,9 +151,9 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
         ItemAssessment.Attempt came = new ItemAssessment.Attempt.Unresolved(
                 new Generator.UnresolvedCombination(List.of("r.cost = 100"),
                         Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                WayToTheBorder.UNTOUCHED, List.of(proof));
+                WayToTheBorder.UNTOUCHED, CompositionAccount.ofTheInput(List.of(proof)));
 
-        assertEquals(List.of(proof), came.unaccountedFor(),
+        assertEquals(List.of(new ConditionGap.OfTheInput(proof)), came.unaccountedFor(),
                 "the proof reaches a reader as itself");
     }
 

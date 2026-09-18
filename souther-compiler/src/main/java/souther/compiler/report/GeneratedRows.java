@@ -953,6 +953,11 @@ public final class GeneratedRows {
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->
                     "nothing here could answer for a behavior the target depends on, and a row"
                             + " that stands none in is a row nothing applies";
+            // A row was built, so this is not the sentence above. What it is short of is what the
+            // way asks of that stand-in, which is why the run it made settles nothing.
+            case A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY ->
+                    "a row was composed without something the way asks of a behavior the target"
+                            + " depends on, so where that row went says nothing about it";
             case A_TABLE_IS_WHAT_THIS_NEEDS ->
                     "it needs a behavior the target depends on to answer by what it was applied to,"
                             + " which is a table written for the module and not a line on a row";

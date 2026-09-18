@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,7 +75,7 @@ class AnEdgeThatOfferedNothingSaysWhichOfTheTwoItIsShortOfTest {
     private static Generator.BoundaryAttempt shortOf(Set<CompositionBudget> stoppedBy,
                                                      Set<CompositionRepertoire> notAllOf) {
         return new Generator.Edge(realization(stoppedBy, notAllOf), null)
-                .cameToNothing(LABEL, List.of());
+                .cameToNothing(LABEL, CompositionAccount.NOTHING);
     }
 
     /** What such a walk came back with, which is the arm its own two answers put it in. */

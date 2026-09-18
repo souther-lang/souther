@@ -63,12 +63,18 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
      */
     @Test
     void aSearchThatSettledNothingOwesWhatTheWayLeftOut() {
-        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
+        assertEquals(List.of(unstated()),
                 came(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED).unaccountedFor());
-        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
+        assertEquals(List.of(unstated()),
                 came(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS).unaccountedFor());
-        assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
+        assertEquals(List.of(unstated()),
                 came(Generator.UnresolvedCombination.Reason.LINKAGE_FAILED).unaccountedFor());
+    }
+
+    /** The condition the way had no words for, as a reader of the account meets it. */
+    private static souther.compiler.partition.ConditionGap unstated() {
+        return new souther.compiler.partition.ConditionGap.OfTheInput(
+                new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT));
     }
 
     /** And one that proved there is nothing there owes none of it, over the same way. */

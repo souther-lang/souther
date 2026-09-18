@@ -218,7 +218,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static ItemAssessment.Attempt unverified() {
         return new ItemAssessment.Attempt.Unverified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
-                WAY, List.of(),
+                WAY, NOTHING_LEFT_OUT,
                 EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
 
@@ -230,7 +230,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Stopped(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
+                WAY, NOTHING_LEFT_OUT,
+                PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
                 PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()));
     }
 
@@ -247,7 +248,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Unexhausted(
                 new Generator.UnresolvedCombination(List.of("List.sum(p.xs) = 7"),
                         Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                WAY, List.of(), PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                WAY, NOTHING_LEFT_OUT, PublicationOrders.COMPOSITION_REPERTOIRES.keep(
                         EnumSet.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)));
     }
 
@@ -263,7 +264,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Limited(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
-                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(
+                WAY, NOTHING_LEFT_OUT, PublicationOrders.COMPOSITION_BUDGETS.keep(
                         EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }
 
@@ -279,9 +280,13 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason
                                 .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
-                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(
+                WAY, NOTHING_LEFT_OUT, PublicationOrders.COMPOSITION_BUDGETS.keep(
                         EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }
+
+    /** These outcomes are about how a search is classified and not about what it left out. */
+    private static final souther.compiler.partition.CompositionAccount NOTHING_LEFT_OUT =
+            souther.compiler.partition.CompositionAccount.NOTHING;
 
     private static ItemAssessment.Attempt unresolved() {
         return new ItemAssessment.Attempt.Unresolved(
