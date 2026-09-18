@@ -67,6 +67,19 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
      * {@code q@A.lo} and {@code q@A.hi} once the value is an {@code A}.
      */
     TermPath standingUnderTheCase(TermPath there) {
+        return under(there, sum, branch, names);
+    }
+
+    /**
+     * {@link #standingUnderTheCase} with the crossing given as its parts, for a reader holding one
+     * name rather than the set a declaration spreads.
+     *
+     * <p>Here and not written out twice. What the walk observed of a name and what a declaration
+     * spreads are two facts about one crossing, and a second copy of the step that says which case
+     * the value turned out to be would put a name under a case by one rule here and another one
+     * there.
+     */
+    static TermPath under(TermPath there, TermPath sum, Refinement branch, Set<String> names) {
         List<TermPath.Step> steps = there.steps();
         int narrowing = sum.steps().size();
         if (steps.size() <= narrowing

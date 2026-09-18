@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.ValueSet;
@@ -27,6 +28,8 @@ final class NothingTheDeclarationsRefuse {
         for (TermPath each : positions) {
             sets.put(each, ValueSet.ANY);
         }
-        return new WitnessSearch(AdmittedValues.of(sets), PatternPlan.Budget.OF_A_WITNESS::meter);
+        // No sum whose cases share a spread, which is what an input of plain positions observed.
+        return new WitnessSearch(AdmittedValues.of(sets, NameReach.NONE),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 }

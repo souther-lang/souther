@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Where a name written at one position stands, wherever that is not the position of the same name
@@ -49,6 +50,22 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
                 throw new IllegalArgumentException(
                         "a name stands somewhere, under something, and is called something");
             }
+        }
+
+        /**
+         * Where {@code path} stands once the value at the sum is this case, or null where this
+         * crossing is not above it.
+         *
+         * <p>{@link #to} is this asked of the name itself. A path below that name answers with the
+         * same step put in, because what a clause relates under a shared name are positions under
+         * the case for the same reason the name is.
+         *
+         * <p>Asked of the crossing the walk recorded rather than worked out again from the path: the
+         * step that says which case the value turned out to be is written in one place, and a second
+         * one would put a name under a case by a rule of its own.
+         */
+        public TermPath standingUnderTheCase(TermPath path) {
+            return SharedNames.under(path, at, branch, Set.of(field));
         }
     }
 
@@ -127,6 +144,133 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
 
     /** Nothing observed: an input with no sum whose cases share a spread. */
     public static final NameReach NONE = new NameReach(List.of(), List.of(), List.of());
+
+    /**
+     * Where a name written at a sum stands once the value is one of its cases, and what a row has
+     * to be for it to stand there.
+     *
+     * <p><b>The condition travels with the position.</b> A row is one value, so every name of one
+     * sum is written under one case: two of these chosen apart would ask for a value that is two
+     * cases at once. Held as a position alone, that constraint would be stated nowhere and each
+     * name would be sent wherever it could go — so what a reader merges is
+     * {@link Requirements#merge}, which already refuses two answers at one position, rather than a
+     * rule of its own about which branches go together.
+     *
+     * @param assuming what the value at the sum has to have turned out to be
+     * @param position where the name stands under it, which is what a row rebuilds
+     */
+    public record CaseStanding(Requirements assuming, TermPath position) {
+
+        public CaseStanding {
+            if (assuming == null || position == null) {
+                throw new IllegalArgumentException(
+                        "a name standing under a case stands somewhere, and only where the row is"
+                                + " that case");
+            }
+        }
+    }
+
+    /**
+     * Where the values a path names stand, which is the path itself except where a name crosses.
+     *
+     * <p>Structure and not a verdict, like everything else here. What follows for a reader is the
+     * reader's — one narrowing a search by has nothing to narrow by at a name that crosses, and one
+     * choosing where to write has the cases to choose between.
+     */
+    public sealed interface Standing {
+
+        /**
+         * Nothing crosses here: the values a row writes stand where the path says.
+         *
+         * <p>The answer for every ordinary name, and for a path this reading never reached. That
+         * those two are one answer is what makes this structure rather than a verdict: whether the
+         * reading answered for the path is what the reading's own positions say, and this says only
+         * that no name was seen to cross.
+         */
+        record AtThePathItself() implements Standing {}
+
+        /**
+         * Under the cases of a sum whose every case the walk went down put the name somewhere.
+         *
+         * <p>Every case the walk opened, which is what makes the list a choice a writer may make: a
+         * row written as any one of them holds a value at the name.
+         */
+        record UnderTheCases(List<CaseStanding> standings) implements Standing {
+
+            public UnderTheCases {
+                standings = List.copyOf(standings);
+                if (standings.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a name that stands under the cases stands under at least one of them");
+                }
+            }
+        }
+
+        /**
+         * A name that crosses, where the reading of some case stopped before putting it anywhere.
+         *
+         * <p>Both halves, because a writer may not act on either alone. The cases that do hold the
+         * name are a choice; the ones whose reading stopped are positions whose rules were never
+         * read, and a row written as one of those would be offered at a position nothing answered
+         * for. Collapsed into one word, whichever half a reader looked at would decide the other's
+         * answer.
+         */
+        record CasesIncomplete(List<CaseStanding> standings, List<NotStanding> stopped)
+                implements Standing {
+
+            public CasesIncomplete {
+                standings = List.copyOf(standings);
+                stopped = List.copyOf(stopped);
+                if (stopped.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a name the cases are read alike at is UnderTheCases, and one no case"
+                                    + " crosses is AtThePathItself");
+                }
+            }
+        }
+    }
+
+    /**
+     * Where the values {@code path} names stand.
+     *
+     * <p>The one place a path is sorted into these, because every reader that acts on the difference
+     * has to act on the same sorting. A search narrowing by sets and a writer choosing where to put
+     * a value ask for different grains of the answer and not for different answers — sorted where
+     * each of them spends it, the two would part over the first case whose reading stopped.
+     *
+     * <p>Asked of the crossings the walk recorded and of the cases it went down without putting the
+     * name anywhere. The cases it never went down say nothing: naming a case that holds nothing
+     * builds it, and a case the rules leave no value of is one no row writes — neither is a name
+     * this reading fell short of.
+     *
+     * <p><b>One crossing at a time, and the answer says so.</b> A name under two sums is moved by
+     * the outer one before the inner one can see it, so a position answered with here can itself be
+     * a name that crosses — a caller acting on one asks this of what it got back, and a position
+     * that crosses again is one this has not finished moving. Run to a fixed point instead, the
+     * answer would be a case of every sum on the way and the choices would multiply inside a type
+     * that records what a walk saw.
+     */
+    public Standing standingOf(TermPath path) {
+        List<CaseStanding> standings = new ArrayList<>();
+        List<NotStanding> stopped = new ArrayList<>();
+        for (Crossing crossing : crossings) {
+            TermPath under = crossing.standingUnderTheCase(path);
+            if (under != null) {
+                standings.add(new CaseStanding(
+                        Requirements.NONE.and(crossing.at(), crossing.branch()), under));
+            }
+        }
+        for (NotStanding each : notStanding) {
+            if (path.isAtOrUnder(each.at().then(each.field()))) {
+                stopped.add(each);
+            }
+        }
+        if (!stopped.isEmpty()) {
+            return new Standing.CasesIncomplete(standings, stopped);
+        }
+        return standings.isEmpty() ? new Standing.AtThePathItself()
+                : new Standing.UnderTheCases(standings);
+    }
 
     /**
      * The positions {@code field}, written at {@code at}, stands at across the cases — empty where

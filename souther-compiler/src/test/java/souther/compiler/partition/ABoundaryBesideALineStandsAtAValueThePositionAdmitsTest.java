@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
@@ -101,7 +102,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     }
 
     private static WitnessSearch admitting(ValueSet set) {
-        return new WitnessSearch(AdmittedValues.of(Map.of(CODE, set)),
+        return new WitnessSearch(AdmittedValues.of(Map.of(CODE, set), NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 
@@ -145,10 +146,10 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     void aPairWithOneSideNothingWorkedOutComposesNothingEitherWayRound() {
         WitnessSearch bothWorkedOut = new WitnessSearch(
                 AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY,
-                        BESIDE.position(), ValueSet.ANY)),
+                        BESIDE.position(), ValueSet.ANY), NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
         WitnessSearch onlyOne = new WitnessSearch(
-                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY)),
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY), NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
 
         // The positive control: with both sets worked out the same pair is composed, so what the
@@ -179,7 +180,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     void aPairThatRanOutOfLineToLookAlongComesBackWithThePairSearchsOwnWord() {
         WitnessSearch oneValueEach = new WitnessSearch(
                 AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.just(Value.number(0)),
-                        BESIDE.position(), ValueSet.just(Value.number(0)))),
+                        BESIDE.position(), ValueSet.just(Value.number(0))), NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
 
         Realization made = pair(COUNTED, BESIDE, oneValueEach);
@@ -276,7 +277,8 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
      */
     @Test
     void aPositionNothingWorkedOutSaysSoAndIsNotReadAsUnrestricted() {
-        AdmittedValues admitted = AdmittedValues.of(Map.of(CODE, A_CHARACTER_AT_LEAST));
+        AdmittedValues admitted =
+                AdmittedValues.of(Map.of(CODE, A_CHARACTER_AT_LEAST), NameReach.NONE);
 
         assertEquals(new AdmittedValues.Admitted.Values(A_CHARACTER_AT_LEAST), admitted.at(CODE));
         assertTrue(!A_CHARACTER_AT_LEAST.has(REFUSED),
@@ -297,7 +299,8 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     @Test
     void aBoundaryAtAPositionNothingWorkedOutComposesNothing() {
         WitnessSearch elsewhere = new WitnessSearch(
-                AdmittedValues.of(Map.of(TermPath.of("somewhereElse"), A_CHARACTER_AT_LEAST)),
+                AdmittedValues.of(Map.of(TermPath.of("somewhereElse"), A_CHARACTER_AT_LEAST),
+                        NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
 
         assertInstanceOf(Realization.Unknown.class, realize(run(Towards.BELOW), elsewhere),
@@ -362,7 +365,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
                 java.math.BigDecimal.valueOf(8))));
         java.util.concurrent.atomic.AtomicInteger taken = new java.util.concurrent.atomic.AtomicInteger();
         WitnessSearch counting = new WitnessSearch(
-                AdmittedValues.of(Map.of(CODE, onlyEight)),
+                AdmittedValues.of(Map.of(CODE, onlyEight), NameReach.NONE),
                 () -> {
                     taken.incrementAndGet();
                     return PatternPlan.Budget.OF_A_WITNESS.meter();

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
@@ -50,6 +51,11 @@ public sealed interface RealizationTarget {
      * condition instead, a kind of term added would fall to whichever side the last reader's
      * condition left it on, which is where "nothing composes one" was said of a number nothing had
      * been asked to compose.
+     *
+     * <p>Where the number is read and where it is written are one location here, because a term
+     * says nothing about where a name stands. A caller that knows where the walk saw the name stand
+     * builds {@link AtOnePositionUnderACase} instead — and only such a caller can, which is why
+     * this answers with the place the term names rather than guessing at a case.
      */
     static RealizationTarget of(NumericTerm term) {
         return switch (term) {
@@ -74,6 +80,46 @@ public sealed interface RealizationTarget {
         @Override
         public String toString() {
             return term.toString();
+        }
+    }
+
+    /**
+     * A number read at a name every case of a sum spreads, realized by writing the value under one
+     * of those cases.
+     *
+     * <p><b>Where the two places come apart.</b> The number is the one the rules and the report are
+     * about and it is read at the sum's own name; the value answering it is written under whichever
+     * case the row turns out to be. Said as one place, the row would be asked to write at the sum's
+     * name — which is a location no value goes to, and the answer for a condition over such a name
+     * was that nothing here composes one.
+     *
+     * <p>The case is part of this and not chosen further down. A row is one value, so every name of
+     * one sum is written under one case: two of these disagreeing about the case would be a row
+     * asked to be both, and a reader further on has no way to tell that the pair came from one sum.
+     *
+     * @param term  the number, read where the rules name it
+     * @param under where that number stands once the value is the case this is for, which is the
+     *              location whose whole value the row rebuilds
+     */
+    record AtOnePositionUnderACase(NumericTerm.FromOnePosition term,
+                                   NameReach.CaseStanding under) implements RealizationTarget {
+
+        public AtOnePositionUnderACase {
+            if (term == null || under == null) {
+                throw new IllegalArgumentException(
+                        "a number written under a case is a number, and a case it is written"
+                                + " under");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return under.position();
+        }
+
+        @Override
+        public String toString() {
+            return term + " at " + under.position();
         }
     }
 
