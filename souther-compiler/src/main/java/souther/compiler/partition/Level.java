@@ -104,23 +104,16 @@ public sealed interface Level {
      * ({@link Count#at}). Written out at each reader instead, four of them had the same two lines
      * and none of them said what happens to a number no order counts to.
      *
-     * <p>Refused rather than answered with a rounding. Every caller here is holding a level it has
-     * established is a place — an end of a run on a carrier, a line a place is compared against —
-     * and a level at a third reaching one of them is this compiler having mixed two orders. A reader
-     * that means to ask whether a line is a value of something asks
-     * {@link CutPosition#asAValueOf}, which answers.
+     * <p>Refused rather than answered with a rounding, which is {@link Count#number(ExactRatio)}'s
+     * to say. Every caller here is holding a level it has established is a place — an end of a run
+     * on a carrier, a line a place is compared against — and a level at a third reaching one of them
+     * is this compiler having mixed two orders. A reader that means to ask whether a line is a value
+     * of something asks {@link CutPosition#asAValueOf}, which answers.
      */
     default Place asAPlace() {
         return switch (this) {
             case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> {
-                Count count = Count.at(at);
-                if (count == null) {
-                    throw new IllegalStateException(
-                            "a level no order counts to was asked for a place: " + at);
-                }
-                yield count;
-            }
+            case OfTheQuantity(ExactRatio at) -> Count.number(at);
         };
     }
 

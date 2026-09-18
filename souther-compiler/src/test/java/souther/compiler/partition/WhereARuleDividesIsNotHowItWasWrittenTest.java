@@ -9,6 +9,7 @@ import souther.compiler.numeric.Towards;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Where a rule divides a quantity's values, as against the number it was written with.
@@ -182,6 +183,44 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
                 Seam.of(evens, count("9"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
                 "`2 * n <= 9` is a line between four and five, and neither is on it");
     }
+
+    /**
+     * A level read back into the quantity's units is a value of the position, and is said as one.
+     *
+     * <p>The side of the carrier edge this reading is on. What the form wrote is a multiple of the
+     * quantity, so every level it attains divides back onto a value the position holds — eight of a
+     * doubled position is four of it, and four is a whole number the order stands at.
+     */
+    @Test
+    void aLevelReadBackIntoTheQuantitysUnitsIsAValueOfThePosition() {
+        Seam scaled = Seam.of(LevelSpace.steppingBy(ExactRatio.of(2)), count("8"), Towards.BELOW,
+                new Seam.Scale(ExactRatio.of(2), new Carrier.Whole()));
+
+        assertEquals(new Level.OnACarrier(new Carrier.Whole(), new Count(new java.math.BigDecimal(4))),
+                scaled.below(),
+                "read back on the carrier the quantity is ordered by, and not as a number beside it");
+    }
+
+    /**
+     * And a share the levels are no multiple of is refused there rather than let past it.
+     *
+     * <p>No reading builds this pair: what a form wrote is the divisor of its own coefficients, so
+     * the levels it attains are multiples of it. Which is why the edge may state it. Written as a
+     * fallback instead — a level of the quantity handed back where a value of the carrier was asked
+     * for — the two spaces would be mixed from here on, and the reader that noticed would be
+     * whichever one later asked this level for a place.
+     */
+    @Test
+    void andAShareTheLevelsAreNoMultipleOfIsRefusedAtTheCarrierEdge() {
+        Seam.Scale thirds = new Seam.Scale(ExactRatio.of(3), new Carrier.Whole());
+
+        assertThrows(IllegalStateException.class,
+                () -> Seam.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, thirds),
+                "a third is no value of a whole-numbered position, and this is the edge that says so");
+    }
+
+    /** The quantity's own values a level of one is written against, which are the whole numbers. */
+    private static final LevelSpace WHOLE_NUMBERS = LevelSpace.steppingBy(ExactRatio.ONE);
 
     private static Level count(String number) {
         return new Level.OfTheQuantity(

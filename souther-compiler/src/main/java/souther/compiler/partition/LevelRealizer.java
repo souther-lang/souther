@@ -1047,7 +1047,7 @@ public final class LevelRealizer {
             // rather than as the same place a second time, which a caller asking again would read
             // as a search that had not moved.
             case Criterion.AtTheLevel at ->
-                    apart.has(placeOf(at.at())) ? null : placeOf(at.at());
+                    apart.has(at.at().asAPlace()) ? null : at.at().asAPlace();
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
@@ -1255,9 +1255,5 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         fixing.forEach((target, at) -> standing.put(target.term(), at));
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
-    }
-
-    private static Place placeOf(Level level) {
-        return level.asAPlace();
     }
 }

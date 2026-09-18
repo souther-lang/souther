@@ -137,13 +137,12 @@ public record Seam(CutPosition at, Level below, Level above) {
         if (into.onto() == null) {
             return new Level.OfTheQuantity(at);
         }
-        // The carrier edge: a value of the quantity is a value of the position it is ordered by, or
-        // it is none. A level the written form attains is a whole multiple of what it wrote, so this
-        // is a value wherever the reading got here — and where a later grammar puts a level at a
-        // third, the quantity keeps it and the position does not.
-        souther.compiler.numeric.Count count = souther.compiler.numeric.Count.at(at);
-        return count == null ? new Level.OfTheQuantity(at)
-                : new Level.OnACarrier(into.onto(), count);
+        // The carrier edge, crossed by a reader that has established it can be: a level the written
+        // form attains is a whole multiple of what that form wrote, so reading it back in the
+        // quantity's own units lands on a value the position holds. Asked the other way — for a
+        // count where one may not be — this would hand back a level of the exact side under a name
+        // saying it is a value of this carrier, and the two spaces would be mixed from here on.
+        return new Level.OnACarrier(into.onto(), souther.compiler.numeric.Count.number(at));
     }
 
     /**

@@ -101,7 +101,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     private static Level reduced(Level written, ExactRatio to) {
         return switch (written) {
             case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
-            case Level.OnACarrier on -> new Level.OnACarrier(on.of(), Count.at(to));
+            case Level.OnACarrier on -> new Level.OnACarrier(on.of(), Count.number(to));
         };
     }
 
@@ -161,7 +161,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         // An order with no numbers is never scaled — a rule holding two strings apart writes the
         // whole of what it cuts — so its line is its own value and there is nothing to divide.
         if (at == null) {
-            return per.equals(ExactRatio.ONE) ? placeOf(written) : null;
+            return per.equals(ExactRatio.ONE) ? written.asAPlace() : null;
         }
         Count count = Count.at(at);
         return count == null ? null : carrier.onTheGrid(count);
@@ -179,7 +179,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         // An order with no numbers is never scaled — a rule holding two strings apart writes the
         // whole of what it cuts — so the two are places of one order and compare as they stand.
         if (line == null || of == null) {
-            return placeOf(value).compareTo(placeOf(written));
+            return value.asAPlace().compareTo(written.asAPlace());
         }
         return of.compareTo(line);
     }
@@ -195,7 +195,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         ExactRatio mine = exactly();
         ExactRatio theirs = other.exactly();
         if (mine == null || theirs == null) {
-            return placeOf(written).compareTo(placeOf(other.written));
+            return written.asAPlace().compareTo(other.written.asAPlace());
         }
         return mine.compareTo(theirs);
     }
@@ -241,7 +241,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         // brought together say so themselves rather than arriving here as a null.
         return at instanceof Count count && line != null
                 ? count.exactly().compareTo(line)
-                : at.compareTo(placeOf(written));
+                : at.compareTo(written.asAPlace());
     }
 
     /**
@@ -294,23 +294,6 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
             return 0;
         }
         return ExactRatio.ONE.dividedBy(apart).floor().toString().length() + 1;
-    }
-
-    /** The place a level is, for the one reading that compares two of them as they stand: an order
-     *  with no numbers, whose only level is where two positions meet. A counted level reached here
-     *  is one such an order has no place for. */
-    private static souther.compiler.numeric.Place placeOf(Level level) {
-        return switch (level) {
-            case Level.OfTheQuantity counted -> {
-                Count at = Count.at(counted.at());
-                if (at == null) {
-                    throw new IllegalStateException(
-                            "an order with no numbers was compared against one: " + counted);
-                }
-                yield at;
-            }
-            case Level.OnACarrier on -> on.at();
-        };
     }
 
     private static ExactRatio numberOf(Level level) {

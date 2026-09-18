@@ -732,7 +732,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
 
     /** Whether {@code within} holds the value at {@code level}. */
     private static boolean admits(NumericDomain.Bounds within, Level level) {
-        Place at = placeOf(level);
+        // What the rules leave is written as places, because it is read off the declarations, so the
+        // level is read as one to be held against it. Both are on the quantity's own order by
+        // construction: the bounds handed in are the bounds of the thing being cut.
+        Place at = level.asAPlace();
         return (within.min() == null || at.compareTo(within.min().at()) >= 0)
                 && (within.max() == null || at.compareTo(within.max().at()) <= 0);
     }
@@ -890,7 +893,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         if (at.isEmpty()) {
             return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
-        return reach.admits(placeOf(at.get()))
+        return reach.admits(at.get().asAPlace())
                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
@@ -1011,24 +1014,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // the two agree wherever a rule admits its threshold and are one count apart wherever it
         // does not, which is half the operators an author can write.
         Level leaves = Seam.of(space, cut, valueBelongs(origin)).leaving(kept);
-        if (end == null || !end.at().sameAs(placeOf(leaves))) {
+        if (end == null || !end.at().sameAs(leaves.asAPlace())) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: "
                             + origin.saidWithoutAPlace());
         }
-    }
-
-    /**
-     * A level as a place on the order it is a level of.
-     *
-     * <p>The one narrowing, so that what the rules leave — which is written as places, because it is
-     * read off the declarations — can be held against what the quantity takes. Both are on the
-     * quantity's own order by construction: the bounds handed in are the bounds of the thing being
-     * cut, and a caller that handed in a position's bounds for a border over something else would be
-     * answering a different question here as well.
-     */
-    private static Place placeOf(Level level) {
-        return level.asAPlace();
     }
 
     /**
