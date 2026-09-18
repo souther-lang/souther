@@ -46,6 +46,12 @@ public sealed interface PublishedDeclarationResult {
      * from resolution down is cut for a module whose imports form a ring, so read there a
      * declaration nobody could reach would be one nobody wrote — which is the arm above collapsing
      * into this one, at the rung below the one this type exists to keep apart.
+     *
+     * <p>The lookup of expanded clauses tells its own two apart by the same question, which is what
+     * keeps a value from being short of its rules to one reader and held to none by the other
+     * ({@code TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest}). Only those two: whether
+     * either has an answer at all is each one's own question, and a form with no rule to write has
+     * clauses to hand over whatever became of the module that holds it.
      */
     record NotDeclared(TypeKey declaration) implements PublishedDeclarationResult {}
 }

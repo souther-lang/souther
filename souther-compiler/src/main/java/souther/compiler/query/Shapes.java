@@ -577,8 +577,8 @@ public final class Shapes {
             // Which of the two absences it is, asked of whether a module writes the declaration at
             // all. Asked of anything that resolves, this would answer that a declaration nobody
             // could read is one nobody wrote — and a value of it would be held to no rule, with
-            // nothing saying so. The same question answers it on the expanded side, so the two
-            // boundaries divide the cases by one question rather than each by its own.
+            // nothing saying so. The same question tells the two apart on the expanded side, so a
+            // reader meeting either is told the same about which of them it is.
             return Front.somethingDeclares(db, named)
                     ? Answer.of(new PublishedDeclarationResult.Unavailable(named))
                     : Answer.of(new PublishedDeclarationResult.NotDeclared(named));
