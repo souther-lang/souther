@@ -97,7 +97,19 @@ public final class AnAnswerComposed {
                 continue;
             }
             LinearForm<NumericTerm> over = overThisAnswer(at, form);
-            region = region.assuming(over, rel);
+            // Nothing composed where the region cannot carry what was asked. A demand dropped here
+            // and the composition carried on would look for a value in a region wider than the
+            // demand — and what came back would be offered as a value that answers it, which is
+            // the one thing a caller may not be handed. Conservative widening is a reading's
+            // privilege and not a composer's: a reading says what it could not take in and the
+            // region it leaves is still every row that arrives, while a value composed against
+            // rules the demand is not in answers nothing.
+            if (!(region.assuming(over, rel) instanceof SearchRegion.Assumption.Taken(
+                    SearchRegion taken))) {
+                return new Outcome.NothingComposed(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            region = taken;
             cuts.add(new OnTheWay.TakenIn(anchor, new TakenConstraint.Affine(over, rel)));
         }
         return composed(subject, new Reachability.Reaching(region, required, cuts));

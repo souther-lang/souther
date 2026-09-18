@@ -372,21 +372,31 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The same rules, with {@code form rel 0} taken in as well.
+     * The same rules, with {@code form rel 0} taken in as well — or that this cannot carry it.
      *
-     * <p>Reached only through {@link ReadRegion}, so what comes back is a region and never a reading
-     * of the declarations. What is kept is the assertion and not what it came to: two of them said
-     * in either order are the same two, and one said twice is one.
+     * <p>Reached only through {@link ReadRegion}, so what comes back is about a region and never a
+     * reading of the declarations. What is kept is the assertion and not what it came to: two of
+     * them said in either order are the same two, and one said twice is one.
      *
-     * <p>This value back where the arithmetic cannot take the assertion in — a form over a position
+     * <p><b>Refused where the arithmetic cannot take the assertion in</b> — a form over a position
      * whose values it has no spacing for. Kept anyway, it would sit in the state as a rule about a
      * number nothing knows how to space, which {@link souther.compiler.numeric.NumericDomain#assume}
-     * refuses outright; declined here, the region still holds everything that reaches the border,
+     * refuses outright; refused here, the region still holds everything that reaches the border,
      * which is the direction every reader of it depends on.
+     *
+     * <p>And said rather than shown by what comes back. Nothing about these rules tells a refusal
+     * from a second taking of a constraint already in them — both leave the rules where they were —
+     * so which of the two it was is the answer itself.
      */
-    ReadQuantities assuming(LinearForm<NumericTerm> form, Rel rel) {
+    Taking assuming(LinearForm<NumericTerm> form, Rel rel) {
+        // A form weighing no term states nothing, so there is no constraint here to take in or to
+        // refuse. Answered either way it would be an entry about nothing — recorded as taken in, a
+        // condition a reader is told the search was narrowed by; refused, a shortfall of this
+        // compiler where no rule was written. Every caller has a comparison that named a position,
+        // so it is the question that is wrong and it is said here.
         if (form == null || form.coefs().isEmpty()) {
-            return this;
+            throw new IllegalArgumentException(
+                    "a form weighing no term is no constraint to take in: " + form);
         }
         form.coefs().keySet().forEach(this::held);
         // Refused where the form is over positions no one value has, the same as a question about
@@ -394,10 +404,25 @@ final class ReadQuantities implements Quantities {
         StructuralContext under = asked(form.coefs().keySet());
         for (NumericTerm term : form.coefs().keySet()) {
             if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
-                return this;
+                return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
             }
         }
-        return alsoAssuming(new Assumed.OverAForm(form, rel));
+        return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
+    }
+
+    /**
+     * What taking a form in came to, in the rules rather than in the region.
+     *
+     * <p>The region's own answer ({@link SearchRegion.Assumption}) with the reading in it, since
+     * which face a caller is holding is {@link ReadRegion}'s to say and not this one's.
+     */
+    sealed interface Taking {
+
+        /** The rules with it taken in, which are these rules again where it was already in them. */
+        record Taken(ReadQuantities rules) implements Taking {}
+
+        /** The rules cannot carry it, and are unchanged. */
+        record Refused(SearchRegion.Refusal why) implements Taking {}
     }
 
     /**

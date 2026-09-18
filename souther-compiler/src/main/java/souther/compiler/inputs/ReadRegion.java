@@ -20,10 +20,16 @@ import java.util.Optional;
 record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form,
-                                 Rel rel) {
-        ReadQuantities taken = within.assuming(form, rel);
-        return taken == within ? this : new ReadRegion(taken);
+    public Assumption assuming(LinearForm<NumericTerm> form,
+                               Rel rel) {
+        return switch (within.assuming(form, rel)) {
+            // The same region where the rules came back as they were, which is a constraint they
+            // already held. A region that took it in is what this says, and it says nothing about
+            // whether anything moved.
+            case ReadQuantities.Taking.Taken(ReadQuantities taken) -> new Assumption.Taken(
+                    taken == within ? this : new ReadRegion(taken));
+            case ReadQuantities.Taking.Refused(Refusal why) -> new Assumption.Refused(why);
+        };
     }
 
     @Override

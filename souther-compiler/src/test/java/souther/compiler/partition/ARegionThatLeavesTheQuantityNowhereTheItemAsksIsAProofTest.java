@@ -216,12 +216,12 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
 
     /** The region with {@code y <= x} taken in, which admits pairs and no distance above nought. */
     private static SearchRegion yIsNoMoreThanX() {
-        return region().assuming(form(-1, 1, 0), Rel.LE);
+        return region().assuming(form(-1, 1, 0), Rel.LE).taken();
     }
 
     /** And the region with {@code x <= 0} taken in, which is the same fact about one position. */
     private static SearchRegion xIsNoMoreThanNought() {
-        return region().assuming(form(1, 0, 0), Rel.LE);
+        return region().assuming(form(1, 0, 0), Rel.LE).taken();
     }
 
     /** {@code cx·x + cy·y + k} over the two positions the behavior declares. */

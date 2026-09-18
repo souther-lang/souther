@@ -159,6 +159,23 @@ public sealed interface OnTheWay {
         record ComparisonStatesNoQuantity() implements Why {}
 
         /**
+         * A comparison read from end to end whose quantity stands on no order a region measures
+         * values on.
+         *
+         * <p>Apart from the two above, and from both directions. It is not a reading that fell
+         * short: {@code a == b} over two records is read perfectly, and what it comes to is a
+         * difference between two positions that is a distance on nothing. And it is not a rule
+         * that constrains no position: it constrains both of them, and an author reading that it
+         * constrains none would go looking for a cancellation that is not there.
+         *
+         * <p>What is here for an author to act on is the carrier. A position whose values this
+         * compiler measures on nothing is one every rule about it is unrepresented in, so the
+         * shortfall is where the model's own type has no order rather than in how the rule was
+         * written.
+         */
+        record QuantityStandsOnNoOrder() implements Why {}
+
+        /**
          * What the condition coming out this way says is one of two things, and a region is what
          * has been accumulated onto it. {@code A && B} coming out false says one of them failed and
          * names neither, and taking either would exclude rows that arrive.

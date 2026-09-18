@@ -110,8 +110,15 @@ public sealed interface AnotherLineTheRowsAllow {
          * listing what the condition already leaves out.
          */
         public SearchRegion tellingThemApart(SearchRegion within) {
+            // The region is asked to take the line in and carries it, which the direction's own
+            // type has already settled: a boundary of this kind exists only where every term of
+            // the quantity has a carrier that counts (OrderedAffineBoundary.weighable), and a
+            // region refuses a form only for a term with no carrier at all. A refusal would be a
+            // line and a region disagreeing
+            // about what the positions are measured on, and the region it would leave is where
+            // every row stands rather than where the two lines differ.
             return within.assuming(new LinearForm<>(cut.negate(), direction.direction()),
-                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE);
+                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
         }
 
         /**

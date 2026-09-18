@@ -61,6 +61,11 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
      * builds the sets as they are asked for, so it is a reading that has not finished. The rest hold
      * one of those and reach the purse through it.
      *
+     * <p>One of them is a handover rather than a holder. {@code ReadQuantities$Taking$Taken} is what
+     * comes back from asking the rules to take a constraint in, and it carries the rules that took
+     * it so that the region can put its own face on them — read once by the one caller and never
+     * kept, so there are never two of these to compose and no question of which purse pays.
+     *
      * <p>What is not here is the list's point. A reading's published answers —
      * {@code AdmissibleValues}, {@code ConjoinedAdmissibleValues}, {@code ConstraintState}, and the
      * seeded reading a later reader keeps — carry sets and no way to buy another, so two of them met
@@ -73,6 +78,7 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
             "souther/compiler/inputs/PlacedRules",
             "souther/compiler/inputs/PlacedRules$Reaching",
             "souther/compiler/inputs/ReadQuantities",
+            "souther/compiler/inputs/ReadQuantities$Taking$Taken",
             "souther/compiler/inputs/ReadRegion");
 
     /**

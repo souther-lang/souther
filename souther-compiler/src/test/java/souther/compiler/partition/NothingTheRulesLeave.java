@@ -23,8 +23,8 @@ final class NothingTheRulesLeave implements SearchRegion {
     static final SearchRegion REGION = new NothingTheRulesLeave();
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
-        return this;
+    public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
+        return new Assumption.Taken(this);
     }
 
     @Override

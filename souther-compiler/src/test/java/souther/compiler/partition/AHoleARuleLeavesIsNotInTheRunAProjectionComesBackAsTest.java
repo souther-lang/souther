@@ -50,8 +50,8 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     private record Leaving(NumericDomain.Bounds bounds) implements SearchRegion {
 
         @Override
-        public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
-            return this;
+        public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
+            return new Assumption.Taken(this);
         }
 
         @Override
@@ -84,8 +84,8 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     private record LeavingNothing() implements SearchRegion {
 
         @Override
-        public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
-            return this;
+        public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
+            return new Assumption.Taken(this);
         }
 
         @Override
