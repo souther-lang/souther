@@ -1,7 +1,12 @@
 package souther.compiler.numeric;
 
+import souther.compiler.values.InOneOrder;
+
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -27,6 +32,17 @@ import java.util.function.Function;
  * <p>Compared by its map, so two forms that say one thing are one key. That is what makes asserting
  * a rule twice the same as asserting it once, and it is the property everything downstream leans on
  * when it stops caring what order the rules arrived in.
+ *
+ * <p><b>Held in the order it was written, which is not yet one the form settles.</b> A reader walks
+ * these positions to work a bound out at each of them, so the order they come in reaches an answer,
+ * and two forms that say one thing ought to hand out one walk. Copied into a map that keeps no
+ * order, the walk was one the runtime made up afresh on every run and the same model was answered
+ * two ways on two runs of one compiler — so what a caller wrote is kept, and a reader wanting one
+ * order takes one the positions themselves decide.
+ *
+ * <p>Which is not what they are written as. A position renders for a person to read and two of them
+ * rendering alike are not one position ({@link souther.compiler.check.Term}), so a walk put in an
+ * order by the renderings would weigh one of such a pair twice and the other never.
  */
 public record CanonicalForm<A>(Map<A, Rational> coefs) {
 
@@ -34,14 +50,21 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         if (coefs == null || coefs.isEmpty()) {
             throw new IllegalArgumentException("a form names at least one position");
         }
-        coefs = Map.copyOf(coefs);
-        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
-            if (each.getValue().isZero()) {
-                throw new IllegalArgumentException(
-                        "a position with a zero coefficient is one the form does not name: "
-                                + each.getKey());
+        // Every position with no weight, and not the first one met. What is handed in holds no
+        // order this promises anything about, so a refusal that stopped at the first would tell
+        // two callers that wrote one form two ways two different things about the same mistake.
+        Set<A> unweighed = new HashSet<>();
+        coefs.forEach((atom, coef) -> {
+            if (coef.isZero()) {
+                unweighed.add(atom);
             }
+        });
+        if (!unweighed.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a position with a zero coefficient is one the form does not name: "
+                            + InOneOrder.of(unweighed));
         }
+        coefs = Collections.unmodifiableMap(new LinkedHashMap<>(coefs));
     }
 
     /**

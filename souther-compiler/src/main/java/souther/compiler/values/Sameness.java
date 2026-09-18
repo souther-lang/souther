@@ -77,15 +77,22 @@ public final class Sameness<A> {
     public static <A> Sameness<A> of(Collection<Block<A>> blocks) {
         Map<A, Block<A>> out = new LinkedHashMap<>();
         Set<A> seen = new LinkedHashSet<>();
+        // Every position held twice, and not the first one met. What is handed in holds no order
+        // of its blocks, so a refusal that stopped at the first would name whichever of them the
+        // caller's walk reached first and tell two callers of one relation two different things.
+        Set<A> shared = new LinkedHashSet<>();
         blocks.forEach(block -> block.members().forEach(each -> {
             if (!seen.add(each)) {
-                throw new IllegalArgumentException(
-                        "two classes of one relation hold " + each + " between them: " + blocks);
+                shared.add(each);
             }
             if (!block.isOne()) {
                 out.put(each, block);
             }
         }));
+        if (!shared.isEmpty()) {
+            throw new IllegalArgumentException("two classes of one relation hold "
+                    + InOneOrder.of(shared) + " between them: " + InOneOrder.of(blocks));
+        }
         return out.isEmpty() ? discrete() : new Sameness<>(out);
     }
 
@@ -138,12 +145,7 @@ public final class Sameness<A> {
      * position taken out of the set would be an answer about that position's block.
      */
     boolean has(Block<A> block) {
-        for (A member : block.members()) {
-            if (!block.equals(blockOf(member))) {
-                return false;
-            }
-        }
-        return true;
+        return block.members().stream().allMatch(member -> block.equals(blockOf(member)));
     }
 
     /** The blocks this holds {@code block}'s positions in, which is one block where it holds them

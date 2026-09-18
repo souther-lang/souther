@@ -1,7 +1,9 @@
 package souther.compiler.values;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -59,18 +61,26 @@ public final class Refinement<A> {
             return new Refinement<>(finer, coarser, Map.of());
         }
         Map<Sameness.Block<A>, Sameness.Block<A>> up = new LinkedHashMap<>();
+        // Every block the coarser relation cuts apart, and not the first one met. A relation holds
+        // no order of its blocks, so a refusal that stopped at the first would name whichever of
+        // them this walk reached first and read two ways for one pair of relations.
+        //
+        // Said as where each position landed, because the blocks alone are two renderings beside
+        // each other and one block of those positions is written the same way.
+        List<String> cut = new ArrayList<>();
         for (Sameness.Block<A> block : finer.joined()) {
             Set<Sameness.Block<A>> there = coarser.holding(block);
             if (there.size() != 1) {
-                // Said as where each position landed, because the blocks alone are two renderings
-                // beside each other and one block of those positions is written the same way.
                 Map<A, Sameness.Block<A>> each = new LinkedHashMap<>();
                 block.members().forEach(member -> each.put(member, coarser.blockOf(member)));
-                throw new IllegalArgumentException("positions held as one at " + block
-                        + " are held apart by the relation they are read against, which holds "
-                        + InOneOrder.of(each));
+                cut.add(block + " holds " + InOneOrder.of(each));
+            } else {
+                up.put(block, there.iterator().next());
             }
-            up.put(block, there.iterator().next());
+        }
+        if (!cut.isEmpty()) {
+            throw new IllegalArgumentException("positions held as one are held apart by the"
+                    + " relation they are read against, which holds " + InOneOrder.of(cut));
         }
         return new Refinement<>(finer, coarser, Collections.unmodifiableMap(up));
     }

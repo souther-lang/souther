@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Which blocks of one alternative are stated to hold different values.
@@ -202,13 +203,11 @@ public final class Apartness<A> {
         if (!holdsABlockApartFromItself) {
             return Lacks.none();
         }
-        List<Shown<A>> out = new ArrayList<>();
-        edges.forEach(edge -> {
-            if (edge.isOfOneBlock()) {
-                out.add(Shown.of(new RelationalLack.ABlockApartFromItself<>(edge.one())));
-            }
-        });
-        return Lacks.of(out);
+        return Lacks.of(edges.stream()
+                .filter(Edge::isOfOneBlock)
+                .<Shown<A>>map(edge -> Shown.of(
+                        new RelationalLack.ABlockApartFromItself<>(edge.one())))
+                .collect(Collectors.toSet()));
     }
 
     /** How much walking this relation is, before any of it is walked. */
