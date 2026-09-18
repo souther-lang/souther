@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Where a name written at one position stands, wherever that is not the position of the same name
@@ -65,7 +64,7 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
          * one would put a name under a case by a rule of its own.
          */
         public TermPath standingUnderTheCase(TermPath path) {
-            return SharedNames.under(path, at, branch, Set.of(field));
+            return SharedNames.under(path, at, branch, field);
         }
     }
 
@@ -251,26 +250,38 @@ public record NameReach(List<Crossing> crossings, List<BranchNotEntered> branche
      * that records what a walk saw.
      */
     public Standing standingOf(TermPath path) {
-        List<CaseStanding> standings = new ArrayList<>();
-        List<NotStanding> stopped = new ArrayList<>();
+        List<CaseStanding> standings = null;
+        List<NotStanding> stopped = null;
         for (Crossing crossing : crossings) {
             TermPath under = crossing.standingUnderTheCase(path);
             if (under != null) {
+                if (standings == null) {
+                    standings = new ArrayList<>();
+                }
                 standings.add(new CaseStanding(
                         Requirements.NONE.and(crossing.at(), crossing.branch()), under));
             }
         }
         for (NotStanding each : notStanding) {
-            if (path.isAtOrUnder(each.at().then(each.field()))) {
+            // The sum first, which is a prefix of the steps and answers no for everything this
+            // reading met elsewhere. The name below it is a path to build, and building one to
+            // find out it was never the right sum is what a reading with no crossings pays.
+            if (path.isAtOrUnder(each.at()) && path.isAtOrUnder(each.at().then(each.field()))) {
+                if (stopped == null) {
+                    stopped = new ArrayList<>();
+                }
                 stopped.add(each);
             }
         }
-        if (!stopped.isEmpty()) {
-            return new Standing.CasesIncomplete(standings, stopped);
+        if (stopped != null) {
+            return new Standing.CasesIncomplete(
+                    standings == null ? List.of() : standings, stopped);
         }
-        return standings.isEmpty() ? new Standing.AtThePathItself()
-                : new Standing.UnderTheCases(standings);
+        return standings == null ? NOWHERE_ELSE : new Standing.UnderTheCases(standings);
     }
+
+    /** The answer for every name no case carries, which is most of them and holds nothing. */
+    private static final Standing NOWHERE_ELSE = new Standing.AtThePathItself();
 
     /**
      * The positions {@code field}, written at {@code at}, stands at across the cases — empty where

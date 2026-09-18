@@ -80,14 +80,36 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
      * there.
      */
     static TermPath under(TermPath there, TermPath sum, Refinement branch, Set<String> names) {
+        String named = nameUnder(there, sum);
+        return named != null && names.contains(named) ? withTheCaseTakenIn(there, sum, branch)
+                : null;
+    }
+
+    /**
+     * The same for a reader holding one name rather than the set a declaration spreads.
+     *
+     * <p>Beside the one above so that such a reader does not gather its name into a set to ask.
+     * Both are the same two steps — which name is written under the sum, and the path with the case
+     * put in — and each of those is written once.
+     */
+    static TermPath under(TermPath there, TermPath sum, Refinement branch, String name) {
+        return name.equals(nameUnder(there, sum)) ? withTheCaseTakenIn(there, sum, branch) : null;
+    }
+
+    /** The name {@code there} is written under at {@code sum}, or null where it is under none. */
+    private static String nameUnder(TermPath there, TermPath sum) {
         List<TermPath.Step> steps = there.steps();
         int narrowing = sum.steps().size();
-        if (steps.size() <= narrowing
-                || !there.isAtOrUnder(sum)
-                || !(steps.get(narrowing) instanceof TermPath.Step.Field field)
-                || !names.contains(field.name())) {
-            return null;
-        }
+        return steps.size() > narrowing
+                && there.isAtOrUnder(sum)
+                && steps.get(narrowing) instanceof TermPath.Step.Field field
+                ? field.name() : null;
+    }
+
+    /** {@code there} with the step that says which case the value turned out to be put in. */
+    private static TermPath withTheCaseTakenIn(TermPath there, TermPath sum, Refinement branch) {
+        List<TermPath.Step> steps = there.steps();
+        int narrowing = sum.steps().size();
         List<TermPath.Step> under = new ArrayList<>(steps.subList(0, narrowing));
         under.add(new TermPath.Step.Refine(branch));
         under.addAll(steps.subList(narrowing, steps.size()));
