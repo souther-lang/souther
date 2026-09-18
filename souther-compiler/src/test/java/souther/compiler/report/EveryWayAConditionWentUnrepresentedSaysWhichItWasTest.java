@@ -128,6 +128,10 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                         new NumericTerm.ValueOf(TermPath.of("x").then("id")))));
         out.put(DemandGap.WhyNotComposed.NoValueComposedAtItsPositions.class,
                 notComposed(new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+        out.put(DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer.class,
+                notComposed(new DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer()));
+        out.put(DemandGap.WhyNotComposed.OneValueAnswersEveryCall.class,
+                notComposed(new DemandGap.WhyNotComposed.OneValueAnswersEveryCall()));
         return out;
     }
 

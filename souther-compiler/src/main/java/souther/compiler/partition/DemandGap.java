@@ -141,5 +141,32 @@ public sealed interface DemandGap {
          * strength of it is a value the demand does not hold of.
          */
         record NoValueComposedAtItsPositions() implements WhyNotComposed {}
+
+        /**
+         * No value of what the dependency answers was composed at all.
+         *
+         * <p>Which is a stage earlier than the two above: they are what a composer said of a
+         * demand it was asked about, and this is what is left of an asking no value came of. What
+         * the dependency answers may be a shape nothing here stands a value at, the case the way
+         * named may be one, or what the way asks of it together may be something no one value is —
+         * and none of those reaches a demand one at a time.
+         *
+         * <p>Said of every demand the answers written down do not name, rather than at each place
+         * an asking may come to nothing. A place that has to remember to write one is a place the
+         * next stage added beside it forgets, and what is forgotten is a row reported as composed
+         * against the whole of what the way asks.
+         */
+        record NothingComposedAValueOfTheAnswer() implements WhyNotComposed {}
+
+        /**
+         * The way wants the dependency to answer differently at different calls, and the row
+         * writes one value.
+         *
+         * <p>What a row says of a dependency is one line, so a way asking two things of two calls
+         * is answered by a table rather than by a row — and a row leaning on the module's table
+         * meets what that table says and not what the way asks. Said of each demand, because each
+         * of them is one the row does not meet.
+         */
+        record OneValueAnswersEveryCall() implements WhyNotComposed {}
     }
 }

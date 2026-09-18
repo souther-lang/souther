@@ -3520,6 +3520,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 + " this measures them on";
                 case DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _ ->
                         "a condition on places inside an answer nothing here composed a value at";
+                case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ ->
+                        "a condition on what a dependency answers, which nothing here composed a"
+                                + " value of";
+                case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ ->
+                        "a condition on what a dependency answers at one call, where the row"
+                                + " writes one value for every call it makes";
             };
         };
     }

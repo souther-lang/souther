@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
@@ -216,13 +215,6 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
             assertFalse(each.account().onAnAnswer().isEmpty(),
                     () -> "and which demand it was composed without: " + each);
         }
-    }
-
-    /** The words the search of a rule came back with. */
-    private static List<Generator.UnresolvedCombination.Reason> reasons(RuleSettlement settled) {
-        return settled.search() instanceof RuleSearch.CameToNothing(var ways)
-                ? ways.stream().map(Generator.UnresolvedCombination::reason).toList()
-                : List.of();
     }
 
     /** The line of the page that says nothing could show a row can be written at the rules. */
