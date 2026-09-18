@@ -46,8 +46,8 @@ public sealed interface AffineConstraint<A> {
         return switch (this) {
             case HalfSpace<A> half -> java.util.List.of(half);
             case Equality<A> at -> java.util.List.of(
-                    new HalfSpace<>(at.form(), RationalCut.inclusive(at.at())),
-                    new HalfSpace<>(at.form().negated(), RationalCut.inclusive(at.at().negated())));
+                    new HalfSpace<>(at.form(), ExactCut.inclusive(at.at())),
+                    new HalfSpace<>(at.form().negated(), ExactCut.inclusive(at.at().negated())));
             case Disequality<A> hole -> java.util.List.of();
         };
     }
@@ -72,7 +72,7 @@ public sealed interface AffineConstraint<A> {
     }
 
     /** The sum held no higher than a bound it may or may not reach. */
-    record HalfSpace<A>(CanonicalForm<A> form, RationalCut bound) implements AffineConstraint<A> {
+    record HalfSpace<A>(CanonicalForm<A> form, ExactCut bound) implements AffineConstraint<A> {
 
         public HalfSpace {
             if (form == null || bound == null) {
@@ -87,7 +87,7 @@ public sealed interface AffineConstraint<A> {
     }
 
     /** The sum held at one value. */
-    record Equality<A>(CanonicalForm<A> form, Rational at) implements AffineConstraint<A> {
+    record Equality<A>(CanonicalForm<A> form, ExactRatio at) implements AffineConstraint<A> {
 
         public Equality {
             if (form == null || at == null) {
@@ -132,7 +132,7 @@ public sealed interface AffineConstraint<A> {
      * {@code x /= 0} beside {@code x >= 0} leave {@code x} at nought or above depending on which was
      * written first.
      */
-    record Disequality<A>(CanonicalForm<A> form, Rational at) implements AffineConstraint<A> {
+    record Disequality<A>(CanonicalForm<A> form, ExactRatio at) implements AffineConstraint<A> {
 
         public Disequality {
             if (form == null || at == null) {
@@ -169,13 +169,13 @@ public sealed interface AffineConstraint<A> {
      * a caller naming them is under no obligation to have. Two values, identified.
      */
     private static boolean oneRuleEitherWayRound(AffineConstraint<?> one, AffineConstraint<?> other) {
-        Rational mine = valueOf(one);
-        Rational theirs = valueOf(other);
+        ExactRatio mine = valueOf(one);
+        ExactRatio theirs = valueOf(other);
         return (one.form().equals(other.form()) && mine.equals(theirs))
                 || (one.form().equals(other.form().negated()) && mine.equals(theirs.negated()));
     }
 
-    private static Rational valueOf(AffineConstraint<?> constraint) {
+    private static ExactRatio valueOf(AffineConstraint<?> constraint) {
         return switch (constraint) {
             case Equality<?> at -> at.at();
             case Disequality<?> hole -> hole.at();
@@ -184,7 +184,7 @@ public sealed interface AffineConstraint<A> {
     }
 
     /** A number the same for a form and its negation, so the two writings hash alike. */
-    private static <A> int sameEitherWayRound(CanonicalForm<A> form, Rational at) {
+    private static <A> int sameEitherWayRound(CanonicalForm<A> form, ExactRatio at) {
         return (form.hashCode() ^ form.negated().hashCode()) * 31
                 + (at.hashCode() ^ at.negated().hashCode());
     }
@@ -217,7 +217,7 @@ public sealed interface AffineConstraint<A> {
      *                {@link NumericDomain#assume} wants it: a position whose spacing is guessed is
      *                one a bound is either wrongly sharpened on or silently left blunt
      */
-    static <A> Read<A> of(Map<A, Rational> coefs, Rational constant, Rel rel,
+    static <A> Read<A> of(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
                           Function<A, Granularity> spacing) {
         CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
         if (scaled == null) {
@@ -225,17 +225,17 @@ public sealed interface AffineConstraint<A> {
         }
         // `Σ c·x + k rel 0` is `Σ c·x rel -k`, and dividing both by what the coefficients share
         // leaves which side of the threshold a value falls on, since what they share is positive.
-        Rational threshold = constant.negated().dividedBy(scaled.by());
+        ExactRatio threshold = constant.negated().dividedBy(scaled.by());
         CanonicalForm<A> form = scaled.form();
         AdditiveImage reaches = form.imageOver(spacing);
         return switch (rel) {
-            case LE -> below(form, reaches, RationalCut.inclusive(threshold));
-            case LT -> below(form, reaches, RationalCut.exclusive(threshold));
+            case LE -> below(form, reaches, ExactCut.inclusive(threshold));
+            case LT -> below(form, reaches, ExactCut.exclusive(threshold));
             // Turned around rather than given a shape of its own: `f >= t` is `-f <= -t`. The image
             // is the same one — what a sum reaches is closed under negation, since a multiple of the
             // divisor stays one when it changes sign — so only the form and the bound turn around.
-            case GE -> below(form.negated(), reaches, RationalCut.inclusive(threshold.negated()));
-            case GT -> below(form.negated(), reaches, RationalCut.exclusive(threshold.negated()));
+            case GE -> below(form.negated(), reaches, ExactCut.inclusive(threshold.negated()));
+            case GT -> below(form.negated(), reaches, ExactCut.exclusive(threshold.negated()));
             case EQ -> reaches.contains(threshold)
                     ? new Read.Stated<>(new Equality<>(form, threshold))
                     : new Read.HoldsNever<>();
@@ -246,7 +246,7 @@ public sealed interface AffineConstraint<A> {
     }
 
     /** A sum held below a bound, with the bound moved onto what the sum can actually reach. */
-    private static <A> Read<A> below(CanonicalForm<A> form, AdditiveImage reaches, RationalCut at) {
+    private static <A> Read<A> below(CanonicalForm<A> form, AdditiveImage reaches, ExactCut at) {
         return new Read.Stated<>(new HalfSpace<>(form, reaches.tightenUpper(at)));
     }
 
@@ -257,7 +257,7 @@ public sealed interface AffineConstraint<A> {
      * constant stands to nought is which way the left side of the comparison stands to the right —
      * which is the one thing a relation is answered at ({@link Rel#holds}).
      */
-    private static <A> Read<A> settledByConstantAlone(Rational constant, Rel rel) {
+    private static <A> Read<A> settledByConstantAlone(ExactRatio constant, Rel rel) {
         return rel.holds(constant.signum()) ? new Read.HoldsAlways<>() : new Read.HoldsNever<>();
     }
 }

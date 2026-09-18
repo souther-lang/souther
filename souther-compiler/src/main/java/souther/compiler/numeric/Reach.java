@@ -24,12 +24,12 @@ import java.util.function.Function;
  * <p>A {@code null} end is no bound that way. One position unbounded in the direction that matters
  * leaves the whole sum unbounded there, since nothing else can make up for it.
  */
-public record Reach(RationalCut least, RationalCut most) {
+public record Reach(ExactCut least, ExactCut most) {
 
     /** Bounded at neither end, which is what a sum containing an unbounded position runs between. */
     public static final Reach ANYWHERE = new Reach(null, null);
 
-    public static Reach between(RationalCut least, RationalCut most) {
+    public static Reach between(ExactCut least, ExactCut most) {
         return new Reach(least, most);
     }
 
@@ -40,20 +40,20 @@ public record Reach(RationalCut least, RationalCut most) {
      *                  the whole way, which leaves the sum unbounded in whichever directions that
      *                  position could push it
      */
-    public static <A> Reach of(Map<A, Rational> coefs, Rational constant,
+    public static <A> Reach of(Map<A, ExactRatio> coefs, ExactRatio constant,
                                Function<A, Reach> positions) {
-        Rational least = constant;
-        Rational most = constant;
+        ExactRatio least = constant;
+        ExactRatio most = constant;
         boolean leastReached = true;
         boolean mostReached = true;
-        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
-            Rational weight = each.getValue();
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            ExactRatio weight = each.getValue();
             Reach runs = positions.apply(each.getKey());
             if (runs == null) {
                 runs = ANYWHERE;
             }
-            RationalCut low = weight.signum() > 0 ? runs.least() : runs.most();
-            RationalCut high = weight.signum() > 0 ? runs.most() : runs.least();
+            ExactCut low = weight.signum() > 0 ? runs.least() : runs.most();
+            ExactCut high = weight.signum() > 0 ? runs.most() : runs.least();
             if (least != null && low != null) {
                 least = least.plus(weight.times(low.at()));
                 leastReached &= low.inclusive();
@@ -67,8 +67,8 @@ public record Reach(RationalCut least, RationalCut most) {
                 most = null;
             }
         }
-        return new Reach(least == null ? null : new RationalCut(least, leastReached),
-                most == null ? null : new RationalCut(most, mostReached));
+        return new Reach(least == null ? null : new ExactCut(least, leastReached),
+                most == null ? null : new ExactCut(most, mostReached));
     }
 
     /** Whether either end was found. */

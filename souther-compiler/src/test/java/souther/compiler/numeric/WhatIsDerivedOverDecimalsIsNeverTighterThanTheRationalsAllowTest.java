@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * contradicted. Over decimals there is no enumerating — between any two values lie infinitely many —
  * so the check here is a second piece of arithmetic instead: Fourier–Motzkin elimination over exact
  * ratios, which decides linear arithmetic over the rationals and is written out below, sharing with
- * the implementation only {@link Rational}.
+ * the implementation only {@link ExactRatio}.
  *
  * <p><b>What it can and cannot say.</b> Souther's decimals are finite decimals and not the rationals:
  * {@code 3 * a} comes arbitrarily close to one and never arrives, so this compiler answers
@@ -53,24 +53,24 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
     private static final List<String> POSITIONS = List.of("a", "b", "c");
     private static final int CASES = 400;
 
-    private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
+    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Rational ratio(long numerator, long denominator) {
-        return Rational.of(java.math.BigInteger.valueOf(numerator),
+    private static ExactRatio ratio(long numerator, long denominator) {
+        return ExactRatio.of(java.math.BigInteger.valueOf(numerator),
                 java.math.BigInteger.valueOf(denominator));
     }
 
     // --- the arithmetic this is checked against ------------------------------------------------------
 
     /** {@code Σ c·x <= k}, or {@code < k} when strict. */
-    private record Row(Map<String, Rational> coefs, Rational at, boolean strict) {
+    private record Row(Map<String, ExactRatio> coefs, ExactRatio at, boolean strict) {
 
-        Rational weightOf(String position) {
-            return coefs.getOrDefault(position, Rational.ZERO);
+        ExactRatio weightOf(String position) {
+            return coefs.getOrDefault(position, ExactRatio.ZERO);
         }
     }
 
@@ -98,11 +98,11 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
         }
         for (Row upper : above) {
             for (Row lower : below) {
-                Rational up = upper.weightOf(position);
-                Rational down = lower.weightOf(position).negated();
-                Map<String, Rational> coefs = new LinkedHashMap<>();
+                ExactRatio up = upper.weightOf(position);
+                ExactRatio down = lower.weightOf(position).negated();
+                Map<String, ExactRatio> coefs = new LinkedHashMap<>();
                 for (String each : namedIn(List.of(upper, lower))) {
-                    Rational combined = upper.weightOf(each).dividedBy(up)
+                    ExactRatio combined = upper.weightOf(each).dividedBy(up)
                             .plus(lower.weightOf(each).dividedBy(down));
                     if (!combined.isZero()) {
                         coefs.put(each, combined);
@@ -130,19 +130,19 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 left = eliminating(other, left);
             }
         }
-        RationalCut most = null;
-        RationalCut least = null;
+        ExactCut most = null;
+        ExactCut least = null;
         for (Row row : left) {
-            Rational weight = row.weightOf(position);
+            ExactRatio weight = row.weightOf(position);
             if (weight.isZero()) {
                 continue;   // a row with nothing left in it says whether the system holds, not where
             }
-            RationalCut cut = new RationalCut(row.at().dividedBy(weight.abs()), !row.strict());
+            ExactCut cut = new ExactCut(row.at().dividedBy(weight.abs()), !row.strict());
             if (weight.signum() > 0) {
-                most = RationalCut.tighterUpper(most, cut);
+                most = ExactCut.tighterUpper(most, cut);
             } else {
-                least = RationalCut.tighterLower(least,
-                        new RationalCut(cut.at().negated(), cut.inclusive()));
+                least = ExactCut.tighterLower(least,
+                        new ExactCut(cut.at().negated(), cut.inclusive()));
             }
         }
         return Reach.between(least, most);
@@ -184,8 +184,8 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
             }
             for (String position : POSITIONS) {
                 Reach allowed = eliminatingDownTo(position, rows);
-                RationalCut most = closed.box().mostOf(position);
-                RationalCut least = closed.box().leastOf(position);
+                ExactCut most = closed.box().mostOf(position);
+                ExactCut least = closed.box().leastOf(position);
                 if (most != null) {
                     narrowed++;
                     assertFalse(allowed.most() == null,
@@ -226,8 +226,8 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 continue;
             }
             for (String position : POSITIONS) {
-                RationalCut most = closed.box().mostOf(position);
-                RationalCut allowed = eliminatingDownTo(position, rows).most();
+                ExactCut most = closed.box().mostOf(position);
+                ExactCut allowed = eliminatingDownTo(position, rows).most();
                 if (most == null || allowed == null
                         || most.at().compareTo(allowed.at()) != 0
                         || most.inclusive() == allowed.inclusive()) {
@@ -236,7 +236,7 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 checked++;
                 assertFalse(most.inclusive(),
                         () -> "ours admits a value the rationals refuse at " + position);
-                assertFalse(new AdditiveImage.OverFiniteDecimals(Rational.ONE)
+                assertFalse(new AdditiveImage.OverFiniteDecimals(ExactRatio.ONE)
                                 .contains(most.at()),
                         () -> "ours refuses " + most.at() + " at " + position + ", which is a"
                                 + " decimal the position can take: " + written);
@@ -255,9 +255,9 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
         List<Written> written = List.of(new Written(Map.of("a", num(3)), num(-1), Rel.LE));
         ClosedState<String> closed = ClosedState.of(read(written), atom -> Granularity.DENSE);
 
-        assertEquals(RationalCut.exclusive(ratio(1, 3)), closed.box().mostOf("a"),
+        assertEquals(ExactCut.exclusive(ratio(1, 3)), closed.box().mostOf("a"),
                 "3a <= 1 leaves a under a third and never at it");
-        assertEquals(RationalCut.inclusive(ratio(1, 3)),
+        assertEquals(ExactCut.inclusive(ratio(1, 3)),
                 eliminatingDownTo("a", asRows(written)).most(),
                 "where over the rationals a third is a value like any other");
     }
@@ -271,17 +271,17 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
         // them, and a run of those would be four hundred cases checking nothing.
         for (String position : POSITIONS) {
             if (dice.nextBoolean()) {
-                out.add(new Written(Map.of(position, Rational.ONE),
+                out.add(new Written(Map.of(position, ExactRatio.ONE),
                         num(dice.nextInt(9) - 8), Rel.GE));
             }
             if (dice.nextBoolean()) {
-                out.add(new Written(Map.of(position, Rational.ONE),
+                out.add(new Written(Map.of(position, ExactRatio.ONE),
                         num(-dice.nextInt(9)), Rel.LE));
             }
         }
         int howMany = 2 + dice.nextInt(3);
         for (int i = 0; i < howMany; i++) {
-            Map<String, Rational> coefs = new LinkedHashMap<>();
+            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             for (String position : POSITIONS) {
                 int weight = dice.nextInt(7) - 3;
                 if (weight != 0) {
@@ -319,10 +319,10 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
         for (Written each : written) {
             boolean flip = each.rel() == Rel.GE || each.rel() == Rel.GT;
             boolean strict = each.rel() == Rel.LT || each.rel() == Rel.GT;
-            Map<String, Rational> coefs = new LinkedHashMap<>();
+            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             each.coefs().forEach((position, weight) ->
                     coefs.put(position, flip ? weight.negated() : weight));
-            Rational at = flip ? each.constant() : each.constant().negated();
+            ExactRatio at = flip ? each.constant() : each.constant().negated();
             out.add(new Row(coefs, at, strict));
         }
         return out;

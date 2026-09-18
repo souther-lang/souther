@@ -58,7 +58,7 @@ public final class AffineReduction {
     public sealed interface Reduction<A> {
 
         /** The ends found, each of them at least as tight as the one it came in with. */
-        record Tightened<A>(Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost)
+        record Tightened<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost)
                 implements Reduction<A> {
 
             public Tightened {
@@ -93,8 +93,8 @@ public final class AffineReduction {
     public static <A> Reduction<A> over(FormReach<A> reading, Function<A, Granularity> spacing) {
         Box<A> from = reading.ends();
         List<AffineConstraint<A>> constraints = reading.rules();
-        Map<A, RationalCut> atLeast = new LinkedHashMap<>();
-        Map<A, RationalCut> atMost = new LinkedHashMap<>();
+        Map<A, ExactCut> atLeast = new LinkedHashMap<>();
+        Map<A, ExactCut> atMost = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
             List<AffineConstraint.HalfSpace<A>> halves = each instanceof
                     AffineConstraint.Disequality<A> hole ? sidedBy(hole, reading) : each.halfSpaces();
@@ -141,8 +141,8 @@ public final class AffineReduction {
      */
     private static <A> List<AffineConstraint.HalfSpace<A>> sidedBy(
             AffineConstraint.Disequality<A> hole, FormReach<A> reading) {
-        Reach reach = reading.of(hole.form().coefs(), Rational.ZERO);
-        Rational away = hole.at();
+        Reach reach = reading.of(hole.form().coefs(), ExactRatio.ZERO);
+        ExactRatio away = hole.at();
         boolean neverBelow = reach.least() != null && reach.least().at().compareTo(away) >= 0;
         boolean neverAbove = reach.most() != null && reach.most().at().compareTo(away) <= 0;
         if (neverBelow && neverAbove
@@ -152,11 +152,11 @@ public final class AffineReduction {
         }
         if (neverBelow) {
             return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form().negated(), RationalCut.exclusive(away.negated())));
+                    hole.form().negated(), ExactCut.exclusive(away.negated())));
         }
         if (neverAbove) {
             return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form(), RationalCut.exclusive(away)));
+                    hole.form(), ExactCut.exclusive(away)));
         }
         return List.of();
     }
@@ -169,8 +169,8 @@ public final class AffineReduction {
     private static <A> boolean record(AffineConstraint.HalfSpace<A> half, A atom, Box<A> from,
                                       FormReach<A> reading, AffineConstraint<A> itsOwnRule,
                                       Function<A, Granularity> spacing,
-                                      Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
-        Rational weight = half.form().coefs().get(atom);
+                                      Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost) {
+        ExactRatio weight = half.form().coefs().get(atom);
         Least rest = leastOfTheRest(half, atom, reading, itsOwnRule);
         if (rest == null) {
             return true;   // some other position runs the wrong way without end, so nothing follows
@@ -191,15 +191,15 @@ public final class AffineReduction {
             }
             case AffineConstraint.Read.Stated<A> stated
                     when stated.constraint() instanceof AffineConstraint.HalfSpace<A> alone -> {
-                RationalCut cut = alone.bound();
+                ExactCut cut = alone.bound();
                 // A canonical one-position form weighs it by one or by minus one. Weighed by minus
                 // one it reads `-a <= c`, which is `a >= -c` — the same cut on the other side of
                 // nought, keeping whether the value itself is reached.
                 if (alone.form().coefs().get(atom).signum() > 0) {
-                    atMost.merge(atom, cut, RationalCut::tighterUpper);
+                    atMost.merge(atom, cut, ExactCut::tighterUpper);
                 } else {
-                    atLeast.merge(atom, new RationalCut(cut.at().negated(), cut.inclusive()),
-                            RationalCut::tighterLower);
+                    atLeast.merge(atom, new ExactCut(cut.at().negated(), cut.inclusive()),
+                            ExactCut::tighterLower);
                 }
                 return holdsAValue(atom, from, atLeast, atMost);
             }
@@ -221,10 +221,10 @@ public final class AffineReduction {
      * knowing when reading the promise above as "every rule sees the same state" — every rule
      * derives from the same state, which is not quite the same sentence.
      */
-    private static <A> boolean holdsAValue(A atom, Box<A> from, Map<A, RationalCut> atLeast,
-                                           Map<A, RationalCut> atMost) {
-        RationalCut low = RationalCut.tighterLower(from.leastOf(atom), atLeast.get(atom));
-        RationalCut high = RationalCut.tighterUpper(from.mostOf(atom), atMost.get(atom));
+    private static <A> boolean holdsAValue(A atom, Box<A> from, Map<A, ExactCut> atLeast,
+                                           Map<A, ExactCut> atMost) {
+        ExactCut low = ExactCut.tighterLower(from.leastOf(atom), atLeast.get(atom));
+        ExactCut high = ExactCut.tighterUpper(from.mostOf(atom), atMost.get(atom));
         if (low == null || high == null) {
             return true;
         }
@@ -250,13 +250,13 @@ public final class AffineReduction {
      */
     private static <A> Least leastOfTheRest(AffineConstraint.HalfSpace<A> half, A atom,
                                             FormReach<A> reading, AffineConstraint<A> itsOwnRule) {
-        Map<A, Rational> rest = new LinkedHashMap<>(half.form().coefs());
+        Map<A, ExactRatio> rest = new LinkedHashMap<>(half.form().coefs());
         rest.remove(atom);
-        RationalCut least = reading.ofTheRestOf(itsOwnRule, rest, Rational.ZERO).least();
+        ExactCut least = reading.ofTheRestOf(itsOwnRule, rest, ExactRatio.ZERO).least();
         return least == null ? null : new Least(least.at(), least.inclusive());
     }
 
     /** @param reached false where the sum comes arbitrarily close to {@code at} without arriving,
      *                 which makes what is derived from it strict */
-    private record Least(Rational at, boolean reached) {}
+    private record Least(ExactRatio at, boolean reached) {}
 }

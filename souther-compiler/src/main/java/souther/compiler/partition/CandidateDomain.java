@@ -3,8 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.numeric.AffinePreimage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Rational;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -155,14 +155,14 @@ sealed interface CandidateDomain {
      * member, both of which are decided on the numbers themselves.
      */
     private static CandidateDomain filling(AffinePreimage.Filling on, NumericDomain.Bounds within) {
-        Rational from = on.from();
-        Rational by = on.by();
-        Rational least = multiplier(within.min(), from, by);
-        Rational most = multiplier(within.max(), from, by);
+        ExactRatio from = on.from();
+        ExactRatio by = on.by();
+        ExactRatio least = multiplier(within.min(), from, by);
+        ExactRatio most = multiplier(within.max(), from, by);
         boolean leastIsItsOwn = within.min() == null || within.min().inclusive();
         boolean mostIsItsOwn = within.max() == null || within.max().inclusive();
         if (least == null && most == null) {
-            return new Somewhere(at(from, by, Rational.ZERO));
+            return new Somewhere(at(from, by, ExactRatio.ZERO));
         }
         if (least == null) {
             return new Somewhere(at(from, by, wholeAt(most, mostIsItsOwn, false)));
@@ -183,25 +183,25 @@ sealed interface CandidateDomain {
 
     /** Where an end of the run falls on the multiplier, or null where the run has no end there or
      *  none this reads a number off. */
-    private static Rational multiplier(Endpoint end, Rational from, Rational by) {
+    private static ExactRatio multiplier(Endpoint end, ExactRatio from, ExactRatio by) {
         return end == null || !(end.at() instanceof Count count)
                 ? null
-                : Rational.of(count.at()).minus(from).dividedBy(by);
+                : ExactRatio.of(count.at()).minus(from).dividedBy(by);
     }
 
     /** The member at one multiplier. Whole plus whole times a decimal is a decimal, so this is
      *  always a value a model writes. */
-    private static Count at(Rational from, Rational by, Rational multiplier) {
+    private static Count at(ExactRatio from, ExactRatio by, ExactRatio multiplier) {
         return new Count(from.plus(by.times(multiplier)).asWrittenDecimal());
     }
 
     /** The whole number at or past one end of the multiplier's run, which is a decimal and needs no
      *  places written out. */
-    private static Rational wholeAt(Rational end, boolean itsOwn, boolean upward) {
-        Rational on = Rational.of(upward ? end.ceiling() : end.floor());
+    private static ExactRatio wholeAt(ExactRatio end, boolean itsOwn, boolean upward) {
+        ExactRatio on = ExactRatio.of(upward ? end.ceiling() : end.floor());
         return itsOwn || on.compareTo(end) != 0
                 ? on
-                : on.plus(Rational.of(upward ? 1 : -1));
+                : on.plus(ExactRatio.of(upward ? 1 : -1));
     }
 
     /**
@@ -212,14 +212,14 @@ sealed interface CandidateDomain {
      * is no allowance here to run out — the number of places is read off the ends rather than fixed,
      * and the two are exact ratios.
      */
-    private static Rational between(Rational least, boolean leastIsItsOwn, Rational most) {
+    private static ExactRatio between(ExactRatio least, boolean leastIsItsOwn, ExactRatio most) {
         java.math.BigInteger places = java.math.BigInteger.ONE;
-        Rational half = most.minus(least).dividedBy(Rational.of(2));
-        while (Rational.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
+        ExactRatio half = most.minus(least).dividedBy(ExactRatio.of(2));
+        while (ExactRatio.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
             places = places.multiply(java.math.BigInteger.TEN);
         }
-        Rational step = Rational.of(java.math.BigInteger.ONE, places);
-        Rational on = Rational.of(least.times(Rational.of(places)).ceiling()).times(step);
+        ExactRatio step = ExactRatio.of(java.math.BigInteger.ONE, places);
+        ExactRatio on = ExactRatio.of(least.times(ExactRatio.of(places)).ceiling()).times(step);
         return leastIsItsOwn || on.compareTo(least) != 0 ? on : on.plus(step);
     }
 }

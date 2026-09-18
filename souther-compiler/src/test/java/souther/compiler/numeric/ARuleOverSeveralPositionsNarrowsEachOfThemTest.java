@@ -43,14 +43,14 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     private static final int HIGH = 4;
     private static final int CASES = 400;
 
-    private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
+    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Map<String, Rational> weighing(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
             out.put((String) pairs[i], num((Integer) pairs[i + 1]));
         }
@@ -65,18 +65,18 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         return ((Read.Stated<String>) read).constraint();
     }
 
-    private static AffineConstraint<String> rule(Map<String, Rational> coefs, long constant,
+    private static AffineConstraint<String> rule(Map<String, ExactRatio> coefs, long constant,
                                                  Rel rel, Granularity spacing) {
         return stated(AffineConstraint.of(coefs, num(constant), rel, atom -> spacing));
     }
 
     private static Box<String> between(Object... triples) {
-        Map<String, RationalCut> least = new LinkedHashMap<>();
-        Map<String, RationalCut> most = new LinkedHashMap<>();
+        Map<String, ExactCut> least = new LinkedHashMap<>();
+        Map<String, ExactCut> most = new LinkedHashMap<>();
         for (int i = 0; i < triples.length; i += 3) {
             String atom = (String) triples[i];
-            least.put(atom, RationalCut.inclusive(num((Integer) triples[i + 1])));
-            most.put(atom, RationalCut.inclusive(num((Integer) triples[i + 2])));
+            least.put(atom, ExactCut.inclusive(num((Integer) triples[i + 1])));
+            most.put(atom, ExactCut.inclusive(num((Integer) triples[i + 2])));
         }
         return new Box<>(least, most);
     }
@@ -109,9 +109,9 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         Reduction.Tightened<String> found =
                 reduce(List.of(budget), from, Granularity.DISCRETE);
 
-        assertEquals(RationalCut.inclusive(num(16)), found.atMost().get("straw"),
+        assertEquals(ExactCut.inclusive(num(16)), found.atMost().get("straw"),
                 "choco is never below nought, so the rule leaves straw at most sixteen");
-        assertEquals(RationalCut.inclusive(num(8)), found.atMost().get("choco"),
+        assertEquals(ExactCut.inclusive(num(8)), found.atMost().get("choco"),
                 "and straw is never below nought, so it leaves choco at most eight");
         assertNull(found.atLeast().get("straw"), "and says nothing below, which the rule does not");
     }
@@ -121,7 +121,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void whatTheOthersAreLeftIsWhatTheBoxSays() {
         AffineConstraint<String> budget =
                 rule(weighing("straw", 300, "choco", 600), -4800, Rel.LE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(4)),
+        assertEquals(ExactCut.inclusive(num(4)),
                 reduce(List.of(budget), between("straw", 0, 1000, "choco", 6, 6),
                         Granularity.DISCRETE).atMost().get("straw"),
                 "with choco pinned at six the rule leaves straw at most four");
@@ -133,7 +133,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aPositionWeighedNegativelyIsReadFromItsOtherEnd() {
         AffineConstraint<String> rule =
                 rule(weighing("a", 1, "b", -1, "c", 1), -10, Rel.LE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(14)),
+        assertEquals(ExactCut.inclusive(num(14)),
                 reduce(List.of(rule), between("a", 0, 100, "b", 0, 5, "c", 1, 3),
                         Granularity.DISCRETE).atMost().get("a"),
                 "b is at most five and c at least one, so a is at most 10 + 5 - 1");
@@ -143,7 +143,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aPositionWithoutTheEndThatMattersLeavesTheRuleSayingNothing() {
         AffineConstraint<String> rule =
                 rule(weighing("a", 1, "b", 1), -10, Rel.LE, Granularity.DISCRETE);
-        Map<String, RationalCut> nothing = Map.of();
+        Map<String, ExactCut> nothing = Map.of();
         Reduction.Tightened<String> found = reduce(List.of(rule),
                 new Box<>(nothing, nothing), Granularity.DISCRETE);
         assertTrue(found.atLeast().isEmpty() && found.atMost().isEmpty(),
@@ -154,8 +154,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aBoundReachedByNothingMakesWhatFollowsStrict() {
         AffineConstraint<String> rule =
                 rule(weighing("a", 1, "b", 1), -10, Rel.LE, Granularity.DENSE);
-        Box<String> from = new Box<>(Map.of("b", RationalCut.exclusive(num(2))), Map.of());
-        assertEquals(RationalCut.exclusive(num(8)),
+        Box<String> from = new Box<>(Map.of("b", ExactCut.exclusive(num(2))), Map.of());
+        assertEquals(ExactCut.exclusive(num(8)),
                 reduce(List.of(rule), from, Granularity.DENSE).atMost().get("a"),
                 "b never quite reaches two, so a never quite reaches eight");
     }
@@ -166,7 +166,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void theBoundLandsOnAValueThePositionCanTake() {
         AffineConstraint<String> rule =
                 rule(weighing("a", 2, "b", 1), -9, Rel.LE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(4)),
+        assertEquals(ExactCut.inclusive(num(4)),
                 reduce(List.of(rule), between("b", 0, 5), Granularity.DISCRETE).atMost().get("a"),
                 "`2a <= 9` leaves a at four and never at four and a half");
     }
@@ -177,8 +177,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 rule(weighing("a", 1, "b", 1, "c", 1), -10, Rel.EQ, Granularity.DISCRETE);
         Reduction.Tightened<String> found =
                 reduce(List.of(rule), between("b", 1, 3, "c", 2, 4), Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(7)), found.atMost().get("a"));
-        assertEquals(RationalCut.inclusive(num(3)), found.atLeast().get("a"));
+        assertEquals(ExactCut.inclusive(num(7)), found.atMost().get("a"));
+        assertEquals(ExactCut.inclusive(num(3)), found.atLeast().get("a"));
     }
 
     /**
@@ -201,7 +201,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aHoleAtTheFloorLiftsIt() {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1), 0, Rel.NE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(1)),
+        assertEquals(ExactCut.inclusive(num(1)),
                 reduce(List.of(hole), between("a", 0, 5), Granularity.DISCRETE)
                         .atLeast().get("a"));
     }
@@ -211,7 +211,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aHoleAtTheCeilingLowersIt() {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1), -5, Rel.NE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(4)),
+        assertEquals(ExactCut.inclusive(num(4)),
                 reduce(List.of(hole), between("a", 0, 5), Granularity.DISCRETE)
                         .atMost().get("a"));
     }
@@ -221,7 +221,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     void aHoleOverSeveralPositionsIsSidedByWhatTheOthersLeave() {
         AffineConstraint<String> hole =
                 rule(weighing("a", 1, "b", 1), -10, Rel.NE, Granularity.DISCRETE);
-        assertEquals(RationalCut.inclusive(num(9)),
+        assertEquals(ExactCut.inclusive(num(9)),
                 reduce(List.of(hole), between("a", 0, 5, "b", 0, 5), Granularity.DISCRETE)
                         .atMost().get("a"),
                 "a + b cannot exceed ten and is not ten, so it is under ten — and what that leaves"
@@ -285,7 +285,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             }
             for (Map<String, Integer> point : admitted) {
                 for (String position : POSITIONS) {
-                    Rational at = num(point.get(position));
+                    ExactRatio at = num(point.get(position));
                     assertTrue(admits(after.leastOf(position), at, false)
                                     && admits(after.mostOf(position), at, true),
                             () -> "refused a point the rules admit: " + point + " under " + written
@@ -296,9 +296,9 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             // Reductive: nothing came back wider than it went in.
             for (String position : POSITIONS) {
                 assertEquals(after.leastOf(position),
-                        RationalCut.tighterLower(from.leastOf(position), after.leastOf(position)));
+                        ExactCut.tighterLower(from.leastOf(position), after.leastOf(position)));
                 assertEquals(after.mostOf(position),
-                        RationalCut.tighterUpper(from.mostOf(position), after.mostOf(position)));
+                        ExactCut.tighterUpper(from.mostOf(position), after.mostOf(position)));
             }
         }
         assertTrue(narrowed > CASES / 10,
@@ -355,16 +355,16 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 continue;
             }
             for (String position : POSITIONS) {
-                RationalCut looseHigh = loose.atMost().get(position);
-                RationalCut tightHigh = tight.atMost().get(position);
+                ExactCut looseHigh = loose.atMost().get(position);
+                ExactCut tightHigh = tight.atMost().get(position);
                 if (looseHigh != null && tightHigh != null) {
-                    assertEquals(tightHigh, RationalCut.tighterUpper(looseHigh, tightHigh),
+                    assertEquals(tightHigh, ExactCut.tighterUpper(looseHigh, tightHigh),
                             () -> "a narrower box said less above " + position);
                 }
-                RationalCut looseLow = loose.atLeast().get(position);
-                RationalCut tightLow = tight.atLeast().get(position);
+                ExactCut looseLow = loose.atLeast().get(position);
+                ExactCut tightLow = tight.atLeast().get(position);
                 if (looseLow != null && tightLow != null) {
-                    assertEquals(tightLow, RationalCut.tighterLower(looseLow, tightLow),
+                    assertEquals(tightLow, ExactCut.tighterLower(looseLow, tightLow),
                             () -> "a narrower box said less below " + position);
                 }
             }
@@ -378,7 +378,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         assertNull(Box.<String>unbounded().mostOf("a"));
     }
 
-    private static boolean admits(RationalCut cut, Rational value, boolean above) {
+    private static boolean admits(ExactCut cut, ExactRatio value, boolean above) {
         if (cut == null) {
             return true;
         }
@@ -393,7 +393,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
         List<Written> out = new ArrayList<>();
         int howMany = 1 + dice.nextInt(3);
         for (int i = 0; i < howMany; i++) {
-            Map<String, Rational> coefs = new LinkedHashMap<>();
+            Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             for (String position : POSITIONS) {
                 int weight = dice.nextInt(7) - 3;
                 if (weight != 0) {
@@ -458,8 +458,8 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     }
 
     private static boolean holdsAt(Written rule, Map<String, Integer> point) {
-        Rational total = rule.constant();
-        for (Map.Entry<String, Rational> each : rule.coefs().entrySet()) {
+        ExactRatio total = rule.constant();
+        for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
             total = total.plus(each.getValue().times(num(point.get(each.getKey()))));
         }
         int sign = total.signum();
