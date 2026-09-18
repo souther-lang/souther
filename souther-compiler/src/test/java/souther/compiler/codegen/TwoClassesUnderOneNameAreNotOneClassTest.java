@@ -51,7 +51,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
                 "the refusal names the class both wanted: " + refused.getMessage());
         assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
                 "and the two identities that wanted it: " + refused.getMessage());
-        assertEquals(List.of(Emitted.value("demo", "Quote")), List.copyOf(out.seal().keySet()),
+        assertEquals(java.util.Set.of(Emitted.value("demo", "Quote")), out.seal().keySet(),
                 "the class already written stays the one that is written");
         assertEquals(ClassFileImage.of(EmittedBytes.of(QUOTE_DATA, "first")),
                 out.seal().get(Emitted.value("demo", "Quote")),
@@ -131,8 +131,14 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         assertThrows(IllegalStateException.class, () -> out.putAll(more));
     }
 
-    /** The control: identities this ABI spells apart are all written, in the order they were written
-     *  in. Without it the refusals above would pass on a registry that refused everything. */
+    /**
+     * The control: identities this ABI spells apart are all written. Without it the refusals above
+     * would pass on a registry that refused everything.
+     *
+     * <p>Which of them, and not the order they were put in. What a generation answers with is a
+     * mapping keyed by the name, and the order it was filled in is a fact about how the generation
+     * ran that no equality of that answer can see.
+     */
     @Test
     void andEveryOtherIdentityIsWritten() {
         Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
@@ -144,9 +150,10 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         out.putAll(Map.of(encoder, EmittedBytes.of(encoder)));
         out.put(decoder, EmittedBytes.of(decoder));
         out.put(price, EmittedBytes.of(price));
-        assertEquals(List.of(Emitted.value("demo", "Quote"), Emitted.encoder("demo", "Quote"),
+        assertEquals(java.util.Set.of(Emitted.value("demo", "Quote"),
+                        Emitted.encoder("demo", "Quote"),
                         Emitted.decoder("demo", "Quote", DecoderKind.JSON),
                         Emitted.behaviorInterface("demo", "price")),
-                List.copyOf(out.seal().keySet()));
+                out.seal().keySet());
     }
 }
