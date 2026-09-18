@@ -142,7 +142,8 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
         return new ItemAssessment.Attempt.Stopped(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
+                WAY, souther.compiler.partition.CompositionAccount.NOTHING,
+                PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
                 PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()));
     }
 }

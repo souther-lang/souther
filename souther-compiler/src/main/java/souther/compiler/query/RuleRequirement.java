@@ -149,6 +149,27 @@ public sealed interface RuleRequirement {
         record AComposedRowWentElsewhere() implements Unsettled {}
 
         /**
+         * A row was composed and run, and what it was composed against was less than the way asks.
+         *
+         * <p>Beside {@link AComposedRowWentElsewhere} rather than among it, because what a reader
+         * may conclude differs. That one is a row built to the whole of what the way states going
+         * somewhere else, which is something about the way; this is a row that meets some of what
+         * the way states reaching whatever such a row reaches, and where it went is a fact about a
+         * row nobody asked for. Read as the one above, a condition this compiler could not put a
+         * value under is published as the model refusing the way.
+         *
+         * <p>A row all the same, which is why this is not
+         * {@link NothingWasComposedToTry}: something was composed and tried, and a search that
+         * produced no candidate is a different thing to do something about.
+         *
+         * <p>What it was short of is on the settlement's account
+         * ({@link RuleSettlement#account()}) and is carried nowhere here, for the reason the
+         * shortfall of a synthesis is: a generator's vocabulary inside this one would make a
+         * requirement answer out of it.
+         */
+        record AComposedRowWasShortOfTheWay() implements Unsettled {}
+
+        /**
          * A row was composed and run, and this reading could not say which rule it took.
          *
          * <p>Beside {@link AComposedRowWentElsewhere} and not among it. That one is a row seen

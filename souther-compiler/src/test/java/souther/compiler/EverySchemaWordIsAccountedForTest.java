@@ -282,6 +282,7 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
         spelling.put("TheRulesLeaveNoValueForIt", "the_rules_leave_no_value_for_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
+        spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");
         spelling.put("NothingWatchedTheRow", "nothing_watched_the_row");
         spelling.put("NothingWasComposedToTry", "nothing_was_composed_to_try");

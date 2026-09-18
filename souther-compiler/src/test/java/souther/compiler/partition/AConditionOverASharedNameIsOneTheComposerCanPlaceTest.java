@@ -87,7 +87,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
     void aConditionOverTheSharedNameIsPlacedAndTheRowIsRefusedForWhatIsTrueOfIt() {
         Generator.BoundaryAttempt attempt = composing(Count.of(4));
 
-        assertEquals(List.of(), attempt.unrepresented(),
+        assertEquals(List.of(), attempt.unrepresented().onTheWay(),
                 "the composer had an order for the name every case spreads: "
                         + attempt.unrepresented());
         Generator.BoundaryAttempt.Unresolved no = (Generator.BoundaryAttempt.Unresolved) attempt;

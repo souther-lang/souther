@@ -36,7 +36,11 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.ConditionGap;
+import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.ReportedShortfall;
 import souther.compiler.partition.StringOfferShortfall;
@@ -846,7 +850,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     reported,
                     armPlaces(compilation, branch),
-                    conditionPlaces(compilation, linesOf(read)),
+                    conditionPlaces(compilation, linesOf(read),
+                            evidence.decision() == null ? List.of()
+                                    : evidence.decision().read().found(),
+                            requirements),
                     rulePlaces(compilation, citedBy(evidence, reported)),
                     partPlaces(compilation, partition, reported),
                     ruleReadings(compilation, name, behavior.name(),
@@ -866,7 +873,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // The declarations' own block names conditions too, and the lines it names them
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
-                        conditionPlaces(compilation, declaredLines(declared)),
+                        conditionPlaces(compilation, declaredLines(declared), List.of(), Map.of()),
                         rulePlaces(compilation, citedByDeclarations(declared, owed))));
     }
 
@@ -1058,8 +1065,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * a sentence would be written about a condition with nowhere to point.
      */
     private static Map<ConditionReportAnchor, Citation> conditionPlaces(
-            Compilation compilation, List<BorderAssessment> lines) {
+            Compilation compilation, List<BorderAssessment> lines,
+            List<DecisionReading.Ruled> rules, Map<DecisionRule, RuleSettlement> settled) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
+        // What a search for a rule of the decision was arrived at without, which is named on the
+        // decision's own line and is about the same conditions the points below name. Every
+        // condition of every way, and not the ones a page prints: which of them is worth a sentence
+        // is decided where the sentence is written, for the reason above.
+        for (DecisionReading.Ruled ruled : rules) {
+            RuleSettlement came = settled.get(ruled.rule());
+            List<ConditionGap> owed = (came == null ? CompositionAccount.NOTHING : came.account())
+                    .reconciledWith(ruled.states());
+            for (ConditionGap gap : owed) {
+                // Asked as an answer that may be missing. What a way met is not always something
+                // the readings hold a place for — a shape this compiler had no words for is one —
+                // and a reader is owed the word for such a condition whether or not there is
+                // somewhere to send them.
+                Citation at = Sites.placeIfKnown(compilation.db(), gap.anchor());
+                if (at != null) {
+                    places.putIfAbsent(gap.anchor(), at);
+                }
+            }
+        }
         for (BorderAssessment line : lines) {
             for (BorderAssessment.Point point : line.points()) {
                 // A point nobody is owed a row at ran no search, so there is nothing under it to
@@ -1068,7 +1095,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     continue;
                 }
                 for (ItemAssessment.Attempt attempt : point.owed().searches().each()) {
-                    for (ReachabilityGap gap : attempt.unaccountedFor()) {
+                    for (ConditionGap gap : attempt.unaccountedFor()) {
                         places.computeIfAbsent(gap.anchor(),
                                 anchor -> Sites.placeOf(compilation.db(), anchor));
                     }
@@ -2836,10 +2863,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // all the same, so nothing is lost and the rules themselves are in the document.
         gathered(out, behavior, decision, RuleRequirement.Unsettled.class,
                 "      ? nothing could show a row can be written at %d decision rule%s%n",
-                rendering, behavior.rulePlace());
+                rendering, behavior.rulePlace(), declaredIn);
         gathered(out, behavior, decision, RuleRequirement.Excluded.class,
                 "      · no row is owed at %d decision rule%s%n",
-                rendering, behavior.rulePlace());
+                rendering, behavior.rulePlace(), declaredIn);
     }
 
     /**
@@ -2858,7 +2885,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  DecisionEvidence decision,
                                  Class<? extends RuleRequirement> answer, String opening,
                                  SourceRendering rendering,
-                                 PublishedRuleHandle.WhereARuleIs places) {
+                                 PublishedRuleHandle.WhereARuleIs places, SourceId declaredIn) {
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
         Map<String, Integer> counted = new LinkedHashMap<>();
         int all = 0;
@@ -2867,7 +2894,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (came == null || !answer.isInstance(came.requirement())) {
                 continue;
             }
-            Said said = said(came, rendering, places);
+            Said said = said(came, ruled.states(), rendering, places,
+                    behavior.conditionPlaces(), declaredIn);
             order.add(said);
             counted.merge(said.text(), 1, Integer::sum);
             all++;
@@ -2932,13 +2960,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * rule this compiler could not read is named there, an allowance spent on composing a value is
      * named nowhere, and a sentence that relied on the neighbour would be complete for one of them.
      */
-    private static Said said(RuleSettlement came, SourceRendering rendering,
-                             PublishedRuleHandle.WhereARuleIs places) {
+    private static Said said(RuleSettlement came, WayToTheBorder way, SourceRendering rendering,
+                             PublishedRuleHandle.WhereARuleIs places,
+                             Map<ConditionReportAnchor, Citation> shown, SourceId declaredIn) {
+        Said said = whatItCameTo(came, rendering, places);
+        // And what it was arrived at without, after what it came to. The word says what happened
+        // and the clause says what the row it happened to was composed short of, which is the pair
+        // a point line is written as for the same reason: opened on the word alone, a reader is
+        // told a search had everything and reached nothing.
+        String left = whatWasLeftOut("rule", came.account().reconciledWith(way), shown, rendering,
+                declaredIn);
+        return left.isEmpty() ? said
+                : new Said(said.family(), said.within(), said.text() + "; " + left);
+    }
+
+    private static Said whatItCameTo(RuleSettlement came, SourceRendering rendering,
+                                     PublishedRuleHandle.WhereARuleIs places) {
         return switch (came.requirement()) {
             // Composed and run first, because they are what a reader can tell this compiler about:
             // a row that went elsewhere is a way this steered wrong and the model may be fine.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     new Said(0, 0, "a row composed for one took another rule of the same body");
+            // Beside it and after it, because the difference is what a reader may conclude: this
+            // row met less than the way asks, so where it went is what such a row does and not
+            // something about the rule. What it was short of follows this sentence.
+            case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
+                    new Said(0, 1, "a row was composed and run, and what it was composed against"
+                            + " was less than the way asks");
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     new Said(1, PublicationOrders.positionOf(
                                     came.synthesisShortfall().reason()),
@@ -3390,7 +3438,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * outcome that opens on what the search came to has not, and puts the same clause first.
      */
     private static String alsoLeftOut(
-            List<ReachabilityGap> left, Map<ConditionReportAnchor, Citation> shown,
+            List<ConditionGap> left, Map<ConditionReportAnchor, Citation> shown,
             SourceRendering rendering, SourceId declaredIn) {
         String said = whatTheRegionLeftOut(left, shown, rendering, declaredIn);
         return said.isEmpty() ? "" : "; " + said;
@@ -3410,21 +3458,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the wider box would be this report deciding something it has not been shown.
      */
     private static String whatTheRegionLeftOut(
-            List<ReachabilityGap> left, Map<ConditionReportAnchor, Citation> shown,
+            List<ConditionGap> left, Map<ConditionReportAnchor, Citation> shown,
+            SourceRendering rendering, SourceId declaredIn) {
+        return whatWasLeftOut("line", left, shown, rendering, declaredIn);
+    }
+
+    /**
+     * The same, of a way to whatever a caller was searching for.
+     *
+     * <p>What the way led to is the caller's word because the conditions are the same conditions: a
+     * line and a rule of a decision are both places a row has to arrive at, and a reader standing
+     * at one of them is not told about the other.
+     */
+    private static String whatWasLeftOut(
+            String toWhat, List<ConditionGap> left, Map<ConditionReportAnchor, Citation> shown,
             SourceRendering rendering, SourceId declaredIn) {
         if (left.isEmpty()) {
             return "";
         }
-        StringBuilder out = new StringBuilder("not every condition on the way to the line is one"
-                + " the row was composed against: ");
+        StringBuilder out = new StringBuilder("not every condition on the way to the " + toWhat
+                + " is one the row was composed against: ");
         for (int i = 0; i < left.size(); i++) {
-            out.append(i == 0 ? "" : ", ")
-                    .append(whyLeftOut(left.get(i)))
-                    // The place last and in brackets, as every other line of this report writes
-                    // one, and looked up rather than held: what the condition carries is which
-                    // question places it, and this is where that question was put.
-                    .append(" (").append(shown.get(left.get(i).anchor()).said(rendering, declaredIn))
-                    .append(")");
+            out.append(i == 0 ? "" : ", ").append(whyLeftOut(left.get(i)));
+            // The place last and in brackets, as every other line of this report writes one, and
+            // looked up rather than held: what the condition carries is which question places it,
+            // and this is where that question was put. Said without one where nothing places it,
+            // which is a reader told what was left out and not where — the alternative is a reader
+            // told neither.
+            Citation at = shown.get(left.get(i).anchor());
+            if (at != null) {
+                out.append(" (").append(at.said(rendering, declaredIn)).append(")");
+            }
         }
         return out.toString();
     }
@@ -3441,7 +3505,51 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * is what these sentences are — a way added with nothing to say would be one an author meets as
      * whichever sentence the arm beside it had.
      */
-    static String whyLeftOut(ReachabilityGap gap) {
+    static String whyLeftOut(ConditionGap gap) {
+        return switch (gap) {
+            case ConditionGap.OfTheInput(var of) -> whatTheInputSideLeftOut(of);
+            case ConditionGap.OfADemand(var of) -> whatTheAnswerSideLeftOut(of);
+        };
+    }
+
+    /**
+     * The same for a condition about a value a row stands a dependency in with.
+     *
+     * <p>Its own sentences and not the input side's. What went unrepresented there is about
+     * positions of the row, and an author told that a condition is over positions nothing composed
+     * a value at would go looking for positions the condition is not over.
+     */
+    private static String whatTheAnswerSideLeftOut(DemandGap gap) {
+        return switch (gap) {
+            case DemandGap.Unstated(var _, var why) -> switch (why) {
+                case DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer _ ->
+                        "a truth read off a place inside what a dependency answers";
+                case DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer _ ->
+                        "a comparison over more than one answer, which nothing here composes"
+                                + " values to together";
+                case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ ->
+                        "a place on the order an answer's own values stand on";
+            };
+            case DemandGap.Uncomposed(var _, var why) -> switch (why) {
+                // The term the region named is not said. What it is spelled in is the subject the
+                // answer was composed over, whose head is a name of this reading's own — put in
+                // front of an author, it would name a position nothing in the model is called.
+                case DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer _ ->
+                        "a comparison of places inside an answer whose values stand on no order"
+                                + " this measures them on";
+                case DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _ ->
+                        "a condition on places inside an answer nothing here composed a value at";
+                case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ ->
+                        "a condition on what a dependency answers, which nothing here composed a"
+                                + " value of";
+                case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ ->
+                        "a condition on what a dependency answers at one call, where the row"
+                                + " writes one value for every call it makes";
+            };
+        };
+    }
+
+    private static String whatTheInputSideLeftOut(ReachabilityGap gap) {
         return switch (gap) {
             case ReachabilityGap.Unstated(var condition) ->
                     whyDeclined(condition.why());
@@ -5312,6 +5420,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "the_rules_leave_no_value_for_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
+            case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
+                    "a_composed_row_was_short_of_the_way";
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _ ->
                     "the_rule_the_row_took_could_not_be_told";
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ -> "nothing_watched_the_row";

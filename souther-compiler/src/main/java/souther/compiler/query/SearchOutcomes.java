@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.ConditionGap;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -191,10 +191,10 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
     }
 
     /** Every condition on the way that none of these composed against. */
-    public List<ReachabilityGap> unaccountedFor() {
-        List<ReachabilityGap> out = new ArrayList<>();
+    public List<ConditionGap> unaccountedFor() {
+        List<ConditionGap> out = new ArrayList<>();
         for (ItemAssessment.Attempt attempt : each) {
-            for (ReachabilityGap gap : attempt.unaccountedFor()) {
+            for (ConditionGap gap : attempt.unaccountedFor()) {
                 if (!out.contains(gap)) {
                     out.add(gap);
                 }

@@ -451,7 +451,7 @@ public sealed interface ItemAssessment {
              * of the walk's answers. Both halves are put together where a reader wants one list
              * ({@link #unaccountedFor()}).
              */
-            List<souther.compiler.partition.ReachabilityGap> uncomposed();
+            souther.compiler.partition.CompositionAccount uncomposed();
         }
 
         /**
@@ -492,23 +492,23 @@ public sealed interface ItemAssessment {
              * the other is the way the same wrong value gets built — and which of the two a caller
              * happens to make is not something the invariant should turn on.
              */
-            static List<souther.compiler.partition.ReachabilityGap> withNoProofAmongThem(
-                    List<souther.compiler.partition.ReachabilityGap> gaps) {
-                List<souther.compiler.partition.ReachabilityGap> held = List.copyOf(gaps);
-                for (souther.compiler.partition.ReachabilityGap gap : held) {
+            static souther.compiler.partition.CompositionAccount withNoProofAmongThem(
+                    souther.compiler.partition.CompositionAccount account) {
+                for (souther.compiler.partition.ReachabilityGap gap : account.onTheWay()) {
                     if (gap instanceof souther.compiler.partition.ReachabilityGap
                             .ProvedImpossible) {
                         throw new IllegalArgumentException("a row stands where the rules leave"
                                 + " nothing standing: " + gap.anchor());
                     }
                 }
-                return held;
+                return account;
             }
 
             /** A row composed where the whole way was stated and used. */
             static Certified certified(Generator.GeneratedRow row,
                                        souther.compiler.partition.WayToTheBorder way) {
-                return new Certified(row, way, List.of());
+                return new Certified(row, way,
+                        souther.compiler.partition.CompositionAccount.NOTHING);
             }
         }
 
@@ -561,7 +561,7 @@ public sealed interface ItemAssessment {
          */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap> uncomposed)
+                         souther.compiler.partition.CompositionAccount uncomposed)
                 implements Attempt, Searched, Built {
 
             public Certified {
@@ -584,7 +584,7 @@ public sealed interface ItemAssessment {
          */
         record Unverified(Generator.GeneratedRow row,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap> uncomposed,
+                          souther.compiler.partition.CompositionAccount uncomposed,
                           EstablishmentGap.Observation why)
                 implements Attempt, Searched, Built, Prevented {
 
@@ -625,13 +625,14 @@ public sealed interface ItemAssessment {
          */
         record Stopped(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
+                       souther.compiler.partition.CompositionAccount uncomposed,
                        CanonicalSelection<CompositionBudget> stoppedBy,
                        CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
 
             public Stopped {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 Objects.requireNonNull(notAllOf, "a search says what it walked some of, or none");
                 if (stoppedBy == null || stoppedBy.isEmpty()) {
@@ -671,12 +672,13 @@ public sealed interface ItemAssessment {
          */
         record Unexhausted(Generator.UnresolvedCombination why,
                            souther.compiler.partition.WayToTheBorder way,
-                           List<souther.compiler.partition.ReachabilityGap> uncomposed,
+                           souther.compiler.partition.CompositionAccount uncomposed,
                            CanonicalSelection<CompositionRepertoire> notAllOf)
                 implements Attempt, Searched, Prevented {
 
             public Unexhausted {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 if (notAllOf == null || notAllOf.isEmpty()) {
                     throw new IllegalArgumentException(
@@ -707,12 +709,13 @@ public sealed interface ItemAssessment {
          */
         record Limited(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap> uncomposed,
+                       souther.compiler.partition.CompositionAccount uncomposed,
                        CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Searched, Prevented {
 
             public Limited {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 if (limitedBy == null || limitedBy.isEmpty()) {
                     throw new IllegalArgumentException("an answer short of what the point had says"
@@ -749,12 +752,13 @@ public sealed interface ItemAssessment {
          */
         record Unplanned(Generator.UnresolvedCombination why,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap> uncomposed,
+                         souther.compiler.partition.CompositionAccount uncomposed,
                          CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Prevented {
 
             public Unplanned {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "an attempt says what it came to in its own word");
                 if (limitedBy == null || limitedBy.isEmpty()) {
                     throw new IllegalArgumentException("a point nothing could be planned for says"
@@ -782,17 +786,18 @@ public sealed interface ItemAssessment {
          */
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap> uncomposed)
+                          souther.compiler.partition.CompositionAccount uncomposed)
                 implements Attempt, Searched {
 
             public Unresolved {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
             }
 
             /** A search that came to nothing where the whole way was stated and used. */
             public Unresolved(Generator.UnresolvedCombination why,
                               souther.compiler.partition.WayToTheBorder way) {
-                this(why, way, List.of());
+                this(why, way, souther.compiler.partition.CompositionAccount.NOTHING);
             }
         }
 
@@ -829,8 +834,13 @@ public sealed interface ItemAssessment {
          *
          * <p>Put together here and kept apart everywhere else. A condition the walk had no words
          * for and one it stated that nothing could compose a value under leave the same gap for a
-         * reader and are different facts to act on, so what comes back is one list of two shapes
-         * rather than one shape that has lost which of them it was.
+         * reader and are different facts to act on, so what comes back is one list of shapes rather
+         * than one shape that has lost which of them it was.
+         *
+         * <p>Which of the way's own declines belong in it is the account's
+         * ({@link souther.compiler.partition.CompositionAccount#reconciledWith}) and is not a
+         * concatenation: a condition about an answer is one the way has no words for however well
+         * the demand reading did with it.
          *
          * <p>Empty where nothing was left out, and empty where the outcome settles the point on its
          * own: a walk of the whole of what the rules leave that reaches no value proves there is
@@ -838,9 +848,9 @@ public sealed interface ItemAssessment {
          * empty box leaves what it contains empty too. Empty for a row that was built, which is a
          * point answered rather than a search to account for, and for a search nobody made.
          */
-        default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
+        default List<souther.compiler.partition.ConditionGap> unaccountedFor() {
             souther.compiler.partition.WayToTheBorder way;
-            List<souther.compiler.partition.ReachabilityGap> uncomposed;
+            souther.compiler.partition.CompositionAccount uncomposed;
             switch (this) {
                 case Unresolved it -> {
                     if (it.why().reason().provesInfeasible()) {
@@ -881,13 +891,7 @@ public sealed interface ItemAssessment {
                     return List.of();
                 }
             }
-            List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();
-            // The walk's, said as the stage it happened at. A condition it had no words for is one
-            // nothing downstream ever saw.
-            way.declined().forEach(each ->
-                    out.add(new souther.compiler.partition.ReachabilityGap.Unstated(each)));
-            out.addAll(uncomposed);
-            return List.copyOf(out);
+            return uncomposed.reconciledWith(way);
         }
 
     }

@@ -1678,12 +1678,14 @@ final class Coverages {
                 new souther.compiler.partition.Generator.UnresolvedCombination(
                         java.util.List.of(label), wordOf(unknown));
         if (!unknown.stoppedBy().isEmpty()) {
-            return new ItemAssessment.Attempt.Stopped(why, within, java.util.List.of(),
+            return new ItemAssessment.Attempt.Stopped(why, within,
+                    souther.compiler.partition.CompositionAccount.NOTHING,
                     PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
                     PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
         }
         if (!unknown.notAllOf().isEmpty()) {
-            return new ItemAssessment.Attempt.Unexhausted(why, within, java.util.List.of(),
+            return new ItemAssessment.Attempt.Unexhausted(why, within,
+                    souther.compiler.partition.CompositionAccount.NOTHING,
                     PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
         }
         return new ItemAssessment.Attempt.Unresolved(why, within);

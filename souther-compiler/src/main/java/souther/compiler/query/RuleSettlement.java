@@ -28,8 +28,14 @@ import souther.compiler.partition.Generator;
  *
  * @param requirement whether a row is owed at the rule, in the three states ADR-0091 fixes
  * @param search      what composing a row for it came to
+ * @param account     the conditions of the way the composing was arrived at without, which is what
+ *                    says how much the answer beside it is worth. Beside the two rather than read
+ *                    off either: a search that composed nothing and one that composed a row meeting
+ *                    less than the way asks both leave conditions unaccounted for, and the word
+ *                    each of them comes back with says only what happened and not what was left out
  */
-public record RuleSettlement(RuleRequirement requirement, RuleSearch search) {
+public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
+                             souther.compiler.partition.CompositionAccount account) {
 
     public RuleSettlement {
         if (requirement == null) {
@@ -37,6 +43,11 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search) {
         }
         if (search == null) {
             throw new IllegalArgumentException("a settlement says what the composing came to");
+        }
+        if (account == null) {
+            throw new IllegalArgumentException(
+                    "a settlement says what the composing was arrived at without, or that it was"
+                            + " nothing");
         }
         // Exhaustive over the requirements, so an answer added is one somebody says the search of
         // rather than one that quietly takes whatever it was given.
@@ -53,8 +64,11 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search) {
             // The inquiry having had no candidate is that same shape without the proof.
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     search instanceof RuleSearch.CameToNothing;
-            // And the rest are what became of a row that was composed.
+            // And the rest are what became of a row that was composed, including the one composed
+            // against less than the way asks: a row short of the way is a row that was built and
+            // tried, and saying it with the word above would deny the row.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _,
+                 RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _,
                  RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _,
                  RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
                     search instanceof RuleSearch.Composed;
@@ -67,21 +81,25 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search) {
 
     /** A rule the readings settled, which nothing was composed for. */
     public static RuleSettlement read(RuleRequirement.Excluded requirement) {
-        return new RuleSettlement(requirement, new RuleSearch.NotMade());
+        return new RuleSettlement(requirement, new RuleSearch.NotMade(),
+                souther.compiler.partition.CompositionAccount.NOTHING);
     }
 
     /** A search that had a candidate to try the rule with, whatever it then settled. */
-    public static RuleSettlement of(RuleRequirement requirement) {
-        return new RuleSettlement(requirement, new RuleSearch.Composed());
+    public static RuleSettlement of(RuleRequirement requirement,
+                                    souther.compiler.partition.CompositionAccount account) {
+        return new RuleSettlement(requirement, new RuleSearch.Composed(), account);
     }
 
     /** A search whose composing produced no candidate, in the words the composing came back with. */
-    public static RuleSettlement nothingToTryWith(Generator.UnresolvedCombination why) {
+    public static RuleSettlement nothingToTryWith(
+            Generator.UnresolvedCombination why,
+            souther.compiler.partition.CompositionAccount account) {
         if (why == null) {
             throw new IllegalArgumentException("a composing that came to nothing says what of");
         }
         return new RuleSettlement(new RuleRequirement.Unsettled.NothingWasComposedToTry(),
-                RuleSearch.CameToNothing.by(why));
+                RuleSearch.CameToNothing.by(why), account);
     }
 
     /**
@@ -93,7 +111,8 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search) {
      * is held is what each composing said, the way a point holds its searches.
      */
     public static RuleSettlement provedNothingTakesIt(RuleSearch.CameToNothing proofs) {
-        return new RuleSettlement(new RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(), proofs);
+        return new RuleSettlement(new RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(), proofs,
+                souther.compiler.partition.CompositionAccount.NOTHING);
     }
 
     /**

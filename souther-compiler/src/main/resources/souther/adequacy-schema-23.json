@@ -2680,12 +2680,13 @@
                 ]
               },
               "because": {
-                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Three are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, and `the_rules_leave_no_value_for_it` a search proving the rules leave no value that takes the rule — the one of the three a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. That last says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
+                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Three are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, and `the_rules_leave_no_value_for_it` a search proving the rules leave no value that takes the rule — the one of the three a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a row was composed against less than the way asks, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. `a_composed_row_was_short_of_the_way` is the one to read no negative from: the row was built and run, and a row meeting some of what the way states reaches whatever such a row reaches, so where it went says nothing about the rule. `nothing_was_composed_to_try` says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
                 "enum": [
                   "the_way_needs_one_position_to_be_two",
                   "an_arm_nothing_reaches",
                   "the_rules_leave_no_value_for_it",
                   "a_composed_row_went_elsewhere",
+                  "a_composed_row_was_short_of_the_way",
                   "the_rule_the_row_took_could_not_be_told",
                   "nothing_watched_the_row",
                   "nothing_was_composed_to_try"
