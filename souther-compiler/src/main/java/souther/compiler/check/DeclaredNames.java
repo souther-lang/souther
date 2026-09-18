@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,22 @@ public final class DeclaredNames {
         public Index {
             declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
             refusals = List.copyOf(refusals);
+        }
+
+        /**
+         * What each declaration this kept comes to, under the name it is written by.
+         *
+         * <p>Asked here rather than by walking the declarations, because what comes back is keyed
+         * by the same names and the walk reaches nothing else: every entry is written under the
+         * name the walk handed over, so no turn can overwrite another's and the answer is the same
+         * whichever way the walk went. Written as a loop at each reader, what settled that was that
+         * none of them happened to read the order — which is a fact about today's readers and not
+         * about the answer.
+         */
+        public <R> Map<String, R> byName(Function<D, R> of) {
+            Map<String, R> out = new HashMap<>();
+            declarations.forEach((name, declared) -> out.put(name, of.apply(declared)));
+            return out;
         }
     }
 
