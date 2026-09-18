@@ -107,9 +107,9 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     void narrowingInventsNothing() {
         for (Compilation compilation : RepositoryModels.all()) {
             AdequacyReport whole = AdequacyReport.of(compilation);
-            List<AdequacyOpening> ofTheWhole = whole.assessment().uncertainties();
+            List<AdequacyUncertainty> ofTheWhole = whole.assessment().uncertainties();
             for (AdequacyReport.ModuleReport module : whole.modules()) {
-                for (AdequacyOpening each
+                for (AdequacyUncertainty each
                         : whole.only(module.module(), null).assessment().uncertainties()) {
 
                     assertTrue(ofTheWhole.contains(each),

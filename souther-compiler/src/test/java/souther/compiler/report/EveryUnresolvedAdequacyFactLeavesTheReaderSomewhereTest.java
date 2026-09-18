@@ -55,10 +55,10 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      * from what the whole one holds, so asking the compilation asks about all of them
      * ({@link AdequacyReport#assessment()}).
      */
-    private static final List<AdequacyOpening> UNRESOLVED = everythingUnresolved();
+    private static final List<AdequacyUncertainty> UNRESOLVED = everythingUnresolved();
 
-    private static List<AdequacyOpening> everythingUnresolved() {
-        List<AdequacyOpening> out = new ArrayList<>();
+    private static List<AdequacyUncertainty> everythingUnresolved() {
+        List<AdequacyUncertainty> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
             out.addAll(AdequacyReport.of(compilation).assessment().uncertainties());
         }
@@ -73,11 +73,11 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      */
     @Test
     void everyUnresolvedFactReachesADisposition() {
-        List<AdequacyOpening> unresolved = UNRESOLVED;
+        List<AdequacyUncertainty> unresolved = UNRESOLVED;
 
         assertFalse(unresolved.isEmpty(), "the models here go without things, which is what this is"
                 + " a law about");
-        for (AdequacyOpening each : unresolved) {
+        for (AdequacyUncertainty each : unresolved) {
             assertTrue(ReaderDisposition.of(each) != null,
                     () -> each + " was not answered and leaves a reader nowhere");
         }
@@ -92,7 +92,7 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      */
     @Test
     void aWiderRunIsOfferedExactlyWhereItWouldAnswer() {
-        for (AdequacyOpening each : UNRESOLVED) {
+        for (AdequacyUncertainty each : UNRESOLVED) {
             boolean offered = ReaderDisposition.of(each) instanceof ReaderDisposition.WidenTheRun;
 
             assertEquals(each.runSensitivity() == RunSensitivity.MAY_CHANGE, offered,
@@ -128,7 +128,7 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
     @Test
     void theModelsHereReachTheseDispositions() {
         Set<String> reached = new LinkedHashSet<>();
-        for (AdequacyOpening each : UNRESOLVED) {
+        for (AdequacyUncertainty each : UNRESOLVED) {
             reached.add(ReaderDisposition.of(each).getClass().getSimpleName());
         }
 

@@ -116,18 +116,18 @@ public sealed interface ReaderDisposition {
      * <p>Switches with no {@code default}, so an opening or a subject added later is a compile
      * error here rather than an entry this report has nothing to say about.
      */
-    static ReaderDisposition of(AdequacyOpening opening) {
+    static ReaderDisposition of(AdequacyUncertainty opening) {
         Subject subject = opening.subject();
         if (opening.runSensitivity() == RunSensitivity.MAY_CHANGE) {
             return new WidenTheRun(subject);
         }
         return switch (opening) {
-            case AdequacyOpening.NotMeasured it ->
+            case AdequacyUncertainty.NotMeasured it ->
                     new LookAtWhyNothingWasMeasured(subject, it.why());
-            case AdequacyOpening.ShowingStopped _,
-                 AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+            case AdequacyUncertainty.ShowingStopped _,
+                 AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
                     new LookAtWhatShowedNoRow(subject);
-            case AdequacyOpening.ByWeakening it -> switch (subject) {
+            case AdequacyUncertainty.ByWeakening it -> switch (subject) {
                 case Subject.AtARule _ -> new LookAtTheRule(subject);
                 case Subject.AtAFork _ -> new LookAtTheFork(subject);
                 case Subject.AtAnArm _ -> new LookAtThisCompilersProof(subject);
@@ -222,7 +222,7 @@ public sealed interface ReaderDisposition {
     }
 
     /** What the weakening behind an entry is called, asked of the one projection that names it. */
-    private static WeakeningVocabulary wordOf(AdequacyOpening.ByWeakening it) {
+    private static WeakeningVocabulary wordOf(AdequacyUncertainty.ByWeakening it) {
         return AdequacyReport.vocabularyOf(it.cause());
     }
 }

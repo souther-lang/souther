@@ -27,7 +27,7 @@ import java.util.List;
  * @param uncertainties what has not come to an answer, whatever the verdict makes of them
  */
 public record AdequacyAssessment(List<Adequacy.Finding> gaps,
-                                 List<AdequacyOpening> uncertainties) {
+                                 List<AdequacyUncertainty> uncertainties) {
 
     public AdequacyAssessment {
         gaps = List.copyOf(gaps);
