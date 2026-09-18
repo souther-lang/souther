@@ -1046,10 +1046,15 @@ public final class Shapes {
      * <p>Absent where a ring is found, which is what keeps the readers below from being started on a
      * graph they have no end in. What the report points at is the first spread of the ring, written
      * on the declaration the ring closes on — a {@code ...} the author can take out, and the one
-     * their eye goes to when they are told which declaration is made of itself. The ring is this
-     * module's to report: a spread crossing into another module and back is two modules importing
-     * each other, which is refused before any of this, so a ring reached from here closes on a
-     * declaration written here ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
+     * their eye goes to when they are told which declaration is made of itself.
+     *
+     * <p><b>Found here, said where it is written.</b> The walk crosses into whatever the spreads
+     * name, so a module that spreads a declaration of a ring finds that ring and has no reading to
+     * give — and the ring is not its author's to take apart. Every declaration of a ring is written
+     * in one module, since a spread crossing out and back would be two modules importing each other;
+     * that module asks this of itself and says it there. Reported by whoever found it, one mistake
+     * would be said once for every module downstream of it
+     * ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
      */
     public record WellFoundedSpreads(String name) implements Key<ProductSpreads.WellFounded> {
         @Override
@@ -1069,11 +1074,13 @@ public final class Shapes {
             });
             return switch (found) {
                 case ProductSpreads.WellFounded wellFounded -> Answer.of(wellFounded);
-                case ProductSpreads.ReachesItself ring -> Answer.absent(Report.of(Diagnostic
-                        .at(ring.written().name().reportedAt())
-                        .say(new DataMessage.ADataSpreadsItself(
-                                ring.declaration().name(), ring.through()))
-                        .build()));
+                case ProductSpreads.ReachesItself ring -> ring.writtenIn(name)
+                        ? Answer.absent(Report.of(Diagnostic
+                                .at(ring.written().name().reportedAt())
+                                .say(new DataMessage.ADataSpreadsItself(
+                                        ring.declaration().name(), ring.through()))
+                                .build()))
+                        : Answer.absent();
             };
         }
     }

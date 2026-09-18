@@ -156,13 +156,54 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
     }
 
     /**
-     * A ring closes inside one module, which is why the refusal is said by the module it is found
-     * from and nobody asks whose declaration it is.
+     * A module that spreads its way into somebody else's ring finds it, has no reading to give, and
+     * does not report it.
+     *
+     * <p>The walk goes wherever the spreads go, and a one-way import is enough to reach a ring
+     * another module wrote. Said by whoever found it, one mistake would be reported once for every
+     * module downstream of it — and nothing dedupes them, since each is filed under the module that
+     * asked. What the author is owed is the one sentence, on the declaration they can take apart.
+     */
+    @Test
+    void aRingIsFoundByWhoeverSpreadsIntoItAndSaidWhereItIsWritten() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("b.sou", """
+                module b exposing ( Pair, Other )
+
+                data Pair  = { ...Other, qty: Int }
+
+                data Other = { ...Pair, note: String }
+                """);
+        byId.put("a.sou", """
+                module a exposing ( Local )
+
+                import b ( Pair )
+
+                data Local = { ...Pair, local: Int }
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+
+        assertAll(
+                () -> assertEquals(
+                        List.of(new DataMessage.ADataSpreadsItself("Pair", "`Other` -> `Pair`")),
+                        c.db().allReports().stream()
+                                .map(found -> found.report().diagnostic().said()).toList(),
+                        "the one sentence, said by the module that wrote the ring"),
+                () -> assertFalse(c.db().ask(new Shapes.WellFoundedSpreads("b")).present(),
+                        "the module that wrote it has no graph to hand on"),
+                () -> assertFalse(c.db().ask(new Shapes.WellFoundedSpreads("a")).present(),
+                        "and neither has the one that spreads into it, which is what stops its"
+                                + " readers as surely as a ring of its own would"));
+    }
+
+    /**
+     * A ring closes inside one module, which is what makes the declaration it is written in the one
+     * to report it.
      *
      * <p>Held as a check rather than said beside the report. What makes it so is another rule — a
      * spread into another module and back is two modules importing each other — and a language that
-     * came to allow that would leave the sentence standing and the same ring reported by each of
-     * them.
+     * came to allow that would leave the sentence standing and a ring with no module to own it.
      */
     @Test
     void aSpreadDoesNotCrossIntoAnotherModuleAndBack() {

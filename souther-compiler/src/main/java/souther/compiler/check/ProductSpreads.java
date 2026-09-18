@@ -82,6 +82,22 @@ public final class ProductSpreads {
             return round.get(0);
         }
 
+        /**
+         * Whether {@code module} is the one that wrote this ring, and so the one to report it.
+         *
+         * <p>A walk goes wherever the spreads go, so a module that spreads its way into somebody
+         * else's ring finds it and is not where it is written. Asked of the ring rather than
+         * worked out beside each report, because every reader that finds one has to decide the
+         * same thing and there is one answer to decide it by.
+         *
+         * <p>Whichever declaration of a ring the walk closed on will do: a spread out of a module
+         * and back is two modules importing each other, so the whole of a ring is written in one
+         * module.
+         */
+        public boolean writtenIn(String module) {
+            return declaration.module().equals(module);
+        }
+
         /** The ring as a reader is shown it — the spreads in the order they are gone round by. */
         public String through() {
             List<String> names = new ArrayList<>();
