@@ -927,11 +927,16 @@ public final class Adequacy {
                 // said in the words of a fact about the model.
                 return Answer.absent();
             }
-            Map<String, souther.compiler.core.Core> bodies = checked.value().behaviorBodies();
-            if (bodies.isEmpty()) {
-                // Elaborated, and holding no body: there are no places to be about, and that is
-                // what the model says. Which is why this stays a present answer and the one above
-                // does not.
+            // Which bodies this elaboration holds is not which bodies the model has. An image
+            // holds the implementations that may be run, so a module of them all left out holds
+            // none — and reading that as the model having no body is the same sentence the arm
+            // above refuses to say. Asked per behavior below, where the declarations answer for it.
+            Bodies.Implementations owns =
+                    db.ask(new Bodies.RunnableImplementations(name)).value();
+            if (owns == null || owns.owned().isEmpty()) {
+                // The model gives no behavior here a body: there are no places to be about, and
+                // that is what the model says. Which is why this stays a present answer and the one
+                // above does not.
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan = checked.value().plan();
@@ -962,7 +967,12 @@ public final class Adequacy {
                                         InputDomain read)))) {
                     continue;
                 }
-                souther.compiler.core.Core body = bodies.get(spec.name());
+                // Read per behavior, and the two absences told apart where they are classified.
+                // A body this image has none of is not a behavior the model gives none.
+                souther.compiler.core.Core body =
+                        bodyReading(db, name, checked.value(), spec.name())
+                                instanceof souther.compiler.partition.BodyReading.Read it
+                                ? it.emitted() : null;
                 Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
                 if (body == null || fn == null) {
                     continue;
