@@ -4,9 +4,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -281,7 +280,7 @@ public final class AnAnswerComposed {
      */
     private static LinearForm<NumericTerm> overThisAnswer(String head,
                                                           LinearForm<DecisionAtom> form) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         form.coefs().forEach((atom, coefficient) -> coefs.put(
                 new NumericTerm.ValueOf(path(head, ((DecisionAtom.OfAnAnswer) atom).at().steps())),
                 coefficient));

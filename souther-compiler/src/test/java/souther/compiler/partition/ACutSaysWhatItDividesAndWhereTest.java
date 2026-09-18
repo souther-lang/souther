@@ -7,6 +7,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
 
@@ -35,9 +36,9 @@ class ACutSaysWhatItDividesAndWhereTest {
     }
 
     private static LinearForm<NumericTerm> form(String name, String coef) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(term(name), new BigDecimal(coef));
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(term(name), ExactRatio.of(new BigDecimal(coef)));
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     /** {@code n > t}, read as one position's own values. */
@@ -53,7 +54,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     private static Cutting overAMultiple(String k, String t) {
         return new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", k), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
-                new Level.ACount(new Count(new BigDecimal(t))),
+                new Level.OfTheQuantity(ExactRatio.of(new BigDecimal(t))),
                 new ComparisonClaim.Cut(Towards.BELOW, false), null);
     }
 
@@ -95,7 +96,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     void aRuleThatSinglesAValueOutSinglesOutAValueOrNoneAtAll() {
         Cutting names = new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
-                new Level.ACount(new Count(new BigDecimal("9"))),
+                new Level.OfTheQuantity(ExactRatio.of(9)),
                 new ComparisonClaim.Singled(true), null);
 
         assertEquals(term("n"), names.dividedPosition(),
@@ -109,7 +110,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     void andWhereTheLineIsAValueOfThePositionThatIsTheOneItNames() {
         Cutting names = new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
-                new Level.ACount(new Count(new BigDecimal("8"))),
+                new Level.OfTheQuantity(ExactRatio.of(8)),
                 new ComparisonClaim.Singled(true), null);
 
         assertEquals("4", names.singledValue().key(), "eight halved is four");
@@ -126,7 +127,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     void aThresholdTheWrittenFormNeverReachesStillPartsTheValues() {
         Cutting closed = new Cutting(
                 new BorderQuantity.OverAForm("f", form("n", "2"), Map.of(term("n"), souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE))),
-                new Level.ACount(new Count(new BigDecimal("9"))),
+                new Level.OfTheQuantity(ExactRatio.of(9)),
                 new ComparisonClaim.Cut(Towards.BELOW, true), null);
 
         assertEquals("4|5", closed.seam().key());

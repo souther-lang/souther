@@ -1,26 +1,27 @@
 package souther.compiler.partition;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 
 /**
  * Where a rule's line falls on the quantity it cuts, in that quantity's own units.
  *
  * <p>Held as what the rule wrote and how much of the quantity it wrote it in, rather than as the
  * number that comes of dividing one by the other. {@code 3 * d <= 1} puts its line at a third, and
- * no decimal this language writes is a third — divided out, the position would have to be rounded to
- * a number the line is not at, and a report would ask for a row on the wrong side of it.
+ * the pair says where that is in the numbers the rule was written with — which is what a report
+ * names the class by, and what {@link Seam#asARuleAbout} writes back out.
  *
- * <p>Which costs nothing, because nothing needs the quotient. Two positions are the same position
- * when the fractions reduce alike, and that is settled by multiplying rather than dividing.
+ * <p>The exactness no longer rests on the pair. A level is an exact ratio wherever the quantity
+ * counts to one, so dividing here loses nothing; what the pair keeps is the rule's own units, and
+ * {@code 3 * d <= 1} and {@code d <= 1 / 3} draw one line and are two ways of writing it.
  *
  * @param written what the rule compared against, on the form it was written in
  * @param per     how much of the quantity that form is, which is never zero and never negative
  */
-public record CutPosition(Level written, BigDecimal per) implements Comparable<CutPosition> {
+public record CutPosition(Level written, ExactRatio per) implements Comparable<CutPosition> {
 
     public CutPosition {
         if (written == null || per == null || per.signum() <= 0) {
@@ -33,34 +34,32 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
     /** A line at a level of the quantity itself, which is what a rule that wrote the whole of it
      *  draws. */
     public static CutPosition at(Level written) {
-        return new CutPosition(written, BigDecimal.ONE);
+        return new CutPosition(written, ExactRatio.ONE);
+    }
+
+    /**
+     * Where this line falls, as the exact number it is — or null on an order with no numbers.
+     *
+     * <p>What the rule wrote over how much of the quantity it wrote, which is exact: both are
+     * ratios and a ratio divided by a ratio is one. A third comes back a third, and the reader that
+     * needs it as a value of something asks {@link #asAValueOf}.
+     */
+    public ExactRatio exactly() {
+        ExactRatio at = numberOf(written);
+        return at == null ? null : at.dividedBy(per);
     }
 
     /**
      * What makes two positions one position: where the line falls, and not the units it was said in.
      *
-     * <p>A third and two sixths are one place. Reduced rather than divided, so that a place no value
-     * of the quantity stands at is still named exactly — which is the case this exists for, since a
-     * position with a value either side of it is told from its neighbours by those values and never
-     * reaches here ({@link Seam#key()}).
+     * <p>A third and two sixths are one place, which an exact ratio in lowest terms already says.
      *
      * <p>An order with no numbers answers with its own value. Nothing scales such a quantity — a
      * rule holding two strings apart writes the whole of it — so there is no fraction to reduce.
      */
     public String key() {
-        BigDecimal at = numberOf(written);
-        if (at == null) {
-            return written.key();
-        }
-        int scale = Math.max(Math.max(at.scale(), per.scale()), 0);
-        BigInteger top = at.setScale(scale).unscaledValue();
-        BigInteger bottom = per.setScale(scale).unscaledValue();
-        BigInteger common = top.gcd(bottom);
-        if (common.signum() != 0) {
-            top = top.divide(common);
-            bottom = bottom.divide(common);
-        }
-        return top + "/" + bottom;
+        ExactRatio at = exactly();
+        return at == null ? written.key() : at.numerator() + "/" + at.denominator();
     }
 
     /**
@@ -74,12 +73,12 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * <p>An order with no numbers has no fraction to reduce, and its place is its own value.
      */
     public CutPosition canonical() {
-        BigDecimal at = numberOf(written);
+        ExactRatio at = exactly();
         if (at == null) {
             return new CutPosition(written.canonical(), per);
         }
-        BigDecimal[] rule = asARule();
-        return new CutPosition(reduced(written, rule[1]), rule[0]);
+        return new CutPosition(reduced(written, ExactRatio.of(at.numerator())),
+                ExactRatio.of(at.denominator()));
     }
 
     /**
@@ -94,11 +93,15 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
         return new CutPosition(written.negated(), per);
     }
 
-    /** The reduced numerator, put back on whatever order the line was written on. */
-    private static Level reduced(Level written, BigDecimal to) {
+    /**
+     * The reduced numerator, put back on whatever order the line was written on.
+     *
+     * <p>A whole number, so a carrier's order has a count at it wherever it has counts at all.
+     */
+    private static Level reduced(Level written, ExactRatio to) {
         return switch (written) {
-            case Level.ACount _ -> new Level.ACount(new Count(to));
-            case Level.OnACarrier on -> new Level.OnACarrier(on.of(), new Count(to));
+            case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
+            case Level.OnACarrier on -> Level.OnACarrier.held(on.of(), to);
         };
     }
 
@@ -113,7 +116,7 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * a search was handed a level of one order to look for on another.
      */
     public Level asALevelOfTheQuantity() {
-        return per.compareTo(BigDecimal.ONE) == 0 ? written : null;
+        return per.equals(ExactRatio.ONE) ? written : null;
     }
 
     /**
@@ -121,21 +124,20 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      *
      * <p>A line at a place is at {@code k} times that number where the unit is a {@code k}th of the
      * one it was said in: what a quantity's own level is, the form that wrote {@code k} of it calls
-     * {@code k} times as much. Multiplied rather than re-divided, so a line at a place no value
-     * stands at travels between the two orders exactly.
+     * {@code k} times as much.
      */
-    public CutPosition times(BigDecimal k) {
-        BigDecimal at = numberOf(written);
-        if (at == null || k.compareTo(BigDecimal.ONE) == 0) {
+    public CutPosition times(ExactRatio k) {
+        ExactRatio at = numberOf(written);
+        if (at == null || k.equals(ExactRatio.ONE)) {
             return this;
         }
         // Scaled by exactly the share the rule wrote, the share divides out: the line is at the
         // number the rule carried, in the units the rule carried it in. Left in, the position was
         // right and the reading of it was not — a line the form does stand at went on answering
         // that the quantity has no value there, and the run above it could not say where it starts.
-        return k.compareTo(per) == 0
-                ? new CutPosition(new Level.ACount(new Count(at)), BigDecimal.ONE)
-                : new CutPosition(new Level.ACount(new Count(at.multiply(k))), per);
+        return k.equals(per)
+                ? new CutPosition(new Level.OfTheQuantity(at), ExactRatio.ONE)
+                : new CutPosition(new Level.OfTheQuantity(at.times(k)), per);
     }
 
     /**
@@ -147,67 +149,55 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * wrote a multiple: {@code 2 * n == 8} names four and {@code 2 * n == 9} names nothing, and both
      * are lines of an order whose values are the even numbers.
      *
-     * <p>Divided here and nowhere else, because here is the one question that needs the quotient to
-     * be a value rather than a place: a rule that names a value names one the position holds or
-     * names none. A quotient that does not end is not one, and neither is one the carrier's own
-     * values step past.
+     * <p>The carrier edge for a line: an exact place becomes a value here or is none
+     * ({@link Count#at}). A third is no count at all, and a count the carrier's own values step past
+     * is no value of it either.
      */
     public souther.compiler.numeric.Place asAValueOf(souther.compiler.check.Carrier carrier) {
-        BigDecimal at = numberOf(written);
         if (carrier == null) {
             return null;
         }
+        ExactRatio at = exactly();
         // An order with no numbers is never scaled — a rule holding two strings apart writes the
         // whole of what it cuts — so its line is its own value and there is nothing to divide.
         if (at == null) {
-            return per.compareTo(BigDecimal.ONE) == 0 ? placeOf(written) : null;
+            return per.equals(ExactRatio.ONE) ? written.asAPlace() : null;
         }
-        BigDecimal quotient;
-        try {
-            quotient = at.divide(per);
-        } catch (ArithmeticException _) {
-            return null;   // a third is no value of anything this language writes
-        }
-        return carrier.onTheGrid(new Count(quotient));
+        Count count = Count.at(at);
+        return count == null ? null : carrier.onTheGrid(count);
     }
 
     /**
      * Whether a value of the quantity is below, at or above where this line falls.
      *
-     * <p>Asked by multiplying rather than by dividing, which is what lets a line at a place no value
-     * stands at be compared exactly: a fifth is under a third and a half is over it, and neither
-     * comparison needs a third to be written down.
-     *
-     * <p>The value is one of the quantity's own and the line was written in a multiple of it, so
-     * bringing them together is what this is for. A reader that compared the two as they stand put
-     * every decimal up to one below a line at a third.
+     * <p>Both are exact, so the comparison is exact and a line at a place no value stands at is
+     * compared without being written down: a fifth is under a third and a half is over it.
      */
     public int compare(Level value) {
-        BigDecimal at = numberOf(written);
-        BigDecimal of = numberOf(value);
+        ExactRatio line = exactly();
+        ExactRatio of = numberOf(value);
         // An order with no numbers is never scaled — a rule holding two strings apart writes the
         // whole of what it cuts — so the two are places of one order and compare as they stand.
-        if (at == null || of == null) {
-            return placeOf(value).compareTo(placeOf(written));
+        if (line == null || of == null) {
+            return value.asAPlace().compareTo(written.asAPlace());
         }
-        return of.multiply(per).compareTo(at);
+        return of.compareTo(line);
     }
 
     /**
      * Whether this line falls below, at or above where {@code other} does.
      *
-     * <p>Cross-multiplied rather than divided, for the reason the rest of this is: a line at a third
-     * and one at two sixths fall in one place, and neither of them is a number this language can
-     * write out to compare.
+     * <p>Exact, for the reason the rest of this is: a line at a third and one at two sixths fall in
+     * one place, and neither of them is a number this language can write out to compare.
      */
     @Override
     public int compareTo(CutPosition other) {
-        BigDecimal mine = numberOf(written);
-        BigDecimal theirs = numberOf(other.written);
+        ExactRatio mine = exactly();
+        ExactRatio theirs = other.exactly();
         if (mine == null || theirs == null) {
-            return placeOf(written).compareTo(placeOf(other.written));
+            return written.asAPlace().compareTo(other.written.asAPlace());
         }
-        return mine.multiply(other.per).compareTo(theirs.multiply(per));
+        return mine.compareTo(theirs);
     }
 
     /**
@@ -219,33 +209,39 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * no value at the line: {@code 3 * d <= 1} says exactly where the values part and says it in
      * numbers this language has, which dividing them out would not.
      *
-     * @return the multiple and the number it comes to, or null on an order with no numbers
+     * <p>The denominator is how much of the quantity and the numerator is what it comes to, which
+     * is what a ratio in lowest terms already holds.
+     *
+     * @return where the line falls, or null on an order with no numbers
      */
-    public BigDecimal[] asARule() {
-        BigDecimal at = numberOf(written);
-        if (at == null) {
-            return null;
+    public ExactRatio asARule() {
+        return exactly();
+    }
+
+    /**
+     * The same, asked of a number the quantity comes to.
+     *
+     * <p>For a reader holding what a form added up to at one row rather than a level of an order:
+     * the two are the same number and only one of them is a value of anything.
+     */
+    public int compare(ExactRatio value) {
+        ExactRatio line = exactly();
+        if (line == null) {
+            throw new IllegalStateException(
+                    "an order with no numbers was compared against one: " + written);
         }
-        int scale = Math.max(Math.max(at.scale(), per.scale()), 0);
-        BigInteger top = at.setScale(scale).unscaledValue();
-        BigInteger bottom = per.setScale(scale).unscaledValue();
-        BigInteger common = top.gcd(bottom);
-        if (common.signum() != 0) {
-            top = top.divide(common);
-            bottom = bottom.divide(common);
-        }
-        return new BigDecimal[] {new BigDecimal(bottom), new BigDecimal(top)};
+        return value.compareTo(line);
     }
 
     /** The same, asked of a place of the order this line falls on. */
     public int compare(souther.compiler.numeric.Place at) {
-        BigDecimal line = numberOf(written);
+        ExactRatio line = exactly();
         // The same two answers as above, and the second for the same reason: an order with no
         // numbers is never scaled, so its places compare as they stand — and two carriers' places
         // brought together say so themselves rather than arriving here as a null.
         return at instanceof Count count && line != null
-                ? count.at().multiply(per).compareTo(line)
-                : at.compareTo(placeOf(written));
+                ? count.exactly().compareTo(line)
+                : at.compareTo(written.asAPlace());
     }
 
     /**
@@ -259,16 +255,16 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * <p>Null on an order with no numbers, which is never scaled and so never needs this.
      */
     public souther.compiler.numeric.Place justBeyond(Towards towards, int digits) {
-        BigDecimal at = numberOf(written);
-        if (at == null) {
+        ExactRatio line = exactly();
+        if (line == null) {
             return null;
         }
-        BigDecimal past = at.divide(per, digits, towards == Towards.ABOVE
-                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
+        BigDecimal past = line.asDecimal(towards == Towards.ABOVE
+                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits);
         // Strictly past, which rounding gives only where the line is not itself a number of that
         // many digits. A line the quantity does stand at rounds to itself, and the run beyond it
         // does not hold it.
-        if (past.multiply(per).compareTo(at) == 0) {
+        if (ExactRatio.of(past).compareTo(line) == 0) {
             BigDecimal step = BigDecimal.ONE.movePointLeft(digits);
             past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
         }
@@ -284,42 +280,23 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
      * instead, a run narrower than the widest of them was reported as one no value of the position
      * lies inside, which is a false answer rather than a search that gave up.
      *
-     * <p>Exact, by comparing the two as fractions: the difference of {@code a/b} and {@code c/d} is
-     * {@code (ad - cb) / bd}, and the digits needed are what it takes for a tenth of that many to
-     * fit inside it. Zero where the two are the same place, which no run has.
+     * <p>Exact, because both lines are: the digits needed are what it takes for a tenth of that many
+     * to fit inside the distance. Zero where the two are the same place, which no run has.
      */
     public int digitsToTellApartFrom(CutPosition other) {
-        BigDecimal mine = numberOf(written);
-        BigDecimal theirs = numberOf(other.written);
+        ExactRatio mine = exactly();
+        ExactRatio theirs = other.exactly();
         if (mine == null || theirs == null) {
             return 0;
         }
-        int scale = Math.max(Math.max(mine.scale(), per.scale()),
-                Math.max(theirs.scale(), other.per.scale()));
-        scale = Math.max(scale, 0);
-        BigInteger a = mine.setScale(scale).unscaledValue();
-        BigInteger b = per.setScale(scale).unscaledValue();
-        BigInteger c = theirs.setScale(scale).unscaledValue();
-        BigInteger d = other.per.setScale(scale).unscaledValue();
-        BigInteger apart = a.multiply(d).subtract(c.multiply(b)).abs();
-        if (apart.signum() == 0) {
+        ExactRatio apart = mine.minus(theirs).abs();
+        if (apart.isZero()) {
             return 0;
         }
-        BigInteger over = b.multiply(d).abs();
-        return over.divide(apart).toString().length() + 1;
+        return ExactRatio.ONE.dividedBy(apart).floor().toString().length() + 1;
     }
 
-    private static souther.compiler.numeric.Place placeOf(Level level) {
-        return switch (level) {
-            case Level.ACount count -> count.at();
-            case Level.OnACarrier on -> on.at();
-        };
-    }
-
-    private static BigDecimal numberOf(Level level) {
-        return switch (level) {
-            case Level.ACount count -> count.at().at();
-            case Level.OnACarrier on -> on.at() instanceof Count count ? count.at() : null;
-        };
+    private static ExactRatio numberOf(Level level) {
+        return level.asANumber();
     }
 }

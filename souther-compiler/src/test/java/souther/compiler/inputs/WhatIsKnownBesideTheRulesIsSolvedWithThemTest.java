@@ -7,14 +7,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -100,11 +99,11 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     }
 
     private static LinearForm<NumericTerm> sum() {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(X, BigDecimal.ONE);
-        coefs.put(Y, BigDecimal.ONE);
-        coefs.put(Z, BigDecimal.ONE);
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(X, ExactRatio.ONE);
+        coefs.put(Y, ExactRatio.ONE);
+        coefs.put(Z, ExactRatio.ONE);
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     private static NumericTerm value(String field) {

@@ -10,6 +10,7 @@ import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -726,7 +727,7 @@ final class Terms {
         // A list written out has as many elements as it is written with, whatever they are.
         BigDecimal counted = writtenSize(n, at);
         if (counted != null) {
-            return LinearForm.constant(counted);
+            return LinearForm.constant(ExactRatio.of(counted));
         }
         FactSubject atom = atomOf(n, at);
         return atom == null ? null : LinearForm.atom(atom);
@@ -1107,8 +1108,8 @@ final class Terms {
      * reading has no number for, which is a fact about this reading. */
     private LinearForm<FactSubject> startedFrom(Accumulation.Identity identity) {
         return switch (identity) {
-            case ZERO -> LinearForm.constant(java.math.BigDecimal.ZERO);
-            case ONE -> LinearForm.constant(java.math.BigDecimal.ONE);
+            case ZERO -> LinearForm.constant(ExactRatio.ZERO);
+            case ONE -> LinearForm.constant(ExactRatio.ONE);
             case EMPTY -> null;
         };
     }

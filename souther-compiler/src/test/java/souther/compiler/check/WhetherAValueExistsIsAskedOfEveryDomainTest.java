@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
@@ -16,9 +17,7 @@ import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
-import java.lang.reflect.RecordComponent;
-import java.math.BigDecimal;
-import java.util.Map;
+import java.lang.reflect.RecordComponent;import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -126,7 +125,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     private static ConstraintState<FactSubject> numbersAtBottom() {
         // `1 <= 0`, which is how a reading already says that what it stands in is never reached.
         return ConstraintState.<FactSubject>top()
-                .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
+                .taking(LinearForm.constant(ExactRatio.ONE), Rel.LE, Map.of());
     }
 
     private static ConstraintState<FactSubject> factsAtBottom() {

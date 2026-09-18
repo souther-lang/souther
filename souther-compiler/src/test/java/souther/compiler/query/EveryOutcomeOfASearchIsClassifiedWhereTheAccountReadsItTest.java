@@ -192,7 +192,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     void aRowReadBackIsGroundsWhateverElseWasStopped() {
         ItemAssessment.Owed owed = new ItemAssessment.Owed(
                 new souther.compiler.partition.Criterion.AtTheLevel(
-                        souther.compiler.partition.Level.ACount.of(1)),
+                        souther.compiler.partition.Level.OfTheQuantity.of(1)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 ItemAssessment.WritabilityProjection.UNPROVEN,
                 new SearchOutcomes(List.of(stopped(), certified())));

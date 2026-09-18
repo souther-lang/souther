@@ -1,5 +1,6 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
@@ -614,7 +615,7 @@ public final class OperationFacts {
     private static souther.compiler.numeric.LinearForm<ArgumentRef> form(
             ArgumentRef argument, long times) {
         return souther.compiler.numeric.LinearForm.<ArgumentRef>atom(argument)
-                .times(java.math.BigDecimal.valueOf(times));
+                .times(ExactRatio.of(times));
     }
 
     private static OperationFact answers(

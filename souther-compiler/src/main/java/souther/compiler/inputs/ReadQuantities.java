@@ -18,8 +18,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -677,7 +675,8 @@ final class ReadQuantities implements Quantities {
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
                         LinearForm.<InputAtom>atom(atom)
-                                .minus(LinearForm.constant(BigDecimal.ONE)),
+                                .minus(LinearForm.constant(
+                                        ExactRatio.ONE)),
                         Rel.GE, Map.of(atom, spaced));
             }
         }
@@ -1050,9 +1049,9 @@ final class ReadQuantities implements Quantities {
      */
     private LinearForm<InputAtom> over(
             LinearForm<NumericTerm> form, StructuralContext under) {
-        Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) ->
-                coefs.merge(called(term, under), coef, BigDecimal::add));
+        Map<InputAtom, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((term, coef) -> coefs.merge(called(term, under), coef,
+                ExactRatio::plus));
         return new LinearForm<>(form.constant(), coefs);
     }
 
@@ -1405,8 +1404,10 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().size() != 1 || form.constant().signum() != 0) {
             return null;
         }
-        Map.Entry<NumericTerm, BigDecimal> one = form.coefs().entrySet().iterator().next();
-        return one.getValue().compareTo(BigDecimal.ONE) == 0 ? one.getKey() : null;
+        Map.Entry<NumericTerm, ExactRatio> one =
+                form.coefs().entrySet().iterator().next();
+        return one.getValue().equals(ExactRatio.ONE)
+                ? one.getKey() : null;
     }
 
     /**

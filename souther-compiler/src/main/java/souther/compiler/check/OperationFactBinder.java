@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
@@ -18,8 +19,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -262,7 +261,8 @@ final class OperationFactBinder {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
                 "what a form of its arguments is about");
         LinearForm<DeclaredArgument> bound = LinearForm.constant(form.constant());
-        for (Map.Entry<ArgumentRef, BigDecimal> each : form.coefs().entrySet()) {
+        for (Map.Entry<ArgumentRef, ExactRatio> each
+                : form.coefs().entrySet()) {
             DeclaredArgument argument = holdToTheDeclaration(declaration, each.getKey(), null,
                     TypeRequirement.COUNTED, "an argument the result is a form of");
             bound = bound.plus(LinearForm.<DeclaredArgument>atom(argument).times(each.getValue()));

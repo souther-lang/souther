@@ -4,6 +4,7 @@ import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
@@ -150,9 +151,11 @@ final class IntrinsicNumericFacts {
                                          LinearForm<FactSubject>> against,
                                  List<NumericConstraint> out) {
         for (ResultBound<DeclaredArgument> bound : rows) {
+            ExactRatio offset =
+                    ExactRatio.of(bound.offset());
             LinearForm<FactSubject> stands = bound.against() == null
-                    ? LinearForm.constant(bound.offset())
-                    : addTo(against.apply(bound.against()), bound.offset());
+                    ? LinearForm.constant(offset)
+                    : addTo(against.apply(bound.against()), offset);
             if (stands != null) {
                 out.add(new NumericConstraint(LinearForm.atom(atom).minus(stands), bound.rel()));
             }
@@ -189,7 +192,9 @@ final class IntrinsicNumericFacts {
         LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
         if (amount != null) {
             out.add(new NumericConstraint(
-                    LinearForm.atom(atom).minus(amount.times(shift.per())), Rel.EQ));
+                    LinearForm.atom(atom).minus(
+                            amount.times(ExactRatio.of(shift.per()))),
+                    Rel.EQ));
         }
     }
 
@@ -201,13 +206,22 @@ final class IntrinsicNumericFacts {
     }
 
     /** {@code form} with {@code offset} added, or null where the form could not be read. */
-    private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form, BigDecimal offset) {
+    private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form,
+                                                 ExactRatio offset) {
         return form == null ? null : form.plus(LinearForm.constant(offset));
     }
 
-    /** The constant {@code e} reads as, or null where it reads as none. */
+    /**
+     * The constant {@code e} reads as, or null where it reads as none.
+     *
+     * <p>Written out, because what asks is the library's own bound arithmetic and a declared bound
+     * is a number somebody wrote. A form that came to a value no decimal is has no such number, and
+     * that is null for the reason an unreadable expression is: what this hands over is a written
+     * constant or nothing, and never a rounding of one.
+     */
     private static BigDecimal constantOf(Core e, Denotations at, Terms terms) {
         LinearForm<FactSubject> form = terms.affineOf(e, at);
-        return form == null || !form.coefs().isEmpty() ? null : form.constant();
+        return form == null || !form.coefs().isEmpty() ? null
+                : form.constant().asWrittenDecimal();
     }
 }

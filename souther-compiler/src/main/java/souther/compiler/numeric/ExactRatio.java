@@ -238,6 +238,25 @@ public record ExactRatio(BigInteger numerator, BigInteger denominator) implement
         return new BigDecimal(numerator).divide(new BigDecimal(denominator), scale, towards);
     }
 
+    /**
+     * This as a reader is shown it: the decimal where one is this exactly, and the quotient of two
+     * whole numbers where none is.
+     *
+     * <p>The decimal first because that is what a model writes, and what every number reaching a
+     * report was until an exact scalar could hold something else. A coefficient of a half spelled
+     * {@code 1/2} in a document that used to say {@code 0.5} is a report changed by a
+     * representation, which is not a difference anybody asked for. A third has no decimal, and
+     * saying {@code 1/3} is the honest answer where rounding one would not be.
+     *
+     * <p>Apart from {@link #toString}, which is for a message about this compiler and says the plain
+     * shape of the number. This is for a sentence somebody reads about their own model.
+     */
+    public String spelled() {
+        BigDecimal written = asWrittenDecimal();
+        return written == null ? numerator + "/" + denominator
+                : written.stripTrailingZeros().toPlainString();
+    }
+
     @Override
     public String toString() {
         return isWhole() ? numerator.toString() : numerator + "/" + denominator;

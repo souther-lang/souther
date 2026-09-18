@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
@@ -263,7 +264,8 @@ public final class AffineForms {
         // divide being arithmetic this composes over positions, which it is not.
         BigDecimal folded = Terms.constantNumber(e, reading.symbols());
         if (folded != null) {
-            return new Outcome.Composed<>(LinearForm.constant(folded));
+            return new Outcome.Composed<>(
+                    LinearForm.constant(ExactRatio.of(folded)));
         }
         Outcome<A, E> denoted = read(e, at, reading, following);
         if (denoted instanceof Outcome.Composed<A, E> composedName) {
@@ -721,7 +723,7 @@ public final class AffineForms {
             return null;
         }
         Place at = carrier.literalOf(e, reading.symbols());
-        return at == null ? null : LinearForm.constant(Count.number(at).at());
+        return at == null ? null : LinearForm.constant(Count.number(at).exactly());
     }
 
     /**
@@ -743,7 +745,8 @@ public final class AffineForms {
         // met an expression an author would change — it has met this call.
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
-        for (Map.Entry<DeclaredArgument, BigDecimal> each : says.coefs().entrySet()) {
+        for (Map.Entry<DeclaredArgument, ExactRatio> each
+                : says.coefs().entrySet()) {
             // The call here may be the runnable tree's and not a kept one, so its argument count
             // is checked here rather than by a kept call's own constructor.
             int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));

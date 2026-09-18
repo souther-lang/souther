@@ -1,12 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
-
-import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Set;
 
@@ -130,7 +129,7 @@ public final class OccurrenceCounts {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }
         LinearForm<FactSubject> from = LinearForm.atom(counted)
-                .minus(LinearForm.constant(BigDecimal.valueOf(count)));
+                .minus(LinearForm.constant(ExactRatio.of(count)));
         return !seeded.numbers()
                 .assume(from, against, Map.of(counted, Granularity.DISCRETE))
                 .isBottom();

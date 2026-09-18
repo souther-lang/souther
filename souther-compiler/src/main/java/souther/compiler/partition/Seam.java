@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 /**
@@ -65,7 +66,8 @@ public record Seam(CutPosition at, Level below, Level above) {
         Level above = attains && belongsTo == Towards.ABOVE ? cut
                 : beside(space, cut, Towards.ABOVE);
         return new Seam(
-                new CutPosition(cut, into == null ? java.math.BigDecimal.ONE : into.per()),
+                new CutPosition(cut,
+                        into == null ? ExactRatio.ONE : into.per()),
                 inUnitsOf(below, into), inUnitsOf(above, into));
     }
 
@@ -92,7 +94,7 @@ public record Seam(CutPosition at, Level below, Level above) {
                 ? order.valueBelongs() : Towards.ABOVE;
         souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
                 of.direction();
-        java.math.BigDecimal per = QuantityKey.per(direction);
+        ExactRatio per = QuantityKey.per(direction);
         return of(of.levels(), at, belongsTo, new Scale(per, direction.coefs().size() == 1
                 ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
     }
@@ -106,7 +108,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * names the last value below and the first above, and the line's own value is one of those two
      * exactly where the quantity takes it.
      */
-    public Towards sideOf(souther.compiler.numeric.Place value) {
+    public Towards sideOf(ExactRatio value) {
         int where = at.compare(value);
         if (where != 0) {
             return where < 0 ? Towards.BELOW : Towards.ABOVE;
@@ -126,13 +128,21 @@ public record Seam(CutPosition at, Level below, Level above) {
         // A rule that wrote the whole of the quantity wrote it in the quantity's own units, so
         // there is nothing to read back — including where the quantity has no numbers at all. A
         // rule holds two strings apart and writes the whole of what it cuts, and asking such a
-        // level for its number is what {@link Level#asACount} exists to refuse.
-        if (level == null || into == null || into.per().compareTo(java.math.BigDecimal.ONE) == 0) {
+        // level for its number is what {@link Level#asAnExactNumber} exists to refuse.
+        if (level == null || into == null
+                || into.per().equals(ExactRatio.ONE)) {
             return level;
         }
-        java.math.BigDecimal at = level.asACount().at().divide(into.per());
-        return into.onto() == null ? new Level.ACount(new souther.compiler.numeric.Count(at))
-                : new Level.OnACarrier(into.onto(), new souther.compiler.numeric.Count(at));
+        ExactRatio at = level.asAnExactNumber().dividedBy(into.per());
+        if (into.onto() == null) {
+            return new Level.OfTheQuantity(at);
+        }
+        // The carrier edge, crossed by a reader that has established it can be: a level the written
+        // form attains is a whole multiple of what that form wrote, so reading it back in the
+        // quantity's own units lands on a value the position holds. Both halves of that are asked,
+        // because a number can be a count and be no value of this order — a half is a count and no
+        // whole number is one.
+        return Level.OnACarrier.held(into.onto(), at);
     }
 
     /**
@@ -174,7 +184,8 @@ public record Seam(CutPosition at, Level below, Level above) {
      * @param per  how much of the quantity the form wrote ({@link QuantityKey#per})
      * @param onto the carrier the quantity's own values are ordered by, or null where it has none
      */
-    public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
+    public record Scale(ExactRatio per,
+                        souther.compiler.check.Carrier onto) {}
 
     /**
      * The same division of the quantity read the other way round.
@@ -201,8 +212,8 @@ public record Seam(CutPosition at, Level below, Level above) {
      * on, and each rule reads its rows through the form it was written as. Nothing here needs the
      * line to be a value of anything — it is a change of unit and not a change of order.
      */
-    Seam scaledBy(java.math.BigDecimal k) {
-        if (k.compareTo(java.math.BigDecimal.ONE) == 0) {
+    Seam scaledBy(ExactRatio k) {
+        if (k.equals(ExactRatio.ONE)) {
             return this;
         }
         return new Seam(at.times(k), scaled(below, k), scaled(above, k));
@@ -215,20 +226,20 @@ public record Seam(CutPosition at, Level below, Level above) {
      * times a decimal is not a decimal the position is written at. So what comes back is counted
      * rather than carried on a carrier, whichever of the two went in.
      */
-    private static Level scaled(Level level, java.math.BigDecimal k) {
+    private static Level scaled(Level level, ExactRatio k) {
         if (level == null) {
             return null;
         }
-        java.math.BigDecimal at = switch (level) {
-            case Level.ACount count -> count.at().at();
+        ExactRatio at = switch (level) {
+            case Level.OfTheQuantity counted -> counted.at();
             case Level.OnACarrier on -> on.at() instanceof souther.compiler.numeric.Count count
-                    ? count.at() : null;
+                    ? count.exactly() : null;
         };
         if (at == null) {
             throw new IllegalStateException(
                     "an order with no numbers was asked for a multiple of one: " + level);
         }
-        return new Level.ACount(new souther.compiler.numeric.Count(at.multiply(k)));
+        return new Level.OfTheQuantity(at.times(k));
     }
 
     /**
@@ -271,19 +282,20 @@ public record Seam(CutPosition at, Level below, Level above) {
      * @param muchOf how the reader writes so much of the quantity, which is the quantity's own
      *               answer where the reader has one to ask
      */
-    public String asARuleAbout(java.util.function.Function<java.math.BigDecimal, String> muchOf,
-                               Towards side) {
-        java.math.BigDecimal[] rule = at.asARule();
+    public String asARuleAbout(
+            java.util.function.Function<ExactRatio, String> muchOf,
+            Towards side) {
+        ExactRatio rule = at.asARule();
         if (rule == null) {
             return null;
         }
-        String much = muchOf.apply(rule[0]);
-        return side == Towards.ABOVE ? plain(rule[1]) + " < " + much
-                : much + " <= " + plain(rule[1]);
-    }
-
-    private static String plain(java.math.BigDecimal number) {
-        return number.stripTrailingZeros().toPlainString();
+        // The denominator is how much of the quantity and the numerator is what it comes to, which
+        // is what a ratio in lowest terms holds: `3 * x <= 1` is the line at a third written as a
+        // rule, and the two numbers are the ones an author would write.
+        String much = muchOf.apply(
+                ExactRatio.of(rule.denominator()));
+        return side == Towards.ABOVE ? rule.numerator() + " < " + much
+                : much + " <= " + rule.numerator();
     }
 
     /**

@@ -11,6 +11,7 @@ import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
@@ -29,8 +30,6 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -3399,7 +3398,7 @@ public final class InvariantChecker {
          * position at all — asked by the one authority for that question, which is the walk over
          * the clause, and not by this.
          */
-        record CutsNothing(StatedComparison comparison, BigDecimal residue)
+        record CutsNothing(StatedComparison comparison, ExactRatio residue)
                 implements CanonicalForm {
 
             /**

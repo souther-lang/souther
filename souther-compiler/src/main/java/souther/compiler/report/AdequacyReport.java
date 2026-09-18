@@ -4320,9 +4320,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 carrier(into.putObject("carrier"), on.of());
                 into.put("at", on.at().key());
             }
-            case Level.ACount count -> {
+            case Level.OfTheQuantity counted -> {
                 into.put("kind", "a_count");
-                into.put("at", count.at().key());
+                into.put("at", counted.at().spelled());
             }
         }
     }
@@ -4401,7 +4401,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case FarEnd.AtTheDomain(var reaches) -> {
                 into.put("kind", "at_the_domain");
                 level(into.putObject("at"), reaches.at().written());
-                into.put("per", reaches.at().per().toPlainString());
+                into.put("per", reaches.at().per().spelled());
                 into.put("inclusive", reaches.inclusive());
             }
             case FarEnd.AtTheOrderEnd(var towards) -> {

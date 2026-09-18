@@ -6,7 +6,6 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -38,7 +37,7 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
     private static final NumericTerm.ValueOf THERE = new NumericTerm.ValueOf(TermPath.of("there"));
 
     private static final Criterion AT_A_HUNDRED =
-            new Criterion.AtTheLevel(new Level.ACount(Count.of(100)));
+            new Criterion.AtTheLevel(Level.OfTheQuantity.of(100));
 
     @Test
     void aRowReadOnTheQuantitysOwnOrdersIsAnswered() {

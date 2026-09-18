@@ -10,7 +10,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -69,8 +69,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
 
     /** {@code d - n}, the difference of a decimal position and a whole-number one. */
     private static LinearForm<NumericTerm> aDecimalLessAnInt() {
-        return new LinearForm<>(BigDecimal.ZERO,
-                Map.of(value("d"), BigDecimal.ONE, value("n"), BigDecimal.ONE.negate()));
+        return new LinearForm<>(ExactRatio.ZERO,
+                Map.of(value("d"), ExactRatio.ONE, value("n"), ExactRatio.ONE.negated()));
     }
 
     /**
@@ -87,10 +87,10 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     @Test
     void twoDatesAndAWholeNumberAreOneQuantity() {
         LinearForm<NumericTerm> daysBetweenLessN =
-                new LinearForm<>(BigDecimal.ZERO,
-                        Map.of(value("to"), BigDecimal.ONE,
-                                value("from"), BigDecimal.ONE.negate(),
-                                value("n"), BigDecimal.ONE.negate()));
+                new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(value("to"), ExactRatio.ONE,
+                                value("from"), ExactRatio.ONE.negated(),
+                                value("n"), ExactRatio.ONE.negated()));
 
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", daysBetweenLessN,
                 Map.of(value("to"), on("to", Carrier.DATE), value("from"), on("from", Carrier.DATE),
@@ -192,7 +192,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
 
         Standing standing = over.standingAt(
-                new Criterion.AtTheLevel(new Level.ACount(Count.of(new BigDecimal("2.5")))));
+                new Criterion.AtTheLevel(
+                        new Level.OfTheQuantity(ExactRatio.of(new BigDecimal("2.5")))));
 
         assertInstanceOf(Standing.OfAForm.class, standing);
         assertEquals(Map.of(value("d"), Carrier.DENSE, value("n"), Carrier.WHOLE),
@@ -221,14 +222,14 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     @Test
     void aFormThatPutsTheDensePositionOnACosetIsStillReached() {
         LinearForm<NumericTerm> thriceD = new LinearForm<>(
-                BigDecimal.ZERO,
-                Map.of(value("d"), new BigDecimal("3"), value("n"), BigDecimal.ONE));
+                ExactRatio.ZERO,
+                Map.of(value("d"), ExactRatio.of(3), value("n"), ExactRatio.ONE));
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", thriceD,
                 Map.of(value("d"), on("d", Carrier.DENSE), value("n"), on("n", Carrier.WHOLE)));
 
         Realization made = new LevelRealizer().realize(
                 over.standingAt(
-                        new Criterion.AtTheLevel(new Level.ACount(Count.of(BigDecimal.ONE)))),
+                        new Criterion.AtTheLevel(new Level.OfTheQuantity(ExactRatio.ONE))),
                 region(), NothingTheDeclarationsRefuse.at());
 
         assertInstanceOf(Realization.Found.class, made,

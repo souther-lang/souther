@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
@@ -27,8 +28,6 @@ import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.WhichLine;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,15 +81,15 @@ final class TheLinesBesideABorder {
      * {@code x} somewhere else, so this is a way that makes them one line as far as a row goes.
      */
     static WayToTheBorder aWayThatHoldsXAtNought() {
-        Map<NumericTerm, BigDecimal> onlyX = new LinkedHashMap<>();
-        onlyX.put(X, BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> onlyX = new LinkedHashMap<>();
+        onlyX.put(X, ExactRatio.ONE);
         return new WayToTheBorder(List.of(
                 new OnTheWay.TakenIn(anchor(),
                         new TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.ZERO, onlyX), Rel.LE)),
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE)),
                 new OnTheWay.TakenIn(anchor(),
                         new TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.ZERO, onlyX), Rel.GE))));
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE))));
     }
 
     /**
@@ -103,13 +102,13 @@ final class TheLinesBesideABorder {
      * {@code z} was.
      */
     static WayToTheBorder aWayOverAPositionTheBorderIsNotOn() {
-        Map<NumericTerm, BigDecimal> xAndZ = new LinkedHashMap<>();
-        xAndZ.put(X, BigDecimal.ONE);
-        xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> xAndZ = new LinkedHashMap<>();
+        xAndZ.put(X, ExactRatio.ONE);
+        xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), ExactRatio.ONE);
         return new WayToTheBorder(List.of(
                 new OnTheWay.TakenIn(anchor(),
                         new TakenConstraint.Affine(
-                                new LinearForm<>(BigDecimal.valueOf(-10), xAndZ), Rel.LE))));
+                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE))));
     }
 
     /** And one holding a condition nothing turned into something a row can be held against. */
@@ -126,13 +125,13 @@ final class TheLinesBesideABorder {
 
     /** What the rows are weighed by: {@code x} at minus two and {@code y} at one. */
     private static BorderQuantity form() {
-        Map<NumericTerm, BigDecimal> weights = new LinkedHashMap<>();
-        weights.put(X, BigDecimal.valueOf(-2));
-        weights.put(Y, BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        weights.put(X, ExactRatio.of(-2));
+        weights.put(Y, ExactRatio.ONE);
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         on.put(X, TermOrdersFixtures.itself(X, WHOLE));
         on.put(Y, TermOrdersFixtures.itself(Y, WHOLE));
-        return new BorderQuantity.OverAForm("f", new LinearForm<>(BigDecimal.ZERO, weights), on);
+        return new BorderQuantity.OverAForm("f", new LinearForm<>(ExactRatio.ZERO, weights), on);
     }
 
     private static LineFacts ordered() {
@@ -142,7 +141,7 @@ final class TheLinesBesideABorder {
     private static Border over(LineFacts facts, BorderQuantity of) {
         BoundaryTarget target = BoundaryTarget.at(of,
                 of instanceof BorderQuantity.OverAForm
-                        ? new Level.ACount(Count.of(0))
+                        ? Level.OfTheQuantity.of(0)
                         : new Level.OnACarrier(WHOLE, Count.of(0)));
         LineOrigin origin = new LineOrigin.EnsuresOrigin(
                 new WhichLine.OfAComparisonOfAPart(

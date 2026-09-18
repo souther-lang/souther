@@ -8,7 +8,6 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
@@ -64,7 +63,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
             TermOrdersFixtures.itself(OTHER_TOTAL, new Carrier.Whole());
 
     private static final Criterion AT_A_HUNDRED =
-            new Criterion.AtTheLevel(new Level.ACount(Count.of(100)));
+            new Criterion.AtTheLevel(Level.OfTheQuantity.of(100));
 
     /**
      * A run holding a value the limits stopped is unreadable, and says which stopped it.

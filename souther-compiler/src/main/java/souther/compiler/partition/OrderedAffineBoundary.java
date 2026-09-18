@@ -4,11 +4,10 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -126,7 +125,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * opposite sides of it.
      */
     public boolean satisfiedBy(Map<NumericTerm, Place> values) {
-        return seam.sideOf(new Count(along(direction().direction(), values))) == satisfiedOn;
+        return seam.sideOf(along(direction().direction(), values)) == satisfiedOn;
     }
 
     /**
@@ -137,16 +136,16 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * Written here for both the line the model drew and the lines it did not, so that neither is
      * scored by a rule the other is not.
      */
-    public static BigDecimal along(Map<NumericTerm, BigDecimal> direction,
+    public static ExactRatio along(Map<NumericTerm, ExactRatio> direction,
                                    Map<NumericTerm, Place> values) {
-        BigDecimal at = BigDecimal.ZERO;
-        for (Map.Entry<NumericTerm, BigDecimal> each : direction.entrySet()) {
+        ExactRatio at = ExactRatio.ZERO;
+        for (Map.Entry<NumericTerm, ExactRatio> each : direction.entrySet()) {
             Place held = values.get(each.getKey());
             if (held == null) {
                 throw new IllegalArgumentException("a row read at a quantity holds a number at each"
                         + " of its positions, and holds none at " + each.getKey());
             }
-            at = at.add(Count.number(held).at().multiply(each.getValue()));
+            at = at.plus(Count.number(held).exactly().times(each.getValue()));
         }
         return at;
     }
@@ -170,7 +169,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
         // In the order the quantity's own form is spelled in, so that an input and the line it is
         // an input of name their positions the same way round. Taken in the order the terms were
         // recorded, a reader compares a form written one way against a row written another.
-        for (Map.Entry<NumericTerm, BigDecimal> each
+        for (Map.Entry<NumericTerm, ExactRatio> each
                 : AffineReading.ordered(of.direction())) {
             NumericTerm term = each.getKey();
             Place at = values.get(term);
@@ -190,19 +189,19 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * names a line the model did not draw writes it beside the one it did, and two renderings would
      * have the pair a reader is comparing spelled two ways.
      */
-    public static String spelled(Map<NumericTerm, BigDecimal> direction) {
+    public static String spelled(Map<NumericTerm, ExactRatio> direction) {
         StringBuilder out = new StringBuilder();
-        for (Map.Entry<NumericTerm, BigDecimal> each
-                : AffineReading.ordered(new LinearForm<>(BigDecimal.ZERO, direction))) {
-            BigDecimal coef = each.getValue();
+        for (Map.Entry<NumericTerm, ExactRatio> each
+                : AffineReading.ordered(new LinearForm<>(ExactRatio.ZERO, direction))) {
+            ExactRatio coef = each.getValue();
             if (out.isEmpty()) {
                 out.append(coef.signum() < 0 ? "-" : "");
             } else {
                 out.append(coef.signum() < 0 ? " - " : " + ");
             }
-            BigDecimal size = coef.abs();
-            if (size.compareTo(BigDecimal.ONE) != 0) {
-                out.append(size.stripTrailingZeros().toPlainString()).append(" * ");
+            ExactRatio size = coef.abs();
+            if (!size.equals(ExactRatio.ONE)) {
+                out.append(size.spelled()).append(" * ");
             }
             out.append(each.getKey());
         }

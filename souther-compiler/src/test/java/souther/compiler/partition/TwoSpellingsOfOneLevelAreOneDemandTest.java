@@ -11,6 +11,7 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -67,7 +68,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         assertNotEquals(at("0").canonical(), onWhole.canonical(),
                 "one number on two orders is two levels");
         assertNotEquals(at("0").canonical(),
-                new Level.ACount(new Count(BigDecimal.ZERO)).canonical(),
+                Level.OfTheQuantity.of(0).canonical(),
                 "and a number the quantity counts to is on no carrier at all");
         assertEquals(at("0").key(), onWhole.key(),
                 "which the key does not tell apart, being about the place alone");
@@ -123,10 +124,10 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     /** A line at a third and one at two sixths fall in one place, so they are one debt. */
     @Test
     void oneLineWrittenInTwoUnitsIsOneDebt() {
-        CutPosition third = new CutPosition(new Level.ACount(new Count(BigDecimal.ONE)),
-                new BigDecimal("3"));
-        CutPosition twoSixths = new CutPosition(new Level.ACount(new Count(new BigDecimal("2"))),
-                new BigDecimal("6"));
+        CutPosition third = new CutPosition(Level.OfTheQuantity.of(1),
+                ExactRatio.of(3));
+        CutPosition twoSixths = new CutPosition(Level.OfTheQuantity.of(2),
+                ExactRatio.of(6));
 
         assertEquals(third.key(), twoSixths.key(), "which is what the key already said");
         assertEquals(third.canonical(), twoSixths.canonical(), "and now what the value says");

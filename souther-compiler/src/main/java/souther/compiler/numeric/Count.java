@@ -60,6 +60,59 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
+     * The count an exact number is, or null where no count is it.
+     *
+     * <p><b>The edge exact reasoning becomes a value on a carrier at, for a reader asking whether
+     * it does.</b> Every carrier's order is counted in decimals and the algebra above it is not: a
+     * form weighed by a third puts a level a third along, and no count is a third. Null says that
+     * and never that this could not work it out — {@link ExactRatio#asWrittenDecimal} is exact, so a
+     * caller is told which of the two it has rather than handed a number that cannot be asked.
+     *
+     * <p>Whether the carrier holds the count it is a separate question and the carrier's own
+     * ({@link Granularity}): a third is no count anywhere, and a half is a count no whole-numbered
+     * order stands at.
+     *
+     * <p>For a caller that has established there is one, {@link #number(ExactRatio)}. The two are
+     * the same edge asked by two kinds of reader, and which of them a caller is decides what a
+     * missing count means — so it is said in the signature rather than worked out again at each
+     * call.
+     */
+    public static Count at(ExactRatio number) {
+        BigDecimal written = number.asWrittenDecimal();
+        return written == null ? null : new Count(written);
+    }
+
+    /**
+     * The count an exact number is, where the caller has established that one is.
+     *
+     * <p>The same narrowing {@link #number(Place)} is, asked of the other side of the edge: there,
+     * a caller holding a place has established which carrier it is on; here, a caller holding an
+     * exact number has established that a carrier's order counts to it. A level the written form
+     * attains is a whole multiple of what that form wrote, so reading it back in the quantity's own
+     * units lands on a number the order has — and a reader that has that in hand has no use for an
+     * absence.
+     *
+     * <p>Refused rather than answered with a level of the exact side. The two are values of
+     * different spaces, and one handed over where the other was asked for travels until something
+     * far from here asks it for a place. What reaches this is this compiler having broken the
+     * premise the caller stands on, so it is said where the premise is.
+     */
+    public static Count number(ExactRatio at) {
+        Count count = at(at);
+        if (count == null) {
+            throw new IllegalStateException(
+                    "no count on any carrier's order is this number: " + at);
+        }
+        return count;
+    }
+
+    /** This count as the exact number it is, which never loses anything: every finite decimal is a
+     *  ratio. */
+    public ExactRatio exactly() {
+        return ExactRatio.of(at);
+    }
+
+    /**
      * The count {@code steps} further along the order.
      *
      * <p>Whole steps only. What one step means is the carrier's — a day for a date, a second for a
@@ -79,9 +132,13 @@ public record Count(BigDecimal at) implements Place {
      *
      * <p>Both are counts, because the domain that proves what a position holds reasons over
      * differences: {@code a - b <= 0} bounds one position through another, and what it carries either
-     * side of the comparison is a coordinate. Scaling is there for the same reason — a rule may relate
-     * a position to a multiple of another — and the factor is a plain number rather than a count,
-     * since a coefficient is not a place on any order.
+     * side of the comparison is a coordinate. Scaling is there for the same reason — a run is
+     * stepped by so many of its steps — and the factor is a plain number rather than a count, since
+     * how many steps is no place on any order.
+     *
+     * <p>Not what weighs a count by a coefficient. What a form comes to is on no carrier's order at
+     * all and need not be a number any carrier counts to, so that arithmetic is
+     * {@link ExactRatio}'s, reached through {@link #exactly}.
      */
     public Count plus(Count other) {
         return new Count(at.add(other.at));

@@ -7,7 +7,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
@@ -54,7 +53,7 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
             new NumericTerm.ValueOf(TermPath.of("levies").element().then("amount"));
 
     private static final Criterion AT_A_HUNDRED =
-            new Criterion.AtTheLevel(new Level.ACount(Count.of(100)));
+            new Criterion.AtTheLevel(Level.OfTheQuantity.of(100));
 
     /** The row's answer, however the form carrying the term is written. */
     @Test

@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -2262,7 +2263,7 @@ public final class FieldDomains {
         if (form.isEmpty()) {
             return null;
         }
-        Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
+        Map<FactSubject, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<NumberAt<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
             NumberAt<RuleKey> at = each.getKey();
             FactSubject atom = switch (at.of()) {
@@ -2276,10 +2277,11 @@ public final class FieldDomains {
             }
             // Two coordinates of one form can be one atom — a form is written over the names a
             // rule writes, and a rule may write one of them twice.
-            coefs.merge(atom, each.getValue(), java.math.BigDecimal::add);
+            coefs.merge(atom, ExactRatio.of(each.getValue()),
+                    ExactRatio::plus);
         }
         return constraints.numbers().boundsOf(
-                new LinearForm<>(java.math.BigDecimal.ZERO, coefs));
+                new LinearForm<>(ExactRatio.ZERO, coefs));
     }
 
     /**

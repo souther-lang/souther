@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
@@ -17,8 +18,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,10 +105,10 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
 
     /** {@code cx·x + cy·y + k} over the two positions the behavior declares. */
     private static LinearForm<NumericTerm> form(long cx, long cy, long k) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(term("x"), BigDecimal.valueOf(cx));
-        coefs.put(term("y"), BigDecimal.valueOf(cy));
-        return new LinearForm<>(BigDecimal.valueOf(k), coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(term("x"), ExactRatio.of(cx));
+        coefs.put(term("y"), ExactRatio.of(cy));
+        return new LinearForm<>(ExactRatio.of(k), coefs);
     }
 
     private static LinearForm<NumericTerm> sum() {

@@ -122,7 +122,7 @@ public final class DomainEnd {
         }
         Level at = like instanceof Level.OnACarrier on
                 ? new Level.OnACarrier(on.of(), end.at())
-                : new Level.ACount(Count.number(end.at()));
+                : new Level.OfTheQuantity(Count.number(end.at()).exactly());
         Optional<Level> value = end.inclusive() ? space.nearestAtOrBeyond(at, side.inward())
                 : Border.beyond(space, at, side.inward());
         if (value.isPresent()) {

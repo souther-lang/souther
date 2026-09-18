@@ -32,12 +32,12 @@ class NumericDomainTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(n));
+        return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
     /** {@code coefficient · atom}, which is how a bound with a divisor is written. */
     private static LinearForm<String> times(long coefficient, String a) {
-        return atom(a).times(BigDecimal.valueOf(coefficient));
+        return atom(a).times(ExactRatio.of(coefficient));
     }
 
     private static Map<String, Granularity> spaced(Granularity g, String... atoms) {
@@ -341,7 +341,7 @@ class NumericDomainTest {
     @Test
     void anEndAtAValueNoDecimalWritesIsRoundedPast() {
         NumericDomain<String> d = NumericDomain.<String>top()
-                .assume(atom(A).times(java.math.BigDecimal.valueOf(3)).minus(num(1)),
+                .assume(atom(A).times(ExactRatio.of(3)).minus(num(1)),
                         Rel.LE, dense(A));
         assertFalse(d.endsAreWrittenExactly(A));
         assertTrue(d.boundsOf(A).max().at() instanceof Count at
