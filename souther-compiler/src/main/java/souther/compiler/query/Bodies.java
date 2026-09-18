@@ -57,6 +57,22 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.claims.ClaimDiagnostics;
+import souther.compiler.claims.Claims;
+import souther.compiler.claims.UnreachableClaims;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.Expandable;
+import souther.compiler.check.PathReachability;
+import souther.compiler.check.UninhabitableTypes;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.DecisionSource;
+import souther.compiler.coverage.DecisionSources;
+import souther.compiler.coverage.ModuleBodies;
+import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.SuppliedRules;
+import souther.compiler.sites.SemanticSnapshot;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -463,7 +479,7 @@ public final class Bodies {
      * of its own, and the second reader of a revision is handed the first reader's.
      *
      * <p>Asked here rather than kept on the snapshot that reads it. A {@link
-     * souther.compiler.sites.SemanticSnapshot} is built where it is used and dropped there, which is
+     * SemanticSnapshot} is built where it is used and dropped there, which is
      * what makes it safe to ask about a buffer mid-edit; a field on one would live for one question.
      *
      * <p>Absent where the module's names are not resolved or its signatures could not be worked out.
@@ -904,7 +920,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, StatedContract>> compute(Db db) {
-            Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
+            Answer<Expandable> expandable = db.ask(new Shapes.Expandable(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, DeclaredSig>> signatures = db.ask(new DeclaredSignatures(name));
             Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
@@ -2560,7 +2576,7 @@ public final class Bodies {
                 // renames no binding, so what is read now is as true of what it answers with.
                 return Answer.of(new CheckedBody(
                         GrowingFold.rewrite(core, scope.value().theWalk()),
-                        souther.compiler.check.ElementBindings.of(core,
+                        ElementBindings.of(core,
                                 body.value().provenance(), Shapes.declarationNewtypes(db)),
                         // Who owns the rule each fork decides by, read off the declarations that
                         // wrote them. Read here because here is where the declarations are: after
@@ -2569,7 +2585,7 @@ public final class Bodies {
                         // The behavior's own declaration beside the ones it can reach: its forks
                         // are written in it and nowhere else, and a reading without it leaves every
                         // one of them to whatever answer absence is given.
-                        souther.compiler.coverage.DecisionSources.of(
+                        DecisionSources.of(
                                 inliner.value().reachable(),
                                 // Reached as this module reaches its own behavior, which is bare —
                                 // the forks below are looked up by the reference a call carries,
@@ -2618,22 +2634,22 @@ public final class Bodies {
      * they are addresses of has to be the one that answer carries, and a numbering decided here
      * would be a second one of the same module for every later reader to hold a claim against.
      */
-    private static Map<String, souther.compiler.claims.Claims> judged(
-            Db db, souther.compiler.coverage.ModuleBodies of, Hir.Module settled,
-            souther.compiler.coverage.CoverageSites.Plan plan) {
+    private static Map<String, Claims> judged(
+            Db db, ModuleBodies of, Hir.Module settled,
+            CoverageSites.Plan plan) {
         String module = of.module();
         Map<String, Core> bodies = of.bodies();
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, InputDomain>> inputs =
-                db.ask(new souther.compiler.query.Adequacy.Inputs(module));
+                db.ask(new Adequacy.Inputs(module));
         Answer<Map<String, Sig>> sigs = db.ask(new Signatures(module));
         Answer<RuleReadingSource> reading =
                 Shapes.ruleReading(db, module);
         if (!scope.present() || !inputs.present() || !sigs.present() || !reading.present()) {
             return Map.of();
         }
-        Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
+        Map<String, Claims> out = new LinkedHashMap<>();
         // One world for every behavior of the module, since every walk below reads in it.
         RuleReadingContext ruleReading =
                 RuleReadingContext.of(reading.value(), policy, db.readings());
@@ -2652,10 +2668,10 @@ public final class Bodies {
                 continue;
             }
             Hir.FnDef fn = db.ask(new SettledFn(module, spec.name())).value();
-            out.put(spec.name(), souther.compiler.claims.Claims.of(
-                    souther.compiler.claims.UnreachableClaims.of(body, read, scope.value(),
+            out.put(spec.name(), Claims.of(
+                    UnreachableClaims.of(body, read, scope.value(),
                             ruleReading.source().newtypes(), plan),
-                    souther.compiler.check.PathReachability.of(body,
+                    PathReachability.of(body,
                             fn == null ? null : SpecImplementation.align(spec, fn),
                             plan, read, ruleReading)));
         }
@@ -2668,15 +2684,15 @@ public final class Bodies {
     /** The claims a model's own rules contradict, as reports. Read from the judging above rather
      *  than judged again: what refuses a build and what a report prints are one answer. */
     private static List<Report> contradicted(Db db, String module,
-                                             Map<String, souther.compiler.claims.Claims> claims) {
+                                             Map<String, Claims> claims) {
         Answer<Map<String, InputDomain>> inputs =
-                db.ask(new souther.compiler.query.Adequacy.Inputs(module));
+                db.ask(new Adequacy.Inputs(module));
         if (!inputs.present()) {
             return List.of();
         }
         List<Report> out = new ArrayList<>();
         claims.forEach((behavior, judged) -> {
-            for (Diagnostic refused : souther.compiler.claims.ClaimDiagnostics.refusals(
+            for (Diagnostic refused : ClaimDiagnostics.refusals(
                     judged, inputs.value().get(behavior))) {
                 out.add(Report.of(refused));
             }
@@ -2730,7 +2746,7 @@ public final class Bodies {
             // out here. What the check reads is that fact; the clauses it was read from are not
             // something a body's answer turns on, and depending on them would re-check every body
             // beside a declaration that cannot change it.
-            Answer<souther.compiler.check.UninhabitableTypes.WithNoValue> withNoValue =
+            Answer<UninhabitableTypes.WithNoValue> withNoValue =
                     db.ask(new Shapes.TypesWithNoValue(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !unwritten.present()
@@ -2811,9 +2827,9 @@ public final class Bodies {
      *                 about this body and the rules it is judged against, and where those rules are
      *                 written is a question {@link InvariantWarnings} asks when it points at one
      */
-    public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements,
-                             souther.compiler.coverage.DecisionSources decisions,
-                             souther.compiler.coverage.SuppliedRules supplied,
+    public record CheckedBody(Core body, ElementBindings elements,
+                             DecisionSources decisions,
+                             SuppliedRules supplied,
                              AnalysisBody analysis,
                              List<InvariantFinding> found) {
 
@@ -2843,23 +2859,23 @@ public final class Bodies {
      */
     public static final class Elaborated {
 
-        private final souther.compiler.coverage.ModuleBodies of;
+        private final ModuleBodies of;
         private final Map<String, Core> emittedHelpers;
-        private final Map<String, souther.compiler.claims.Claims> claims;
-        private final Map<String, souther.compiler.check.ElementBindings> elements;
-        private final souther.compiler.coverage.DecisionSources decisions;
-        private final souther.compiler.coverage.SuppliedRules supplied;
+        private final Map<String, Claims> claims;
+        private final Map<String, ElementBindings> elements;
+        private final DecisionSources decisions;
+        private final SuppliedRules supplied;
         private final Map<String, AnalysisBody> analysed;
-        private final souther.compiler.coverage.CoverageSites.Plan plan;
+        private final CoverageSites.Plan plan;
 
-        private Elaborated(souther.compiler.coverage.ModuleBodies of,
+        private Elaborated(ModuleBodies of,
                            Map<String, Core> emittedHelpers,
-                           Map<String, souther.compiler.claims.Claims> claims,
-                           Map<String, souther.compiler.check.ElementBindings> elements,
-                           souther.compiler.coverage.DecisionSources decisions,
-                           souther.compiler.coverage.SuppliedRules supplied,
+                           Map<String, Claims> claims,
+                           Map<String, ElementBindings> elements,
+                           DecisionSources decisions,
+                           SuppliedRules supplied,
                            Map<String, AnalysisBody> analysed,
-                           souther.compiler.coverage.CoverageSites.Plan plan) {
+                           CoverageSites.Plan plan) {
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
@@ -2889,7 +2905,7 @@ public final class Bodies {
          * put in it — so two answers built from equal trees have plans that address different
          * things and could never compare equal, however alike the modules are. What is stable
          * across two such builds is what the plan is a numbering of, and that is a value: two
-         * checks of one module come to one {@link souther.compiler.coverage.NumberingIdentity}.
+         * checks of one module come to one {@link NumberingIdentity}.
          * Reading the plan here would deny every answer its own recomputation and leave everything
          * downstream of the check running on every revision.
          */
@@ -2928,7 +2944,7 @@ public final class Bodies {
          * caller is looking at that one — so an arm one reader names and an arm another names are
          * one address and not two that agree.
          */
-        public souther.compiler.coverage.CoverageSites.Plan plan() {
+        public CoverageSites.Plan plan() {
             return plan;
         }
 
@@ -2945,17 +2961,17 @@ public final class Bodies {
          * the same executable, and two builds of one module come to one — which is what lets a
          * recording taken by one build be read by another.
          */
-        public souther.compiler.coverage.NumberingIdentity numberingIdentity() {
+        public NumberingIdentity numberingIdentity() {
             return plan.identity();
         }
 
         /** Who owns the rule each fork of this module's bodies decides by. */
-        public souther.compiler.coverage.DecisionSources decisions() {
+        public DecisionSources decisions() {
             return decisions;
         }
 
         /** Which of each body's bindings hold an element of a container, by the behavior's name. */
-        public Map<String, souther.compiler.check.ElementBindings> elementBindings() {
+        public Map<String, ElementBindings> elementBindings() {
             return elements;
         }
 
@@ -2994,7 +3010,7 @@ public final class Bodies {
          * and both read this. Made twice they would be two answers to one question, and the one
          * that refuses a build and the one a report prints are the last two that should differ.
          */
-        public Map<String, souther.compiler.claims.Claims> claims() {
+        public Map<String, Claims> claims() {
             return claims;
         }
     }
@@ -3243,14 +3259,14 @@ public final class Bodies {
                                             ModuleCheck.Of module, List<String> emitting) {
         java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
         Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
-        Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
+        Map<String, ElementBindings> elements = new LinkedHashMap<>();
         // One reading for the module. Every behavior's check walks the same declarations, so the
         // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
         // about a fork does not have to know which behavior's check happened to reach it.
-        Map<souther.compiler.types.SourceConstructOrigin,
-                souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
-        Map<souther.compiler.types.BindingOwner,
-                souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();
+        Map<SourceConstructOrigin,
+                DecisionSource> decisions = new LinkedHashMap<>();
+        Map<BindingOwner,
+                SuppliedRules.Handed> supplied = new LinkedHashMap<>();
         for (String behavior : emitting) {
             Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
             if (!core.present()) {
@@ -3276,14 +3292,14 @@ public final class Bodies {
         // where the hole is, and what a case can arrive at cannot be read through one — asked
         // anyway, the reading meets a shape no position can have and says so about this compiler,
         // which is true and is not what the author of a mistyped model needs.
-        souther.compiler.coverage.DecisionSources read =
-                new souther.compiler.coverage.DecisionSources(decisions);
-        souther.compiler.coverage.SuppliedRules handed = new souther.compiler.coverage.SuppliedRules(supplied);
+        DecisionSources read =
+                new DecisionSources(decisions);
+        SuppliedRules handed = new SuppliedRules(supplied);
         // Whose module these bodies are, said once and here: this is where a module's name and
         // its trees are both in hand for the first and only time, and everything below takes
         // the pair rather than two things to put together again.
-        souther.compiler.coverage.ModuleBodies of =
-                new souther.compiler.coverage.ModuleBodies(name, bodies);
+        ModuleBodies of =
+                new ModuleBodies(name, bodies);
         // Where the places of these bodies are, walked here and once. What it is an answer
         // about is the module this check holds, so this is where there is a module to walk;
         // and the claims below name arms of it, so they are addresses of the plan this answer
@@ -3300,8 +3316,8 @@ public final class Bodies {
         // hand, which is a condition on judging a claim and never was one on the bodies having
         // places: a module whose bodies came out has arms whatever else did not come out, and
         // an answer carrying no plan is one every reader of it would walk the bodies for.
-        souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(of, read, handed);
+        CoverageSites.Plan plan =
+                CoverageSites.of(of, read, handed);
         return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
                 read, handed, analysed, plan);
     }
