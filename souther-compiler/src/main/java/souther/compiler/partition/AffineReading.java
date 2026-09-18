@@ -14,6 +14,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.numeric.LinearForm;
 
@@ -143,7 +144,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      */
     static java.util.List<Map.Entry<NumericTerm, BigDecimal>> ordered(
             LinearForm<NumericTerm> form) {
-        return souther.compiler.inputs.NumericTerms.entriesInOrder(form.coefs());
+        return NumericTerms.entriesInOrder(form.coefs());
     }
 
     /**
@@ -345,7 +346,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                         // alone, and rooting a reading of arrivals at it would read it as a tree of
                         // its own and lose whatever bound a name above it.
                         souther.compiler.coverage.Arrivals.everyArmIsTakenForAValue())) {
-            for (NumericTerm atom : left.coefs().keySet()) {
+            for (NumericTerm atom : NumericTerms.inOrder(left.coefs().keySet())) {
                 if (atom.subjectPath().equals(named)) {
                     return atom;
                 }
@@ -378,7 +379,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             souther.compiler.inputs.Quantities quantities) {
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
                 new java.util.LinkedHashMap<>();
-        for (NumericTerm term : form.coefs().keySet()) {
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             // Both ends of the term, because a reader of a row wants the one it is decoded on and a
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).

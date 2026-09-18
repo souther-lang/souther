@@ -402,7 +402,9 @@ final class ReadQuantities implements Quantities {
         // Refused where the form is over positions no one value has, the same as a question about
         // where it runs: what would be taken in is a condition on a row nobody can write.
         StructuralContext under = asked(form.coefs().keySet());
-        for (NumericTerm term : form.coefs().keySet()) {
+        // Walked by the terms, because which term is named in the refusal is the answer here and a
+        // form holds its terms without holding an order they were written in.
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
                 return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
             }
@@ -579,7 +581,7 @@ final class ReadQuantities implements Quantities {
                 continue;
             }
             Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
-            for (NumericTerm term : each.form().coefs().keySet()) {
+            for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(made.numbers(), term, called(term, under));
                 if (spaced == null) {
@@ -1013,7 +1015,9 @@ final class ReadQuantities implements Quantities {
     private NumericDomain.FormProjection runsIn(StructuralContext under,
                                                 LinearForm<NumericTerm> form) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
-        for (NumericTerm term : form.coefs().keySet()) {
+        // Walked by the terms: what each one brings in is taken onto the state the one before it
+        // left, and a form says which terms it weighs without saying which was written first.
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             rules = holding(rules, term, under);
         }
         // What the rules leave, carried as what it is. A reading that admits no assignment says so

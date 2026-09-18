@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -132,12 +133,13 @@ public final class LevelRealizer {
         };
     }
 
-    /** Every position the item asks a value at, in the order the item names them. */
+    /** Every position the item asks a value at: where the item names them in an order, that one,
+     *  and where it is a form, the order its terms are walked in. */
     private static List<NumericTerm> termsOf(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
-            case Standing.OfAForm over -> List.copyOf(over.form().coefs().keySet());
+            case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
         };
     }
 

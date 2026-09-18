@@ -110,8 +110,18 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
      *  how the comparison was written. */
     private static List<Map.Entry<DecisionAtom, BigDecimal>> ordered(
             LinearForm<DecisionAtom> form) {
-        return form.coefs().entrySet().stream()
+        List<Map.Entry<DecisionAtom, BigDecimal>> walked = form.coefs().entrySet().stream()
                 .sorted(java.util.Comparator.comparing(each -> each.getKey().spelled())).toList();
+        for (int at = 1; at < walked.size(); at++) {
+            DecisionAtom before = walked.get(at - 1).getKey();
+            DecisionAtom here = walked.get(at).getKey();
+            if (before.spelled().equals(here.spelled()) && !before.equals(here)) {
+                throw new IllegalStateException("two atoms of one quantity are spelled alike: "
+                        + before + " and " + here + "; what puts them in an order would leave which"
+                        + " of them comes first to how the comparison was written");
+            }
+        }
+        return walked;
     }
 
     /**

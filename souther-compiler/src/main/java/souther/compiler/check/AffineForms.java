@@ -8,8 +8,11 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -743,7 +746,11 @@ public final class AffineForms {
         // met an expression an author would change — it has met this call.
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
-        for (Map.Entry<DeclaredArgument, BigDecimal> each : says.coefs().entrySet()) {
+        // Walked left to right over the call's arguments. A declared form holds which arguments the
+        // operation answers over and says nothing about which of them was written first, and where
+        // two of them cannot be carried it is the one the walk meets first that the stop is
+        // recorded against — so the walk is taken off the call rather than off the form.
+        for (Map.Entry<DeclaredArgument, BigDecimal> each : inArgumentOrder(says, call)) {
             // The call here may be the runnable tree's and not a kept one, so its argument count
             // is checked here rather than by a kept call's own constructor.
             int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
@@ -757,6 +764,23 @@ public final class AffineForms {
             form = form.plus(argument.times(each.getValue()));
         }
         return form;
+    }
+
+    /**
+     * What a declared form weighs, in the order the call writes those arguments down.
+     *
+     * <p>An argument the operation does not declare sorts last, where the walk meets it and stops
+     * at the call: what is not the operation's is not put in front of what is.
+     */
+    private static List<Map.Entry<DeclaredArgument, BigDecimal>> inArgumentOrder(
+            LinearForm<DeclaredArgument> says, Core call) {
+        ValueName operation = Terms.operationOf(call);
+        return says.coefs().entrySet().stream()
+                .sorted(Comparator.comparingInt(each -> {
+                    int position = CallArguments.positionOf(each.getKey(), operation);
+                    return position < 0 ? Integer.MAX_VALUE : position;
+                }))
+                .toList();
     }
 
     /**
