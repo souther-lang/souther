@@ -144,6 +144,10 @@ public sealed interface Ordering {
                 // The JVM carries each of these as Comparable, which is why they are the ordered
                 // ones (spec §primitives).
                 case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
+                // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
+                // value that carries one compares by exactly that — one representation per value, so
+                // the order it carries and the equality it answers are the same reading of it.
+                case RATIONAL -> NATURAL;
                 case BOOL, RAW -> null;
             };
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.

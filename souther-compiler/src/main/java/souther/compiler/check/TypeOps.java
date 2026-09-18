@@ -88,14 +88,28 @@ public final class TypeOps {
      */
     public static boolean answers(Type t, Requires required, Symbols symbols) {
         return switch (t) {
-            case Type.Prim _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            case Type.Prim p -> switch (required) {
+                case EQUALITY -> true;
+                // Written out rather than answered for every primitive at once, so that a primitive
+                // added here says whether a boundary can carry it. Rational is the one that cannot:
+                // it is a value computation produces and consumes, and no representation of it is
+                // selected for JSON, for a Java boundary or for a fixture (ADR-0116).
+                case EXTERNAL_FORM -> switch (p) {
+                    case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> true;
+                    case RATIONAL -> false;
+                };
             };
             case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
             };
-            case Type.Union _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            // A union's answer is its members', the way a collection's is its element's. Held as one
+            // unconditional yes while every primitive had an external form, it would say yes about
+            // `Rational | DivisionByZero` at a boundary that refuses it — a capability this states
+            // and `hasExternalForm` would not hold.
+            case Type.Union u -> switch (required) {
+                case EQUALITY -> true;
+                case EXTERNAL_FORM -> u.members().stream()
+                        .allMatch(m -> memberAnswers(m, required, symbols));
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
@@ -127,6 +141,13 @@ public final class TypeOps {
                 case EQUALITY, EXTERNAL_FORM -> true;
             };
         };
+    }
+
+    /** What one of a union's members answers. A member that names a primitive is asked as that
+     *  primitive; one that names a declaration answers the way a {@link Type.Ref} does. */
+    private static boolean memberAnswers(TypeSymbol member, Requires required, Symbols symbols) {
+        Type.Prim named = member.primitiveKind();
+        return named == null || answers(named, required, symbols);
     }
 
     /**
@@ -182,6 +203,14 @@ public final class TypeOps {
                 Type inKey = withoutExternalForm(m.key(), symbols);
                 yield inKey != null ? inKey : withoutExternalForm(m.value(), symbols);
             }
+            // The member that cannot cross, and not the union it stands in: an author whose output is
+            // `Rational | DivisionByZero` is told which half of it the boundary refuses.
+            case Type.Union u -> u.members().stream()
+                    .map(TypeSymbol::primitiveKind)
+                    .filter(p -> p != null && !answers(p, Requires.EXTERNAL_FORM, symbols))
+                    .findFirst()
+                    .map(p -> (Type) p)
+                    .orElse(t);
             default -> t;
         };
     }
@@ -1550,7 +1579,7 @@ public final class TypeOps {
                 case INSTANT -> new MapKeyRepresentation.Instant();
                 // a key is addressed by the text it is written as, and a number, a flag and Raw have
                 // none a boundary could name one by
-                case INT, BOOL, DECIMAL, RAW -> null;
+                case INT, BOOL, DECIMAL, RATIONAL, RAW -> null;
             };
         }
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {

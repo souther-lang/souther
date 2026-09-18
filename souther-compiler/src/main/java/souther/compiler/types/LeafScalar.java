@@ -3,10 +3,11 @@ package souther.compiler.types;
 /**
  * A primitive a derived codec reads and writes as itself.
  *
- * <p>The set is closed here rather than being the primitives minus one. {@code Raw} is spelled like
- * a primitive and is not a scalar anything carries: no leaf codec exists for it, so a witness built
- * out of {@link Type.Prim} would hold a value every reader below then needs an arm for. {@link #of}
- * is the one way in, and it answers nothing for {@code Raw}.
+ * <p>The set is closed here rather than being the primitives minus the ones that are not. {@code Raw}
+ * is spelled like a primitive and is not a scalar anything carries, and a {@code Rational} is a value
+ * computation holds and no boundary writes (ADR-0116): no leaf codec exists for either, so a witness
+ * built out of {@link Type.Prim} would hold a value every reader below then needs an arm for.
+ * {@link #of} is the one way in, and it answers nothing for those two.
  *
  * <p>One type for one fact, read by two questions that are not the same question. What a behavior's
  * boundary writes as itself is one; what a fixture can be decoded into is another. They list the
@@ -36,7 +37,8 @@ public enum LeafScalar {
         return prim;
     }
 
-    /** The scalar {@code prim} is, or null when it is not one — which only {@code Raw} is not. */
+    /** The scalar {@code prim} is, or null when it is not one — which {@code Raw} and
+     *  {@code Rational} are not. */
     public static LeafScalar of(Type.Prim prim) {
         return switch (prim) {
             case STRING -> STRING;
@@ -47,7 +49,7 @@ public enum LeafScalar {
             case TIME -> TIME;
             case DATETIME -> DATETIME;
             case INSTANT -> INSTANT;
-            case RAW -> null;
+            case RATIONAL, RAW -> null;
         };
     }
 }

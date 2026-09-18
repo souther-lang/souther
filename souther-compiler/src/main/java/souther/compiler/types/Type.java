@@ -50,7 +50,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
 
     enum Prim implements Leaf, DelegatedEqualityIsTheCrossingAnswer,
             ObjectEqualityIsTheCrossingAnswer {
-        INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW;
+        INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT, RAW;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type
          *  and backwards by {@link TypeSymbol#primitiveKind()} — a primitive case name is minted from
@@ -61,6 +61,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
                 case STRING -> "String";
                 case BOOL -> "Bool";
                 case DECIMAL -> "Decimal";
+                case RATIONAL -> "Rational";
                 case DATE -> "Date";
                 case TIME -> "Time";
                 case DATETIME -> "DateTime";
@@ -87,7 +88,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
         public boolean temporal() {
             return switch (this) {
                 case DATE, TIME, DATETIME, INSTANT -> true;
-                case INT, STRING, BOOL, DECIMAL, RAW -> false;
+                case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> false;
             };
         }
     }
@@ -293,6 +294,10 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
     Type STRING = Prim.STRING;
     Type BOOL = Prim.BOOL;
     Type DECIMAL = Prim.DECIMAL;
+    /** The exact quotient {@code /} answers (ADR-0116). A value computation produces and consumes,
+     * and not one a boundary carries: it has no external form, so no field holds one and no
+     * behavior takes or answers one. */
+    Type RATIONAL = Prim.RATIONAL;
     Type DATE = Prim.DATE;
     /** A local time of day, to the second (spec §temporal-literal). What a {@code DateTime} holds
      * beside its {@code Date}, and what a model that names an opening time holds on its own. */

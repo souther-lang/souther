@@ -316,6 +316,7 @@ final class Intrinsics {
                 case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
                 case INSTANT -> CD_Instant;
+                case RATIONAL -> CD_Rational;
                 case RAW -> CD_Object;
             };
         }

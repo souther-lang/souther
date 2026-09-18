@@ -340,7 +340,9 @@ class ATemporalIsBuiltFromThePartsAModelHoldsTest {
             case TIME -> LocalTime.parse("09:30");
             case DATETIME -> LocalDateTime.parse("2026-07-26T09:30");
             case INSTANT -> Instant.parse("2026-07-26T09:30:00Z");
-            case RAW -> null;   // not a LeafScalar, so never asked for
+            // Neither is a LeafScalar, so neither is ever asked for: `Raw` is bytes nobody wrote, and
+            // a `Rational` has no external form to cross with (ADR-0116).
+            case RATIONAL, RAW -> null;
         };
     }
 

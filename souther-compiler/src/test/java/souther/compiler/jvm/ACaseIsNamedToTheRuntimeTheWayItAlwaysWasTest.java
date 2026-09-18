@@ -52,6 +52,7 @@ class ACaseIsNamedToTheRuntimeTheWayItAlwaysWasTest {
                         "STRING", "souther.String",
                         "BOOL", "souther.Bool",
                         "DECIMAL", "souther.Decimal",
+                        "RATIONAL", "souther.Rational",
                         "DATE", "souther.Date",
                         "TIME", "souther.Time",
                         "DATETIME", "souther.DateTime",

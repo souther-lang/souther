@@ -50,6 +50,7 @@ final class JvmTypes {
                 case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
                 case INSTANT -> CD_Instant;
+                case RATIONAL -> CD_Rational;
                 case RAW -> null;
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
@@ -204,6 +205,7 @@ final class JvmTypes {
                 case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
                 case INSTANT -> CD_Instant;
+                case RATIONAL -> CD_Rational;
                 // reserved: no stage produces one, so none reaches codegen
                 case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
             };
