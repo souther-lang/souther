@@ -94,6 +94,11 @@ class TheRuntimePackageIsTheBackendsToNameTest {
      * package and an account of why there is none: the first is an import, a fully qualified name or
      * the string a table is written with, the second is a comment — and two of the target-neutral
      * areas carry one, so dropping the distinction makes the account the finding.
+     *
+     * <p>The text block carries an unpaired quote, which is what tells a reading that knows about
+     * text blocks from one that walks quotes in pairs. To the second, the line under that quote is
+     * outside any string, so its {@code //} starts a comment and the package named there goes —
+     * which is a dependency dropped rather than an account kept.
      */
     @Test
     void whatTheReadingKeepsIsWhatTheCompilerReads() {
@@ -108,18 +113,24 @@ class TheRuntimePackageIsTheBackendsToNameTest {
                     private static final String ABI = "souther.runtime";
                     private final souther.runtime.Fn held = null;
                     private static final String SLASHES = "// not a comment souther.runtime";
+                    private static final String BLOCK = ""\"
+                            say "hi
+                            // nor here, in souther.runtime
+                            ""\";
                 }
                 """;
 
         String read = code(source);
 
-        assertEquals(4, howOftenItNames(read),
-                () -> "the import, the fully qualified name and the two strings are kept and the two"
-                        + " comments are dropped: " + read);
+        assertEquals(5, howOftenItNames(read),
+                () -> "the import, the fully qualified name and the three strings are kept and the"
+                        + " two comments are dropped: " + read);
         assertTrue(read.contains("import souther.runtime.Fn;"), read);
         assertTrue(read.contains("\"souther.runtime\""), read);
         assertTrue(read.contains("private final souther.runtime.Fn held"), read);
         assertTrue(read.contains("\"// not a comment souther.runtime\""), read);
+        assertTrue(read.contains("say \"hi"), read);
+        assertTrue(read.contains("// nor here, in souther.runtime"), read);
         assertTrue(!read.contains("Why") && !read.contains("again"), read);
     }
 
