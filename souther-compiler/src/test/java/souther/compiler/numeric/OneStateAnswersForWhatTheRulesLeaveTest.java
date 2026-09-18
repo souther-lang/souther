@@ -65,7 +65,7 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
 
     private static ClosedState<String> closing(List<AffineConstraint<String>> rules) {
         return ClosedState.of(rules, atom -> Granularity.DISCRETE,
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
     }
 
     // --- the issue, end to end --------------------------------------------------------------------

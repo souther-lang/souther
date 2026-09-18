@@ -87,17 +87,18 @@ class AnOrderThatCannotTellTwoPositionsApartRefusesTheWalkTest {
     }
 
     /**
-     * And a domain lifted from {@link Comparable} is held to the same thing.
+     * And a domain that wrote its order as its own comparison is held to the same thing.
      *
-     * <p>{@link CanonicalOrder#asTheyCompare} lifts whatever a position's own {@code compareTo}
-     * says, and {@code compareTo} is not asked to promise that nought means equality — two decimals
-     * written to different scales are two values that compare as one. So the lift promises no more
-     * than any other domain does, and the pair is refused where the walk needs the direction rather
-     * than resting on which comparables happen to be consistent with their equality.
+     * <p>Which is why there is no lift from {@link Comparable} at large. Java does not ask a
+     * comparison to agree with its equality, and the classes that do not are ordinary: two decimals
+     * written to different scales are two values that compare as one. A domain that says its order
+     * is its positions' own comparison has said something this cannot check for it, and the pair is
+     * refused where a walk needs the direction — which is what the factories on
+     * {@link CanonicalOrder} are narrow enough to be able to promise instead.
      */
     @Test
-    void aDomainLiftedFromItsOwnComparisonIsHeldToTheSameThing() {
-        CanonicalOrder<BigDecimal> asWritten = CanonicalOrder.asTheyCompare();
+    void aDomainThatWroteItsOrderAsItsOwnComparisonIsHeldToTheSameThing() {
+        CanonicalOrder<BigDecimal> asWritten = BigDecimal::compareTo;
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> asWritten.walking(
@@ -105,6 +106,29 @@ class AnOrderThatCannotTellTwoPositionsApartRefusesTheWalkTest {
                         Function.identity()));
 
         assertTrue(refused.getMessage().contains("2.0") && refused.getMessage().contains("2.00"),
-                "the refusal names the two the lift could not tell apart: " + refused.getMessage());
+                "the refusal names the two it could not tell apart: " + refused.getMessage());
+    }
+
+    /**
+     * And the orders this hands out are ones whose promise can be shown.
+     *
+     * <p>An enum constant is equal to itself and to nothing else and compares by where it is
+     * declared; a string compares as nought exactly where it is the same string. Those are the two
+     * this offers, and both directions hold of each — which is what makes them safe to hand out
+     * where an arbitrary comparison is not.
+     */
+    @Test
+    void theOrdersThisHandsOutTellApartEverythingTheirDomainsDo() {
+        assertEquals(List.of("a", "b"),
+                CanonicalOrder.asTheyAreSpelled().walking(List.of("b", "a"), Function.identity()));
+        assertEquals(List.of(Written.FIRST, Written.SECOND),
+                CanonicalOrder.<Written>asTheyAreDeclared()
+                        .walking(List.of(Written.SECOND, Written.FIRST), Function.identity()));
+    }
+
+    /** Two constants, to be walked in the order they are written here. */
+    private enum Written {
+        FIRST,
+        SECOND
     }
 }

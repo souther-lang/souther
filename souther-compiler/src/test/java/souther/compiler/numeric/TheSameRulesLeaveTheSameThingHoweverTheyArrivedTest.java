@@ -58,7 +58,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     }
 
     private static NumericDomain<String> given(List<Written> rules, Map<String, Granularity> kinds) {
-        NumericDomain<String> out = NumericDomain.top(CanonicalOrder.<String>asTheyCompare());
+        NumericDomain<String> out = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (Written each : rules) {
             out = out.assume(each.form(), each.rel(), kinds);
         }
@@ -86,7 +86,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aHoleBitesOnWhatALaterRuleEstablishes() {
         Map<String, Granularity> kinds = whole("x");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.NE, kinds)
                 .assume(atom("x").minus(num(5)), Rel.LE, kinds)
                 .assume(atom("x"), Rel.GE, kinds);
@@ -96,7 +96,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aHoleWithNothingToSideItStaysAHole() {
         Map<String, Granularity> kinds = whole("x");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare()).assume(atom("x"), Rel.NE, kinds);
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom("x"), Rel.NE, kinds);
         assertTrue(d.boundsOf("x").saysNothing(), "nothing says which side of nought x is on");
         assertFalse(d.isBottom());
     }
@@ -104,7 +104,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aHoleAtTheOnlyValueLeftLeavesNothing() {
         Map<String, Granularity> kinds = whole("x");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.GE, kinds)
                 .assume(atom("x"), Rel.LE, kinds)
                 .assume(atom("x"), Rel.NE, kinds);
@@ -118,7 +118,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aRuleOverTwoPositionsNarrowsThemAndIsProvenFromWhatItLeft() {
         Map<String, Granularity> kinds = whole("straw", "choco");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("straw"), Rel.GE, kinds)
                 .assume(atom("straw").minus(num(1000)), Rel.LE, kinds)
                 .assume(atom("choco"), Rel.GE, kinds)
@@ -139,7 +139,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aRuleThatCannotHoldWithTheBoundsLeavesNothing() {
         Map<String, Granularity> kinds = whole("a", "b");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(20)), Rel.GE, kinds)
                 .assume(atom("b").minus(num(20)), Rel.GE, kinds)
                 .assume(scaled("a", 300).plus(scaled("b", 600)).minus(num(4800)), Rel.LE, kinds);
@@ -152,7 +152,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aRuleAtAValueItsSumCannotReachLeavesNothing() {
         Map<String, Granularity> dense = Map.of("a", Granularity.DENSE);
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(scaled("a", 3).minus(num(1)), Rel.EQ, dense);
         assertTrue(d.isBottom());
     }
@@ -171,7 +171,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void whatAFormRunsUpToIsWhatFollowsFromIt() {
         Map<String, Granularity> kinds = whole("x", "y");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.GE, kinds)
                 .assume(atom("x").minus(num(5)), Rel.LE, kinds)
                 .assume(atom("y"), Rel.GE, kinds)
@@ -196,7 +196,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aQuestionScaledUpIsTheSameQuestion() {
         Map<String, Granularity> kinds = whole("a", "b");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(atom("b")).minus(num(2)), Rel.LE, kinds);
 
         assertEquals(d.entails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
@@ -211,7 +211,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aBoundOnAScaledFormIsScaledToMatch() {
         Map<String, Granularity> kinds = whole("a", "b");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(atom("b")).plus(num(2)), Rel.LE, kinds);
 
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(-2))),
@@ -234,7 +234,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void anEqualityIsRefutedWhereTheRulesPutItsValueOutOfReach() {
         Map<String, Granularity> kinds = whole("x");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
         assertTrue(d.refutes(atom("x").minus(num(5)), Rel.EQ), "x is at most three");
@@ -247,7 +247,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     @Test
     void aQuestionAboutAPositionThisNeverHeardOfIsNotProven() {
         Map<String, Granularity> kinds = whole("x");
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
         assertFalse(d.entails(atom("elsewhere").minus(num(5)), Rel.LE));
@@ -274,7 +274,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         for (int i = 0; i <= chain; i++) {
             kinds.put("x" + i, Granularity.DISCRETE);
         }
-        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x" + chain).minus(num(1)), Rel.LE, kinds);
         for (int i = 0; i < chain; i++) {
             // Not a difference, so it carries one link per round rather than through the closure.

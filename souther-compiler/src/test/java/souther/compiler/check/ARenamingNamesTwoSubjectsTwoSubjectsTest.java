@@ -60,7 +60,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void twoSubjectsFromDifferentDomainsMayNotShareAName() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> spread().renamed(InjectiveRenaming.of(subject -> "one name"),
-                        CanonicalOrder.<String>asTheyCompare()));
+                        CanonicalOrder.asTheyAreSpelled()));
 
         assertTrue(refused.getMessage().contains("one subject"), refused.getMessage());
     }
@@ -70,7 +70,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void aNamingThatKeepsThemApartIsCarriedThrough() {
         Map<FactSubject, String> apart = Map.of(ONLY_IN_FACTS, "p.f", ONLY_IN_ORDERED, "p.o",
                 ONLY_IN_VALUES, "p.v", ONLY_IN_NUMBERS, "p.n");
-        ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get), CanonicalOrder.asTheyCompare());
+        ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get), CanonicalOrder.asTheyAreSpelled());
 
         assertTrue(said.facts().entails("p.f", true));
         assertTrue(said.confinement().holdingNothing().contains("p.o"));
@@ -126,7 +126,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
 
         ConstraintState<String> said = both.renamed(
                 InjectiveRenaming.of(subject -> "p#" + asked.getAndIncrement()),
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
 
         assertTrue(said.facts().entails("p#0", true));
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p#0"));

@@ -48,14 +48,14 @@ class AFormOverRulesThatAdmitNothingIsAtNoValueTest {
      * contradicts is the pair, over both positions at once.
      */
     private static NumericDomain<String> contradicting() {
-        return NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        return NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(form(-1, 1, 0), Rel.LE, whole())
                 .assume(form(1, -1, 1), Rel.LE, whole());
     }
 
     /** The same two positions with nothing said about them, which is what an open range means. */
     private static NumericDomain<String> silent() {
-        return NumericDomain.top(CanonicalOrder.<String>asTheyCompare());
+        return NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
     }
 
     /** The rules leave the form nowhere, and that is what asking where it runs comes back with. */

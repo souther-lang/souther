@@ -8,6 +8,7 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,13 +52,52 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
     private static final String THE_BLOCK = "souther/compiler/values/Sameness$Block";
 
     /**
-     * The readers that still take a position out of a block by where it is.
+     * Every reader that reads a block's positions for where they are, and what was found when it
+     * was read.
      *
-     * <p>None. A reader put here would be one somebody read and found the order could not reach the
-     * answer of, which is a fact about that body as it stands rather than about the reader — so it
-     * is a place to move rather than a shape to keep.
+     * <p><b>A closed set, which is what makes this a guard rather than a list of words.</b> What is
+     * looked for is a reader that enumerates a value holding no order and comes to something whose
+     * own equality sees one — a sequence, a text, a position taken by where it is. Some of those
+     * readers are fine, and which ones is not a thing a rule can read off a name: it is a fact
+     * about the body, and the fact is written down here once instead of being re-established
+     * whenever somebody wonders.
+     *
+     * <p>So a reader reaching this rule is red until somebody reads it and says which of the two it
+     * is. What must not happen is a name added here without that reading — which is why each of
+     * them says what was found rather than that it is allowed.
      */
-    private static final List<String> STILL_TO_MOVE = List.of();
+    private static final Map<String, String> READ_AND_SETTLED = Map.of(
+            "souther/compiler/check/ProofOfEmptiness#declaredIn"
+                    + "(Ljava/util/Set;Ljava/util/SequencedMap;)Ljava/util/List;",
+            "the positions are gathered into a set that holds no order, and the sequence handed"
+                    + " back is walked out of the positions the value declares, in theirs",
+            "souther/compiler/check/ProofOfEmptiness#declared"
+                    + "(Lsouther/compiler/values/Sameness$Block;Ljava/util/Map;)Ljava/util/List;",
+            "what comes back is the ordinals the value gives the positions, sorted — so the walk"
+                    + " decides which numbers are in it and nothing about their order",
+            "souther/compiler/values/Reached#at"
+                    + "(Lsouther/compiler/values/Sameness$Block;)Lsouther/compiler/values/"
+                    + "AdmittedPlan;",
+            "the sequence is handed straight to a meet over the plans in it, which comes to the"
+                    + " same plan whichever order they are met in",
+            "souther/compiler/values/Refinement#of"
+                    + "(Lsouther/compiler/values/Sameness;Lsouther/compiler/values/Sameness;)"
+                    + "Lsouther/compiler/values/Refinement;",
+            "the positions gathered are what a refusal names, and it names them in one order"
+                    + " (InOneOrder) rather than in the order the walk reached them",
+            "souther/compiler/values/AdmittedPlan#held"
+                    + "(Ljava/util/Set;Ljava/lang/String;)Ljava/util/Set;",
+            "the parts are put in the order a plan itself decides (PlanOrder) before anything is"
+                    + " built from them, so what a walk handed in cannot reach the answer",
+            "souther/compiler/values/AdmittedPlan#flattened(Ljava/util/List;Z)Ljava/util/List;",
+            "what it hands back is poured into a set by both its callers and then put in the"
+                    + " plan's own order, so the sequence it keeps is one nothing reads",
+            "souther/compiler/values/Standing#across(Ljava/util/Set;)Ljava/util/List;",
+            "the positions are asked for membership and nothing else; what comes back is every"
+                    + " reason once in the order the rules were written, which the entries carry",
+            "souther/compiler/values/Standing#<init>(Ljava/util/List;Ljava/util/Set;)V",
+            "the entries are the rules in the order they were written and the positions are a set"
+                    + " asked for membership, so neither is read for where anything came");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
@@ -65,10 +105,12 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
             CompiledOutputs.ofEverythingCompiledHere();
 
     @Test
-    void noReaderOfABlockTakesAPositionOutOfItByWhereItIs() {
-        assertEquals(STILL_TO_MOVE.stream().sorted().toList(), whoReadsOneByWhereItIs(COMPILED),
-                "a block holds its positions in no order, so a reader that takes one of them by"
-                        + " where it is has in its answer something the block it read cannot see");
+    void everyReaderThatReadsABlockForWhereItsPositionsAreHasBeenRead() {
+        assertEquals(READ_AND_SETTLED.keySet().stream().sorted().toList(),
+                whoReadsOneByWhereItIs(COMPILED),
+                "a block holds its positions in no order, so a reader whose answer sees the order"
+                        + " it walked has in it something the block it read cannot — each of them"
+                        + " is read and settled above, and one that is not is one nobody has read");
     }
 
     /**
@@ -85,11 +127,15 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         List<String> found = whoReadsOneByWhereItIs(AND_WHAT_IS_COMPILED_BESIDE_IT);
         String here = ABlockReadByWhereItsPositionsAre.class.getName().replace('.', '/');
 
-        assertTrue(found.contains(here + "#theFirstTheIteratorGives"),
+        assertTrue(isAmong(found, here, "theFirstTheIteratorGives"),
                 "a position taken out of a block's walk by hand was not found: " + found);
-        assertTrue(found.contains(here + "#theFirstOfThemAsAList"),
+        assertTrue(isAmong(found, here, "theFirstOfThemAsAList"),
                 "a position taken out of a block by where it is in a list was not found: " + found);
-        assertTrue(found.contains(here + "#theFirstOf"),
+        assertTrue(isAmong(found, here, "oneOf"),
+                "a position taken by where it is inside a helper that shares its name with one"
+                        + " taking no walk was not found, so a method of that name is being read"
+                        + " for another of the same name: " + found);
+        assertTrue(isAmong(found, here, "theFirstOf"),
                 "a position taken by where it is on the far side of a call was not found, so this"
                         + " rule stops holding wherever somebody draws a line through a reader: "
                         + found);
@@ -110,6 +156,12 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         assertEquals(List.of(), found.stream().filter(each -> each.startsWith(here)).toList(),
                 "a commutative reading of a block was named as taking a position by where it is,"
                         + " so this rule would refuse the readers it is written to allow");
+    }
+
+    /** Whether one of {@code found} is this method, which is named by what it takes as well as by
+     *  what it is called — two methods of one name are two methods. */
+    private static boolean isAmong(List<String> found, String owner, String called) {
+        return found.stream().anyMatch(each -> each.startsWith(owner + "#" + called + "("));
     }
 
     /**
@@ -161,6 +213,22 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         private static <T> T theFirstOf(java.util.Collection<T> these) {
             return these.iterator().next();
         }
+
+        /** And the same again where the helper shares its name with one that takes no walk, which
+         *  is what a rule keyed on the name alone cannot tell apart. */
+        static <A> A theFirstAnOverloadTakes(souther.compiler.values.Sameness.Block<A> block) {
+            return oneOf(block.members());
+        }
+
+        private static <T> T oneOf(java.util.Collection<T> these) {
+            return these.iterator().next();
+        }
+
+        /** Named as the one above and taking no walk at all. Written so that a rule keyed on the
+         *  name has two methods to choose between and may choose this one. */
+        static String oneOf(int number) {
+            return String.valueOf(number);
+        }
     }
 
     /**
@@ -201,8 +269,8 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> reading = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_BLOCK, "members")) {
-            if (WhoHoldsWhatAReaderHandedOver.takesSomethingByWhereItIs(
-                    handed.methodNamed(holding))) {
+            if (WhoHoldsWhatAReaderHandedOver.readsAWalkForWhereThingsAre(
+                    handed.methodThatIs(holding))) {
                 reading.add(holding);
             }
         }

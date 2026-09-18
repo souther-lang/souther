@@ -84,7 +84,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
     private static Reduction.Tightened<String> reduce(List<AffineConstraint<String>> rules,
                                                       Box<String> from, Granularity spacing) {
         Reduction<String> reduced = AffineReduction.over(reading(rules, from), atom -> spacing,
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
         assertInstanceOf(Reduction.Tightened.class, reduced);
         return (Reduction.Tightened<String>) reduced;
     }
@@ -96,9 +96,9 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
      */
     private static FormReach<String> reading(List<AffineConstraint<String>> rules, Box<String> from) {
         DifferenceBounds<String> differences =
-                DifferenceBounds.over(rules, CanonicalOrder.<String>asTheyCompare());
+                DifferenceBounds.over(rules, CanonicalOrder.asTheyAreSpelled());
         return differences.holdsNothing() ? null
-                : FormReach.over(rules, from, differences, CanonicalOrder.<String>asTheyCompare());
+                : FormReach.over(rules, from, differences, CanonicalOrder.asTheyAreSpelled());
     }
 
     // --- the issue's example -----------------------------------------------------------------------
@@ -238,7 +238,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 rule(weighing("a", 1), -3, Rel.NE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
                 AffineReduction.over(reading(List.of(hole), between("a", 3, 3)),
-                        atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare()));
+                        atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled()));
     }
 
     /** A rule over several positions can empty a system the difference bounds see nothing wrong
@@ -249,7 +249,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 rule(weighing("a", 1, "b", 1), -5, Rel.LE, Granularity.DISCRETE);
         assertInstanceOf(Reduction.NothingIsLeft.class,
                 AffineReduction.over(reading(List.of(rule), between("a", 10, 20, "b", 10, 20)),
-                        atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare()));
+                        atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled()));
     }
 
     // --- against the points ------------------------------------------------------------------------
@@ -276,7 +276,7 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
                 continue;
             }
             Reduction<String> found = AffineReduction.over(reading, atom -> Granularity.DISCRETE,
-                    CanonicalOrder.<String>asTheyCompare());
+                    CanonicalOrder.asTheyAreSpelled());
             if (found instanceof Reduction.NothingIsLeft) {
                 assertTrue(admitted.isEmpty(),
                         () -> "said nothing is left, but " + written + " admits " + admitted);
@@ -326,10 +326,10 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             }
             Reduction<String> asWritten =
                     AffineReduction.over(asRead, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.<String>asTheyCompare());
+                            CanonicalOrder.asTheyAreSpelled());
             Reduction<String> reordered =
                     AffineReduction.over(reread, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.<String>asTheyCompare());
+                            CanonicalOrder.asTheyAreSpelled());
             assertEquals(asWritten, reordered,
                     () -> "the reduction moved when the rules were reordered: " + stated);
         }
@@ -352,10 +352,10 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
             }
             Reduction<String> overWide =
                     AffineReduction.over(readWide, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.<String>asTheyCompare());
+                            CanonicalOrder.asTheyAreSpelled());
             Reduction<String> overNarrow =
                     AffineReduction.over(readNarrow, atom -> Granularity.DISCRETE,
-                            CanonicalOrder.<String>asTheyCompare());
+                            CanonicalOrder.asTheyAreSpelled());
             if (!(overWide instanceof Reduction.Tightened<String> loose)) {
                 continue;   // the wider box was already empty, so there is nothing wider to be
             }

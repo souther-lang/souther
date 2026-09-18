@@ -7,6 +7,7 @@ import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,14 +60,15 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     "sequencedKeySet", "sequencedEntrySet", "sequencedValues");
 
     /**
-     * The readers that still walk a form's coefficients as the mapping hands them over.
+     * Every reader that walks a form's coefficients into something whose answer sees the order, and
+     * what was found when it was read.
      *
-     * <p>None, which is where this was headed. A reader put here would be one somebody read and
-     * found the order could not reach the answer of — a sum, a conjunction, a pick by the weight at
-     * a position — and that is a fact about the body as it stands rather than about the reader, so
-     * it is a place to move rather than a shape to keep.
+     * <p>None, which is where this was headed: every walk of a form's positions asks the atom
+     * domain for the order it takes them in. A reader reaching this rule is red until somebody
+     * reads it and says which it is — a walk whose answer is a sum, a union or a conjunction, or a
+     * walk whose answer has the order in it and has to move.
      */
-    private static final List<String> STILL_TO_MOVE = List.of();
+    private static final Map<String, String> READ_AND_SETTLED = Map.of();
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
@@ -75,7 +77,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
 
     @Test
     void everyReaderThatWalksAFormsPositionsIsOneOfTheOnesStillToMove() {
-        assertEquals(STILL_TO_MOVE.stream().sorted().toList(), whoWalksAForm(COMPILED),
+        assertEquals(READ_AND_SETTLED.keySet().stream().sorted().toList(), whoWalksAForm(COMPILED),
                 "a reader that walks a form's positions as the mapping hands them over has an"
                         + " order in its answer that the form cannot see — it asks the atom domain"
                         + " for one (CanonicalForm#entriesIn), or it is named above with why the"
@@ -119,12 +121,18 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
 
         String here = AFormWalkedAsItIsHeld.class.getName().replace('.', '/');
 
-        assertTrue(found.contains(here + "#positionsAsTheyCome"),
+        assertTrue(isAmong(found, here, "positionsAsTheyCome"),
                 "the one reader written here to walk a form as it is held was not found, so what"
                         + " this rule looks for is not what such a reader does: " + found);
-        assertTrue(found.contains(here + "#asItComes"),
+        assertTrue(isAmong(found, here, "asItComes"),
                 "a form walked as it is held on the far side of a call was not found, so this rule"
                         + " stops holding wherever somebody draws a line through a reader: " + found);
+    }
+
+    /** Whether one of {@code found} is this method, which is named by what it takes as well as by
+     *  what it is called — two methods of one name are two methods. */
+    private static boolean isAmong(List<String> found, String owner, String called) {
+        return found.stream().anyMatch(each -> each.startsWith(owner + "#" + called + "("));
     }
 
     /**
@@ -182,8 +190,8 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
         WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> walking = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_FORM, "coefs")) {
-            if (WhoHoldsWhatAReaderHandedOver.takesSomethingByWhereItIs(
-                    handed.methodNamed(holding))) {
+            if (WhoHoldsWhatAReaderHandedOver.readsAWalkForWhereThingsAre(
+                    handed.methodThatIs(holding))) {
                 walking.add(holding);
             }
         }

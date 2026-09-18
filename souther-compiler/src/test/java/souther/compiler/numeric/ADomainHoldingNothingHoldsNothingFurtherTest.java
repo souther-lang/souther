@@ -29,7 +29,7 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
     }
 
     private static NumericDomain<String> atLeastTwo() {
-        return NumericDomain.top(CanonicalOrder.<String>asTheyCompare()).assume(nMinus(2), Rel.GE, COUNTS);
+        return NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(nMinus(2), Rel.GE, COUNTS);
     }
 
     @Test

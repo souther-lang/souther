@@ -179,7 +179,7 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 continue;   // nothing to be tight about
             }
             ClosedState<String> closed = ClosedState.of(read(written), atom -> Granularity.DENSE,
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
             if (closed.holdsNothing()) {
                 continue;   // said over decimals and not over the rationals; see the class comment
             }
@@ -223,7 +223,7 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 continue;
             }
             ClosedState<String> closed = ClosedState.of(read(written), atom -> Granularity.DENSE,
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
             if (closed.holdsNothing()) {
                 continue;
             }
@@ -256,7 +256,7 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
     void aThirdIsNotADecimalSoTheBoundStopsShortOfIt() {
         List<Written> written = List.of(new Written(Map.of("a", num(3)), num(-1), Rel.LE));
         ClosedState<String> closed = ClosedState.of(read(written), atom -> Granularity.DENSE,
-                CanonicalOrder.<String>asTheyCompare());
+                CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(ExactCut.exclusive(ratio(1, 3)), closed.box().mostOf("a"),
                 "3a <= 1 leaves a under a third and never at it");

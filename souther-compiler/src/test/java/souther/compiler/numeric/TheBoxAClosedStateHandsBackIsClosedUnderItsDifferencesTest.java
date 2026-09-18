@@ -55,7 +55,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         int exhausted = 0;
         for (int round = 0; round < CASES; round++) {
             ClosedState<String> closed = ClosedState.of(read(aSystem(dice), Granularity.DISCRETE),
-                    atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare());
+                    atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
             if (closed.holdsNothing()) {
                 continue;
             }
@@ -106,7 +106,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         Random dice = new Random(1016);
         for (int round = 0; round < CASES; round++) {
             ClosedState<String> closed = ClosedState.of(read(aSystem(dice), Granularity.DISCRETE),
-                    atom -> Granularity.DISCRETE, CanonicalOrder.<String>asTheyCompare());
+                    atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
             if (closed.holdsNothing()) {
                 continue;
             }
@@ -139,7 +139,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
 
         ClosedState<String> closed =
                 ClosedState.of(read(system, Granularity.DENSE), atom -> Granularity.DENSE,
-                        CanonicalOrder.<String>asTheyCompare());
+                        CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(ClosedState.Status.BUDGET_EXHAUSTED, closed.status(),
                 "the point of this system is that the rounds do not settle it");

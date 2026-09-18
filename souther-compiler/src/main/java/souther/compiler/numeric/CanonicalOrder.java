@@ -81,19 +81,34 @@ public interface CanonicalOrder<A> extends Comparator<A> {
     }
 
     /**
-     * The order a domain whose positions compare consistently with their own equality already has.
+     * The order the constants of an enum are declared in.
      *
-     * <p>For a position that is a string, a number or an enum constant, whose {@code compareTo} is
-     * what its own equality is. Such a domain has nothing of its own to say here, and saying it
-     * again would be a second spelling of the same order to fall out of step with the first.
-     *
-     * <p><b>And {@link Comparable} is not asked to promise more than this needs.</b> It does not
-     * promise that a comparison of nought is equality — two decimals written to different scales
-     * compare as one and are two values — and neither does this. Where such a pair reaches a walk it
-     * is refused at {@link #walking}, which is the same place every other domain's coarseness is
-     * refused, so nothing here rests on which comparables happen to be consistent.
+     * <p>Which is one of these and can be shown to be: an enum constant is equal to itself and to
+     * nothing else, and its own comparison is by where it is declared, so two that are one compare
+     * as one and no two that are not do. A domain whose positions are an enum has nothing of its
+     * own to say here, and saying it again would be a second spelling of the same order to fall out
+     * of step with the first.
      */
-    static <A extends Comparable<A>> CanonicalOrder<A> asTheyCompare() {
-        return Comparable::compareTo;
+    static <A extends Enum<A>> CanonicalOrder<A> asTheyAreDeclared() {
+        return Enum::compareTo;
+    }
+
+    /**
+     * The order their spellings are in, for a domain whose positions are text.
+     *
+     * <p>Also one of these, and for the reason above: a string's comparison is nought exactly where
+     * it is the same string.
+     *
+     * <p><b>Why there is no such lift from {@link Comparable} at large.</b> Java does not ask an
+     * implementation to make its comparison agree with its equality — it recommends it and names
+     * the classes that do not — so a lift from {@code Comparable} would promise, of whatever was
+     * handed to it, the one thing this type is for. What it would promise is the direction
+     * {@link #walking} cannot check either: two positions that are equal and compare apart are
+     * never both in one walk, so a carrier equal to another would hand back a different sequence
+     * and nothing here would say so. Where a domain's own order is wanted, the domain says what it
+     * is.
+     */
+    static CanonicalOrder<String> asTheyAreSpelled() {
+        return String::compareTo;
     }
 }

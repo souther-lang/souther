@@ -49,7 +49,7 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
     /** {@code y <= weight·x} beside {@code y >= weight·x + 1}. */
     private static NumericDomain<String> theCrossedPair(int weight) {
-        return NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        return NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(form(0, "y", 1, "x", -weight), Rel.LE, WHOLE)
                 .assume(form(-1, "y", 1, "x", -weight), Rel.GE, WHOLE);
     }
@@ -76,7 +76,7 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
     void andWhereBothPositionsAreWeighedRatherThanOne() {
         // 3x + 2y <= 1 beside 3x + 2y >= 2. Neither rule is a bound on a position or a difference
         // of two, and the pair is a contradiction that needs no third rule.
-        assertTrue(NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        assertTrue(NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(form(-1, "x", 3, "y", 2), Rel.LE, WHOLE)
                 .assume(form(-2, "x", 3, "y", 2), Rel.GE, WHOLE)
                 .isBottom(), "a form bounded above below where it is bounded below");
@@ -86,7 +86,7 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
     void andWhereTheTwoRulesAreWrittenAtDifferentScales() {
         // y - 2x >= 1 beside 6x - 3y >= 0, which is the second of the pair above written three times
         // over. What decides it is the form the two come to and not the numbers written.
-        assertTrue(NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        assertTrue(NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(form(-1, "y", 1, "x", -2), Rel.GE, WHOLE)
                 .assume(form(0, "x", 6, "y", -3), Rel.GE, WHOLE)
                 .isBottom(), "one rule scaled is the same rule");
@@ -118,7 +118,7 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
     @Test
     void andACycleOfDifferencesIsClosedOverItselfHowever() {
-        NumericDomain<String> three = NumericDomain.top(CanonicalOrder.<String>asTheyCompare())
+        NumericDomain<String> three = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(form(0, "y", 1, "x", -1), Rel.LE, WHOLE)
                 .assume(form(0, "x", 1, "z", -1), Rel.LE, WHOLE)
                 .assume(form(1, "z", 1, "y", -1), Rel.LE, WHOLE);
