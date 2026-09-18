@@ -2,13 +2,16 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.Compiler;
 import souther.compiler.diag.Severity;
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ArmObservation;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,8 +93,44 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
             let use (n) = twice(n)
             """;
 
+    /**
+     * A module whose own check stops, and which plainly owns two implementations.
+     *
+     * <p>{@code %s} is a {@code depends on} naming a behavior this module implements, which the
+     * language refuses and which leaves the module's check with nothing for its bodies to be
+     * checked against. Written as one model with that line moved, so the two readings below differ
+     * in it and in nothing else — the declarations, and so what the module owns, are the same
+     * either way.
+     */
+    private static final String STOPS = """
+            module example.stops exposing ( Ok, foo )
+
+            data Ok = { n: Int }
+
+            behavior foo : (n: Int) -> Ok
+                constructs Ok
+            let foo (n) = Ok { n = n }
+
+            behavior beside : (n: Int) -> Ok
+            %s
+            let beside (n) = foo(n)
+            """;
+
+    /** A caller in another module of a behavior the module above implements. */
+    private static final String CALLS_IT = """
+            module example.calls
+
+            import example.stops ( Ok, foo )
+
+            behavior use : (n: Int) -> Ok
+            let use (n) = foo(n)
+            """;
+
     /** What this compiler refuses a construction its own invariant rejects. */
     private static final String THE_REFUSED_CONSTRUCTION = "E2010";
+
+    /** And what it refuses a `depends on` that names a behavior the module implements. */
+    private static final String THE_REFUSED_DEPENDENCY = "E1607";
 
     /**
      * Where every implementation came out, every one of them may be run.
@@ -186,14 +225,106 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
         assertEquals(Set.of("use"), clean.runnable("example.up"));
     }
 
+    /**
+     * What a module owns does not move with what happened to check.
+     *
+     * <p>The contract of the two sets, held as a law rather than written in a sentence. Ownership is
+     * a reading of the declarations: a module whose own check stopped declares exactly what it
+     * declared before, and an answer that said it owns nothing would tell a caller in another module
+     * that what it reaches is supplied from outside — which is the one distinction the two sets
+     * exist to keep apart.
+     *
+     * <p>Held over both compiles rather than pinned on one. A set written out here would be a set
+     * somebody typed; what has to hold is that the same declarations answer the same way whatever
+     * the check came to.
+     */
+    @Test
+    void whatAModuleOwnsDoesNotMoveWithWhatHappenedToCheck() {
+        Compiled stops = compile("1", STOPS.formatted("    depends on foo"));
+        Compiled finishes = compile("1", STOPS.formatted(""));
+
+        assertEquals(List.of(THE_REFUSED_DEPENDENCY), stops.refusals(),
+                () -> "this model is refused about the dependency alone, and it was refused about "
+                        + stops.refusals());
+        assertEquals(List.of(), finishes.refusals(),
+                () -> "and the model with the line taken out is refused about nothing: "
+                        + finishes.refusals());
+        assertEquals(finishes.owned("example.stops"), stops.owned("example.stops"));
+        assertEquals(Set.of("foo", "beside"), stops.owned("example.stops"),
+                "both are implemented here, whatever became of checking them");
+    }
+
+    /**
+     * And nothing of a module that emits no class may be run, nor a caller of one.
+     *
+     * <p>Two answers from one reading. What may be run of a module nothing of which can be emitted
+     * is nothing, whatever each of its bodies came to — and a caller in another module reaching one
+     * of its implementations is a class constructing one that will not be there. The caller's own
+     * module came out whole, so nothing about the caller itself says this.
+     */
+    @Test
+    void nothingOfAModuleThatEmitsNoClassMayBeRunNorACallerOfOne() {
+        Compiled stops = compile("1", STOPS.formatted("    depends on foo"), CALLS_IT);
+
+        assertEquals(Set.of("foo", "beside"), stops.owned("example.stops"));
+        assertEquals(Set.of(), stops.runnable("example.stops"));
+        assertEquals(Set.of("use"), stops.owned("example.calls"),
+                "the caller's own module implements it and came out whole");
+        assertEquals(Set.of(), stops.runnable("example.calls"));
+    }
+
+    /**
+     * And an implementation another compile already made may be run.
+     *
+     * <p>A module the path holds was built when it was built, and its classes are in the artifact —
+     * so there is no body here for this compile to have failed to make. Read the way a module being
+     * compiled is read, every published implementation would be one whose check is not here and so
+     * one that may not be run, and every caller of a dependency would go with it.
+     */
+    @Test
+    void anImplementationAnotherCompileAlreadyMadeMayBeRun() {
+        Map<String, ClassFileImage> published = Compiler.compile("""
+                module example.built exposing ( Ok, made )
+
+                data Ok = { n: Int }
+
+                behavior made : (n: Int) -> Ok
+                    constructs Ok
+                let made (n) = Ok { n = n }
+                """, "built.sou");
+        Compilation against = Compilation.ofSources(List.of("""
+                module example.reads
+
+                import example.built ( Ok, made )
+
+                behavior use : (n: Int) -> Ok
+                let use (n) = made(n)
+                """), ModulePath.of(published));
+        against.answerEverything();
+        Compiled reading = new Compiled(against);
+
+        assertEquals(Set.of("made"), reading.runnable("example.built"),
+                "what the path holds was made when it was built");
+        assertEquals(Set.of("use"), reading.runnable("example.reads"),
+                "so a caller of it may be run");
+    }
+
     /** A compilation of the model, and the answers this asks of it. */
     private record Compiled(Compilation compilation) {
 
         Set<String> runnable(String module) {
+            return implementations(module).runnable();
+        }
+
+        Set<String> owned(String module) {
+            return implementations(module).owned();
+        }
+
+        private Bodies.Implementations implementations(String module) {
             Answer<Bodies.Implementations> answer =
                     compilation.db().ask(new Bodies.RunnableImplementations(module));
             assertTrue(answer.present(), "a module that settled is one this answers about");
-            return answer.value().runnable();
+            return answer.value();
         }
 
         List<String> refusals() {

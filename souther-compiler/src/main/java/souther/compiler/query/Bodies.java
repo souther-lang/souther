@@ -3156,7 +3156,24 @@ public final class Bodies {
             if (!settled.present() || !module.present()) {
                 return Answer.absent();
             }
-            Set<String> owned = implementationsOwnedBy(db, name, settled.value());
+            Set<String> owned = implementationsOwnedBy(db, name);
+            // A module this compile did not build. Its implementations were made when it was built
+            // and are in the artifact the path holds, so what may be run of it is what it owns —
+            // there is no body here for this compile to have failed to make. Asked before the walk
+            // because the walk is about what this compile emits: it reads the check of each body,
+            // which a module off the path has none of, and would answer that every published
+            // implementation cannot be run.
+            if (Front.onThePath(db, name) != null) {
+                return Answer.of(new Implementations(owned, owned));
+            }
+            // A module nothing of which can be emitted has no implementation that may be run,
+            // whatever became of each body. Said here rather than left to each reader: what this
+            // answers is what may be run, and a reader that had to remember to ask this as well
+            // would be one place the two could come apart — which is how a caller came to be
+            // runnable against a module that emits no class at all.
+            if (!emittable(db, name, settled.value(), module.value())) {
+                return Answer.of(new Implementations(owned, Set.of()));
+            }
             // Written out, because this package declares a `Composition` of its own and an import
             // would make the bare name mean the other one.
             Map<ValueName.Behavior, souther.compiler.core.Composition> composed =
@@ -3285,7 +3302,7 @@ public final class Bodies {
             // declarations and not from the closure over them, which is a question about what may
             // be run and is asked of an evaluation rather than of a check.
             Elaborated whole = elaborationOf(db, name, settled.value(), module.value(),
-                    implemented, implementationsOwnedBy(db, name, settled.value()));
+                    implemented, implementationsOwnedBy(db, name));
             return Answer.of(whole, contradicted(db, name, whole.claims()));
         }
     }
@@ -3367,25 +3384,35 @@ public final class Bodies {
     /**
      * Which of a module's behaviors it emits an implementation for, in the order it declares them.
      *
-     * <p>A behavior written with a {@code let} and one written as a {@code >->} composition, which
-     * are the two a module emits a class to apply. Read off the declarations rather than off the
-     * compositions the check settled, because this is asked while a module is being checked: what
-     * routes a composition's stages is settled from the module's lowering and from what the compile
-     * has published, and a reading of that from here would put the publishing of one module behind
-     * the check of another.
+     * <p>One reading and not a union of two. A behavior written with a {@code let} and one written
+     * as a {@code >->} composition are both a class a row is applied through, and
+     * {@link Implementation} is where that is decided for either — asked of the declarations, so a
+     * module on the path answers it from what it published and a module being compiled answers it
+     * from its source.
+     *
+     * <p><b>Not read off what the check reached.</b> {@link #bodiesCheckedIn} answers which bodies
+     * there are to check and is empty for a module whose own check stopped, which is a fact about
+     * how far this compile got. Taken for ownership it says a module owns nothing, and then a caller
+     * in another module is told that what it reaches is supplied from outside — which is the one
+     * distinction the two sets here exist to keep apart.
      *
      * <p>Which of these may be run is a further question and is not this one
      * ({@link RunnableImplementations}). What a module owns does not move with what happened to
      * check: a behavior whose implementation could not be made is still one this module was to
      * implement, and that is the whole difference between the two absences a row can meet.
      */
-    private static Set<String> implementationsOwnedBy(Db db, String module, Hir.Module settled) {
-        Set<String> owned = new LinkedHashSet<>(bodiesCheckedIn(db, module));
-        for (Hir.BehaviorDef behavior : settled.behaviors()) {
-            if (behavior instanceof Hir.PipeBehavior pipe) {
-                owned.add(pipe.name());
-            }
+    private static Set<String> implementationsOwnedBy(Db db, String module) {
+        Map<String, BehaviorImplementation> states =
+                db.ask(new Implementation(module)).value();
+        Set<String> owned = new LinkedHashSet<>();
+        if (states == null) {
+            return owned;
         }
+        states.forEach((behavior, state) -> {
+            if (state.hasBody()) {
+                owned.add(behavior);
+            }
+        });
         return owned;
     }
 
