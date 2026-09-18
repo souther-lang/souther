@@ -17,23 +17,30 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Everything holding a verdict open leaves a reader somewhere, and somewhere it can act.
+ * Everything the analysis could not answer leaves a reader somewhere, and somewhere they can act.
  *
  * <p>The question a reader of {@code undetermined} has is what to do next, and until now the report
  * answered it only where the answer was a row. What is held here is the other half: every entry
  * reaches exactly one {@link ReaderDisposition}, and which one follows from what the compiler
  * established rather than from a formatter's reading of the words.
  *
+ * <p><b>Asked of the assessment and not of what keeps a verdict open.</b> Those are the same list
+ * only where a scope has no gap, and where it has one the verdict shows a reader nothing while the
+ * entries are still there. Asked through the verdict, this law covered whichever models happened to
+ * be short of something and refused about nothing — and a module short of a thing this compiler has
+ * a whole arm for went unasked because a sibling module in the same compilation was refused.
+ *
  * <p><b>Over the models this repository carries and not over values a test built.</b> A
- * disposition worked out from a hand-made opening says the switch is total, which javac already
- * says; what it does not say is that the openings a real model produces reach the arms anybody
+ * disposition worked out from a hand-made entry says the switch is total, which javac already
+ * says; what it does not say is that the entries a real model produces reach the arms anybody
  * expected. Those are two claims and only the second can go wrong quietly.
  */
 @ClosedWorldContract
-class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
+class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
 
     /**
-     * Every opening every model here produces, which is where a claim about them has to be held.
+     * Every unanswered thing every model here produces, which is where a claim about them has to be
+     * held.
      *
      * <p>Built once for the class. Nothing else here asks a bench corpus how adequate its rows
      * are, so the measuring of one of them is paid by this and by nothing else — measured, it is
@@ -44,16 +51,16 @@ class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
      * a claim belongs: its subject is the models this repository carries, so it runs where they are
      * the subject.
      *
-     * <p>Which arms they reach is theirs to change. A model reaches an arm about something a measure
-     * went without only while it is short of that thing, so a model made more adequate takes such a
-     * witness away — these are evidence about the language, not fixtures held to reach an arm.
+     * <p>One scope apiece and not one per selection. What a narrowed report holds is a selection
+     * from what the whole one holds, so asking the compilation asks about all of them
+     * ({@link AdequacyReport#assessment()}).
      */
-    private static final List<AdequacyOpening> OPENINGS = everyOpening();
+    private static final List<AdequacyOpening> UNRESOLVED = everythingUnresolved();
 
-    private static List<AdequacyOpening> everyOpening() {
+    private static List<AdequacyOpening> everythingUnresolved() {
         List<AdequacyOpening> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
-            out.addAll(AdequacyReport.of(compilation).whatKeepsTheVerdictOpen());
+            out.addAll(AdequacyReport.of(compilation).assessment().uncertainties());
         }
         return List.copyOf(out);
     }
@@ -61,18 +68,18 @@ class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
     /**
      * One apiece, and the population is not empty.
      *
-     * <p>The second half is what keeps this from passing over a corpus that holds nothing open. A
-     * law about openings answered over none of them is a law nothing has been held to.
+     * <p>The second half is what keeps this from passing over a corpus that answers everything. A
+     * law about unanswered things held over none of them is a law nothing has been held to.
      */
     @Test
-    void everyOpeningReachesADisposition() {
-        List<AdequacyOpening> openings = OPENINGS;
+    void everyUnresolvedFactReachesADisposition() {
+        List<AdequacyOpening> unresolved = UNRESOLVED;
 
-        assertFalse(openings.isEmpty(), "the models here hold verdicts open, which is what this is"
+        assertFalse(unresolved.isEmpty(), "the models here go without things, which is what this is"
                 + " a law about");
-        for (AdequacyOpening each : openings) {
+        for (AdequacyOpening each : unresolved) {
             assertTrue(ReaderDisposition.of(each) != null,
-                    () -> each + " holds a verdict open and leaves a reader nowhere");
+                    () -> each + " was not answered and leaves a reader nowhere");
         }
     }
 
@@ -85,7 +92,7 @@ class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
      */
     @Test
     void aWiderRunIsOfferedExactlyWhereItWouldAnswer() {
-        for (AdequacyOpening each : OPENINGS) {
+        for (AdequacyOpening each : UNRESOLVED) {
             boolean offered = ReaderDisposition.of(each) instanceof ReaderDisposition.WidenTheRun;
 
             assertEquals(each.runSensitivity() == RunSensitivity.MAY_CHANGE, offered,
@@ -97,9 +104,9 @@ class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
     /**
      * The dispositions a model this repository carries reaches.
      *
-     * <p>Written out so that a change which quietly stops producing an opening, or starts answering
+     * <p>Written out so that a change which quietly stops producing an entry, or starts answering
      * one with a different arm, is read here rather than found by someone running the command. The
-     * set and not the counts: how many of a kind a model holds open moves with the model.
+     * set and not the counts: how many of a kind a model holds unanswered moves with the model.
      */
     private static final Set<String> WITNESSED = Set.of(
             "LookAtTheRule", "LookAtWhyNothingWasMeasured", "LookAtWhatShowedNoRow");
@@ -121,7 +128,7 @@ class EveryThingThatHoldsAVerdictOpenLeavesTheReaderSomewhereTest {
     @Test
     void theModelsHereReachTheseDispositions() {
         Set<String> reached = new LinkedHashSet<>();
-        for (AdequacyOpening each : OPENINGS) {
+        for (AdequacyOpening each : UNRESOLVED) {
             reached.add(ReaderDisposition.of(each).getClass().getSimpleName());
         }
 
