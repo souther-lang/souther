@@ -60,14 +60,25 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      *
      * <p>A {@link OnTheWay.Declined} entry never narrows it — it is the record that something on the
      * way is not represented in what comes back.
+     *
+     * <p>And a {@link OnTheWay.TakenIn} entry is one the region represents, which is settled where
+     * the entry is made rather than hoped for here. It does not follow that the region is narrower
+     * for each of them: a constraint the rules already hold is taken in again and leaves the region
+     * where it was. What holds is the one thing a reader of an account acts on — that what is
+     * written down as taken in is in the region a search runs over.
      */
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn taken) {
                 region = switch (taken.taken()) {
+                    // Taken in, and the region is asked to take it in: an entry here is one the
+                    // region said it could carry when the walk recorded it, so a refusal now is
+                    // this compiler holding two readings of one constraint that disagree. Loud,
+                    // because the quiet answer is the region a search would then run over — wider
+                    // than what every reader of this account was told it had been narrowed to.
                     case TakenConstraint.Affine affine ->
-                            region.assuming(affine.form(), affine.rel());
+                            region.assuming(affine.form(), affine.rel()).taken();
                     case TakenConstraint.Ordered ordered ->
                             region.assuming(ordered.term(), ordered.at(), ordered.rel());
                     case TakenConstraint.AwayFrom away ->

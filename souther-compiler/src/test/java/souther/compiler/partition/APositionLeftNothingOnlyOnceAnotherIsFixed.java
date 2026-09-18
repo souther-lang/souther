@@ -45,8 +45,8 @@ final class APositionLeftNothingOnlyOnceAnotherIsFixed implements SearchRegion {
     }
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
-        return this;
+    public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
+        return new Assumption.Taken(this);
     }
 
     @Override

@@ -113,7 +113,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
     @Test
     void aFixingReachesWhatTheRelationsReachAndNotOnlyItsNeighbour() {
         NumericDomain.Bounds runs = runsBetween(
-                related().assuming(minus("z", "y"), Rel.LE)
+                related().assuming(minus("z", "y"), Rel.LE).taken()
                         .given(term("z"), Count.of(BigDecimal.valueOf(100))), term("x"));
 
         assertNotNull(runs, "x is a number this reading answers about");
@@ -138,7 +138,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(term("y"), BigDecimal.ONE);
         coefs.put(term("x"), BigDecimal.valueOf(-2));
-        return region().assuming(new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE);
+        return region().assuming(new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE).taken();
     }
 
     /** The form {@code one - other}. */

@@ -68,7 +68,7 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         // And on its own the third is exactly what the caller said and no more, so a reader meeting
         // that onto the answer above would still have no floor for the sum.
         SearchRegion withAFloorUnderTheThird =
-                rules.assuming(LinearForm.atom(Z), Rel.GE);
+                rules.assuming(LinearForm.atom(Z), Rel.GE).taken();
         assertEquals(Endpoint.inclusive(Count.of(0)),
                 runsBetween(withAFloorUnderTheThird, LinearForm.atom(Z)).min());
 
@@ -84,7 +84,8 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         SearchRegion rules = region();
 
         assertEquals(runsBetween(rules, LinearForm.atom(X)),
-                runsBetween(rules.assuming(LinearForm.atom(Z), Rel.GE), LinearForm.atom(X)));
+                runsBetween(rules.assuming(LinearForm.atom(Z), Rel.GE).taken(),
+                        LinearForm.atom(X)));
     }
 
     /** Where the form runs, of a region that holds something — which every region here does. */

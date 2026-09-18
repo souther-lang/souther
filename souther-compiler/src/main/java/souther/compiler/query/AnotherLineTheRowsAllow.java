@@ -110,8 +110,13 @@ public sealed interface AnotherLineTheRowsAllow {
          * listing what the condition already leaves out.
          */
         public SearchRegion tellingThemApart(SearchRegion within) {
+            // The region is asked to take the line in and is expected to carry it: this line is
+            // drawn along a direction a boundary of the model was drawn on, so its terms stand on
+            // the orders that drawing needed. A refusal would be a line and a region disagreeing
+            // about what the positions are measured on, and the region it would leave is where
+            // every row stands rather than where the two lines differ.
             return within.assuming(new LinearForm<>(cut.negate(), direction.direction()),
-                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE);
+                    keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
         }
 
         /**

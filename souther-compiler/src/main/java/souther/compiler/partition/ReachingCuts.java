@@ -214,8 +214,19 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
                 // `f rel 0`.
                 LinearForm<NumericTerm> against =
                         affine.form().minus(LinearForm.constant(affine.cut()));
-                yield new OnTheWay.TakenIn(at,
-                        new TakenConstraint.Affine(against, holding ? states : states.denied()));
+                Rel met = holding ? states : states.denied();
+                // And whether a region can carry it, asked of a region rather than decided from
+                // the shape of the form. That a reading reached the end of a comparison is a fact
+                // about the arithmetic's reading; whether the values it is over stand on anything
+                // a region measures them on is the region's, and the two are not each other — a
+                // difference between two positions holding records is read perfectly and is a
+                // distance on nothing.
+                yield switch (read.quantities().region().assuming(against, met)) {
+                    case SearchRegion.Assumption.Taken _ ->
+                            new OnTheWay.TakenIn(at, new TakenConstraint.Affine(against, met));
+                    case SearchRegion.Assumption.Refused(var why) ->
+                            new OnTheWay.Declined(comparison.occurrence(), at, whyDeclined(why));
+                };
             }
             // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
             // position, so there is nothing for a region to be narrowed by and nothing this
@@ -231,6 +242,26 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
                         : new OnTheWay.Declined(comparison.occurrence(), at,
                                 new OnTheWay.Why.ComparisonNotRepresentedAsACut());
             }
+        };
+    }
+
+    /**
+     * A region's refusal in the words an account of the way is written in.
+     *
+     * <p>Two vocabularies because they answer to two readers. What a region says is about its own
+     * algebra and names the term it has no order for; what an account of the way says is what an
+     * author is to make of a condition that narrowed nothing. Written as one, either the region
+     * would be naming conditions or the report would be reading terms.
+     */
+    private static OnTheWay.Why whyDeclined(SearchRegion.Refusal why) {
+        return switch (why) {
+            case SearchRegion.Refusal.NoOrderUnderATerm _ ->
+                    new OnTheWay.Why.QuantityStandsOnNoOrder();
+            // A form weighing no term is a comparison that constrains no position, which is the
+            // word a reading that cancelled already gets. One thing, so one word: an author reading
+            // either is told the rule states no quantity, and there is nothing to change.
+            case SearchRegion.Refusal.NoQuantityToTake _ ->
+                    new OnTheWay.Why.ComparisonStatesNoQuantity();
         };
     }
 

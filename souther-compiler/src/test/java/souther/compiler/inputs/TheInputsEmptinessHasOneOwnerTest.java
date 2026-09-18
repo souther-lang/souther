@@ -141,7 +141,7 @@ class TheInputsEmptinessHasOneOwnerTest {
         coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), BigDecimal.ONE);
         coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), BigDecimal.ONE);
         SearchRegion crossed = asked.region().assuming(
-                new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE);
+                new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE).taken();
 
         assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
                 crossed.emptiness());

@@ -47,9 +47,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         private final List<TakenConstraint> told = new ArrayList<>();
 
         @Override
-        public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
+        public Assumption assuming(LinearForm<NumericTerm> form, Rel rel) {
             told.add(new TakenConstraint.Affine(form, rel));
-            return this;
+            return new Assumption.Taken(this);
         }
 
         @Override

@@ -3498,6 +3498,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // is nothing an author would change.
             case OnTheWay.Why.ComparisonStatesNoQuantity _ ->
                     "a comparison that constrains no position";
+            // And the third, which is neither: the rule was read in full and constrains both of the
+            // positions it names, and what is missing is an order to measure them on. An author
+            // acts on the types here rather than on how the comparison was written.
+            case OnTheWay.Why.QuantityStandsOnNoOrder _ ->
+                    "a comparison whose quantity stands on no order this compiler measures";
             case OnTheWay.Why.OneOfTwoThings _ ->
                     "an outcome that states one of two things";
             case OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->

@@ -69,7 +69,7 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
     @Test
     void andWithOnlyOneOfThemItIsARangeLikeAnyOther() {
         assertInstanceOf(NumericDomain.FormProjection.Within.class,
-                region().assuming(form(-1, 1, 0), Rel.LE).projectionOf(term("x")),
+                region().assuming(form(-1, 1, 0), Rel.LE).taken().projectionOf(term("x")),
                 "one condition on its own leaves every pair it admits");
     }
 
@@ -91,14 +91,15 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
     @Test
     void andOverTheRegionBeforeThatConditionItWalks() {
         assertInstanceOf(NumericWitness.Standing.Found.class,
-                NumericWitness.of(region().assuming(form(-1, 1, 0), Rel.LE),
+                NumericWitness.of(region().assuming(form(-1, 1, 0), Rel.LE).taken(),
                         List.of(term("x")), _ -> Carrier.WHOLE),
                 "there is somewhere for the position to stand, so it stands there");
     }
 
     /** The region with {@code y <= x} and {@code y >= x + 1} taken in, which no pair satisfies. */
     private static SearchRegion contradicting() {
-        return region().assuming(form(-1, 1, 0), Rel.LE).assuming(form(1, -1, 1), Rel.LE);
+        return region().assuming(form(-1, 1, 0), Rel.LE).taken()
+                .assuming(form(1, -1, 1), Rel.LE).taken();
     }
 
     /** {@code cx·x + cy·y + k} over the two positions the behavior declares. */

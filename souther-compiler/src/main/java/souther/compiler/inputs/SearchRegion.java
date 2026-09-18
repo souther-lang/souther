@@ -43,19 +43,81 @@ import java.util.Optional;
 public interface SearchRegion {
 
     /**
-     * The same region, with {@code form rel 0} taken in.
+     * This region asked to take {@code form rel 0} in, and whether it could.
      *
      * <p>A refinement of where a row may be written and not a new reading of anything. Taking in
      * accumulates, so the order the conditions on the way to a border arrived in does not reach the
      * answer, and taking one in twice is taking it in once.
      *
-     * <p>Where the arithmetic has nothing to say about a condition — a form over a position whose
-     * values it cannot count, a subject it has no spacing for — what comes back is this region
-     * unchanged. Which is the direction that keeps the inclusions above: a condition nothing took in
-     * leaves a region that still holds every row that arrives, and a region narrowed on a condition
-     * nothing established would leave it narrower than they are.
+     * <p><b>Whether it was taken in is the answer and not what became of the region.</b> A
+     * constraint already taken in is taken in again and leaves the region where it was, and a
+     * constraint this algebra has no way to carry leaves it there too — one of those is a region
+     * that represents the condition and the other is a region that does not, and a caller reading
+     * the two off the region it got back reads them as one. Which is what left a search composing
+     * against rules wider than the rows that reach it while every account of the way said the
+     * search had been narrowed.
+     *
+     * <p>A refusal is not an error and the region it leaves is still sound: what comes back
+     * unnarrowed still holds every row that arrives, which is the direction the inclusions above
+     * need. What a caller owes is to say so — by declining the condition rather than recording it
+     * as one the search was narrowed by, or by giving up on what it was composing.
      */
-    SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel);
+    Assumption assuming(LinearForm<NumericTerm> form, Rel rel);
+
+    /**
+     * What asking a region to take a constraint in came to.
+     *
+     * <p>Two answers and not a region, for the reason
+     * {@link SearchRegion#assuming(LinearForm, Rel)} gives: a region that took
+     * the constraint in and one that has no way to carry it are told apart by nothing a reader can
+     * see in the region itself.
+     */
+    sealed interface Assumption {
+
+        /** The region with the constraint taken in, which is a region that represents it. Not
+         *  necessarily a different region: a constraint already taken in leaves it where it was,
+         *  and that is a region that represents it as surely as the first taking did. */
+        record Taken(SearchRegion region) implements Assumption {}
+
+        /** The constraint is one this region's algebra cannot carry, so the region is unchanged
+         *  and does not represent it. */
+        record Refused(Refusal why) implements Assumption {}
+
+        /**
+         * The region that took it in, where it did.
+         *
+         * <p>For a caller that has already established the constraint is representable — one
+         * narrowing a region by what an account says was taken in, where a refusal is this
+         * compiler's two readings of one constraint disagreeing. Everybody else answers the
+         * refusal, since what comes back from one is a region that says less than the caller
+         * needs.
+         */
+        default SearchRegion taken() {
+            return switch (this) {
+                case Taken(SearchRegion region) -> region;
+                case Refused(Refusal why) -> throw new IllegalStateException(
+                        "a constraint this region was to have taken in was refused by it: " + why);
+            };
+        }
+    }
+
+    /** Why a region cannot carry a constraint it was asked to take in. */
+    sealed interface Refusal {
+
+        /**
+         * One of the form's terms stands on no order this region measures values on.
+         *
+         * <p>Which is not the same as an order that counts nothing: a string is ordered and two
+         * strings stand a distance apart, and a form over them is carried here. This is a position
+         * with no order at all — a record compared with another is a difference between two of them
+         * that is a distance on nothing.
+         */
+        record NoOrderUnderATerm(NumericTerm term) implements Refusal {}
+
+        /** The form weighs no term, so there is no quantity to be constrained. Nothing fell short
+         *  here; there is nothing to take in. */
+        record NoQuantityToTake() implements Refusal {}
+    }
 
     /**
      * The same region, with {@code term rel at} taken in on the order {@code term} stands on.
