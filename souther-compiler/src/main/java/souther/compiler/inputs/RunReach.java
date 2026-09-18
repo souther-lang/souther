@@ -61,8 +61,7 @@ final class RunReach {
 
     /** The one order a walk takes these two in, which is the order they are declared. A constant is
      *  equal to itself and to no other, so the two ends of the law an order owes meet exactly. */
-    private static final CanonicalOrder<Atom> IN_ONE_ORDER =
-            (one, other) -> one.ordinal() - other.ordinal();
+    private static final CanonicalOrder<Atom> IN_ONE_ORDER = CanonicalOrder.asTheyCompare();
 
     private static final LinearForm<Atom> ACCUMULATOR =
             LinearForm.atom(Atom.ACCUMULATOR);
