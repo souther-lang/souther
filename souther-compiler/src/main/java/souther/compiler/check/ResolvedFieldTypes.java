@@ -6,7 +6,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the declarations a text has resolved so far say its fields hold.
@@ -78,11 +80,21 @@ public final class ResolvedFieldTypes implements FieldTypes {
      * that check is whichever of them it read last.
      */
     static Map<String, Hir.TypeRef> written(TypeSymbol typeName, Symbols symbols) {
+        return written(typeName, symbols, new LinkedHashSet<>());
+    }
+
+    /**
+     * {@code onThePath} is what is being read above this. A text being edited is not one the rule
+     * that a data does not spread itself has been asked of ({@link ProductSpreads}), and what an
+     * editor is owed for one that does is an answer rather than a walk that does not come back.
+     */
+    private static Map<String, Hir.TypeRef> written(TypeSymbol typeName, Symbols symbols,
+                                                    Set<TypeSymbol> onThePath) {
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declaredNode(typeName) instanceof Hir.Data d) {
+        if (symbols.declaredNode(typeName) instanceof Hir.Data d && onThePath.add(typeName)) {
             for (Hir.Name inc : d.includes()) {
                 if (inc instanceof Hir.Name.Denoting named) {
-                    out.putAll(written(named.type(), symbols));
+                    out.putAll(written(named.type(), symbols, onThePath));
                 }
             }
             for (Hir.Field f : d.fields()) {
@@ -90,6 +102,7 @@ public final class ResolvedFieldTypes implements FieldTypes {
                     out.put(f.name(), ref);
                 }
             }
+            onThePath.remove(typeName);
         }
         return out;
     }
