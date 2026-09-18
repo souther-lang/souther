@@ -1,46 +1,41 @@
 package souther.architecture;
 
-import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.check.Symbols;
-
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.classfile.constantpool.ClassEntry;
+import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The walk over which rules govern a value takes what the declarations publish, and nothing beside
- * it.
+ * What the walk over which rules govern a value reads, written down.
  *
- * <p>What it would otherwise reach for is a world. Told that a declaration says nothing, a walk has
- * to know which of two opposite things that is — nothing declares the name, or a declaration is
- * there whose module could not be read — and only one of them leaves the rules of a value short.
- * Read out of a world, that bit comes from where the declarations are written, which is the thing a
- * walk over what they publish is for not reading.
+ * <p>One authority. What a declaration spreads, what it states, and whether there is a declaration
+ * at all are read from what the declarations publish; a second place answering any of it is a walk
+ * whose answer depends on which of the two it met.
  *
- * <p>So what is published says which of the three it is
- * ({@code souther.compiler.check.PublishedDeclarationResult}) and the walk asks nobody else. Held
- * here rather than left to the signature: a world is reached by being named in one, and also by
- * being handed on, held in a record, or read off something that has one — and a parameter removed
- * while a field stays is the same walk reading the same thing.
+ * <p><b>Written as what it may read and not as what it may not.</b> A rule naming the worlds would
+ * be answered by asking a narrower carrier for the same thing — the scope this used to consult
+ * reaches its answer through {@code NameSense}, which any carrier of it can hand over, and a rule
+ * listing the worlds would let that back in with nothing going red. So every type of this compiler
+ * the walk names is a row here, and a second authority arriving is a row nobody wrote.
  *
- * <p>The worlds are read off the sealed interface and not listed, so a world added to it is one
- * this sees arrive.
- *
- * <p>The control is what the walk does take. Without it this is met by a class that reads neither,
- * which is not a walk over what declarations publish at all.
+ * <p>Read off the compiled class: the constant pool for what it uses, and the descriptors and
+ * signatures of its methods and fields for what it is handed and hands on. A type reached by being
+ * passed in, held, or answered with is named in one of those, so a carrier with a world inside it is
+ * a row too.
  */
 class TheWalkOverWhatDeclarationsPublishReadsNoWorldTest {
 
@@ -48,65 +43,82 @@ class TheWalkOverWhatDeclarationsPublishReadsNoWorldTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
-    /** Every declaration world, the interface and each carrier of it. */
-    private static final Set<String> THE_WORLDS = worlds();
+    /**
+     * Every type of this compiler the walk names, and why it may.
+     *
+     * <p>{@code PublishedDeclarations} is the authority, and {@code PublishedDeclarationResult} is
+     * what it answers — which of the three, and what the declaration says where there is one.
+     * {@code DeclarationMeaning} and {@code ClauseMeaning} are that answer read: what a declaration
+     * spreads and what each of its clauses states. {@code DeclarationReference} is what a spread
+     * names and {@code TypeSymbol} is what it resolves to, which is where the walk goes next;
+     * {@code TypeKey} is the address the authority is asked by.
+     *
+     * <p>Nothing here reads a declaration as it was written, and nothing here answers a question
+     * about one from anywhere but the publication.
+     */
+    private static final List<String> IT_MAY_READ = List.of(
+            "souther/compiler/check/ClauseMeaning",
+            "souther/compiler/check/DeclarationMeaning",
+            "souther/compiler/check/DeclarationMeaning$Product",
+            "souther/compiler/check/DeclarationReference",
+            "souther/compiler/check/DeclarationReference$Named",
+            "souther/compiler/check/PublishedDeclarationResult",
+            "souther/compiler/check/PublishedDeclarationResult$Found",
+            "souther/compiler/check/PublishedDeclarationResult$NotDeclared",
+            "souther/compiler/check/PublishedDeclarationResult$Unavailable",
+            "souther/compiler/check/PublishedDeclarations",
+            "souther/compiler/check/PublishedRules",
+            "souther/compiler/types/TypeKey",
+            "souther/compiler/types/TypeSymbol",
+            "souther/compiler/types/TypeSymbol$AtModule");
 
     @Test
-    void theWalkNamesNoWorld() {
-        assertEquals(List.of(), new ArrayList<>(named(THE_WORLDS)),
-                "the walk over what declarations publish reads a world, so which of the two ways a"
-                        + " declaration says nothing is answered from where it is written");
+    void theWalkNamesWhatIsWrittenDownAndNothingElse() {
+        assertEquals(IT_MAY_READ, new ArrayList<>(named()),
+                "a row missing here is a second authority the walk reads, which is an answer that"
+                        + " depends on which of the two it met");
     }
 
-    /** And it names what it does read, which is what keeps the rule above from holding vacuously. */
-    @Test
-    void andItNamesWhatItReadsInstead() {
-        assertTrue(named(Set.of(internal(PublishedDeclarations.class))).size() == 1,
-                "the walk does not read what the declarations publish either, so it is not the walk"
-                        + " this is about");
-    }
-
-    /** Which of {@code wanted} the walk names — used, handed on, or written in a signature. */
-    private static Set<String> named(Set<String> wanted) {
+    /** Every type of this compiler the walk names, used or written in a signature. */
+    private static Set<String> named() {
         ClassModel walk = COMPILED.read(THE_WALK);
         Set<String> found = new TreeSet<>();
         for (PoolEntry entry : walk.constantPool()) {
-            if (entry instanceof ClassEntry it && wanted.contains(it.asInternalName())) {
-                found.add(it.asInternalName());
+            if (entry instanceof ClassEntry it) {
+                add(found, it.asInternalName());
+            }
+            if (entry instanceof MemberRefEntry it) {
+                add(found, it.owner().name().stringValue());
+                addEachIn(found, it.nameAndType().type().stringValue());
             }
         }
         for (MethodModel method : walk.methods()) {
-            for (String each : wanted) {
-                if (writes(method, each)) {
-                    found.add(each);
-                }
-            }
+            addEachIn(found, method.methodTypeSymbol().descriptorString());
+            method.findAttribute(Attributes.signature()).ifPresent(
+                    it -> addEachIn(found, it.signature().stringValue()));
+        }
+        for (FieldModel field : walk.fields()) {
+            addEachIn(found, field.fieldTypeSymbol().descriptorString());
+            field.findAttribute(Attributes.signature()).ifPresent(
+                    it -> addEachIn(found, it.signature().stringValue()));
         }
         return found;
     }
 
-    /** Whether {@code method} writes {@code type} in what it takes or answers with. */
-    private static boolean writes(MethodModel method, String type) {
-        String named = "L" + type + ";";
-        if (method.methodTypeSymbol().descriptorString().contains(named)) {
-            return true;
+    /** Every class named in a descriptor or a signature, which is where a type handed over or
+     *  handed on is written. */
+    private static void addEachIn(Set<String> found, String descriptor) {
+        Matcher named = Pattern.compile("L([^;<]+)[;<]").matcher(descriptor);
+        while (named.find()) {
+            add(found, named.group(1));
         }
-        return method.findAttribute(Attributes.signature())
-                .map(SignatureAttribute::signature)
-                .map(it -> it.stringValue().contains(named))
-                .orElse(false);
     }
 
-    private static Set<String> worlds() {
-        Set<String> out = new LinkedHashSet<>();
-        out.add(internal(Symbols.class));
-        for (Class<?> each : Symbols.class.getPermittedSubclasses()) {
-            out.add(internal(each));
+    /** This compiler's own types only. What the walk does with a list or a map is the language's
+     *  and says nothing about which authority it read. */
+    private static void add(Set<String> found, String name) {
+        if (name.startsWith("souther/")) {
+            found.add(name);
         }
-        return out;
-    }
-
-    private static String internal(Class<?> type) {
-        return type.getName().replace('.', '/');
     }
 }

@@ -30,7 +30,8 @@ public sealed interface PublishedDeclarationResult {
     }
 
     /**
-     * The name resolves to a declaration and what it says could not be worked out.
+     * A module wrote the declaration and what it says could not be worked out — its module does not
+     * compile, its imports form a ring, or settling it failed.
      *
      * <p>Never widened to a declaration that says nothing. A reading turns this into the rule it
      * already has a word for, that not every rule governing the value was reached; read as a
@@ -39,16 +40,12 @@ public sealed interface PublishedDeclarationResult {
     record Unavailable(TypeKey declaration) implements PublishedDeclarationResult {}
 
     /**
-     * The name does not resolve to a declaration of this compilation, and the language declares
-     * none either.
+     * No module of this compilation writes one, and the language declares none either.
      *
-     * <p>Which is a wider answer than a name nobody wrote. Whether a name resolves to a declaration
-     * is read from the resolution that fails when a module does — so a module whose imports form a
-     * ring, or that does not parse, has the declarations it writes answered for here as
-     * declarations there are none of. The expanded side divides the cases by the same question and
-     * answers alike, which {@code TheTwoBoundariesPutADeclarationInTheSameArmTest} holds. What
-     * keeps this from being read as a value held to nothing is that a compilation in that state has
-     * no reading of the importing module either.
+     * <p>Asked of what the modules were parsed as, and not of anything that resolves. Every answer
+     * from resolution down is cut for a module whose imports form a ring, so read there a
+     * declaration nobody could reach would be one nobody wrote — which is the arm above collapsing
+     * into this one, at the rung below the one this type exists to keep apart.
      */
     record NotDeclared(TypeKey declaration) implements PublishedDeclarationResult {}
 }

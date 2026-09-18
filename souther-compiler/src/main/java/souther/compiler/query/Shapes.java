@@ -574,12 +574,14 @@ public final class Shapes {
                 return Answer.of(new PublishedDeclarationResult.Found(
                         DeclarationMeaning.ofLanguage(declared)));
             }
-            // Which of the two absences it is, asked of whether the name resolves to a declaration
-            // at all — the same question the expanded side asks to tell them apart, so the two
+            // Which of the two absences it is, asked of whether a module writes the declaration at
+            // all. Asked of anything that resolves, this would answer that a declaration nobody
+            // could read is one nobody wrote — and a value of it would be held to no rule, with
+            // nothing saying so. The same question answers it on the expanded side, so the two
             // boundaries divide the cases by one question rather than each by its own.
-            return ClausesExpandedFor.declarationOf(db, named) == null
-                    ? Answer.of(new PublishedDeclarationResult.NotDeclared(named))
-                    : Answer.of(new PublishedDeclarationResult.Unavailable(named));
+            return Front.somethingDeclares(db, named)
+                    ? Answer.of(new PublishedDeclarationResult.Unavailable(named))
+                    : Answer.of(new PublishedDeclarationResult.NotDeclared(named));
         }
     }
 
@@ -1268,7 +1270,13 @@ public final class Shapes {
             // module wrote, would come back as clauses nobody could work out.
             Hir.Def declared = declarationOf(db, named);
             if (declared == null) {
-                return Answer.of(new ExpandedClauseResult.NotDeclared(named));
+                // Whether there is such a declaration is not what resolution answers: a module cut
+                // out of it writes what it writes, and read from resolution its declarations would
+                // come back as declarations nobody wrote. So the clauses of one are unavailable,
+                // which is what a reader turns into a rule about the position that went unreached.
+                return Answer.of(Front.somethingDeclares(db, named)
+                        ? new ExpandedClauseResult.Unavailable(named)
+                        : new ExpandedClauseResult.NotDeclared(named));
             }
             if (!(declared instanceof Hir.Data)) {
                 return Answer.of(new ExpandedClauseResult.Found(

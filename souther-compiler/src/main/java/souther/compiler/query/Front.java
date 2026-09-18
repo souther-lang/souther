@@ -6,6 +6,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.regex.PatternPlan;
@@ -932,6 +933,33 @@ public final class Front {
             }
             return Answer.of(List.copyOf(declared));
         }
+    }
+
+    /**
+     * Whether a module of this compilation writes a declaration of {@code named}.
+     *
+     * <p>Asked here and not of anything that resolves. Whether there is such a declaration and
+     * whether this compiler could work out what it says are two questions, and every answer below
+     * resolution can only tell a reader that it has neither — a module whose imports form a ring is
+     * cut at {@link Names.Declarations}, so its declarations come back from there as declarations
+     * there are none of. Read off what the module was parsed as, which is above that cut, the
+     * answer is what the author wrote either way.
+     *
+     * <p>Only what a module of this compilation writes. What the language declares belongs to no
+     * module here and is asked for where a reader has the library, which is before either boundary
+     * has a question about a name being written at all.
+     */
+    public static boolean somethingDeclares(Db db, TypeKey named) {
+        Answer<List<TypeSymbol.AtModule>> written = db.ask(new DeclaredTypes(named.module()));
+        if (!written.present()) {
+            return false;
+        }
+        for (TypeSymbol.AtModule each : written.value()) {
+            if (each.key().equals(named)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

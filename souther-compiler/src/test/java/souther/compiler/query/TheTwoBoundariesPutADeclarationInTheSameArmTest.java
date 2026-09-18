@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * broken module costs is answered for one declaration at a time — a clause that does not type, a
  * field naming no type, a body that does not check — so none of those reaches anything but found.
  * A value defined in terms of itself is answered for the module, and stops it before its
- * declarations say anything. Imports that form a ring stop the resolution the second question is
- * itself read from, so both boundaries answer that there is no such declaration.
+ * declarations say anything. Imports that form a ring stop every answer from resolution down,
+ * which is why whether a module writes a declaration is asked of what it was parsed as.
  *
  * <p>The control is a workspace that compiles, which is what keeps this from being met by two
  * boundaries that answer nothing for everything.
@@ -73,14 +73,15 @@ class TheTwoBoundariesPutADeclarationInTheSameArmTest {
     }
 
     /**
-     * And one whose module's imports form a ring is not declared, to both.
+     * And one whose module's imports form a ring is unavailable to both, not undeclared.
      *
-     * <p>Wider than a name nobody wrote, and the same width on both sides. Whether a name resolves
-     * to a declaration is read from the resolution a ring stops, so the declarations of a module in
-     * one are answered for as declarations there are none of.
+     * <p>The case every answer from resolution down is cut for. A module in a ring writes what it
+     * writes, so whether there is a declaration is the parse's to answer and what it says is what
+     * could not be worked out. Divided by anything below the cut, a declaration nobody could read
+     * comes back as one nobody wrote, and a value of it is held to no rule with nothing saying so.
      */
     @Test
-    void oneWhoseImportsFormARingIsNotDeclaredToBoth() {
+    void oneWhoseImportsFormARingIsUnavailableToBoth() {
         String prices = """
                 module shop.prices exposing ( Amount )
 
@@ -92,8 +93,8 @@ class TheTwoBoundariesPutADeclarationInTheSameArmTest {
                 data Held = { b: Basket }
                 """;
 
-        assertEquals("NotDeclared", published(prices),
-                "the resolution that says whether anything declares it is the one the ring stops");
+        assertEquals("Unavailable", published(prices),
+                "the module writes the declaration, and what it says could not be worked out");
         assertEquals(published(prices), expanded(prices),
                 "and the two boundaries put it in the same arm");
     }

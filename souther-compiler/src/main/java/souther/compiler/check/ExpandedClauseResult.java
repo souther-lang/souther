@@ -36,7 +36,8 @@ public sealed interface ExpandedClauseResult {
     }
 
     /**
-     * The name resolves to a declaration and its clauses could not be worked out.
+     * A module wrote the declaration and its clauses could not be worked out — its module does not
+     * compile, its imports form a ring, or expanding it failed.
      *
      * <p>Never widened to no clauses. A reading turns this into a rule about the position that went
      * unreached, which it already has a word for; a code generator does not generate, because a
@@ -45,7 +46,7 @@ public sealed interface ExpandedClauseResult {
      */
     record Unavailable(TypeKey declaration) implements ExpandedClauseResult {}
 
-    /** The name does not resolve to a declaration of this compilation — which is wider than a name
-     *  nobody wrote, for the reason {@link PublishedDeclarationResult.NotDeclared} gives. */
+    /** No module of this compilation writes one, asked of what they were parsed as for the reason
+     *  {@link PublishedDeclarationResult.NotDeclared} gives. */
     record NotDeclared(TypeKey declaration) implements ExpandedClauseResult {}
 }
