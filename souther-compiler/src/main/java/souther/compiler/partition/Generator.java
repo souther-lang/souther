@@ -3601,13 +3601,13 @@ public final class Generator {
      * came to nothing would stay chosen, and the cut after it would be answering under a case
      * nothing was ever written under.
      *
-     * @param standing where the row already writes, which a number asked for here has to stand
-     *                 beside — read and never added to
-     * @param assumed  what the row is already taken to be, which every case chosen here agrees with
+     * @param alreadyStanding where the row already writes, which a number asked for here has to
+     *                        stand beside — read and never added to
+     * @param assumed what the row is already taken to be, which every case chosen here agrees with
      */
     private static Placed placing(MeasuredInput subject, WitnessSearch looking,
                                   souther.compiler.inputs.SearchRegion here,
-                                  Map<RealizationTarget, Place> out,
+                                  Map<RealizationTarget, Place> alreadyStanding,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
         // What the cut says, asked as the one thing it says. A cut over two positions is a
         // statement about their sum, and the rules can leave that sum nowhere while leaving each
@@ -3654,7 +3654,7 @@ public final class Generator {
             }
             // This very number already stands somewhere: the item asked for it, or an earlier
             // cut did. Nothing to place, and the cut is answered at it either way.
-            if (out.containsKey(asked.target())) {
+            if (alreadyStanding.containsKey(asked.target())) {
             continue;
             }
             // A number this reader cannot place beside the ones already standing. What it can
@@ -3671,7 +3671,7 @@ public final class Generator {
             // already writing for another number.
             NumericTerm.FromOnePosition at = term.atOnePosition();
             if (at == null) {
-            shared = !alsoWritingAt(out, asked.target().writeRoot()).isEmpty();
+            shared = !alsoWritingAt(alreadyStanding, asked.target().writeRoot()).isEmpty();
             placeable = false;
             break;
             }
@@ -3686,7 +3686,7 @@ public final class Generator {
             // answer is about the demands this row actually has. Which locations are one is
             // asked of the reader that owns it, because a container written whole and a
             // position inside it are one location spelled two ways.
-            List<RealizationTarget> beside = alsoWritingAt(out, asked.target().writeRoot());
+            List<RealizationTarget> beside = alsoWritingAt(alreadyStanding, asked.target().writeRoot());
             if (!beside.isEmpty() && !writtenTogether(beside, asked.target())) {
             shared = true;
             break;
