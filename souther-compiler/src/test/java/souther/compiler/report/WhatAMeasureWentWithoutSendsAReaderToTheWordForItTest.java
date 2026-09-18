@@ -6,7 +6,9 @@ import souther.compiler.query.Weakening;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -120,12 +122,25 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
                 .filter(ReaderDisposition.LookAtWhatTheMeasureWentWithout.class::isInstance)
                 .toList();
 
-        assertEquals(1, reached.size(),
-                () -> "this model is written to go without one thing that is not a rule, a fork or"
-                        + " an arm, and what it reached was " + measured().assessment()
-                                .uncertainties().stream().map(ReaderDisposition::of).toList());
+        // Two things, each said of what it is true of. Nothing lowered this module's bodies, and
+        // the measures of the behavior were made against an image that carries none — so a reader
+        // is told the module's publication and the behavior's measure, and neither of them stands
+        // for the other.
+        assertEquals(Set.of(theWitness(), new ReaderDisposition.LookAtWhatTheMeasureWentWithout(
+                        new Subject.OfABehavior("hold"),
+                        new WeakeningVocabulary.AWordOfThisDocuments(
+                                WeakeningWord.BODY_NOT_IN_EVALUATION))),
+                new LinkedHashSet<>(reached),
+                () -> "this model is written to go without the bodies of a module and the reading"
+                        + " of one behavior's body, and what it reached was "
+                        + measured().assessment().uncertainties().stream()
+                                .map(ReaderDisposition::of).toList());
         ReaderDisposition.LookAtWhatTheMeasureWentWithout it = assertInstanceOf(
-                ReaderDisposition.LookAtWhatTheMeasureWentWithout.class, reached.getFirst());
+                ReaderDisposition.LookAtWhatTheMeasureWentWithout.class,
+                reached.stream().filter(each -> each instanceof
+                                ReaderDisposition.LookAtWhatTheMeasureWentWithout went
+                                && went.subject() instanceof Subject.OfAModule)
+                        .findFirst().orElse(null));
         assertEquals(new Subject.OfAModule("probe.unelaborated"), it.subject());
         assertEquals(new WeakeningVocabulary.AWordOfThisDocuments(
                 WeakeningWord.BODIES_NOT_ELABORATED), it.said());

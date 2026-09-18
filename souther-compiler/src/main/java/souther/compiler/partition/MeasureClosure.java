@@ -132,11 +132,11 @@ public final class MeasureClosure {
          *
          * <p>Carries nothing and compares as one conclusion, for the reason {@link Closed} does.
          */
-        record BodyNotRead(String module, Set<ClosureGap> besides) implements OfThePartition {
+        record BodyNotRead(String behavior, Set<ClosureGap> besides) implements OfThePartition {
 
             public BodyNotRead {
-                java.util.Objects.requireNonNull(module,
-                        "a body nobody read is some module's body");
+                java.util.Objects.requireNonNull(behavior,
+                        "a body nobody read is some behavior's body");
                 // Copied and not held to being non-empty. That rule is the open arm's: something
                 // has to have been found for a reading to have stopped, and here the readings that
                 // were made may well have found nothing while the body was still not read.
@@ -193,11 +193,11 @@ public final class MeasureClosure {
          * draw no line — which is what {@code BoundaryDerivation.NoRuleDrawsALine} takes a closed
          * border as the proof of.
          */
-        record BodyNotRead(String module, Set<ClosureGap> besides) implements OfTheBorder {
+        record BodyNotRead(String behavior, Set<ClosureGap> besides) implements OfTheBorder {
 
             public BodyNotRead {
-                java.util.Objects.requireNonNull(module,
-                        "a body nobody read is some module's body");
+                java.util.Objects.requireNonNull(behavior,
+                        "a body nobody read is some behavior's body");
                 // Copied and not held to being non-empty. That rule is the open arm's: something
                 // has to have been found for a reading to have stopped, and here the readings that
                 // were made may well have found nothing while the body was still not read.
@@ -229,9 +229,10 @@ public final class MeasureClosure {
          * None was, so there is nothing to conclude from and no question to name.
          *
          * <p>Carries whose body went unread, which is what a measurement that went without
-         * something has to be able to say.
+         * something has to be able to say. The behavior's: an image carries some of a module's
+         * implementations and not others.
          */
-        record NoneWasMade(String module) implements Drawing {}
+        record NoneWasMade(String behavior) implements Drawing {}
     }
 
     /**
@@ -242,10 +243,10 @@ public final class MeasureClosure {
      * a flag saying there was no reading, it would be two factories in one and the sentence that
      * only it says {@code Closed} would stop holding.
      */
-    public static Both bodyNotRead(String module, Both besides) {
+    public static Both bodyNotRead(String behavior, Both besides) {
         return new Both(
-                new OfThePartition.BodyNotRead(module, gapsOf(besides.partition())),
-                new OfTheBorder.BodyNotRead(module, gapsOf(besides.border())));
+                new OfThePartition.BodyNotRead(behavior, gapsOf(besides.partition())),
+                new OfTheBorder.BodyNotRead(behavior, gapsOf(besides.border())));
     }
 
     /** What a closure of a reading that was made found, whichever way it came out. */

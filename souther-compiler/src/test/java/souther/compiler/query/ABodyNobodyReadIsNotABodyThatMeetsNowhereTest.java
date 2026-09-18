@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
@@ -198,5 +199,41 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
                 () -> "unread, neither concludes: " + unread);
         assertFalse(unread.contains("id=omitted/n, term=n, classes=[Partition"),
                 () -> "the guard is not recovered from a body nobody read: " + unread);
+    }
+
+    /**
+     * And no position of it is said to be one the model divides no way.
+     *
+     * <p>The other half of not concluding. A measure that came to nothing says so about the measure;
+     * what a report sends an author to is the position, and there the same reading would have said
+     * that the model draws no distinction at {@code n} — over a {@code guard} two tokens away that
+     * nothing read.
+     *
+     * <p>The pair is what says it. Read, {@code n} is measured and is no longer a position anything
+     * is undivided about; unread, it is one, and what is held is which sentence it gets.
+     */
+    @Test
+    void noPositionOfABodyNobodyReadIsSaidToBeUndividedByTheModel() {
+        List<UndividedPosition> read = undividedOf(measured("1"));
+        List<UndividedPosition> unread = undividedOf(measured("0"));
+
+        assertEquals(List.of(), read.stream().map(each -> each.at().toString())
+                        .filter(each -> each.equals("n")).toList(),
+                () -> "read, the guard divides this position and nothing is undivided at it: "
+                        + read);
+        assertEquals(List.of("n"), unread.stream().map(each -> each.at().toString())
+                        .filter(each -> each.equals("n")).toList(),
+                () -> "unread, nothing measures it: " + unread);
+        assertEquals(List.of(), unread.stream()
+                        .filter(each -> each.why() instanceof UndividedPosition.Why.Absent)
+                        .map(each -> each.at().toString())
+                        .toList(),
+                "a position of a body nobody read is not a position the model divides no way");
+    }
+
+    /** What the partition measure of {@code omitted} is left undivided at. */
+    private static List<UndividedPosition> undividedOf(Compilation measured) {
+        return measured.db().ask(new Adequacy.Dividing("probe.up", "omitted")).value()
+                .geometry().undivided();
     }
 }

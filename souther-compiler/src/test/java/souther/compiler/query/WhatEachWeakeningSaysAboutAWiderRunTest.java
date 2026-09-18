@@ -69,11 +69,15 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ObservationIncomplete", "asks the code/MAY_CHANGE");
         table.put("BorderValueUnreadable", "asks the reading/MAY_CHANGE");
         table.put("ModelReadingIncomplete", "asks the gap/UNAFFECTED");
-        // And the seven where there is nothing further in to ask. Six of them are this compiler
-        // meeting something it has no reading for; one is a figure of its own.
+        // And the eight where there is nothing further in to ask. Each is this compiler meeting
+        // something it has no reading for. The two about bodies are quantified differently and are
+        // both here: a module whose bodies nothing elaborated, and a behavior whose body the image
+        // this run was made in does not carry. Neither is got past by allowing a wider run — what
+        // was elaborated is what the classes that ran came from.
         table.put("OutputCasesUnreadable", "answers/UNAFFECTED");
         table.put("InputCasesUnreadable", "answers/UNAFFECTED");
         table.put("BodiesNotElaborated", "answers/UNAFFECTED");
+        table.put("BodyNotInEvaluation", "answers/UNAFFECTED");
         table.put("BoundaryNotDerived", "answers/UNAFFECTED");
         table.put("InputNotRead", "answers/UNAFFECTED");
         table.put("ProofContradicted", "answers/UNAFFECTED");
@@ -212,7 +216,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt _ -> "asks what stood in the way";
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BodiesNotElaborated _, Weakening.BoundaryNotDerived _,
+                 Weakening.BodiesNotElaborated _, Weakening.BodyNotInEvaluation _,
+                 Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
@@ -240,6 +245,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.OutputCasesUnreadable("b"));
         out.add(new Weakening.InputCasesUnreadable("b", 0));
         out.add(new Weakening.BodiesNotElaborated("m"));
+        out.add(new Weakening.BodyNotInEvaluation("b"));
         out.add(new Weakening.BoundaryNotDerived("b"));
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted(new CoverageSites.Obligation("b",

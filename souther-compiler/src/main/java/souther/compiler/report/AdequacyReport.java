@@ -5165,7 +5165,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             switch (each.why()) {
                 case UndividedPosition.Why.Absent _ -> undivided.add(each.at().toString());
                 case UndividedPosition.Why.CannotDerive _,
-                     UndividedPosition.Why.StatedWithoutALine _ -> { }
+                     UndividedPosition.Why.StatedWithoutALine _,
+                // Nor a position of a behavior whose body this image has none of. What is short
+                // there is the reading of the body, which the measure beside this list says it
+                // went without — written here as well, a consumer would be told it once per
+                // position of a behavior nothing read anything of.
+                     UndividedPosition.Why.BodyNotInEvaluation _ -> { }
             }
         });
         // The position and what stopped it, kept as the product they are. Which limit a position is
@@ -6481,6 +6486,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // at the position says, and is not what this word promises.
                 case ClosureGap.LineNotDerived _ -> WeakeningWord.RULE_UNREAD;
             };
+            case Weakening.BodyNotInEvaluation _ -> WeakeningWord.BODY_NOT_IN_EVALUATION;
             case Weakening.BodiesNotElaborated _ -> WeakeningWord.BODIES_NOT_ELABORATED;
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;

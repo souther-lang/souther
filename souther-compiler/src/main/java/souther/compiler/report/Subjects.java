@@ -57,6 +57,9 @@ final class Subjects {
                     new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             case Weakening.BodiesNotElaborated it -> new Subject.OfAModule(it.module());
+            // Named by the behavior, which is what this answer is of.
+            case Weakening.BodyNotInEvaluation it ->
+                    new Subject.OfABehavior(it.behavior());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());
             case Weakening.InputNotRead it -> new Subject.OfABehavior(it.behavior());
             // The behavior, and not how large the space was or what it was walked against. Those

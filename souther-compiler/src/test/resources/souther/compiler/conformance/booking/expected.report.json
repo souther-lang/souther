@@ -2,7 +2,7 @@
   "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "bodies_not_elaborated", "rule_unread" ],
+  "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation", "rule_unread" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -3659,7 +3659,7 @@
   }, {
     "module" : "conformance.holds",
     "status" : "partial",
-    "weakening" : [ "bodies_not_elaborated" ],
+    "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -3669,7 +3669,7 @@
       "pending" : 0,
       "rowObligations" : [ ],
       "status" : "partial",
-      "weakening" : [ "bodies_not_elaborated" ],
+      "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation" ],
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
@@ -3691,18 +3691,18 @@
         "axesMeasure" : {
           "status" : "unavailable",
           "reason" : "body_was_not_read",
-          "weakening" : [ "bodies_not_elaborated" ]
+          "weakening" : [ "body_not_in_evaluation" ]
         },
         "boundariesMeasure" : {
           "status" : "unavailable",
           "reason" : "body_was_not_read",
-          "weakening" : [ "bodies_not_elaborated" ]
+          "weakening" : [ "body_not_in_evaluation" ]
         },
         "axes" : [ ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ ],
         "obligations" : [ ],
-        "notDerivable" : [ "party" ],
+        "notDerivable" : [ ],
         "notRead" : [ ]
       },
       "branch" : {
@@ -3710,11 +3710,7 @@
         "reason" : "bodies_not_elaborated",
         "weakening" : [ "bodies_not_elaborated" ]
       },
-      "findings" : [ {
-        "kind" : "partition_not_derivable",
-        "disposition" : "reported",
-        "subject" : "party"
-      } ]
+      "findings" : [ ]
     } ]
   }, {
     "module" : "conformance.deposits",

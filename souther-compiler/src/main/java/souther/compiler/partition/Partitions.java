@@ -180,10 +180,39 @@ public final class Partitions {
             for (PositionMeasurements at : measurements) {
                 PendingPosition pending = PendingPosition.of(at.position(), at.hasMeasures());
                 if (pending != null) {
-                    out.add(pending.complete(at.inspection()));
+                    out.add(withheldWhereNothingRead(pending.complete(at.inspection())));
                 }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * The same answer, less the one conclusion a reading nobody made cannot support.
+         *
+         * <p>{@link UndividedPosition.Why.Absent} says the model divides the position no way at
+         * all, and what proves it is every rule about the position having been read and none of
+         * them dividing it. Where nothing read the body, the rules it writes were not among them —
+         * so the phases that did run answered for what they saw and the conclusion is one nobody
+         * is entitled to draw.
+         *
+         * <p>Only that one. A position the walk could not enter and one a rule was filed at say
+         * what they say whether or not a body was read, and taking them out here would lose a
+         * finding an author can act on to a fact about a different part of the reading.
+         *
+         * <p>And it becomes the answer for that, rather than the one for a reading that did not
+         * get far enough. That one promises a reader something standing at the position and a
+         * finding published at it, and a body this image has none of is true of every position of
+         * the behavior at once and stands at none of them.
+         *
+         * <p>Withheld here rather than concluded elsewhere: {@code Absent} has one producer, and
+         * this is the reader that holds both the position's answer and what the measure's reading
+         * came to.
+         */
+        private UndividedPosition withheldWhereNothingRead(UndividedPosition said) {
+            return partitionClosure instanceof MeasureClosure.OfThePartition.BodyNotRead
+                    && said.why() instanceof UndividedPosition.Why.Absent
+                    ? UndividedPosition.bodyNotInEvaluation(said.at())
+                    : said;
         }
 
         /**
@@ -1128,7 +1157,7 @@ public final class Partitions {
             case MeasureClosure.Drawing.FromTheReading _ ->
                     MeasureClosure.of(base.positions(), asked, read);
             case MeasureClosure.Drawing.NoneWasMade it -> MeasureClosure.bodyNotRead(
-                    it.module(), MeasureClosure.of(base.positions(), asked, read));
+                    it.behavior(), MeasureClosure.of(base.positions(), asked, read));
         };
         return new Partitioning(measurements, asked, base.uncertain(),
                 // Read after every position was measured, so that what a position's classes would

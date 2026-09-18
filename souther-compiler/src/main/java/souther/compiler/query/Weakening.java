@@ -244,6 +244,32 @@ public sealed interface Weakening {
     }
 
     /**
+     * The behavior's checked body is here and the image a run is made in does not carry it.
+     *
+     * <p>Beside {@link BodiesNotElaborated} and not one of them, because they are different facts
+     * about different things. That one is a compile that did not get as far as producing the
+     * checked bodies, and it is the module's: one stop, however many behaviors went looking. This
+     * one is a body that came out and an evaluation that may not run it, which is a closure over
+     * the module's implementations and is settled per behavior — the behavior beside it in the same
+     * module may well be run.
+     *
+     * <p>Said as the first, a report puts a module-wide stop on a module that did not stop, and
+     * every behavior of it carries a word that is false of the ones this image does hold.
+     *
+     * <p>Named by the behavior for the reason that one is named by the module: what the answer is
+     * of is what it should be named by.
+     */
+    record BodyNotInEvaluation(String behavior) implements Weakening {
+
+        /** Which implementations an image carries is settled by what came out, and a run under
+         *  wider allowances is made in the same image. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * The elaborated bodies a measure counts inside were not made, so what they hold was not read.
      *
      * <p>Not a reading of the model that stopped and not an observation that went missing: the

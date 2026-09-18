@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 import souther.test.ClosedWorldContract;
 
@@ -127,16 +128,40 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
                 }
             }
             for (UndividedPosition each : behavior.evidence().partition().notDerivable()) {
-                boolean underivable = each.why() instanceof UndividedPosition.Why.CannotDerive;
                 boolean published = shortHere.contains(each.at());
-                if (underivable != published) {
-                    out.add(behavior.name() + " at " + each.at() + ": " + each.why()
-                            + (published ? " with a finding saying this compiler was short here"
-                                    : " with nothing published for a reader to act on"));
+                String wrong = switch (each.why()) {
+                    // A reading that fell short at the position is published at the position.
+                    case UndividedPosition.Why.CannotDerive _ -> published ? null
+                            : " with nothing published for a reader to act on";
+                    // And what a reading that ran out came to is not.
+                    case UndividedPosition.Why.Absent _,
+                         UndividedPosition.Why.StatedWithoutALine _ -> published
+                            ? " with a finding saying this compiler was short here" : null;
+                    // A body this image has none of is published on the measure and not at the
+                    // position: it is the one fact for every position of the behavior, and a reader
+                    // sent to each of them would be sent after a limit that is at none. So what has
+                    // to be there is the word the measure went without, and nothing here.
+                    case UndividedPosition.Why.BodyNotInEvaluation _ -> {
+                        if (published) {
+                            yield " with a finding saying this compiler was short here";
+                        }
+                        yield wentWithoutTheBody(behavior) ? null
+                                : " with nothing saying the body it is measured against was"
+                                        + " not in this image";
+                    }
+                };
+                if (wrong != null) {
+                    out.add(behavior.name() + " at " + each.at() + ": " + each.why() + wrong);
                 }
             }
         }
         return out;
+    }
+
+    /** Whether this behavior's partition measure says it went without the reading of the body. */
+    private static boolean wentWithoutTheBody(AdequacyReport.BehaviorReport behavior) {
+        return behavior.evidence().partition().partitioned().weakening().causes().stream()
+                .anyMatch(each -> each instanceof Weakening.BodyNotInEvaluation);
     }
 
     /**

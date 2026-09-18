@@ -129,6 +129,14 @@ public enum WeakeningWord {
 
     /** The bodies of the module were not elaborated, so what is inside them was not read. */
     BODIES_NOT_ELABORATED,
+    /**
+     * A behavior whose checked body the image a run was made in does not carry.
+     *
+     * <p>Beside the word above and not one of them. That one is a compile that did not produce the
+     * checked bodies at all, and it is the module's; this is a body that came out and an evaluation
+     * that may not run it, which is settled per behavior — the behavior beside it may well run.
+     */
+    BODY_NOT_IN_EVALUATION,
 
     /** The boundary of the behavior could not be worked out, so no measure that reads one could be
      *  finished. Every one of them was asked for and started, which is what tells this from a

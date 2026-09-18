@@ -286,6 +286,9 @@ public sealed interface ObligationDisposition {
                      Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                      Weakening.ModelReadingIncomplete _,
                      Weakening.BodiesNotElaborated _,
+                     // A body this image does not carry is the same of one behavior: whether a row
+                     // stands at a point of a line is not what it is short of.
+                     Weakening.BodyNotInEvaluation _,
                      Weakening.BoundaryNotDerived _,
                      Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,

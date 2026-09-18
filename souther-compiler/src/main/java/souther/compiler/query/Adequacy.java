@@ -6679,7 +6679,12 @@ public final class Adequacy {
                     // rule named. Said here as well, they would be one situation under two
                     // sentences, and the one here has no rule to name.
                     case souther.compiler.partition.UndividedPosition.Why.CannotDerive _,
-                         souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _ -> { }
+                         souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _,
+                    // And a position of a behavior whose body this image has none of has no
+                    // finding of its own either: what was short is the reading of the body, said
+                    // once of the measure rather than once at each position it would have reached.
+                         souther.compiler.partition.UndividedPosition.Why.BodyNotInEvaluation _
+                            -> { }
                 }
             }
             // And what this could not read, asked of the one reading that answers it. A position

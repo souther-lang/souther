@@ -190,7 +190,7 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
                 }
             }
             for (UndividedPosition each : divided.undivided()) {
-                boolean underivable = each.why() instanceof UndividedPosition.Why.CannotDerive;
+                boolean underivable = saysTheReadingsFellShortHere(each);
                 boolean somethingStands =
                         standing.contains(each.at()) || unreached.contains(each.at());
                 if (underivable != somethingStands) {
@@ -201,6 +201,29 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
             }
         });
         return out;
+    }
+
+    /**
+     * Whether the verdict says the readings of this position fell short of something at it.
+     *
+     * <p>Every verdict there is, with no {@code default}, because this is the half of the
+     * biconditional a word decides. A verdict added and read through an {@code instanceof} joins
+     * whichever side the test happened to be written from, and the side it joins is the one that
+     * promises nothing — so the check would go on passing over an answer nobody weighed.
+     */
+    private static boolean saysTheReadingsFellShortHere(UndividedPosition said) {
+        return switch (said.why()) {
+            case UndividedPosition.Why.CannotDerive _ -> true;
+            // The model divides the position no way, and a rule filed here came to no line: both
+            // are what a reading that ran out came to, and neither leaves anything at the position.
+            case UndividedPosition.Why.Absent _, UndividedPosition.Why.StatedWithoutALine _ -> false;
+            // And a body this image has none of is not something standing at this position. The
+            // readings that were made ran out here; what is missing is one of the writers whose
+            // rules they would have taken in, which is true of every position of the behavior at
+            // once — so this side of the biconditional is where it belongs, and a position with
+            // something standing at it never reaches this word.
+            case UndividedPosition.Why.BodyNotInEvaluation _ -> false;
+        };
     }
 
     /**
@@ -218,7 +241,11 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
                 stated.add(rule.at().path());
             }
             for (UndividedPosition each : divided.undivided()) {
-                if (each.why() instanceof UndividedPosition.Why.CannotDerive) {
+                // Only the positions everything was answered about. A reading that fell short here
+                // is the contract above, and a behavior whose body this image has none of is not a
+                // verdict about the rules filed at this position at all.
+                if (each.why() instanceof UndividedPosition.Why.CannotDerive
+                        || each.why() instanceof UndividedPosition.Why.BodyNotInEvaluation) {
                     continue;
                 }
                 boolean statesSomething = stated.contains(each.at());

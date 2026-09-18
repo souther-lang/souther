@@ -189,7 +189,7 @@ final class Coverages {
                                     .Drawing.FromTheReading();
                     case souther.compiler.partition.BodyReading.NotInElaboration _ ->
                             new souther.compiler.partition.MeasureClosure
-                                    .Drawing.NoneWasMade(read.symbols().module());
+                                    .Drawing.NoneWasMade(behavior.name());
                 }), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition

@@ -157,7 +157,7 @@ public final class PartitionDerivation {
                 // What it went without: the reading of the body, and whatever the readings that
                 // were made found beside it. Those are theirs to name and are not about the body.
                 WeakeningSet without = WeakeningSet.of(
-                        new Weakening.BodiesNotElaborated(unread.module()))
+                        new Weakening.BodyNotInEvaluation(unread.behavior()))
                         .union(PartitionDerivation.weakening(unread.besides()));
                 yield at.isEmpty()
                         ? new Measurement.FailedToMeasure<>(
