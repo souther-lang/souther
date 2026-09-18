@@ -20,11 +20,23 @@ import souther.compiler.values.ValueSet;
  * answering the number is written at.
  *
  * <p><b>Three states and not two.</b> A position whose rules leave it everything is one this answers
- * for, with every value there is. A position this reading stopped before reaching is a different
- * thing: nothing worked out what it holds, and a caller told "everything" would compose out of a set
- * nobody established — which is the defect this exists to stop, moved behind a lookup. A line can be
- * drawn at a name deeper than the positions a reading divided ({@code o.q@B.q.limit} under a choice
- * whose cases were never filed), so the third state is reached by models somebody writes.
+ * for, with every value there is. A position this measurement has no set for is a different thing,
+ * and saying so is the whole of what this does about it: a caller told "everything" would be told
+ * the declarations leave a position what nothing worked out, which is the defect this exists to
+ * stop, moved behind a lookup.
+ *
+ * <p><b>What a search does about that is not stated here.</b> It differs with the question: one
+ * asked whether a region admits an assignment has no set to narrow by, and one composing a value to
+ * write into a row has nothing to compose from. Both are right and neither is this type's to
+ * choose, so the two are named where a search is handed what it searches with
+ * ({@link WitnessSearch#toNarrowBy}, {@link WitnessSearch#toComposeFrom}). Said here as one action,
+ * whichever search was written first would have its answer applied to the other.
+ *
+ * <p>And the third state covers more than a reading that stopped. A name deeper than the positions
+ * a reading divided reaches it ({@code o.q@B.q.limit} under a choice whose cases were never filed),
+ * and so does a name that is no position of this reading at all — every case of a sum spreading one
+ * field puts the reading under each case, so the shared name has no position to have been worked
+ * out. The two are not one fact and this does not tell them apart.
  */
 public interface AdmittedValues {
 
@@ -56,9 +68,14 @@ public interface AdmittedValues {
         /**
          * Nothing here worked out what the position holds.
          *
-         * <p>A fact about this reading and not about the model. So a search that reaches one composes
-         * nothing and says so in the word it already has for what it could not build — read as a set
-         * of every value, it would offer a row at a position nothing was established about.
+         * <p>A fact about this reading and not about the model, and that is the whole of what it
+         * says. Read as a set of every value, it would be the declarations answering for a position
+         * they were never asked about.
+         *
+         * <p>What follows for a search is the search's question and is settled where a search is
+         * handed what it searches with ({@link WitnessSearch}). One that narrows by sets has none
+         * to narrow by here; one that composes a value to write has nothing to compose from. A
+         * single answer written here would be whichever of the two was needed first.
          */
         record NotWorkedOut() implements Admitted {}
     }

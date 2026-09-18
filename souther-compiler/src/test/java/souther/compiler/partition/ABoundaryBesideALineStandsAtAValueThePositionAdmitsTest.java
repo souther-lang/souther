@@ -162,6 +162,37 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
                 "and naming the pair the other way round reaches the same answer");
     }
 
+    /**
+     * A pair search that meets the figure for how far along the line it looks comes back saying
+     * what the pair search says.
+     *
+     * <p>The end-to-end half of splitting that figure in two. A walk's answer is the walk's, and
+     * the figures it met travel beside it — so a figure split off another keeps the word its walk
+     * already came back with, and one filed under a different word makes an answer nobody can
+     * assemble ({@link Realization.Unknown}).
+     *
+     * <p>Reached the way an author reaches it: an anchored position whose declarations leave it one
+     * value, on a line nothing bounds. Every place but that one is stepped past, so the looking runs
+     * out long before the pair search has been offered the places it is allowed to try.
+     */
+    @Test
+    void aPairThatRanOutOfLineToLookAlongComesBackWithThePairSearchsOwnWord() {
+        WitnessSearch oneValueEach = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.just(Value.number(0)),
+                        BESIDE.position(), ValueSet.just(Value.number(0)))),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+
+        Realization made = pair(COUNTED, BESIDE, oneValueEach);
+
+        assertEquals(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE,
+                assertInstanceOf(Realization.Unknown.class, made,
+                        "the line holds no pair the declarations leave standing").why(),
+                "and what it says is what this walk says, with the figure beside it");
+        assertTrue(assertInstanceOf(Realization.Unknown.class, made).stoppedBy()
+                        .contains(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT),
+                "the figure it met is the one for how far along the line it looked");
+    }
+
     private static Realization pair(NumericTerm.FromOnePosition on,
                                     NumericTerm.FromOnePosition against, WitnessSearch looking) {
         return new LevelRealizer().realize(

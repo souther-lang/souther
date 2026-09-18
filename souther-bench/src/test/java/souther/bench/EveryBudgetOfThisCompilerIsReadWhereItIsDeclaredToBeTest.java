@@ -109,7 +109,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " asked about, and hands the figure over with whatever the planning"
                             + " gave up at"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
-                    "the places a pair is tried at, the steps, the progression — and the re-reads,"
+                    "the places a pair is tried at and the places of its line looked at to find"
+                            + " them, the steps, the progression — and the re-reads,"
                             + " which travel nowhere because reaching that one gives nothing up:"
                             + " the walk carries on against the wider box, which offers every"
                             + " assignment the narrowing would have and skips none of them"),
@@ -152,7 +153,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LevelCandidateSource#<clinit>()V",
                     "how many levels a side is asked at"),
             Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
-                    "how many values a position on the way is tried at"),
+                    "how many values a position on the way is tried at, and how many places of its"
+                            + " run are looked at to find them"),
             Map.entry("souther.compiler.partition.NumericWitness#walk("
                             + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;I"
                             + "Ljava/util/function/Function;"

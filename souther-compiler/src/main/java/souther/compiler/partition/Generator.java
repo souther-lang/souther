@@ -643,17 +643,18 @@ public final class Generator {
                 for (CompositionBudget each : budgets) {
                     Reason here = switch (each) {
                         case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
-                             PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
+                             PLACES_A_PAIR_IS_TRIED_AT,
+                             // Beside the figure it was split off, because the word is the walk's
+                             // answer and the figures are what stopped it. Given a word of its own,
+                             // one walk would say two things depending on which of its own numbers
+                             // ran out first — and an answer carrying the word and the budget could
+                             // not be assembled at all ({@link CompositionBudget#splitFrom}).
+                             PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
-                             // The walking and not the trying: this one stopped before the pair
-                             // search had been offered the places it is allowed to try, so what it
-                             // says is that places were left unlooked at rather than that the
-                             // places looked at composed nothing.
-                             PLACES_A_PAIR_IS_LOOKED_AT,
                              // The numbers past this one were never asked for, so what the search
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the

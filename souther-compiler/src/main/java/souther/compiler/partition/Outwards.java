@@ -38,12 +38,12 @@ final class Outwards {
      * The places walked, and how the walk came to end.
      *
      * <p>Two halves of one answer. A caller reading only the first cannot tell a run with nothing
-     * further in it from one this stopped walking, and the three mean different things about an
+     * further in it from one this stopped walking, and the four mean different things about an
      * empty hand.
      *
      * <p><b>No word for "not all of them", which is what a caller has to be stopped from asking
-     * for.</b> Two of the endings answer that alike and are what a reader does two different things
-     * about, so a caller handed the question in that shape names one of them for the other: the
+     * for.</b> Three of the endings answer that alike and are what a reader does different things
+     * about, so a caller handed the question in that shape names one of them for another: the
      * pair search took an order with no step and a figure met for one fact, and told a reader to
      * raise a number that reaches nothing. So what is offered is the ending itself, and every
      * caller says what it does with each.
@@ -95,7 +95,7 @@ final class Outwards {
     }
 
     /**
-     * At most {@code howManyPlaces} places of {@code within} that {@code admits} takes in and none
+     * At most {@code howManyTaken} places of {@code within} that {@code admits} takes in and none
      * of {@code apart} stands at, from {@code first} outward, {@code by} apart.
      *
      * <p>Stops early where neither direction has a place left, which is what makes a bounded run

@@ -281,9 +281,9 @@ public final class LevelRealizer {
     /**
      * How many places along a line a pair is tried at before this stops.
      *
-     * <p>Small on purpose. What a range cannot say is that one of its values is missing, and a rule
-     * that takes a value away takes one — everything that moves an end is in the range already. So
-     * what this steps past is holes, and there are as many of those as the rules state.
+     * <p>Small on purpose. Every place offered here is one the anchored position may stand at, and
+     * a pair that is not written at the first few is rarely written further along. What it costs to
+     * walk past the places it may not stand at is the other figure's.
      */
     private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
             CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
