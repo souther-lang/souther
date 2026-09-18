@@ -9,6 +9,10 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1004)
     record SpreadFieldCollision(String field, String from, String heldBy) implements DataMessage, Reported {}
 
+    /** A data reaches itself through the spreads written on it and on what they name. */
+    @Code(DiagnosticCode.E1027)
+    record ADataSpreadsItself(String data, String through) implements DataMessage, Reported {}
+
     /** What is spread is not a product data. */
     @Code(DiagnosticCode.E1015)
     record SpreadIsNotAProductData(String spread) implements DataMessage, Reported {}
