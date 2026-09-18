@@ -53,7 +53,8 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     private static NumericWitness.Standing witnessIn(
             souther.compiler.inputs.SearchRegion within) {
         return NumericWitness.of(within, List.of(WIDE, NOWHERE),
-                term -> term == NOWHERE ? null : Carrier.WHOLE);
+                term -> term == NOWHERE ? null : Carrier.WHOLE,
+                NothingTheDeclarationsNarrow.LOOKING);
     }
 
     private static Realization realizedIn(souther.compiler.inputs.SearchRegion within) {

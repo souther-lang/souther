@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.util.Map;
@@ -144,13 +145,30 @@ public interface SearchRegion {
      * are both still there. A range cannot say it, so it is its own verb rather than a relation the
      * one above would have to refuse.
      *
-     * <p>What it changes is {@link #emptiness}: a row standing where a rule holds the position away
-     * is a row that cannot be written. There is no question here for a chooser to ask before it
-     * offers a value, because nothing yet could spend one — on an order that counts nothing the
-     * places a chooser can name are the ones a rule wrote, so a hole at one of them leaves it with
-     * nothing else to offer and the refusal is what says so.
+     * <p>What it changes is {@link #emptiness}, and what it is read back through is {@link #apartAt}.
+     * Both are needed and they are not one answer: the first refuses a row already written at the
+     * place, and the second is what a chooser narrows by so that it never writes one there. Left to
+     * the first alone, a position whose order has no step is offered the one place a run gives up and
+     * has nothing to offer once that place is the hole.
      */
     SearchRegion apartFrom(NumericTerm.FromOnePosition term, Place at);
+
+    /**
+     * Which places this holds {@code term} away from.
+     *
+     * <p>What a chooser asks before it offers a value. A run says where a position stops and has no
+     * word for a value taken out of the middle of it, so a chooser reading the run alone offers a
+     * place this refuses and finds out afterwards — which costs it nothing wherever the order steps
+     * and costs it every candidate it had where the order does not.
+     *
+     * <p>Asked of the region rather than kept by whoever narrowed it. A caller that remembered the
+     * holes it put in would be holding a second copy of what this answers, and the two would be one
+     * region for the emptiness and another for the search.
+     *
+     * <p>Empty where nothing holds the position away, which is every position of every region until
+     * a disequality is taken in. Never null.
+     */
+    PlacesApart apartAt(NumericTerm.FromOnePosition term);
 
     /**
      * The same region, with these positions standing at these values.

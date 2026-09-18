@@ -83,7 +83,8 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
     @Test
     void aSearchHandedThatRegionComesBackWithTheProof() {
         assertInstanceOf(NumericWitness.Standing.ProvedImpossible.class,
-                NumericWitness.of(contradicting(), List.of(term("x")), _ -> Carrier.WHOLE),
+                NumericWitness.of(contradicting(), List.of(term("x")), _ -> Carrier.WHOLE,
+                        NothingTheDeclarationsNarrow.LOOKING),
                 "the rules were shown to leave nothing, so nothing was walked in it");
     }
 
@@ -92,7 +93,8 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
     void andOverTheRegionBeforeThatConditionItWalks() {
         assertInstanceOf(NumericWitness.Standing.Found.class,
                 NumericWitness.of(region().assuming(form(-1, 1, 0), Rel.LE).taken(),
-                        List.of(term("x")), _ -> Carrier.WHOLE),
+                        List.of(term("x")), _ -> Carrier.WHOLE,
+                        NothingTheDeclarationsNarrow.LOOKING),
                 "there is somewhere for the position to stand, so it stands there");
     }
 

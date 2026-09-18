@@ -6,6 +6,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.values.ValueSet;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,12 +55,16 @@ final class NumericWitness {
      * Where each of {@code terms} may stand together inside {@code within}, or null where this found
      * no such assignment.
      *
-     * @param on what each position is counted on, or null for one this has no order for — which is
-     *           a position no value is chosen at here, and the whole assignment is refused rather
-     *           than made without it
+     * @param on      what each position is counted on, or null for one this has no order for — which
+     *                is a position no value is chosen at here, and the whole assignment is refused
+     *                rather than made without it
+     * @param looking what the declarations leave each position and what one crossing of such a set
+     *                with a run may cost. Both, and from the one place that pairs them: a search
+     *                given the sets alone would have to reach for an allowance, and what it reached
+     *                for would be a budget nothing granted it
      */
     static Standing of(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
-                       Function<NumericTerm, Carrier> on) {
+                       Function<NumericTerm, Carrier> on, WitnessSearch looking) {
         // What the rules settle about the question, before any of it is looked for. Two ways for
         // them to settle it and both are the region as it was handed over: it may admit no
         // assignment at all, and it may admit one while leaving a position the question names
@@ -73,7 +78,7 @@ final class NumericWitness {
         Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
-        return walk(within, terms, 0, on, standing, stoppedBy)
+        return walk(within, terms, 0, on, looking, standing, stoppedBy)
                 ? new Standing.Found(standing)
                 : new Standing.NotFound(stoppedBy);
     }
@@ -148,6 +153,7 @@ final class NumericWitness {
     private static boolean walk(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
                                 int at,
                                 Function<NumericTerm, Carrier> on,
+                                WitnessSearch looking,
                                 Map<NumericTerm.FromOnePosition, Place> standing,
                                 java.util.Set<CompositionBudget> stoppedBy) {
         if (at == terms.size()) {
@@ -179,7 +185,7 @@ final class NumericWitness {
         if (runs == null) {
             return false;
         }
-        Place first = carrier.onTheGrid(carrier.somethingInside(runs.min(), runs.max()));
+        Place first = firstOf(term, carrier, runs, within, looking);
         if (first == null) {
             return false;
         }
@@ -191,7 +197,7 @@ final class NumericWitness {
                 continue;
             }
             standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, standing, stoppedBy)) {
+            if (walk(next, terms, at + 1, on, looking, standing, stoppedBy)) {
                 return true;
             }
             standing.remove(term);
@@ -214,6 +220,43 @@ final class NumericWitness {
             case WITH_NO_STEP_TO_TAKE -> { }
         }
         return false;
+    }
+
+    /**
+     * The place this walk starts from, or null where nothing composed one.
+     *
+     * <p><b>Three things say where a value may be, and the search starts inside all of them.</b> The
+     * run is where the arithmetic leaves the number; the set is what the declarations leave the
+     * position, which the arithmetic has no word for; and the places held apart are the values a
+     * rule took out of the middle of the run, which a range cannot say. Taken from the run alone and
+     * put to the other two afterwards, the first candidate is refused and the walk has to reach the
+     * next one to recover — and on an order with no step there is no next one, so whichever of the
+     * three refused it leaves the position with nothing offered at all.
+     *
+     * <p>Which is why the crossing is asked of the carrier rather than filtered here: it narrows the
+     * search by each of the three instead of judging what came back, and it builds a machine over
+     * the set once the ends of the run are exhausted.
+     *
+     * <p><b>And a position no set was worked out for is narrowed by the other two and by nothing
+     * else.</b> What this is asked is whether the region admits an assignment, not whether the
+     * declarations can be shown to admit the value — so a set nobody established is knowledge this
+     * search does not have rather than a set it may search against, and a question narrowed by
+     * something nobody established is narrower than what was established. Whether a row can be
+     * written at the place is the construction's, which owns the word for a position no value is
+     * written at; decided here, a name every case of a sum spreads would be reported as a position
+     * nothing could place rather than as one nothing writes.
+     */
+    private static Place firstOf(NumericTerm.FromOnePosition term, Carrier carrier,
+                                 NumericDomain.Bounds runs, SearchRegion within,
+                                 WitnessSearch looking) {
+        // The identity of the crossing where there is no set to cross with, and never an answer
+        // about what the position admits. The two other narrowings are asked either way: a hole
+        // dropped here is a candidate the region refuses one step later, with nothing left to offer
+        // in its place wherever the order has no step.
+        ValueSet admits =
+                looking.valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
+                        ? set : ValueSet.ANY;
+        return carrier.somethingOtherThan(within.apartAt(term), runs, admits, looking.meter());
     }
 
     private NumericWitness() {}

@@ -2,9 +2,9 @@
 //
 // The line here is the one the second guard draws, and the way to it runs through the first. That
 // one is a string equality: two strings have no sum, so the reading stops and the rule is taken in
-// as a bound on the order the voucher stands on. Its denial is not: failing it leaves every string
-// but one, which is a hole and not an end, and no region is narrowed by one. So the way carries the
-// equality, nothing composes a value where it bounds, and the page names it at the line.
+// as a bound on the order the voucher stands on. Its denial is a hole rather than an end, since
+// failing it leaves every string but one. What stands under it is a string the hole is not at and
+// the length rule leaves standing, neither of which the run's own ends say anything about.
 module conformance.vouchers exposing ( Voucher, Party, Redeemed, redeem )
 
 data Voucher = String

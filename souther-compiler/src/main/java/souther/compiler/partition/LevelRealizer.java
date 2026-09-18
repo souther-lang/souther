@@ -1020,7 +1020,7 @@ public final class LevelRealizer {
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
             case Criterion.Within within ->
-                    whatTheValuesAre(term, looking.admitted())
+                    looking.valuesAt(term)
                             instanceof AdmittedValues.Admitted.Values(ValueSet admits)
                             ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
                             : null;
@@ -1033,27 +1033,6 @@ public final class LevelRealizer {
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
         return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
-    }
-
-    /**
-     * What the position admits, where the place being composed is a value of it.
-     *
-     * <p>Asked of the location the number is read from rather than of the number, because one location
-     * is measured at as many numbers as the rules name of it and admits one set of values — a rule
-     * about one of those numbers is what leaves the others short, which is the whole reason this set
-     * is here.
-     *
-     * <p><b>And every value there is where the number is one taken of the position rather than its
-     * own.</b> {@code String.length(code)} counts a string and the place composed for it is a count;
-     * the set holds the strings. Put to it, every count would be refused for not being one of them,
-     * and a boundary on a length would stop being offered a row at all. What a value carrying that
-     * count looks like is asked where such a value is written ({@link Witnesses}) and the set reaches
-     * it there.
-     */
-    private static AdmittedValues.Admitted whatTheValuesAre(NumericTerm.FromOnePosition term,
-                                                            AdmittedValues admitted) {
-        return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
-                : new AdmittedValues.Admitted.Values(ValueSet.ANY);
     }
 
     /**

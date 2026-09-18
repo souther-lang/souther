@@ -464,8 +464,14 @@ final class ReadQuantities implements Quantities {
         return alsoAssuming(new Assumed.ApartFrom(term, at));
     }
 
-    /** Which places the rules hold {@code term} away from. */
-    private souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
+    /**
+     * Which places the rules hold {@code term} away from.
+     *
+     * <p>Read back by the proof that nothing is left and by whatever is choosing a value, which are
+     * the two things a hole is for: one refuses a row already standing at the place, and the other
+     * never offers it.
+     */
+    souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
         List<souther.compiler.numeric.Place> out = new ArrayList<>();
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.ApartFrom each && each.term().equals(term)) {

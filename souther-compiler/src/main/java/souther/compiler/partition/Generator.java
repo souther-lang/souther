@@ -3605,7 +3605,8 @@ public final class Generator {
             // pair as often as not.
             NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
-                            term -> subject.quantities().ordersOf(term).answered());
+                            term -> subject.quantities().ordersOf(term).answered(),
+                            subject.witnessSearch());
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest.
             //
