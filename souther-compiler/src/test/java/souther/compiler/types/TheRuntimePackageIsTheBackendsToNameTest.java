@@ -29,9 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * different one. What is held here is that the string does not travel back: a layer that reasons
  * about what a declaration <em>is</em> may not name the package one backend keeps it in.
  *
- * <p>Held over the source rather than over imports, so a fully qualified mention is caught too.
+ * <p>Held over the source with its comments taken out, so an import, a fully qualified mention and
+ * the string a backend's own table is written with are each caught, while an account of why the
+ * dependency is refused is not one.
  */
 class TheRuntimePackageIsTheBackendsToNameTest {
+
+    /** The package this is about, spelled the way a Java source spells it — in an import, in a
+     *  fully qualified name, and inside the string one backend's table maps an identity to. */
+    private static final String RUNTIME = "souther.runtime";
 
     /**
      * Where a declaration's identity, its scope, its rules, its readings and the arithmetic those
@@ -55,7 +61,7 @@ class TheRuntimePackageIsTheBackendsToNameTest {
         for (Path source : sources()) {
             String area = area(source);
             if (TARGET_NEUTRAL.contains(area)
-                    && Files.readString(source).contains("\"souther.runtime\"")) {
+                    && code(Files.readString(source)).contains(RUNTIME)) {
                 naming.add(relative(source));
             }
         }
@@ -78,6 +84,92 @@ class TheRuntimePackageIsTheBackendsToNameTest {
         named.addAll(MAY_NAME_IT);
         assertEquals(List.of(), named.stream().filter(each -> !areas.contains(each)).sorted().toList(),
                 "an area named here is no package of this compiler");
+    }
+
+    /**
+     * What the reading keeps and what it drops, held against a source written to carry both.
+     *
+     * <p>The rule above is one predicate over what this hands back, so a hole here is a hole the
+     * rule cannot show. What it has to get right is the difference between a dependency on the
+     * package and an account of why there is none: the first is an import, a fully qualified name or
+     * the string a table is written with, the second is a comment — and two of the target-neutral
+     * areas carry one, so dropping the distinction makes the account the finding.
+     */
+    @Test
+    void whatTheReadingKeepsIsWhatTheCompilerReads() {
+        String source = """
+                package souther.compiler.check;
+
+                import souther.runtime.Fn;
+
+                /** Why {@code souther.runtime} is not named here. */
+                final class One {
+                    // and souther.runtime again
+                    private static final String ABI = "souther.runtime";
+                    private final souther.runtime.Fn held = null;
+                    private static final String SLASHES = "// not a comment souther.runtime";
+                }
+                """;
+
+        String read = code(source);
+
+        assertEquals(4, howOftenItNames(read),
+                () -> "the import, the fully qualified name and the two strings are kept and the two"
+                        + " comments are dropped: " + read);
+        assertTrue(read.contains("import souther.runtime.Fn;"), read);
+        assertTrue(read.contains("\"souther.runtime\""), read);
+        assertTrue(read.contains("private final souther.runtime.Fn held"), read);
+        assertTrue(read.contains("\"// not a comment souther.runtime\""), read);
+        assertTrue(!read.contains("Why") && !read.contains("again"), read);
+    }
+
+    /** How often a reading still names the package. */
+    private static int howOftenItNames(String read) {
+        int found = 0;
+        for (int at = read.indexOf(RUNTIME); at >= 0; at = read.indexOf(RUNTIME, at + 1)) {
+            found++;
+        }
+        return found;
+    }
+
+    /**
+     * The source with its comments taken out and its strings left in.
+     *
+     * <p>Strings stay because one of them is the dependency: a layer writing the package's name into
+     * a table of its own is stating a physical name, which is what this rule was written for.
+     * Comments go because the two things read alike in the text and say opposite things.
+     */
+    private static String code(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        int at = 0;
+        while (at < source.length()) {
+            char here = source.charAt(at);
+            if (source.startsWith("//", at)) {
+                while (at < source.length() && source.charAt(at) != '\n') {
+                    at++;
+                }
+            } else if (source.startsWith("/*", at)) {
+                int ends = source.indexOf("*/", at + 2);
+                at = ends < 0 ? source.length() : ends + 2;
+            } else if (source.startsWith("\"\"\"", at)) {
+                int ends = source.indexOf("\"\"\"", at + 3);
+                int to = ends < 0 ? source.length() : ends + 3;
+                out.append(source, at, to);
+                at = to;
+            } else if (here == '"' || here == '\'') {
+                int to = at + 1;
+                while (to < source.length() && source.charAt(to) != here) {
+                    to += source.charAt(to) == '\\' ? 2 : 1;
+                }
+                to = Math.min(to + 1, source.length());
+                out.append(source, at, to);
+                at = to;
+            } else {
+                out.append(here);
+                at++;
+            }
+        }
+        return out.toString();
     }
 
     /** The package directly under {@code souther/compiler}, or the empty string for a source
