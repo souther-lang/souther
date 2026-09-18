@@ -11,6 +11,7 @@ import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.values.Emptiness.SidesShownEmpty;
 import souther.compiler.values.Admits;
 import souther.compiler.values.AskedOfARelation;
+import souther.compiler.values.InOneOrder;
 import souther.compiler.values.LeftUnbuilt;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.PlannedValues;
@@ -21,6 +22,7 @@ import souther.compiler.values.ValueSet;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -585,23 +587,27 @@ sealed interface Confinement<A> {
      */
     private static <A> Placed placedAt(Map<A, Carrier> carriers, Function<A, OrderedInterval> sits,
                                        Sameness.Block<A> block) {
-        Carrier carrier = null;
+        // One carrier, and refused rather than picked between: a rule holding two positions as one
+        // value is one an equality between them typed, and an equality types only where the two are
+        // of one type. So a block whose members disagree is this compiler being wrong about a
+        // block — and answered with whichever of them the walk met last, which of the two it was
+        // would be how the positions are spelled and nothing would say so.
+        Set<Carrier> orderedOn = new HashSet<>();
         OrderedInterval within = OrderedInterval.OPEN;
         for (A position : block.members()) {
             Carrier here = carriers.get(position);
-            // One carrier, and an assertion because it is about this compiler rather than about any
-            // model: a rule holding two positions as one value is one an equality between them
-            // typed, and an equality types only where the two are of one type. A block whose
-            // members disagreed would be answered by whichever of them the members happen to be
-            // read in the order of, which is a fact about how they are spelled.
-            assert carrier == null || here == null || carrier.equals(here)
-                    : "positions held as one value are ordered on " + carrier + " and " + here;
             if (here != null) {
-                carrier = here;
+                orderedOn.add(here);
             }
+            // The range is the meet over every position, which is the same range whichever order
+            // they are met in.
             within = within.meet(sits.apply(position));
         }
-        return new Placed(carrier, within);
+        if (orderedOn.size() > 1) {
+            throw new IllegalStateException("positions held as one value are ordered on "
+                    + InOneOrder.of(orderedOn));
+        }
+        return new Placed(orderedOn.isEmpty() ? null : orderedOn.iterator().next(), within);
     }
 
     /** A block's order and the range its positions leave it, the order being null where nothing
