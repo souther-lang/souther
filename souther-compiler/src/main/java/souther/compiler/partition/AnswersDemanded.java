@@ -47,6 +47,9 @@ public record AnswersDemanded(List<AnswerDemand> stated,
      * takes what became of it from this side.
      */
     public Set<ConditionReportAnchor> takenUp() {
+        if (stated.isEmpty() && declined.isEmpty()) {
+            return Set.of();
+        }
         Set<ConditionReportAnchor> out = new LinkedHashSet<>();
         stated.forEach(each -> out.add(each.anchor()));
         declined.forEach(each -> out.add(each.anchor()));

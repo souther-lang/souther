@@ -205,13 +205,15 @@ final class DecisionPath {
                                   ConditionReportAnchor anchor) {
         InjectedAnswer only = null;
         boolean anyOfAnAnswer = false;
+        boolean everyAtomIsOfIt = true;
         for (DecisionAtom atom : condition.form().coefs().keySet()) {
             if (!(atom instanceof DecisionAtom.OfAnAnswer(var at))) {
+                everyAtomIsOfIt = false;
                 continue;
             }
             anyOfAnAnswer = true;
             if (only != null && !only.equals(at.answered())) {
-                only = null;
+                everyAtomIsOfIt = false;
                 break;
             }
             only = at.answered();
@@ -219,7 +221,7 @@ final class DecisionPath {
         if (!anyOfAnAnswer) {
             return OF_THE_INPUT;
         }
-        if (only == null || condition.form().coefs().size() > countOf(condition, only)) {
+        if (!everyAtomIsOfIt) {
             return new Asked.NotStated(
                     new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer());
         }
@@ -228,18 +230,6 @@ final class DecisionPath {
         // for a composer to work out from a flag travelling beside the form.
         return new Asked.Stated(new AnswerDemand.AComparison(only, anchor, condition.form(),
                 held ? condition.proposition() : condition.proposition().denied()));
-    }
-
-    /** How many of the form's terms are places inside {@code answer}, which is all of them where
-     *  the form is a demand on it alone. */
-    private static int countOf(DecisionCondition.AComparison condition, InjectedAnswer answer) {
-        int found = 0;
-        for (DecisionAtom atom : condition.form().coefs().keySet()) {
-            if (atom instanceof DecisionAtom.OfAnAnswer(var at) && answer.equals(at.answered())) {
-                found++;
-            }
-        }
-        return found;
     }
 
     /** Both paths' conditions, or null where between them they answer one column two ways. */

@@ -217,6 +217,9 @@ public final class AnAnswerComposed {
      */
     private static List<DemandGap> notComposedAgainst(List<AnswerDemand> demands,
                                                       List<ReachabilityGap> unrepresented) {
+        if (unrepresented.isEmpty()) {
+            return List.of();
+        }
         List<DemandGap> out = new ArrayList<>();
         for (ReachabilityGap gap : unrepresented) {
             if (!(gap instanceof ReachabilityGap.Uncomposed)) {

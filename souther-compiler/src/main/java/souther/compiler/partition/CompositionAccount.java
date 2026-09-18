@@ -46,11 +46,25 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
 
     /** One of a search whose way asked nothing of any answer. */
     public static CompositionAccount ofTheInput(List<ReachabilityGap> onTheWay) {
-        return new CompositionAccount(onTheWay, List.of(), Set.of());
+        return onTheWay.isEmpty() ? NOTHING
+                : new CompositionAccount(onTheWay, List.of(), Set.of());
     }
 
-    /** This account with what the answer side came to put on it. */
+    /**
+     * This account with what the answer side came to put on it.
+     *
+     * <p>The one that has something is the answer where the other has nothing, which is what
+     * almost every composing is: a behavior requiring nothing asks nothing of any answer, and a
+     * search that composed against everything it was handed leaves nothing on either side. Built
+     * out of both regardless, every attempt of every point would copy three collections to say so.
+     */
     public CompositionAccount and(CompositionAccount answers) {
+        if (answers.isNothing()) {
+            return this;
+        }
+        if (isNothing()) {
+            return answers;
+        }
         List<ReachabilityGap> input = new ArrayList<>(onTheWay);
         input.addAll(answers.onTheWay);
         List<DemandGap> demands = new ArrayList<>(onAnAnswer);
@@ -64,6 +78,12 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
      *  against the whole of the way asks. */
     public boolean leftSomethingOut() {
         return !onTheWay.isEmpty() || !onAnAnswer.isEmpty();
+    }
+
+    /** Whether this says nothing at all, which is a composing with nothing left out and no answer
+     *  of a dependency to have answered for. */
+    private boolean isNothing() {
+        return !leftSomethingOut() && takenUpByAnAnswer.isEmpty();
     }
 
     /**

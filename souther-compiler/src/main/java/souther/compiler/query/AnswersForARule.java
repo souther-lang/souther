@@ -116,7 +116,9 @@ record AnswersForARule(RequiredDependencies requires,
         // once per case, which is this reading's arithmetic rather than anything about the
         // condition.
         return new CompositionAccount(List.of(),
-                List.copyOf(new LinkedHashSet<>(unaccounted)), demanded.takenUp());
+                unaccounted.isEmpty() ? List.of()
+                        : List.copyOf(new LinkedHashSet<>(unaccounted)),
+                demanded.takenUp());
     }
 
     /**
