@@ -6,7 +6,6 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Why a generation of one behavior would be worth making, for a caller that has not made one.
@@ -39,7 +38,9 @@ import java.util.Set;
  * @param pairs    the combinations of two classes no row sits in, where the pair space is what the
  *                 behavior is held to
  * @param meetings the combinations of the body's decisions no row makes
- * @param rules    the ways through the body no row takes
+ * @param rules    the ways through the body no row takes, once apiece and in the order the
+ *                 measurement's findings name them — the same order the classes, the arms, the
+ *                 pairs and the meetings are held in, and the order a person is shown the work in
  * @param points   the points of the lines this behavior's rules and its declarations' draw that are
  *                 worth looking for a row at, and that this module answers for. What is read of
  *                 them is that there are some: the rows at a line are the boundary search's to
@@ -48,19 +49,19 @@ import java.util.Set;
 public record RowWork(List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
                       List<ObligationIdentity.OfAFallbackPairCell> pairs,
                       List<ObligationIdentity.OfACombinationOfDecisions> meetings,
-                      Set<DecisionRule> rules,
+                      List<DecisionRule> rules,
                       List<BorderObligationPointAssessment> points) {
 
     /** Nothing at all, which is what a behavior no row is owed for comes to. */
     public static final RowWork NONE = new RowWork(List.of(), List.of(), List.of(), List.of(),
-            Set.of(), List.of());
+            List.of(), List.of());
 
     public RowWork {
         classes = List.copyOf(classes);
         arms = List.copyOf(arms);
         pairs = List.copyOf(pairs);
         meetings = List.copyOf(meetings);
-        rules = Set.copyOf(rules);
+        rules = List.copyOf(rules);
         points = List.copyOf(points);
     }
 
