@@ -3,8 +3,6 @@ package souther.compiler.numeric;
 import souther.compiler.numeric.NumericDomain.Bounds;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,7 +28,7 @@ class WhatADomainProvesOfAWholeFormTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(n));
+        return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
     private static Map<String, Granularity> whole(String... atoms) {

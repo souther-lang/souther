@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
@@ -110,7 +110,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
         LevelInterval between = new LevelInterval(
                 Bound.at(count(1), false), Bound.at(count(2), false));
 
-        LevelSpace fills = LevelSpace.overFiniteDecimals(BigDecimal.valueOf(3));
+        LevelSpace fills = LevelSpace.overFiniteDecimals(ExactRatio.of(3));
         assertInstanceOf(Occupancy.Inhabited.class, fills.inspect(between),
                 "three times a decimal reaches every third of one, so it reaches into this run");
         Level found = assertInstanceOf(Witness.Found.class,
@@ -118,7 +118,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
         assertTrue(fills.attainable(found) && between.contains(found),
                 "and what comes back is a value it takes, inside the run: " + found);
 
-        LevelSpace steps = LevelSpace.steppingBy(BigDecimal.valueOf(3));
+        LevelSpace steps = LevelSpace.steppingBy(ExactRatio.of(3));
         assertEquals(new Occupancy.Empty(), steps.inspect(between),
                 "counting by threes there is nothing between one and two at all");
         assertEquals(Witness.NONE, steps.witness(between, Towards.ABOVE),
@@ -160,7 +160,8 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
         LevelInterval between = new LevelInterval(
                 Bound.at(count(1), false), Bound.at(count(2), false));
         for (String generator : List.of("3", "7", "101", "1000003", "10000000000003")) {
-            LevelSpace fills = LevelSpace.overFiniteDecimals(new BigDecimal(generator));
+            LevelSpace fills =
+                    LevelSpace.overFiniteDecimals(ExactRatio.of(new BigDecimal(generator)));
             assertInstanceOf(Occupancy.Inhabited.class, fills.inspect(between), generator);
             Level found = assertInstanceOf(Witness.Found.class,
                     fills.witness(between, Towards.ABOVE), generator).level();
@@ -199,7 +200,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
     }
 
     private static Level count(long at) {
-        return new Level.ACount(Count.of(at));
+        return Level.OfTheQuantity.of(at);
     }
 
     /** What was tried at one point of one border. */

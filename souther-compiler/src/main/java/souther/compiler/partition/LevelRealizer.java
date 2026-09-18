@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -13,8 +14,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -189,7 +188,7 @@ public final class LevelRealizer {
             NumericDomain.Bounds settled = runs.get(reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
                     runs.get(reading.anchors()), two.of(),
-                    reading.where().anchor().asACount());
+                    Count.number(reading.where().anchor().asAPlace()));
             Outwards.Walked walked = alongTheLine(together, two.of(), reading.anchors(),
                     within, looking);
             if (walked == null) {
@@ -355,7 +354,7 @@ public final class LevelRealizer {
      * nothing.
      */
     private static Place movedBy(Place from, Level level, Carrier carrier) {
-        Count apart = level.asACount();
+        Count apart = Count.number(level.asAPlace());
         if (!carrier.counts()) {
             return apart.signum() == 0 ? from : null;
         }
@@ -394,9 +393,8 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms = new java.util.ArrayList<>();
-        for (Map.Entry<NumericTerm, java.math.BigDecimal> each
-                : AffineReading.ordered(over.form())) {
+        List<Map.Entry<RealizationTarget, ExactRatio>> terms = new java.util.ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
             // Every number is realized by rebuilding one value, so what the walk assigns is a demand
             // and there is one for each term of the form. Whether anything writes such a value is
             // not asked here and is not this reader's to answer: a walk that turned a term away for
@@ -418,7 +416,7 @@ public final class LevelRealizer {
         }
         for (Level level : offered.levels()) {
             Search search = new Search(terms, over.on(), within, runs, tried);
-            Reached reached = search.solve(level.asACount());
+            Reached reached = search.solve(level.asAnExactNumber());
             stoppedBy.addAll(search.stoppedBy());
             if (reached == Reached.FOUND) {
                 Realization made = found(search.fixing(), within, tried);
@@ -529,7 +527,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms;
+        private final List<Map.Entry<RealizationTarget, ExactRatio>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -589,7 +587,7 @@ public final class LevelRealizer {
             return true;
         }
 
-        Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
+        Search(List<Map.Entry<RealizationTarget, ExactRatio>> terms,
                Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within,
                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
@@ -606,10 +604,9 @@ public final class LevelRealizer {
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                Map<NumericTerm, souther.compiler.numeric.ExactRatio> coefs = new LinkedHashMap<>();
+                Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
                 for (int j = i; j < terms.size(); j++) {
-                    coefs.put(terms.get(j).getKey().term(),
-                            souther.compiler.numeric.ExactRatio.of(terms.get(j).getValue()));
+                    coefs.put(terms.get(j).getKey().term(), terms.get(j).getValue());
                 }
                 // Each term's own spacing, which is what the image was always asking for: a sum of
                 // whole numbers lands on whole numbers, and one decimal among them makes it dense.
@@ -617,8 +614,8 @@ public final class LevelRealizer {
             }
         }
 
-        Reached solve(Count target) {
-            return walk(0, target.at(), within);
+        Reached solve(ExactRatio target) {
+            return walk(0, target, within);
         }
 
         /**
@@ -650,13 +647,13 @@ public final class LevelRealizer {
          * is the whole reason this is not a boolean: a position all of whose values were tried leaves
          * an empty-handed walk a proof, and one that was cut short leaves it nothing at all.
          */
-        private Reached walk(int i, java.math.BigDecimal owed,
+        private Reached walk(int i, ExactRatio owed,
                              souther.compiler.inputs.SearchRegion here) {
             taken++;
             if (!stepsLeft()) {
                 return Reached.INCOMPLETE;
             }
-            java.math.BigDecimal coef = terms.get(i).getValue();
+            ExactRatio coef = terms.get(i).getValue();
             // Where this position runs under what the walk has fixed above it, which is not what it
             // runs in the region the search was handed. The rules leaving it nothing here is a proof
             // about this branch and about no other: the values fixed above took it away, and the
@@ -685,11 +682,7 @@ public final class LevelRealizer {
             // them arrives at, and a position offering one candidate has nothing for a test applied
             // afterwards to leave.
             CandidateDomain may = CandidateDomain.of(
-                    fromHere[i + 1].affinePreimage(
-                            souther.compiler.numeric.ExactRatio.of(coef),
-                            souther.compiler.numeric.ExactRatio.of(owed),
-                            carriers[i].spacing()),
-                    left);
+                    fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing()), left);
             return switch (may) {
                 case CandidateDomain.None _ -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
@@ -711,15 +704,15 @@ public final class LevelRealizer {
          * reported as every value having been tried. Nothing being left is proved by the rules, so
          * stepping past it takes nothing out of a walk that reaches the end.
          */
-        private Reached trying(int i, java.math.BigDecimal x, java.math.BigDecimal owed,
-                               java.math.BigDecimal coef, souther.compiler.inputs.SearchRegion here) {
+        private Reached trying(int i, java.math.BigDecimal x, ExactRatio owed,
+                               ExactRatio coef, souther.compiler.inputs.SearchRegion here) {
             souther.compiler.inputs.SearchRegion next =
                     narrowing(here, terms.get(i).getKey().term(), x);
             if (next == null) {
                 return Reached.EXHAUSTED;
             }
             at[i] = new Count(x);
-            Reached reached = walk(i + 1, owed.subtract(coef.multiply(x)), next);
+            Reached reached = walk(i + 1, owed.minus(coef.times(ExactRatio.of(x))), next);
             if (reached != Reached.FOUND) {
                 at[i] = null;
             }
@@ -734,8 +727,8 @@ public final class LevelRealizer {
          * walked to the end, which is why what comes back is the weakest of the children rather than
          * the last of them.
          */
-        private Reached walking(int i, CandidateDomain.Walking every, java.math.BigDecimal owed,
-                                java.math.BigDecimal coef,
+        private Reached walking(int i, CandidateDomain.Walking every, ExactRatio owed,
+                                ExactRatio coef,
                                 souther.compiler.inputs.SearchRegion here) {
             Reached weakest = Reached.EXHAUSTED;
             for (java.math.BigDecimal x = every.first();
@@ -768,8 +761,8 @@ public final class LevelRealizer {
          * allowance of its own, and what a step past a refused value buys is not the same question
          * here as it is for a pair on a line.
          */
-        private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
-                                java.math.BigDecimal coef,
+        private Reached outward(int i, CandidateDomain.Outward on, ExactRatio owed,
+                                ExactRatio coef,
                                 souther.compiler.inputs.SearchRegion here) {
             // The coset is what the arithmetic leaves the position and the run is where the rules
             // leave it; what the declarations leave its values is not given to this search, so
@@ -812,30 +805,28 @@ public final class LevelRealizer {
         /**
          * The last position, solved rather than tried, and every way it can fail is a proof.
          *
-         * <p>Where its values step, what is left over has to be its coefficient's multiple; where
-         * they fill, it is a division and the answer is whatever number it comes to. A quotient with
-         * no end is the one that used to be read as a search giving up, and it is not: a value a
-         * model cannot write is a value the position does not hold, so what it says is that this
-         * prefix has no last value and never that this compiler could not find one.
+         * <p>The division itself is exact. What decides the answer is whether the quotient is a
+         * value the position holds: where its values step, a whole number; where they fill, a number
+         * a model can write. A third is neither, and what that says is that this prefix has no last
+         * value — never that this compiler could not find one.
          *
          * <p>Then the ends themselves, which say whether they are their own values, and then the
          * rules with every position fixed — the one place a whole assignment exists to be held
          * against them. Each of the three refuses on something proved, so a walk that ends here
          * empty-handed has ended.
          */
-        private Reached solving(int i, java.math.BigDecimal owed, java.math.BigDecimal coef,
+        private Reached solving(int i, ExactRatio owed, ExactRatio coef,
                                 NumericDomain.Bounds left) {
+            ExactRatio quotient = owed.dividedBy(coef);
             java.math.BigDecimal solved;
             if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
-                java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
-                if (divided[1].signum() != 0) {
+                if (!quotient.isWhole()) {
                     return Reached.EXHAUSTED;
                 }
-                solved = divided[0];
+                solved = new java.math.BigDecimal(quotient.numerator());
             } else {
-                try {
-                    solved = owed.divide(coef);
-                } catch (ArithmeticException noEnd) {
+                solved = quotient.asWrittenDecimal();
+                if (solved == null) {
                     return Reached.EXHAUSTED;
                 }
             }
@@ -880,8 +871,9 @@ public final class LevelRealizer {
          * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
          * not budgeted.
          */
-        private souther.compiler.inputs.SearchRegion narrowing(souther.compiler.inputs.SearchRegion here, NumericTerm term,
-                                    java.math.BigDecimal at) {
+        private souther.compiler.inputs.SearchRegion narrowing(
+                souther.compiler.inputs.SearchRegion here, NumericTerm term,
+                java.math.BigDecimal at) {
             if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
                 return here;
             }
@@ -927,71 +919,70 @@ public final class LevelRealizer {
          * positions — asking for that one is the change the walk's own cost note argues against, and
          * it is a question of its own rather than part of where a position may stand.
          */
-        private NumericDomain.Bounds leaving(int rest, java.math.BigDecimal owed,
-                                             java.math.BigDecimal coef,
+        private NumericDomain.Bounds leaving(int rest, ExactRatio owed, ExactRatio coef,
                                              NumericDomain.Bounds within) {
-            java.math.BigDecimal[] reach = reach(rest);
-            if (reach == null || coef.signum() == 0) {
+            ExactRatio[] reach = reach(rest);
+            if (reach == null || coef.isZero()) {
                 return within;
             }
             // owed - coef * x must lie in [reach0, reach1], so coef * x lies in
             // [owed - reach1, owed - reach0].
-            java.math.BigDecimal one = owed.subtract(reach[1]);
-            java.math.BigDecimal other = owed.subtract(reach[0]);
-            java.math.BigDecimal low = quotient(one, coef, java.math.RoundingMode.FLOOR)
-                    .min(quotient(other, coef, java.math.RoundingMode.FLOOR));
-            java.math.BigDecimal high = quotient(one, coef, java.math.RoundingMode.CEILING)
-                    .max(quotient(other, coef, java.math.RoundingMode.CEILING));
+            ExactRatio one = owed.minus(reach[1]).dividedBy(coef);
+            ExactRatio other = owed.minus(reach[0]).dividedBy(coef);
+            ExactRatio low = one.compareTo(other) <= 0 ? one : other;
+            ExactRatio high = one.compareTo(other) <= 0 ? other : one;
             return new NumericDomain.Bounds(
-                    Endpoint.lower(within.min(), Endpoint.inclusive(new Count(low))),
-                    Endpoint.upper(within.max(), Endpoint.inclusive(new Count(high))));
+                    Endpoint.lower(within.min(),
+                            Endpoint.inclusive(written(low, java.math.RoundingMode.FLOOR))),
+                    Endpoint.upper(within.max(),
+                            Endpoint.inclusive(written(high, java.math.RoundingMode.CEILING))));
         }
 
         /**
-         * A quotient that is exact where the division ends, and rounded the way {@code towards} says
-         * where it does not.
+         * A derived end as a count somebody could write: the number itself where a decimal is it,
+         * and rounded the way {@code towards} says where none is.
          *
          * <p><b>Outward and never inward.</b> What this bounds is a proof — a value outside it is one
          * no assignment of the rest completes — so a bound rounded the wrong way takes a value the
          * box holds out of the walk, and a walk that then finds nothing calls the level unreachable.
          * Rounded to sixteen digits at the nearest, {@code a = 10000000000000001} was rounded to
          * {@code 10000000000000000} and the one pair that meets the line was proved not to exist.
+         *
+         * <p>The division above is exact, so what is left here is only that the interval algebra
+         * this end is handed to counts in decimals. A third has none, and the number written out for
+         * it is past where the rules stop rather than short of it.
          */
-        private static java.math.BigDecimal quotient(java.math.BigDecimal owed,
-                                                     java.math.BigDecimal coef,
-                                                     java.math.RoundingMode towards) {
-            try {
-                return owed.divide(coef);
-            } catch (ArithmeticException noEnd) {
-                return owed.divide(coef, DIGITS_A_DERIVED_END_KEEPS, towards);
-            }
+        private static Count written(ExactRatio at, java.math.RoundingMode towards) {
+            Count exactly = Count.at(at);
+            return exactly != null ? exactly
+                    : new Count(at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS));
         }
 
         /**
          * The least and the greatest the positions from {@code i} on can add up to, or null where
          * one of them is unbounded and there is nothing to say.
          */
-        private java.math.BigDecimal[] reach(int i) {
-            java.math.BigDecimal least = java.math.BigDecimal.ZERO;
-            java.math.BigDecimal most = java.math.BigDecimal.ZERO;
+        private ExactRatio[] reach(int i) {
+            ExactRatio least = ExactRatio.ZERO;
+            ExactRatio most = ExactRatio.ZERO;
             for (int j = i; j < terms.size(); j++) {
                 NumericDomain.Bounds within = runsBetween[j];
-                java.math.BigDecimal coef = terms.get(j).getValue();
-                java.math.BigDecimal low = numberOf(within.min());
-                java.math.BigDecimal high = numberOf(within.max());
+                ExactRatio coef = terms.get(j).getValue();
+                ExactRatio low = numberOf(within.min());
+                ExactRatio high = numberOf(within.max());
                 if (low == null || high == null) {
                     return null;
                 }
-                java.math.BigDecimal one = coef.multiply(low);
-                java.math.BigDecimal other = coef.multiply(high);
-                least = least.add(one.min(other));
-                most = most.add(one.max(other));
+                ExactRatio one = coef.times(low);
+                ExactRatio other = coef.times(high);
+                least = least.plus(one.compareTo(other) <= 0 ? one : other);
+                most = most.plus(one.compareTo(other) <= 0 ? other : one);
             }
-            return new java.math.BigDecimal[] {least, most};
+            return new ExactRatio[] {least, most};
         }
 
-        private static java.math.BigDecimal numberOf(Endpoint end) {
-            return end == null || !(end.at() instanceof Count count) ? null : count.at();
+        private static ExactRatio numberOf(Endpoint end) {
+            return end == null || !(end.at() instanceof Count count) ? null : count.exactly();
         }
 
     }
@@ -1058,7 +1049,7 @@ public final class LevelRealizer {
             // rather than as the same place a second time, which a caller asking again would read
             // as a search that had not moved.
             case Criterion.AtTheLevel at ->
-                    apart.has(placeOf(at.at())) ? null : placeOf(at.at());
+                    apart.has(at.at().asAPlace()) ? null : at.at().asAPlace();
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
@@ -1146,7 +1137,7 @@ public final class LevelRealizer {
 
     /** One end of such a run, or null where it is not a place of the position. */
     private static Endpoint endOf(Bound end, Carrier carrier) {
-        if (end == null || end.at().per().compareTo(BigDecimal.ONE) != 0) {
+        if (end == null || !end.at().per().equals(ExactRatio.ONE)) {
             return null;
         }
         return end.at().written() instanceof Level.OnACarrier on && on.of().equals(carrier)
@@ -1266,12 +1257,5 @@ public final class LevelRealizer {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         fixing.forEach((target, at) -> standing.put(target.term(), at));
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
-    }
-
-    private static Place placeOf(Level level) {
-        return switch (level) {
-            case Level.OnACarrier on -> on.at();
-            case Level.ACount count -> count.at();
-        };
     }
 }

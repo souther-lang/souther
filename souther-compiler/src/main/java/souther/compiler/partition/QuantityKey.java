@@ -1,9 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -30,7 +30,7 @@ import java.util.TreeMap;
  * @param direction the coefficients with their common divisor taken out, which is the smallest form
  *                  that runs this way
  */
-public record QuantityKey(Map<NumericTerm, BigDecimal> direction) {
+public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
 
     public QuantityKey {
         direction = Map.copyOf(direction);
@@ -38,9 +38,9 @@ public record QuantityKey(Map<NumericTerm, BigDecimal> direction) {
 
     /** The quantity {@code form} is a multiple of. */
     public static QuantityKey of(LinearForm<NumericTerm> form) {
-        BigDecimal per = per(form);
-        Map<NumericTerm, BigDecimal> smallest = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> smallest.put(term, coef.divide(per)));
+        ExactRatio per = per(form);
+        Map<NumericTerm, ExactRatio> smallest = new LinkedHashMap<>();
+        form.coefs().forEach((term, coef) -> smallest.put(term, coef.dividedBy(per)));
         return new QuantityKey(smallest);
     }
 
@@ -56,8 +56,8 @@ public record QuantityKey(Map<NumericTerm, BigDecimal> direction) {
      * multiple of this, so turning one into the canonical quantity's own units never rounds — and
      * where the written form attains no level at all there is nothing to turn.
      */
-    public static BigDecimal per(LinearForm<NumericTerm> form) {
-        return form.coefs().isEmpty() ? BigDecimal.ONE
+    public static ExactRatio per(LinearForm<NumericTerm> form) {
+        return form.coefs().isEmpty() ? ExactRatio.ONE
                 : LevelSpace.stepOf(form.coefs().values());
     }
 
@@ -65,15 +65,14 @@ public record QuantityKey(Map<NumericTerm, BigDecimal> direction) {
      * What makes two quantities one quantity, as a name a map can hold.
      *
      * <p>In an order the coefficients settle rather than the one they were recorded in, so that a
-     * form written {@code 6 * b + 3 * a} and one written {@code 3 * a + 6 * b} are one name. Written
-     * out rather than left to the record's own equality because a coefficient of {@code 2} and one
-     * of {@code 2.0} are one number and two {@code BigDecimal}s — the same rule {@link Level#key()}
-     * states, asked of a direction.
+     * form written {@code 6 * b + 3 * a} and one written {@code 3 * a + 6 * b} are one name. The
+     * coefficients themselves need no spelling rule: an exact ratio is kept in lowest terms, so two
+     * writings of one number are one value — the same thing {@link Level#key()} answers for a place
+     * on a carrier, where the representation does not settle it.
      */
     public String key() {
         Map<String, String> named = new TreeMap<>();
-        direction.forEach((term, coef) ->
-                named.put(term.toString(), coef.stripTrailingZeros().toPlainString()));
+        direction.forEach((term, coef) -> named.put(term.toString(), coef.toString()));
         StringBuilder out = new StringBuilder();
         named.forEach((term, coef) -> out.append(coef).append('*').append(term).append(' '));
         return out.toString().trim();

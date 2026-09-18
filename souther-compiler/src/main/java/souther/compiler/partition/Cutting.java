@@ -7,7 +7,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
@@ -313,7 +313,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against()),
-                new Level.ACount(drawn.stepsApart()), claim, quantities);
+                new Level.OfTheQuantity(drawn.stepsApart().exactly()), claim, quantities);
     }
 
     /**
@@ -366,7 +366,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      java.util.Map<NumericTerm, TermOrders> on,
                                      Quantities quantities) {
         Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
-                new Level.ACount(new Count(read.cut())), read.claim(), quantities);
+                new Level.OfTheQuantity(read.cut()), read.claim(), quantities);
         if (drawn == null) {
             // What this watches: `OverAForm.levels()` answers `steppingBy` or `overFiniteDecimals`,
             // and neither of those parts anywhere but everywhere — the one order that names a
@@ -395,7 +395,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /** How much of the quantity this rule wrote, which is what a level of one reads as on the
      *  other. */
-    java.math.BigDecimal per() {
+    ExactRatio per() {
         return QuantityKey.per(of.direction());
     }
 
@@ -428,7 +428,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * distinguishes (issue #880).
      */
     NumericTerm.FromOnePosition dividedPosition() {
-        java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
+        java.util.Map<NumericTerm, ExactRatio> direction =
+                quantity().direction();
         // And only where one position answers that number. A quantity read from somewhere else
         // divides no position however few terms it is over, so there is nothing here for a class
         // to be a class of.
@@ -543,9 +544,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
             return within;
         }
-        java.util.Map.Entry<NumericTerm, java.math.BigDecimal> only =
+        java.util.Map.Entry<NumericTerm, ExactRatio> only =
                 direction.coefs().entrySet().iterator().next();
-        if (only.getValue().compareTo(java.math.BigDecimal.ONE) != 0
+        if (!only.getValue().equals(ExactRatio.ONE)
                 || !(only.getKey() instanceof NumericTerm.ValueOf(var position))
                 // The one thing this cannot read off its own quantity: which position the interval
                 // is of. Both are the position the comparison turns on today and the check is what

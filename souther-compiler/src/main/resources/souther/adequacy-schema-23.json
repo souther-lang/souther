@@ -81,13 +81,21 @@
     },
     "sources": {
       "type": "object",
-      "description": "What each source identity written elsewhere in this document is called, keyed on the identity. Every identity the document carries has an entry — a `source` subject, and the `sourceId` of every `at`. Not a list of what the compile was handed: a source this report says nothing about has no entry, so this says which files the report is about rather than which files were read. The names are the ones the same run's diagnostics use, which are chosen from the set of files in front of a reader and are neither stable across runs nor a key — which is why they are here and not in place of the identities. Not in `required`: a document written before this field existed is still a document of this version.",
+      "description": "What each source identity written elsewhere in this document is called, keyed on the identity. Every identity the document carries has an entry: every field defined by `sourceIdentity`, and the `subject` of a reason whose `scope` is `source`, which is an identity for that scope alone and so is spelled as the subject of any other. Said by pointing at the definition rather than by listing the fields, because a list is what the next field to carry one is missing from. Not a list of what the compile was handed: a source this report says nothing about has no entry, so this says which files the report is about rather than which files were read. The names are the ones the same run's diagnostics use, which are chosen from the set of files in front of a reader and are neither stable across runs nor a key — which is why they are here and not in place of the identities. Not in `required`: a document written before this field existed is still a document of this version.",
       "additionalProperties": {
         "type": "string"
       }
     }
   },
   "$defs": {
+    "sourceIdentity": {
+      "type": "string",
+      "description": "A source as the compilation identifies it, written once here for every field that carries one. It is what the caller handed the file over as — a position in a list for a build, a document URI for an editor — and not a name to show a reader: what to call a file depends on which other files are in front of that reader, so it is neither stable across runs nor a key. `sources` says what each of these is called. A field that carries one says so by being defined here, which is what lets a reader find every one of them without a list of the places they appear.",
+      "examples": [
+        "0",
+        "file:///home/dev/model.sou"
+      ]
+    },
     "ruleHandle": {
       "type": "string",
       "description": "How a reader finds a rule, written once here for every field that carries one. A rule the author named is found by that name: a clause of an invariant they called something is `invariant Amount (cap)`, one they named nothing is counted from the top of the declaration as `invariant Amount #2`, a clause of an `ensures` is `ensures charge (refunded)`, and a clause stating one rule over every answer is `ensures charge`. A rule they wrote rather than named has no name to look up and is found by where it is: `comparison@billing.sou:14:22` in a source this document's `sources` table names, and `comparison@7:3` where the file is the reader's to know. Code this compile reads from somewhere it holds no file for is said by what reaches it — `comparison in `Money`, reached at billing.sou:14:22`, or `comparison in `Money`, reached at 7:3`, or `comparison in `Money`` where there was no position to give. The word in front of a place says what kind of rule it is, and is one of the words `ruleId.kind` uses for a rule with no name: `predicate@billing.sou:14:22`, `predicate@7:3`, `predicate in `Money`, reached at billing.sou:14:22`, `predicate in `Money`, reached at 7:3`, `predicate in `Money``, and `fork@billing.sou:14:22`, `fork@7:3`, `fork in `Money`, reached at billing.sou:14:22`, `fork in `Money`, reached at 7:3`, `fork in `Money``. These words are how an author acts on a rule and never what tells one rule from another — two arms of one `ensures` clause may name the same case — which is `ruleId`.",
@@ -2438,8 +2446,7 @@
               "description": "The behavior the row is written for."
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "name": {
               "type": "string",
@@ -2461,8 +2468,7 @@
               "description": "The behavior the row is written for."
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "ordinal": {
               "type": "integer",
@@ -4082,10 +4088,10 @@
             "position",
             "row"
           ],
-          "description": "What `subject` names, and so what the reason counts against. A `behavior`, a `position` and a `row` count against the behavior they are in, and each is in one. A `row` says which row of it, as the behavior, the source it is written in and the row's own name: a row written with no name is numbered within its source, so the source is part of saying which row, and two rows of one behavior that did not come back are two things to go and look at. A `module` counts against every behavior in it, because that is what a module holds. A `source` counts against every behavior too, and not for that reason: one is written only where the source was not evaluated, so which behaviors had rows in it is exactly what could not be read."
+          "description": "What `subject` names, and so what the reason counts against. A `behavior`, a `position` and a `row` count against the behavior they are in, and each is in one. A `row` says which row of it, as the behavior, the source it is written in and the row's own name: a row written with no name is numbered within its source, so the source is part of saying which row, and two rows of one behavior that did not come back are two things to go and look at. A `module` counts against every behavior in it, because that is what a module holds. A `source` counts against every behavior too, and not for that reason: one is written only where the contents of the source could not be read at all, so which rows it holds is exactly what could not be read. A source that was read and then produced nothing is not one of those — the rows it holds are known, and what went unread is written of each of them."
         },
         "code": {
-          "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. `linkage_failed` is the generated classes not linking: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. One place writes it, an example whose evaluation raised one and observed nothing, so the rows behind it did not run and that is part of what it says. It had three, and the other two were a value being built after the rows had been read — those are the generator's to report and are not written here. `instrumentation_absent` is the classes an arm-measuring evaluation needs not having been made, named for the absence rather than for a backend that failed or inputs that were not there, which nothing here can tell apart. `answerer_not_established` is a row that was not handed to what answers its behavior, because nothing could establish that what answers it was built against this model — either the two builds say different things about something a value crossing between them depends on, or what the answer carries could not be read at all. The rows behind it were read: they were built and held to their invariants, and what is missing is only what the running would have decided. `row_undecided` is a row that did not come back, because the evaluation had no answer for it. `row_evaluation_limit_reached` is the same loss from the other cause: a figure this compiler evaluates rows under — the counted steps, the recursion depth, the clock — stopped the row before it decided anything. Two words because what a reader may do about them differs: a run that allows more keeps the second and meets the first again. One word covers the three figures, since what the measure lost is the same for all of them and the row's own diagnostic says which; a stack the host ran out of is not among them, because nothing here compared anything against it, and it is written as `row_undecided`. `implementation_not_made` is a row whose behavior this compile was to implement and did not, which happens where the module it is in holds a body nothing elaborated: what may be run is that body's module less what reaches it, and a row about a behavior outside that has nothing here to be applied to. Told apart from `answerer_not_established`, where something would apply the row and may not be handed this module's values, and from a behavior nothing implements at all, which is a row waiting rather than a row undecided. The rows beside it in one source were run: this says nothing about them. `probe_mapping_lost` is what it was called, and no compiler writes it any more: it is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
+          "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. It is written of each row that source holds, since those are known wherever the source's contents could be read, and of the source itself only where they could not. `linkage_failed` is the generated classes not linking: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. One place writes it, an example whose evaluation raised one and observed nothing, so the rows behind it did not run and that is part of what it says. It had three, and the other two were a value being built after the rows had been read — those are the generator's to report and are not written here. `instrumentation_absent` is the classes an arm-measuring evaluation needs not having been made, named for the absence rather than for a backend that failed or inputs that were not there, which nothing here can tell apart. `answerer_not_established` is a row that was not handed to what answers its behavior, because nothing could establish that what answers it was built against this model — either the two builds say different things about something a value crossing between them depends on, or what the answer carries could not be read at all. The rows behind it were read: they were built and held to their invariants, and what is missing is only what the running would have decided. `row_undecided` is a row that did not come back, because the evaluation had no answer for it. `row_evaluation_limit_reached` is the same loss from the other cause: a figure this compiler evaluates rows under — the counted steps, the recursion depth, the clock — stopped the row before it decided anything. Two words because what a reader may do about them differs: a run that allows more keeps the second and meets the first again. One word covers the three figures, since what the measure lost is the same for all of them and the row's own diagnostic says which; a stack the host ran out of is not among them, because nothing here compared anything against it, and it is written as `row_undecided`. `implementation_not_made` is a row whose behavior this compile was to implement and did not, which happens where the module it is in holds a body nothing elaborated: what may be run is that body's module less what reaches it, and a row about a behavior outside that has nothing here to be applied to. Told apart from `answerer_not_established`, where something would apply the row and may not be handed this module's values, and from a behavior nothing implements at all, which is a row waiting rather than a row undecided. The rows beside it in one source were run: this says nothing about them. `probe_mapping_lost` is what it was called, and no compiler writes it any more: it is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
           "enum": [
             "value_unreadable",
             "value_truncated",
@@ -4119,8 +4125,7 @@
       "additionalProperties": false,
       "properties": {
         "sourceId": {
-          "type": "string",
-          "description": "The source, as an identity, read the way a `source` subject is. `sources` says what it is called."
+          "$ref": "#/$defs/sourceIdentity"
         },
         "line": {
           "type": "integer"
@@ -4342,8 +4347,8 @@
           "description": "The definition whose body wrote it."
         },
         "sourceId": {
-          "type": "string",
-          "description": "The source the rows or the stand-in are written in, read the way a `source` subject is. `sources` says what it is called."
+          "$ref": "#/$defs/sourceIdentity",
+          "description": "The source the rows or the stand-in are written in."
         }
       }
     },
@@ -4394,8 +4399,7 @@
               "const": "source"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             }
           }
         },
@@ -4416,8 +4420,7 @@
               "type": "string"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "name": {
               "type": "string",
@@ -4442,8 +4445,7 @@
               "type": "string"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "ordinal": {
               "type": "integer",

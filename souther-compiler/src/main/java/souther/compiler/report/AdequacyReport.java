@@ -376,10 +376,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * call itself measured in full over a debt nobody could measure.
          *
          * <p>Derived and not held. What a module could not read reaches it through the measures that
-         * lost by it — a source none of whose rows were seen counts against every behavior the
-         * module has, and the reading of each of them says so. Read a second time from a list of the
-         * module's own, this report was giving a raw fact its meaning as a weakening, which is a
-         * measure's answer and not a renderer's (issue #953).
+         * lost by it — a source none of whose rows were seen counts against each behavior whose
+         * rows those were, and the reading of each of them says so. Read a second time from a list
+         * of the module's own, this report was giving a raw fact its meaning as a weakening, which
+         * is a measure's answer and not a renderer's (issue #953).
          */
         public WeakeningSet weakenedBy() {
             WeakeningSet out = WeakeningSet.none();
@@ -800,7 +800,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // is a reader deciding what the producer answered (issue #996).
             Adequacy.RowReading reading =
                     Adequacy.RowReadings.readingFor(readings, behavior.name());
-            // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             // Null where the coverage did not answer at all, which is the compile not having got
@@ -4321,9 +4320,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 carrier(into.putObject("carrier"), on.of());
                 into.put("at", on.at().key());
             }
-            case Level.ACount count -> {
+            case Level.OfTheQuantity counted -> {
                 into.put("kind", "a_count");
-                into.put("at", count.at().key());
+                into.put("at", counted.at().spelled());
             }
         }
     }
@@ -4402,7 +4401,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case FarEnd.AtTheDomain(var reaches) -> {
                 into.put("kind", "at_the_domain");
                 level(into.putObject("at"), reaches.at().written());
-                into.put("per", reaches.at().per().toPlainString());
+                into.put("per", reaches.at().per().spelled());
                 into.put("inclusive", reaches.inclusive());
             }
             case FarEnd.AtTheOrderEnd(var towards) -> {
@@ -6122,7 +6121,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     into.put("source", sources.written(it.source()));
             case PublishedSubject.OfARow it -> {
                 into.put("behavior", it.behavior());
-                into.put("source", it.source());
+                // Named here and not where it was projected, as a source subject is: which source
+                // a row is written in is an identity this document now owes an explanation of.
+                into.put("source", sources.written(it.source()));
                 if (it.name() == null) {
                     into.put("ordinal", it.ordinal());
                 } else {
@@ -6304,10 +6305,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // compiler can address it by a number.
             case Subject.OfARow it -> switch (it.rowRef().identity()) {
                 case RowIdentity.Named named -> new PublishedSubject.OfARow(it.rowRef().behavior(),
-                        sources.written(it.rowRef().source()), named.name(), null);
+                        it.rowRef().source(), named.name(), null);
                 case RowIdentity.Unnamed unnamed -> new PublishedSubject.OfARow(
-                        it.rowRef().behavior(), sources.written(it.rowRef().source()), null,
-                        unnamed.ordinal());
+                        it.rowRef().behavior(), it.rowRef().source(), null, unnamed.ordinal());
             };
             case Subject.AtASpelledPosition it ->
                     new PublishedSubject.AtASpelledPosition(it.behavior(), it.path());

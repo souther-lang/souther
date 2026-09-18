@@ -94,15 +94,19 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
                 [ {
                   "kind" : "observation_absent",
                   "about" : {
-                    "kind" : "source",
-                    "source" : "1"
+                    "kind" : "row",
+                    "behavior" : "take",
+                    "source" : "1",
+                    "ordinal" : 1
                   },
                   "runSensitivity" : "unaffected"
                 }, {
                   "kind" : "observation_absent",
                   "about" : {
-                    "kind" : "source",
-                    "source" : "2"
+                    "kind" : "row",
+                    "behavior" : "take",
+                    "source" : "2",
+                    "ordinal" : 1
                   },
                   "runSensitivity" : "unaffected"
                 } ]""",
@@ -120,12 +124,28 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
         assertEquals("""
                 [ {
                   "code" : "observation_absent",
-                  "scope" : "source",
-                  "subject" : "1"
+                  "scope" : "row",
+                  "subject" : "take/1/#1",
+                  "at" : {
+                    "sourceId" : "1",
+                    "line" : 6,
+                    "column" : 7,
+                    "writtenAt" : {
+                      "kind" : "here"
+                    }
+                  }
                 }, {
                   "code" : "observation_absent",
-                  "scope" : "source",
-                  "subject" : "2"
+                  "scope" : "row",
+                  "subject" : "take/2/#1",
+                  "at" : {
+                    "sourceId" : "2",
+                    "line" : 6,
+                    "column" : 7,
+                    "writtenAt" : {
+                      "kind" : "here"
+                    }
+                  }
                 } ]""",
                 written().get("modules").get(0).get("incompleteness").toPrettyString());
     }

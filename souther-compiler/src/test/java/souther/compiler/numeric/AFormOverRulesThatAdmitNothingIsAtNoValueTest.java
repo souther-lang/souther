@@ -1,8 +1,6 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,9 +28,9 @@ class AFormOverRulesThatAdmitNothingIsAtNoValueTest {
 
     /** {@code cx·x + cy·y + k}, which is how a rule over two positions is written. */
     private static LinearForm<String> form(long cx, long cy, long k) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(k))
-                .plus(LinearForm.<String>atom(X).times(BigDecimal.valueOf(cx)))
-                .plus(LinearForm.<String>atom(Y).times(BigDecimal.valueOf(cy)));
+        return LinearForm.<String>constant(ExactRatio.of(k))
+                .plus(LinearForm.<String>atom(X).times(ExactRatio.of(cx)))
+                .plus(LinearForm.<String>atom(Y).times(ExactRatio.of(cy)));
     }
 
     private static Map<String, Granularity> whole() {

@@ -3609,7 +3609,7 @@
             "behavior" : "出荷する",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GE LinearForm[constant=-10000.00, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
+              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
               "outcome" : "held"
             }, {
               "kind" : "comparison",
@@ -3633,7 +3633,7 @@
             "behavior" : "出荷する",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GE LinearForm[constant=-10000.00, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
+              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
               "outcome" : "denied"
             }, {
               "kind" : "comparison",

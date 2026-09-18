@@ -42,11 +42,11 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+        return LinearForm.constant(ExactRatio.of(n));
     }
 
     private static LinearForm<String> scaled(String a, long k) {
-        return LinearForm.<String>atom(a).times(BigDecimal.valueOf(k));
+        return LinearForm.<String>atom(a).times(ExactRatio.of(k));
     }
 
     private static Map<String, Granularity> whole(String... atoms) {
@@ -305,7 +305,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
             // The same questions, scaled up, are the same questions.
             for (Written each : rules) {
-                LinearForm<String> doubledForm = each.form().times(BigDecimal.valueOf(3));
+                LinearForm<String> doubledForm = each.form().times(ExactRatio.of(3));
                 assertEquals(asWritten.entails(each.form(), each.rel()),
                         asWritten.entails(doubledForm, each.rel()),
                         () -> "scaling the question moved what is proven: " + rules);

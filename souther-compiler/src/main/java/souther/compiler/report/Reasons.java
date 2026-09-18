@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Target;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.CompositionShortfall;
@@ -50,9 +51,10 @@ final class Reasons {
      * stopped the row, and they are two codes because the sentence below could say nothing of the
      * phases it was written over that was true at all of them: a row a figure stopped is one a run
      * that allows more keeps, and a row the evaluation had no answer for is not.
-     * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code INSTRUMENTATION_ABSENT}
-     * has one, on a branch taken only where arm coverage was asked for and returning no rows, so
-     * the sentence may name the request and the empty result both.
+     * {@code OBSERVATION_ABSENT} has two and they mean the same thing about two different subjects,
+     * which is why it is the one code whose sentence reads what it is about;
+     * {@code INSTRUMENTATION_ABSENT} has one, on a branch taken only where arm coverage was asked
+     * for and returning no rows, so the sentence may name the request and the empty result both.
      *
      * <p>{@code LINKAGE_FAILED} has one now and had three. The other two were a fill and a boundary
      * that could not build a candidate, and both were things the generator did rather than things a
@@ -77,8 +79,26 @@ final class Reasons {
     static String said(Incompleteness.Fact gap, SourceRendering rendering) {
         String subject = gap.shown(rendering);
         return switch (gap.code()) {
-            case OBSERVATION_ABSENT -> String.format(
-                    "no rows were read from `%s`, so what they cover is unknown", subject);
+            // Its two producers are about two things, so the sentence says which it is about. One
+            // is a source nothing could read the contents of, where what went unread is every row
+            // it holds; the other is a row of a source that produced no observation, and that row
+            // is what went unread. Written as one sentence over both subjects, it said of a row
+            // what is only true of a file.
+            //
+            // Over what it is about and not over the scope that follows from it, and with the rest
+            // refused rather than left to whichever sentence came second. The two kinds are the two
+            // this compiler writes; a third would be a thing nobody has said what happened to, and
+            // taking the file's sentence for it is how a reader is told something that was never
+            // established. Read off the sum, so an arm added to it is answered for here.
+            case OBSERVATION_ABSENT -> switch (gap.target()) {
+                case Target.OfRow _ -> String.format(
+                        "nothing was observed for `%s`, so what it covers is unknown", subject);
+                case Target.OfSource _ -> String.format(
+                        "no rows were read from `%s`, so what they cover is unknown", subject);
+                case Target.OfBehavior _, Target.OfModule _, Target.AtPosition _ ->
+                        throw new IllegalArgumentException("nothing observed is about a row or"
+                                + " about a source nothing could read the contents of: " + gap);
+            };
             case LINKAGE_FAILED -> String.format(
                     "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(

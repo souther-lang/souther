@@ -107,7 +107,8 @@ final class StandingImpossibility {
             // counts is the sum or difference of positions that count, and a position whose values
             // do not count is only ever spoken of on its own order — so an end that is no number
             // arrives only at the shape holding the carrier to write it on.
-            Level level = on == null ? new Level.ACount(Count.number(end.at()))
+            Level level = on == null
+                    ? new Level.OfTheQuantity(Count.number(end.at()).exactly())
                     : new Level.OnACarrier(on, end.at());
             return Bound.at(level, end.inclusive());
         }

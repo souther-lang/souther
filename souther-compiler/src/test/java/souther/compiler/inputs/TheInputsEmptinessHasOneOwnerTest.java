@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
@@ -15,9 +16,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 
 import java.lang.reflect.Method;
-import java.util.List;
-import java.math.BigDecimal;
-import java.util.LinkedHashMap;
+import java.util.List;import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -137,11 +136,11 @@ class TheInputsEmptinessHasOneOwnerTest {
 
         // x + y <= 0, which no declaration could have written and which nothing but the whole input
         // can hold against the two floors.
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), BigDecimal.ONE);
-        coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), ExactRatio.ONE);
+        coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), ExactRatio.ONE);
         SearchRegion crossed = asked.region().assuming(
-                new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE).taken();
+                new LinearForm<>(ExactRatio.ZERO, coefs), Rel.LE).taken();
 
         assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
                 crossed.emptiness());

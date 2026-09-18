@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
@@ -290,7 +291,7 @@ public sealed interface BorderQuantity {
             }
             return LevelSpace.addedUpOver(List.of(on.answered(), against.answered()))
                     == souther.compiler.numeric.Granularity.DISCRETE
-                    ? LevelSpace.steppingBy(java.math.BigDecimal.ONE) : LevelSpace.dense();
+                    ? LevelSpace.steppingBy(ExactRatio.ONE) : LevelSpace.dense();
         }
 
         /** That position's own, which is what it is read off a row and written back on. */
@@ -362,7 +363,7 @@ public sealed interface BorderQuantity {
                         ? Stands.YES : Stands.NO;
             }
             Count apart = Count.number(onAt.value()).minus(Count.number(againstAt.value()));
-            return where.holds(new Level.ACount(apart)) ? Stands.YES : Stands.NO;
+            return where.holds(new Level.OfTheQuantity(apart.exactly())) ? Stands.YES : Stands.NO;
         }
 
         /** Whether a pair standing {@code order} round from where they meet is at the item, for a
@@ -375,7 +376,7 @@ public sealed interface BorderQuantity {
                 // pair is in is which way round they stand from it — said as that count, since the
                 // sign is the whole of what the order has.
                 case Criterion.Within within -> within.holds(
-                        new Level.ACount(souther.compiler.numeric.Count.of(order)));
+                        new Level.OfTheQuantity(ExactRatio.of(order)));
             };
         }
 
@@ -427,11 +428,11 @@ public sealed interface BorderQuantity {
          */
         @Override
         public String writtenAt(Level level) {
-            Count apart = level.asACount();
+            ExactRatio apart = level.asAnExactNumber();
             String there = againstTerm().toString();
             return apart.signum() == 0 ? there
-                    : apart.signum() < 0 ? there + " - " + apart.negate().key()
-                            : there + " + " + apart.key();
+                    : apart.signum() < 0 ? there + " - " + apart.negated().spelled()
+                            : there + " + " + apart.spelled();
         }
 
         @Override
@@ -475,7 +476,7 @@ public sealed interface BorderQuantity {
             if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
                 return null;
             }
-            Map<NumericTerm, java.math.BigDecimal> coefs = new java.util.LinkedHashMap<>();
+            Map<NumericTerm, ExactRatio> coefs = new java.util.LinkedHashMap<>();
             form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? landed : term, coef));
             Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
             on.forEach((term, its) -> moved.put(term.equals(from) ? landed : term,
@@ -537,7 +538,7 @@ public sealed interface BorderQuantity {
          */
         @Override
         public LevelSpace levels() {
-            java.math.BigDecimal step = LevelSpace.stepOf(form.coefs().values());
+            ExactRatio step = LevelSpace.stepOf(form.coefs().values());
             return spacing() == souther.compiler.numeric.Granularity.DISCRETE
                     ? LevelSpace.steppingBy(step)
                     : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
@@ -570,7 +571,7 @@ public sealed interface BorderQuantity {
 
         @Override
         public Stands standsAt(Criterion where, QuantityReading reading) {
-            java.math.BigDecimal at = java.math.BigDecimal.ZERO;
+            ExactRatio at = ExactRatio.ZERO;
             // Every term before anything is concluded. What stopped a reading is collected over the
             // whole form rather than taken from whichever term the map handed over first: the form
             // is unreadable for whatever stopped any of it, and stopping at the first said which
@@ -581,7 +582,7 @@ public sealed interface BorderQuantity {
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             boolean noNumber = false;
             boolean wroteNothing = false;
-            for (Map.Entry<NumericTerm, java.math.BigDecimal> each
+            for (Map.Entry<NumericTerm, ExactRatio> each
                     : NumericTerms.entriesInOrder(form.coefs())) {
                 // Taken by the orders this form reads that term on. What the term read is the
                 // reading's to say and what it is worth to the number is the form's, and a
@@ -592,7 +593,7 @@ public sealed interface BorderQuantity {
                     case WhatATermRead.NoNumberOfTheValue _ -> noNumber = true;
                     case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
                     case WhatATermRead.Number(Place value) ->
-                            at = at.add(Count.number(value).at().multiply(each.getValue()));
+                            at = at.plus(Count.number(value).exactly().times(each.getValue()));
                 }
             }
             // Every term, and the answer after them. Left as soon as one of these was known, the
@@ -614,8 +615,7 @@ public sealed interface BorderQuantity {
             if (noNumber) {
                 return Stands.NO;
             }
-            return where.holds(new Level.ACount(new Count(at)))
-                    ? Stands.YES : Stands.NO;
+            return where.holds(new Level.OfTheQuantity(at)) ? Stands.YES : Stands.NO;
         }
 
         @Override
@@ -642,11 +642,11 @@ public sealed interface BorderQuantity {
 
         @Override
         public String writtenAt(Level level) {
-            if (!(level instanceof Level.ACount count)) {
+            if (!(level instanceof Level.OfTheQuantity counted)) {
                 throw new IllegalStateException(
                         "a form was asked to write a level that is not a number: " + level);
             }
-            return count.at().key();
+            return counted.at().spelled();
         }
 
         @Override
@@ -904,8 +904,8 @@ public sealed interface BorderQuantity {
      * by prefixing, a run over a form came back asking for a row against {@code 2 * 3 * n <= 5},
      * which is the same rule the class beside it writes as {@code 6 * n <= 5}.
      */
-    default String left(java.math.BigDecimal times) {
-        if (this instanceof OverAForm form && times.compareTo(java.math.BigDecimal.ONE) != 0) {
+    default String left(ExactRatio times) {
+        if (this instanceof OverAForm form && !times.equals(ExactRatio.ONE)) {
             return new OverAForm(form.behavior(), form.form().times(times), form.on()).left();
         }
         return times(times, left());
@@ -919,9 +919,8 @@ public sealed interface BorderQuantity {
      * behavior's own position. One spelling rule, so that the two say a multiple of the quantity the
      * same way.
      */
-    static String times(java.math.BigDecimal times, String left) {
-        return times.compareTo(java.math.BigDecimal.ONE) == 0 ? left
-                : times.stripTrailingZeros().toPlainString() + " * " + left;
+    static String times(ExactRatio times, String left) {
+        return times.equals(ExactRatio.ONE) ? left : times.spelled() + " * " + left;
     }
 
     /** One level of this quantity, as a report writes it. */

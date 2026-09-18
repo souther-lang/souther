@@ -15,10 +15,9 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,9 +107,9 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
 
     /** The quantity's atoms by what each of them is, so that which one is first does not depend on
      *  how the comparison was written. */
-    private static List<Map.Entry<DecisionAtom, BigDecimal>> ordered(
+    private static List<Map.Entry<DecisionAtom, ExactRatio>> ordered(
             LinearForm<DecisionAtom> form) {
-        List<Map.Entry<DecisionAtom, BigDecimal>> walked = form.coefs().entrySet().stream()
+        List<Map.Entry<DecisionAtom, ExactRatio>> walked = form.coefs().entrySet().stream()
                 .sorted(java.util.Comparator.comparing(each -> each.getKey().spelled())).toList();
         for (int at = 1; at < walked.size(); at++) {
             DecisionAtom before = walked.get(at - 1).getKey();
@@ -196,7 +195,7 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
     /** The atoms of a form, wrapped as the input's, which is what a comparison the arithmetic read
      *  states here. */
     static LinearForm<DecisionAtom> ofTheInput(LinearForm<NumericTerm> form) {
-        Map<DecisionAtom, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<DecisionAtom, ExactRatio> coefs = new LinkedHashMap<>();
         form.coefs().forEach((term, coefficient) ->
                 coefs.put(new DecisionAtom.OfTheInput(term), coefficient));
         return new LinearForm<>(form.constant(), coefs);

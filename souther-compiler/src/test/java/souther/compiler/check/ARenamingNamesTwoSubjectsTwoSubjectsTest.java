@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
@@ -15,8 +16,6 @@ import souther.compiler.values.AsACompilationAllows;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
-
-import java.math.BigDecimal;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -150,7 +149,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                                 .resolve(AsACompilationAllows.forAdmittedValues()),
                         AsACompilationAllows.forAdmittedValues())
                 .taking(LinearForm.<FactSubject>atom(ONLY_IN_NUMBERS)
-                                .minus(LinearForm.<FactSubject>constant(BigDecimal.valueOf(3))),
+                                .minus(LinearForm.<FactSubject>constant(ExactRatio.of(3))),
                         Rel.LE, Map.of(ONLY_IN_NUMBERS, souther.compiler.numeric.Granularity.DISCRETE));
     }
 }

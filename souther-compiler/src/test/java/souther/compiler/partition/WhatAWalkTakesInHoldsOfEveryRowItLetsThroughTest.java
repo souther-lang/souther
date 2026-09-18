@@ -5,14 +5,13 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiPredicate;
@@ -105,15 +104,16 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */
     private static boolean holdsAt(TakenConstraint.Affine cut, int x, int y) {
         LinearForm<NumericTerm> form = cut.form();
-        BigDecimal value = form.constant();
-        for (Map.Entry<NumericTerm, BigDecimal> each : form.coefs().entrySet()) {
+        ExactRatio value = form.constant();
+        for (Map.Entry<NumericTerm, ExactRatio> each
+                : form.coefs().entrySet()) {
             String term = each.getKey().toString();
             assertTrue(term.endsWith("x") || term.endsWith("y"),
                     () -> "the cuts of this model are over its two positions: " + term);
-            value = value.add(each.getValue()
-                    .multiply(BigDecimal.valueOf(term.endsWith("x") ? x : y)));
+            value = value.plus(each.getValue().times(
+                    ExactRatio.of(term.endsWith("x") ? x : y)));
         }
-        int against = value.compareTo(BigDecimal.ZERO);
+        int against = value.signum();
         return switch (cut.rel()) {
             case GE -> against >= 0;
             case GT -> against > 0;

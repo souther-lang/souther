@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -2285,10 +2286,11 @@ public final class FieldDomains {
         // Two coordinates of one form can be one atom — a form is written over the names a rule
         // writes, and a rule may write one of them twice. What that comes to is a sum, which is the
         // same sum whichever coordinate is added first.
-        Map<FactSubject, java.math.BigDecimal> coefs = new HashMap<>();
-        form.forEach((at, weight) -> coefs.merge(atoms.get(at), weight, java.math.BigDecimal::add));
+        Map<FactSubject, ExactRatio> coefs = new HashMap<>();
+        form.forEach((at, weight) ->
+                coefs.merge(atoms.get(at), ExactRatio.of(weight), ExactRatio::plus));
         return constraints.numbers().boundsOf(
-                new LinearForm<>(java.math.BigDecimal.ZERO, coefs));
+                new LinearForm<>(ExactRatio.ZERO, coefs));
     }
 
     /**

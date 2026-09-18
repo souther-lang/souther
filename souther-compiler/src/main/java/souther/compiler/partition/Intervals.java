@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Towards;
@@ -101,7 +102,7 @@ final class Intervals {
             if (lo != null || hi != null || of == null) {
                 return null;
             }
-            java.math.BigDecimal shared = of.sharedMultiple();
+            ExactRatio shared = of.sharedMultiple();
             return shared == null ? null : times(shared);
         }
 
@@ -110,12 +111,9 @@ final class Intervals {
             return parted == null ? null : parted.asARuleAbout(Interval::times, side);
         }
 
-        private static String times(java.math.BigDecimal by) {
-            return by.compareTo(java.math.BigDecimal.ONE) == 0 ? "x" : plain(by) + " * x";
-        }
-
-        private static String plain(java.math.BigDecimal number) {
-            return number.stripTrailingZeros().toPlainString();
+        private static String times(ExactRatio by) {
+            return by.equals(ExactRatio.ONE) ? "x"
+                    : by.spelled() + " * x";
         }
     }
 

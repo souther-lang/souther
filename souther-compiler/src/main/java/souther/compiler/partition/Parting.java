@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.ExactRatio;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,7 +63,7 @@ public record Parting(Seam geometry, List<AuthoredLine> alternatives) {
 
     /** The same place said in units {@code per} times smaller, which is what a rule that wrote a
      *  multiple of the quantity divides in the quantity's own terms. */
-    public Parting scaledBy(java.math.BigDecimal per) {
+    public Parting scaledBy(ExactRatio per) {
         return new Parting(geometry.scaledBy(per), alternatives);
     }
 

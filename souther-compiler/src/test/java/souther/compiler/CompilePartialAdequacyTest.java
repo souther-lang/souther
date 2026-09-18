@@ -550,20 +550,24 @@ class CompilePartialAdequacyTest {
     }
 
     /**
-     * A reason that names no behavior belongs to every behavior.
+     * Filtering to one behavior keeps what that behavior went without.
      *
-     * <p>Filtering to one behavior drops the reasons about the others. A whole source that could not
-     * be evaluated is not about another behavior — it is missing rows for whatever it held, this one
-     * included — so it stays, and the status with it.
+     * <p>Filtering drops the reasons about the others, and a source that could not be evaluated
+     * costs this one every row it wrote there — so those stay, and the status with them. That a
+     * reason larger than any behavior is carried by every behavior shown is the reason's own answer
+     * and is asked of it in {@code aReasonAboutASourceCountsAgainstTheBehaviorsInIt}.
      */
     @Test
-    void filteringKeepsAReasonThatIsAboutNoOneBehavior() {
+    void filteringKeepsWhatTheBehaviorShownWentWithout() {
         AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
-        assertEquals(1, one.modules().get(0).incompleteness().written().size());
-        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
-                one.modules().get(0).incompleteness().written().iterator().next().fact().code());
+        List<PublishedIncompleteness> kept = one.modules().get(0).incompleteness().written();
+        assertEquals(2, kept.size(), () -> "one per row the attached file wrote: " + kept);
+        for (PublishedIncompleteness gap : kept) {
+            assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, gap.fact().code());
+            assertEquals("take", gap.fact().behavior().orElseThrow());
+        }
     }
 
     /**

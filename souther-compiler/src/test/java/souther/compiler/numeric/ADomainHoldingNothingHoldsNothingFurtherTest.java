@@ -1,8 +1,6 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,7 +25,7 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
 
     private static LinearForm<String> nMinus(long count) {
         return LinearForm.<String>atom("n")
-                .minus(LinearForm.<String>constant(BigDecimal.valueOf(count)));
+                .minus(LinearForm.<String>constant(ExactRatio.of(count)));
     }
 
     private static NumericDomain<String> atLeastTwo() {

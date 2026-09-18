@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
@@ -14,8 +15,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -166,10 +165,12 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
      * to hand for the record pair, since the walk now declines the comparison it would come from.
      */
     private static LinearForm<NumericTerm> difference(String behavior, String one, String other) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, one)), BigDecimal.ONE);
-        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, other)), BigDecimal.ONE.negate());
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, one)),
+                ExactRatio.ONE);
+        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, other)),
+                ExactRatio.ONE.negated());
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     /** Where the reading of the behavior's input has the position spelled {@code spelled}. */

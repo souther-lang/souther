@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.NumberAt;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
@@ -104,12 +105,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Read read = read(UNCOUNTED);
         NumericTerm size = size(read, "xs");
         NumericTerm n = new NumericTerm.ValueOf(TermPath.of("p").then("n"));
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(n, BigDecimal.ONE);
-        coefs.put(size, BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(n, ExactRatio.ONE);
+        coefs.put(size, ExactRatio.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(ExactRatio.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -158,12 +159,12 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
                 deep, there, read.rules().inners(), read.rules().symbols());
         assertNotNull(buried, "the term is one the operation may be taken of");
         NumericTerm n = new NumericTerm.ValueOf(TermPath.of("p").then("n"));
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(n, BigDecimal.ONE);
-        coefs.put(buried, BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(n, ExactRatio.ONE);
+        coefs.put(buried, ExactRatio.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(ExactRatio.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -226,8 +227,8 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         NumericTerm one = size(read, "xs");
 
         NumericDomain.Bounds twice = read.quantities().runsBetween(
-                new LinearForm<>(BigDecimal.ZERO,
-                        Map.of(one, BigDecimal.valueOf(2))));
+                new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(one, ExactRatio.of(2))));
 
         assertEquals(Endpoint.inclusive(count(10)), twice.max(),
                 "a count held at five, taken twice, runs to ten");
@@ -275,13 +276,13 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         NumericTerm size = size(read, "xs");
         NumericTerm x = new NumericTerm.ValueOf(TermPath.of("p").then("x"));
         NumericTerm y = new NumericTerm.ValueOf(TermPath.of("p").then("y"));
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(size, BigDecimal.ONE);
-        coefs.put(x, BigDecimal.ONE);
-        coefs.put(y, BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(size, ExactRatio.ONE);
+        coefs.put(x, ExactRatio.ONE);
+        coefs.put(y, ExactRatio.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(ExactRatio.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(5)), runs.min(),
                 "the two the record relates come to five, and nothing is negative beside them");
@@ -317,13 +318,13 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     @Test
     void aFloorOnlyTheTermStatesDoesNotUndoTheRuleBesideIt() {
         Read read = read(THREE_COUNTS);
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(size(read, "a"), BigDecimal.ONE);
-        coefs.put(size(read, "b"), BigDecimal.ONE);
-        coefs.put(size(read, "c"), BigDecimal.ONE);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(size(read, "a"), ExactRatio.ONE);
+        coefs.put(size(read, "b"), ExactRatio.ONE);
+        coefs.put(size(read, "c"), ExactRatio.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(ExactRatio.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(1)), runs.min(),
                 "two of them come to one, and the third is never negative");

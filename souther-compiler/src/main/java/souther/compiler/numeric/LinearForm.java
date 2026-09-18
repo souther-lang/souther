@@ -1,6 +1,5 @@
 package souther.compiler.numeric;
 
-import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,44 +17,74 @@ import java.util.Map;
  * classification asking what a rule states could not be told apart, by anything a check could read,
  * from one asking what the rules leave. The domain is a consumer of this like every other.
  *
+ * <p><b>In exact ratios and not in written decimals.</b> What an expression comes to is the value
+ * the arithmetic puts there, and the arithmetic that composes a form is not closed over the numbers
+ * a model writes: a quotient by a constant is affine and a third is no decimal. Held as one, the
+ * coefficient would be rounded where it is made and every reader downstream would reason about the
+ * rounded number instead. A constant a model wrote is embedded exactly on the way in
+ * ({@link ExactRatio#of}), and turning one back into a value on a carrier is done where the carrier
+ * is known.
+ *
  * @param constant what the form comes to where every atom is nought
  * @param coefs    what each atom is multiplied by, with nought coefficients left out so that two
  *                 writings of one form are one value
  */
-public record LinearForm<A>(BigDecimal constant, Map<A, BigDecimal> coefs) {
+public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
 
-    public static <A> LinearForm<A> constant(BigDecimal c) {
+    public static <A> LinearForm<A> constant(ExactRatio c) {
         return new LinearForm<>(c, Map.of());
     }
 
     public static <A> LinearForm<A> atom(A a) {
-        return new LinearForm<>(BigDecimal.ZERO, Map.of(a, BigDecimal.ONE));
+        return new LinearForm<>(ExactRatio.ZERO, Map.of(a, ExactRatio.ONE));
     }
 
     public LinearForm<A> plus(LinearForm<A> o) {
-        Map<A, BigDecimal> m = new HashMap<>(coefs);
-        o.coefs.forEach((k, v) -> m.merge(k, v, BigDecimal::add));
-        m.values().removeIf(v -> v.signum() == 0);
-        return new LinearForm<>(constant.add(o.constant), m);
+        Map<A, ExactRatio> m = new HashMap<>(coefs);
+        o.coefs.forEach((k, v) -> m.merge(k, v, ExactRatio::plus));
+        m.values().removeIf(ExactRatio::isZero);
+        return new LinearForm<>(constant.plus(o.constant), m);
     }
 
     public LinearForm<A> negate() {
-        Map<A, BigDecimal> m = new HashMap<>();
-        coefs.forEach((k, v) -> m.put(k, v.negate()));
-        return new LinearForm<>(constant.negate(), m);
+        Map<A, ExactRatio> m = new HashMap<>();
+        coefs.forEach((k, v) -> m.put(k, v.negated()));
+        return new LinearForm<>(constant.negated(), m);
     }
 
     public LinearForm<A> minus(LinearForm<A> o) {
         return plus(o.negate());
     }
 
-    /** This form scaled by a constant {@code k} (a scalar multiply). */
-    public LinearForm<A> times(BigDecimal k) {
-        if (k.signum() == 0) {
-            return constant(BigDecimal.ZERO);
+    /**
+     * The form with its numbers spelled the way a reader is shown them.
+     *
+     * <p>Written out rather than left to the record, because this reaches a document: a decision
+     * table names a condition by the form it compares. An exact ratio says the plain shape of the
+     * number and a report wants the decimal wherever one is the number exactly, which is what
+     * {@link ExactRatio#spelled} answers — a coefficient of four fifths reads {@code 0.8} in a
+     * document that has always said {@code 0.8}.
+     */
+    @Override
+    public String toString() {
+        StringBuilder out = new StringBuilder("LinearForm[constant=")
+                .append(constant.spelled()).append(", coefs={");
+        boolean first = true;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            out.append(first ? "" : ", ").append(each.getKey()).append('=')
+                    .append(each.getValue().spelled());
+            first = false;
         }
-        Map<A, BigDecimal> m = new HashMap<>();
-        coefs.forEach((key, v) -> m.put(key, v.multiply(k)));
-        return new LinearForm<>(constant.multiply(k), m);
+        return out.append("}]").toString();
+    }
+
+    /** This form scaled by a constant {@code k} (a scalar multiply). */
+    public LinearForm<A> times(ExactRatio k) {
+        if (k.isZero()) {
+            return constant(ExactRatio.ZERO);
+        }
+        Map<A, ExactRatio> m = new HashMap<>();
+        coefs.forEach((key, v) -> m.put(key, v.times(k)));
+        return new LinearForm<>(constant.times(k), m);
     }
 }

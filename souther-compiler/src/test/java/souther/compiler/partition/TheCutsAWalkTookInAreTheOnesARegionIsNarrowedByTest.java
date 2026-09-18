@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
@@ -10,8 +11,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -193,7 +192,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     void aCutIsHandedOverAsTheAccountHoldsIt() {
         TakenConstraint shifted = new TakenConstraint.Affine(
                 LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("x")))
-                        .minus(LinearForm.constant(new BigDecimal("17"))), Rel.LE);
+                        .minus(LinearForm.constant(ExactRatio.of(17))), Rel.LE);
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(new OnTheWay.TakenIn(somewhere(1), shifted))).narrowing(region);

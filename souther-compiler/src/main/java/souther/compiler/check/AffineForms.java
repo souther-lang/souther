@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
@@ -266,7 +267,8 @@ public final class AffineForms {
         // divide being arithmetic this composes over positions, which it is not.
         BigDecimal folded = Terms.constantNumber(e, reading.symbols());
         if (folded != null) {
-            return new Outcome.Composed<>(LinearForm.constant(folded));
+            return new Outcome.Composed<>(
+                    LinearForm.constant(ExactRatio.of(folded)));
         }
         Outcome<A, E> denoted = read(e, at, reading, following);
         if (denoted instanceof Outcome.Composed<A, E> composedName) {
@@ -724,7 +726,7 @@ public final class AffineForms {
             return null;
         }
         Place at = carrier.literalOf(e, reading.symbols());
-        return at == null ? null : LinearForm.constant(Count.number(at).at());
+        return at == null ? null : LinearForm.constant(Count.number(at).exactly());
     }
 
     /**
@@ -750,7 +752,7 @@ public final class AffineForms {
         // operation answers over and says nothing about which of them was written first, and where
         // two of them cannot be carried it is the one the walk meets first that the stop is
         // recorded against — so the walk is taken off the call rather than off the form.
-        for (Map.Entry<DeclaredArgument, BigDecimal> each : inArgumentOrder(says, call)) {
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : inArgumentOrder(says, call)) {
             // The call here may be the runnable tree's and not a kept one, so its argument count
             // is checked here rather than by a kept call's own constructor.
             int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
@@ -772,7 +774,7 @@ public final class AffineForms {
      * <p>An argument the operation does not declare sorts last, where the walk meets it and stops
      * at the call: what is not the operation's is not put in front of what is.
      */
-    private static List<Map.Entry<DeclaredArgument, BigDecimal>> inArgumentOrder(
+    private static List<Map.Entry<DeclaredArgument, ExactRatio>> inArgumentOrder(
             LinearForm<DeclaredArgument> says, Core call) {
         ValueName operation = Terms.operationOf(call);
         return says.coefs().entrySet().stream()

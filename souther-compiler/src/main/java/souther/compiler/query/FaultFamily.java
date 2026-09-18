@@ -2,10 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.partition.QuantityKey;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -95,7 +94,9 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
         // the next, and a document written twice could not be compared with itself.
         for (NumericTerm term : weighed.stream()
                 .sorted(Comparator.comparing(NumericTerm::toString)).toList()) {
-            for (BigDecimal step : List.of(BigDecimal.ONE, BigDecimal.ONE.negate())) {
+            for (ExactRatio step
+                    : List.of(ExactRatio.ONE,
+                            ExactRatio.ONE.negated())) {
                 QuantityKey other = weighed(term, step);
                 if (other != null && named.add(other.key())) {
                     out.add(other);
@@ -107,10 +108,11 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
 
     /** The same direction with {@code term} weighed {@code step} more, as the line it is — or null
      *  where the step leaves nothing weighed anywhere. */
-    private QuantityKey weighed(NumericTerm term, BigDecimal step) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+    private QuantityKey weighed(NumericTerm term, ExactRatio step) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         wrote.direction().forEach((each, coef) -> {
-            BigDecimal moved = each.equals(term) ? coef.add(step) : coef;
+            ExactRatio moved =
+                    each.equals(term) ? coef.plus(step) : coef;
             // A position weighed nothing is a position the line is not over, and is left out rather
             // than carried as a zero: what a line is over is what it names, and a direction holding
             // a weight of nothing would be told from the same line without it.
@@ -118,6 +120,8 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
                 coefs.put(each, moved);
             }
         });
-        return coefs.isEmpty() ? null : QuantityKey.of(new LinearForm<>(BigDecimal.ZERO, coefs));
+        return coefs.isEmpty() ? null
+                : QuantityKey.of(
+                        new LinearForm<>(ExactRatio.ZERO, coefs));
     }
 }

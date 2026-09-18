@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -257,7 +258,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 related.projectionOf("x"),
                 "a rule names it and places no end, which is not the same as no rule naming it");
         NumericDomain<String> nowhere = related.assume(
-                LinearForm.<String>constant(BigDecimal.ONE), Rel.LT,
+                LinearForm.<String>constant(ExactRatio.ONE), Rel.LT,
                 Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertInstanceOf(NumericDomain.Projection.NothingIsLeft.class, nowhere.projectionOf("x"),
                 "an atom of rules nothing satisfies is at no value, not at every value");
@@ -277,7 +278,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.<String>asTheyCompare())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
-                .taking(LinearForm.<String>constant(BigDecimal.valueOf(-1))
+                .taking(LinearForm.<String>constant(ExactRatio.of(-1))
                                 .minus(LinearForm.atom("x")), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");

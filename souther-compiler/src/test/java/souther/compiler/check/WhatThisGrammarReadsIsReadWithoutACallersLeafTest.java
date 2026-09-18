@@ -9,13 +9,12 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-
-import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,7 +70,7 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
                 List.of(new Core.FieldValue("value", computed(), SOMEWHERE)),
                 Type.ref(YEN), SOMEWHERE);
 
-        assertEquals(BigDecimal.valueOf(100), constantOf(wrapped));
+        assertEquals(ExactRatio.of(100), constantOf(wrapped));
     }
 
     /** And a field read off a construction is what that construction gives the field. */
@@ -81,12 +80,12 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
                 List.of(new Core.FieldValue("threshold", computed(), SOMEWHERE)),
                 Type.ref(BIG), SOMEWHERE);
 
-        assertEquals(BigDecimal.valueOf(100),
+        assertEquals(ExactRatio.of(100),
                 constantOf(new Core.FieldAccess(built, "threshold", Type.INT, SOMEWHERE)));
     }
 
     /** The constant {@code e} reads as, through a walk that can name nothing. */
-    private static BigDecimal constantOf(Core e) {
+    private static ExactRatio constantOf(Core e) {
         LinearForm<String> form = AffineForms.of(e, "nowhere", refusingToName());
         if (form == null) {
             throw new AssertionError("the grammar composed no form for " + e);

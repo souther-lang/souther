@@ -12,14 +12,13 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +63,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     @Test
     void aDistanceTheRegionStopsBelowTheLevelTheItemAsksFor() {
         assertInstanceOf(Realization.Impossible.class,
-                realize(pairAt(new Criterion.AtTheLevel(Level.ACount.of(1))), yIsNoMoreThanX()),
+                realize(pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))), yIsNoMoreThanX()),
                 "the region leaves `y - x` at nought and below, and the item asks for one");
     }
 
@@ -72,7 +71,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     @Test
     void andTheRunAboveALevelTheRegionStopsAt() {
         assertInstanceOf(Realization.Impossible.class,
-                realize(pairAt(above(Level.ACount.of(0))), yIsNoMoreThanX()),
+                realize(pairAt(above(Level.OfTheQuantity.of(0))), yIsNoMoreThanX()),
                 "the region leaves `y - x` at nought and below, and the item asks for more");
     }
 
@@ -86,7 +85,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     @Test
     void theSameLineAskedAsAForm() {
         assertInstanceOf(Realization.Impossible.class,
-                realize(formAt(new Criterion.AtTheLevel(Level.ACount.of(1))), yIsNoMoreThanX()),
+                realize(formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))), yIsNoMoreThanX()),
                 "the form `y - x` runs at nought and below, and the item asks for one");
     }
 
@@ -110,10 +109,10 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      */
     @Test
     void whereTheTwoMeetNothingIsProved() {
-        assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.ACount.of(0))), yIsNoMoreThanX())
+        assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0))), yIsNoMoreThanX())
                         instanceof Realization.Impossible,
                 "the region leaves `y - x` at nought, which is the level the item asks for");
-        assertFalse(realize(formAt(new Criterion.AtTheLevel(Level.ACount.of(0))), yIsNoMoreThanX())
+        assertFalse(realize(formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0))), yIsNoMoreThanX())
                         instanceof Realization.Impossible,
                 "and the same of the form");
         assertFalse(realize(oneAt(level(0)), xIsNoMoreThanNought())
@@ -138,7 +137,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     @Test
     void aPairOnAnOrderThatCountsNothingIsNotAsked() {
         Standing strings = new Standing.OfTwoOnOneCarrier(term("y"), term("x"), Carrier.TEXT,
-                new Criterion.AtTheLevel(Level.ACount.of(1)));
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
 
         assertFalse(realize(strings, yIsNoMoreThanX()) instanceof Realization.Impossible,
                 "what the region says of a distance is not what this item asks about a pair");
@@ -155,12 +154,12 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     void andEveryShapeNamesAQuantity() {
         assertThrows(IllegalArgumentException.class,
                 () -> new Standing.OfTwoOnOneCarrier(term("x"), term("x"), Carrier.WHOLE,
-                        new Criterion.AtTheLevel(Level.ACount.of(0))),
+                        new Criterion.AtTheLevel(Level.OfTheQuantity.of(0))),
                 "a distance is between two positions");
         assertThrows(IllegalArgumentException.class,
                 () -> new Standing.OfAForm(form(0, 0, 1), Map.of(),
-                        LevelSpace.steppingBy(BigDecimal.ONE),
-                        new Criterion.AtTheLevel(Level.ACount.of(0))),
+                        LevelSpace.steppingBy(ExactRatio.ONE),
+                        new Criterion.AtTheLevel(Level.OfTheQuantity.of(0))),
                 "a form stands over the positions it names");
     }
 
@@ -168,7 +167,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      *  the way to. */
     @Test
     void andWhereNothingNarrowedTheRegionNothingIsProved() {
-        assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.ACount.of(1))), region())
+        assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))), region())
                         instanceof Realization.Impossible,
                 "the declarations leave the distance every value it has");
     }
@@ -190,7 +189,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         on.put(term("x"), Carrier.WHOLE);
         on.put(term("y"), Carrier.WHOLE);
         return new Standing.OfAForm(form(-1, 1, 0), on,
-                LevelSpace.steppingBy(BigDecimal.ONE), where);
+                LevelSpace.steppingBy(ExactRatio.ONE), where);
     }
 
     /** And {@code x} itself, which is the quantity of a border on one coordinate. */
@@ -201,7 +200,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     /** The values of the quantity above one of its levels, which is what a point beside a line
      *  asks for. */
     private static Criterion above(Level line) {
-        LevelSpace space = LevelSpace.steppingBy(BigDecimal.ONE);
+        LevelSpace space = LevelSpace.steppingBy(ExactRatio.ONE);
         Seam parted = Seam.of(space, line, Towards.BELOW);
         return new Criterion.Within(
                 new Band(Band.endAt(parted, null, Towards.ABOVE),
@@ -226,14 +225,14 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
 
     /** {@code cx·x + cy·y + k} over the two positions the behavior declares. */
     private static LinearForm<NumericTerm> form(long cx, long cy, long k) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         if (cx != 0) {
-            coefs.put(term("x"), BigDecimal.valueOf(cx));
+            coefs.put(term("x"), ExactRatio.of(cx));
         }
         if (cy != 0) {
-            coefs.put(term("y"), BigDecimal.valueOf(cy));
+            coefs.put(term("y"), ExactRatio.of(cy));
         }
-        return new LinearForm<>(BigDecimal.valueOf(k), coefs);
+        return new LinearForm<>(ExactRatio.of(k), coefs);
     }
 
     private static final Read READ = read();

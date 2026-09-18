@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
@@ -213,10 +214,10 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     }
 
     private static LinearForm<NumericTerm> sum() {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(X, BigDecimal.ONE);
-        coefs.put(Y, BigDecimal.ONE);
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(X, ExactRatio.ONE);
+        coefs.put(Y, ExactRatio.ONE);
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     private static Map<NumericTerm, souther.compiler.numeric.Place> fixing(
