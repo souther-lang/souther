@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.values.InOneOrder;
+
 import java.util.Map;
 
 /**
@@ -13,9 +15,11 @@ import java.util.Map;
  * <p>Whether it covers the plan is {@link FillResult}'s to hold, since that is where the plan is.
  * This is the answers alone.
  *
- * <p>Nothing reads these in order. What a row is offered for is taken in the plan's order, and
- * everything else asks by key — so the order the entries were written in is kept for the sake of a
- * message about one run reading the same way twice, and is not something to build an answer from.
+ * <p>Held in no order at all. What a row is offered for is taken in the plan's order and everything
+ * else asks by key, so two runs that answered the same obligations in two orders are one discharge
+ * — and an order kept here would be one a reader could start reading and a sentence could start
+ * saying. What is written out is written in one order ({@link #toString}), which is what a message
+ * about one run reading the same way twice wanted of it.
  */
 public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
                         Map<Generator.ArmOwed, ArmDisposition> arms,
@@ -31,15 +35,22 @@ public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
         // Neither half of an entry missing. A key with nothing under it is an obligation that was
         // asked about and not answered for, which is the absence every value here is arranged to
         // have none of — and it satisfied a check written over the keys alone.
-        classes = Ordered.copyOf(classes);
-        arms = Ordered.copyOf(arms);
+        classes = Ordered.byKey(classes);
+        arms = Ordered.byKey(arms);
         // A combination of two classes, under the same shape a class's answer has: a row was
         // composed for it or none was, and why. What differs between them is the requirement and
         // not the news about it.
-        pairs = Ordered.copyOf(pairs);
+        pairs = Ordered.byKey(pairs);
         // And a combination of the body's decisions, under that shape again. What a row is for
         // differs between the three; that a row was composed or none was does not.
-        meetings = Ordered.copyOf(meetings);
+        meetings = Ordered.byKey(meetings);
+    }
+
+    /** What became of each thing asked for, written in one order — see {@link InOneOrder}. */
+    @Override
+    public String toString() {
+        return "classes " + InOneOrder.of(classes) + ", arms " + InOneOrder.of(arms)
+                + ", pairs " + InOneOrder.of(pairs) + ", meetings " + InOneOrder.of(meetings);
     }
 
     /** What became of one combination of the body's decisions, or null where nothing asked. */
