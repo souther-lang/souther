@@ -3,6 +3,8 @@ package souther.compiler.values;
 import souther.compiler.hash.ValueHash;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,7 +42,11 @@ public final class Sameness<A> {
     private final Map<A, Block<A>> blocks;
 
     private Sameness(Map<A, Block<A>> blocks) {
-        this.blocks = Collections.unmodifiableMap(new LinkedHashMap<>(blocks));
+        // Which block each position is on, in no order. What this is equal to is that mapping, and
+        // the blocks it holds are written out in one order wherever one is written ({@link
+        // #toString}) — so an order kept here would be one nothing reads and one a reader could
+        // start reading.
+        this.blocks = Collections.unmodifiableMap(new HashMap<>(blocks));
     }
 
     /** No two positions held as one, which is what a reading that read no equality is a product
@@ -241,11 +247,15 @@ public final class Sameness<A> {
         if (isDiscrete() || other.isDiscrete()) {
             return discrete();
         }
-        Map<List<Block<A>>, Set<A>> together = new LinkedHashMap<>();
+        // Gathered in no order. Which positions land together is settled by which pair of blocks
+        // holds each, and the blocks that come of it are disjoint — so what this leaves is the same
+        // relation whichever order the positions were met in, and an order kept here would be one
+        // a reader could start taking off the relation.
+        Map<List<Block<A>>, Set<A>> together = new HashMap<>();
         for (A position : blocks.keySet()) {
             if (other.blocks.containsKey(position)) {
                 together.computeIfAbsent(List.of(blockOf(position), other.blockOf(position)),
-                        _ -> new LinkedHashSet<>()).add(position);
+                        _ -> new HashSet<>()).add(position);
             }
         }
         Sameness<A> out = discrete();
@@ -272,7 +282,7 @@ public final class Sameness<A> {
     }
 
     private Sameness<A> withBlock(Block<A> block) {
-        Map<A, Block<A>> out = new LinkedHashMap<>(blocks);
+        Map<A, Block<A>> out = new HashMap<>(blocks);
         block.members().forEach(each -> out.put(each, block));
         return new Sameness<>(out);
     }
