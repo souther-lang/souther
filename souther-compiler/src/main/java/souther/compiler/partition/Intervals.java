@@ -115,10 +115,6 @@ final class Intervals {
             return by.equals(ExactRatio.ONE) ? "x"
                     : by.spelled() + " * x";
         }
-
-        private static String plain(java.math.BigDecimal number) {
-            return number.stripTrailingZeros().toPlainString();
-        }
     }
 
     /**
