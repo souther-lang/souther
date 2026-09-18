@@ -59,6 +59,10 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      * Those entries reach a reader through {@code only}, which is how a run answers a request
      * about one behavior, so a law about where entries leave a reader is about them too.
      *
+     * <p>Which scopes those are is {@link ReportScopes}'s and is read off what a run may ask for,
+     * rather than walked here as modules and then their behaviors — a walk that shape misses the
+     * one a run allows and this report's nesting has no place for.
+     *
      * <p>Repeats are no trouble here. What is asked of an entry is where it sends a reader, and an
      * entry met twice sends them to the same place both times.
      *
@@ -72,13 +76,9 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
         List<AdequacyUncertainty> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
             AdequacyReport whole = AdequacyReport.of(compilation);
-            out.addAll(whole.assessment().uncertainties());
-            for (AdequacyReport.ModuleReport module : whole.modules()) {
-                out.addAll(whole.only(module.module(), null).assessment().uncertainties());
-                for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
-                    out.addAll(whole.only(module.module(), behavior.name())
-                            .assessment().uncertainties());
-                }
+            for (ReportScopes scope : ReportScopes.of(String.valueOf(compilation.modules()),
+                    whole)) {
+                out.addAll(scope.report().assessment().uncertainties());
             }
         }
         return List.copyOf(out);

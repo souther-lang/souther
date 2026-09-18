@@ -34,22 +34,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ClosedWorldContract
 class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
 
-    private record Scope(String name, AdequacyReport report) {}
+    /**
+     * Every report a reader of these models can be handed.
+     *
+     * <p>{@link ReportScopes}'s and not walked here, because the other law over these is held over
+     * the same population and two enumerations of it drift.
+     */
+    private static final List<ReportScopes> SCOPES = everyScope();
 
-    private static final List<Scope> SCOPES = everyScope();
-
-    private static List<Scope> everyScope() {
-        List<Scope> out = new ArrayList<>();
+    private static List<ReportScopes> everyScope() {
+        List<ReportScopes> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
-            AdequacyReport whole = AdequacyReport.of(compilation);
-            out.add(new Scope(String.valueOf(compilation.modules()), whole));
-            for (AdequacyReport.ModuleReport module : whole.modules()) {
-                out.add(new Scope(module.module(), whole.only(module.module(), null)));
-                for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
-                    out.add(new Scope(module.module() + "/" + behavior.name(),
-                            whole.only(module.module(), behavior.name())));
-                }
-            }
+            out.addAll(ReportScopes.of(String.valueOf(compilation.modules()),
+                    AdequacyReport.of(compilation)));
         }
         return List.copyOf(out);
     }
@@ -62,7 +59,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
      */
     @Test
     void aRefusedScopeKeepsItsUncertaintiesAndOffersNone() {
-        List<Scope> refusedAndUnanswered = SCOPES.stream()
+        List<ReportScopes> refusedAndUnanswered = SCOPES.stream()
                 .filter(each -> each.report().adequacy()
                         == AdequacyReport.AdequacyStatus.NOT_SATISFIED)
                 .filter(each -> !each.report().assessment().uncertainties().isEmpty())
@@ -70,7 +67,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
 
         assertFalse(refusedAndUnanswered.isEmpty(), "no model here is refused at a scope that also"
                 + " went without something, which is the case this is a law about");
-        for (Scope each : refusedAndUnanswered) {
+        for (ReportScopes each :refusedAndUnanswered) {
             assertTrue(each.report().whatKeepsTheVerdictOpen().isEmpty(),
                     () -> each.name() + " is refused and offers a reader something that holds its"
                             + " verdict open");
@@ -85,7 +82,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
      */
     @Test
     void anUndeterminedScopeShowsEverythingItCouldNotAnswer() {
-        for (Scope each : SCOPES) {
+        for (ReportScopes each :SCOPES) {
             if (each.report().adequacy() != AdequacyReport.AdequacyStatus.UNDETERMINED) {
                 continue;
             }
