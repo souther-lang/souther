@@ -134,6 +134,58 @@ and `y` remain integer positions.
 Exact coefficients therefore introduce neither Rational input positions nor Rational ON points,
 and the distinction between an exact ratio used in reasoning and a `Place` on a carrier remains.
 
+### An exact scalar stays exact through the partition geometry
+
+Reading an expression is not where exactness is needed last. What a border is drawn at travels from
+the reading to the values `souther examples --generate` writes, and every type on that way holds a
+`BigDecimal` today:
+
+```text
+AffineReading   form, cut
+QuantityKey     direction, per
+Cutting         per
+Seam.Scale      per
+CutPosition     written, per
+LevelRealizer   the coefficients it solves with
+BorderQuantity  what it shows of a form
+```
+
+Changing `LinearForm` alone would cut the chain one step in.
+
+The geometry gets by today because everything written in a model is a finite decimal. A border at a
+third is reachable — `guard 3 * d <= 1` draws one — and it survives as the ratio `CutPosition` keeps:
+a `written` level over a `per`. The exactness is in the pair, and the pair is built from two numbers
+the source wrote.
+
+ADR-0116 lets the third be written directly. In:
+
+```souther
+guard d <= 1 / 3
+```
+
+the `written` value is itself a third, and there is no second number for it to be a ratio against.
+The same happens to the coefficients:
+
+```souther
+guard y < -1 / 3 * x + 30
+```
+
+leaves `QuantityKey` a direction it cannot hold and `LevelRealizer` a form it cannot solve in the
+domain it solves in.
+
+**An exact affine scalar stays exact through the partition geometry, and becomes an Int or a Decimal
+only where a candidate is placed on a carrier.**
+
+So the types above carry the exact ratio, and the conversion stays at the edge the next section
+describes. `CutPosition`'s pair keeps its meaning — a level and what it is over — with both exact,
+and the technique it encodes is no longer the only place exactness can live.
+
+What reaches a fixture is unchanged. Rational answers no external form, so no generated row writes
+one: a behavior input is placed on the carrier it declares, and `FixtureTemplate.integer` and
+`FixtureTemplate.decimal` are what a row is written with. A border at a third on a Decimal position
+has no value on that carrier, and the generator says so the way it does for `3 * d <= 1` — it does
+not write `0.333…m` and call it a point on the line.
+
 ### Conversion to a carrier happens only at the carrier edge
 
 When an exact derived result must become a value on a Decimal or Int carrier, that conversion is
@@ -210,6 +262,57 @@ It also puts two accounts of one expression's arithmetic back where ADR-0111 lef
 would hold approximate coefficients and the constraint step would hold exact ones, and a named
 intermediate value read at the first would not agree with the same expression read at the second.
 
+### Clear denominators at the border instead
+
+A comparison is a relation, and multiplying both sides by a positive factor names the same line. So
+the geometry could stay on `BigDecimal` by canonicalising each comparison as it enters the
+partition:
+
+```text
+x < 1/3            becomes   3x < 1
+y < -1/3 x + 30    becomes   x + 3y < 90
+```
+
+This is a different proposal from the one refused above. That one rewrote `LinearForm`, which holds
+what an expression comes to and may not be scaled by a factor a comparison supplied. This one
+rewrites only the relation, where the factor is sound.
+
+It is refused for what it costs rather than for what it means. Clearing a denominator multiplies
+through by it, and a coefficient that came from a Decimal of a large scale has a denominator the
+size of that scale — which is the `10^scale` expansion this decision removes, arriving by another
+route and landing on every coefficient of the relation rather than on one embedding. The exactness
+would also stop at a boundary again: what the geometry held would be a scaled relation while the
+reading held the form, and reconciling them is the two-accounts problem ADR-0111 removed.
+
+## What generation has to keep answering
+
+The rule above is about the values a reader is handed, so `souther examples --generate` is where it
+is observable. Four models say whether the chain holds:
+
+```souther
+guard x < 1 / 3                     -- Int carrier, no Int value on the line
+guard d < 1 / 3                     -- Decimal carrier, a third is no Decimal
+guard y < -1 / 3 * x + 30           -- an exact coefficient
+let slope = -1 / 3
+guard y < slope * x + 30            -- the same, through a name
+```
+
+The first two are the ones that say whether the carrier edge held. A generated row carries a value
+of the position's own type and never a Rational, and a Decimal position whose border falls at a
+third gets what `3 * d <= 1` already gets rather than a fabricated `0.333…m`.
+
+The last two are ADR-0111's rule read through this one: a coefficient reached through a name is the
+coefficient, so both draw one line.
+
+And these two draw the same border:
+
+```souther
+guard x < 1 / 3
+guard 3 * x < 1
+```
+
+which is what says exact arithmetic left `QuantityKey`'s direction-not-size reading intact.
+
 ## Consequences
 
 The affine grammar admits `/` by a constant, so a model writing an exact coefficient has its rule
@@ -218,6 +321,11 @@ whose rule goes unread for that reason is in the case the grammar already had.
 
 `LinearForm` no longer uses `BigDecimal` as its arithmetic domain, and `NumericDomain` no longer
 lifts a form into ratios at its own boundary — one exact scalar reaches both.
+
+The partition geometry carries that scalar too, so a border written at a third reaches the carrier
+edge as a third rather than as the nearest decimal to one. `CutPosition`'s level-over-per pair is
+no longer the only place an exact position can live, and the models where the written number is
+itself a fraction have somewhere to be held.
 
 The rename off `Rational` removes the implication that the compiler's analysis object is the
 runtime representation of ADR-0116's language type, and `numeric` joins the packages that may not
