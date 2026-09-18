@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
@@ -101,8 +102,103 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     }
 
     private static WitnessSearch admitting(ValueSet set) {
-        return new WitnessSearch(AdmittedValues.of(Map.of(CODE, set)),
+        return new WitnessSearch(AdmittedValues.of(Map.of(CODE, set), NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
+    }
+
+    /** The two positions of a pair, on an order with a step, since a distance is arithmetic and a
+     *  pair over strings has none. */
+    private static final NumericTerm.FromOnePosition COUNTED =
+            new NumericTerm.ValueOf(TermPath.of("counted"));
+
+    private static final NumericTerm.FromOnePosition BESIDE =
+            new NumericTerm.ValueOf(TermPath.of("beside"));
+
+    private static final Carrier WHOLE = new Carrier.Whole();
+
+    /** A pair held a step apart, read from whichever of the two is settled first. */
+    private static Criterion.Within aStepApart() {
+        // A distance and not a place: what a pair is held at is how far apart the two stand, which
+        // is a count of the order they share.
+        Level apart = new Level.ACount(souther.compiler.numeric.Count.of(1));
+        Seam parted = Seam.of(LevelSpace.steppingBy(java.math.BigDecimal.ONE), apart,
+                Towards.ABOVE);
+        return new Criterion.Within(
+                new Band(Band.endAt(parted, null, Towards.ABOVE),
+                        Band.endAt(null, null, Towards.BELOW)),
+                apart, Towards.BELOW);
+    }
+
+    /**
+     * A pair one of whose positions nothing worked out a set for composes nothing, either way round.
+     *
+     * <p>The same answer this class already holds one position to, put to the search that reaches a
+     * position through two of them. A pair is searched from either end — which of them is settled
+     * first is this compiler's own arrangement and no part of what the rule said — so a reading that
+     * composed out of the unknown set while its mirror declined would make whether a row is offered
+     * at a position depend on which way round the pair happened to be read.
+     *
+     * <p>Both arrangements have to decline for that to hold, and one of them anchors the position
+     * whose set was worked out. Anchoring it is not the question: the value it goes on to settle is
+     * at the position nothing was worked out about, and that is where the row would be written.
+     */
+    @Test
+    void aPairWithOneSideNothingWorkedOutComposesNothingEitherWayRound() {
+        WitnessSearch bothWorkedOut = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY,
+                        BESIDE.position(), ValueSet.ANY), NameReach.NONE),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+        WitnessSearch onlyOne = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY), NameReach.NONE),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+
+        // The positive control: with both sets worked out the same pair is composed, so what the
+        // two below show is the missing set and not a pair nothing could have built.
+        assertInstanceOf(Realization.Found.class, pair(COUNTED, BESIDE, bothWorkedOut),
+                "both sets are worked out, so the pair stands somewhere");
+
+        assertInstanceOf(Realization.Unknown.class, pair(COUNTED, BESIDE, onlyOne),
+                "one side of the pair had no set worked out, so no value is composed at it");
+        assertInstanceOf(Realization.Unknown.class, pair(BESIDE, COUNTED, onlyOne),
+                "and naming the pair the other way round reaches the same answer");
+    }
+
+    /**
+     * A pair search that meets the figure for how far along the line it looks comes back saying
+     * what the pair search says.
+     *
+     * <p>The end-to-end half of splitting that figure in two. A walk's answer is the walk's, and
+     * the figures it met travel beside it — so a figure split off another keeps the word its walk
+     * already came back with, and one filed under a different word makes an answer nobody can
+     * assemble ({@link Realization.Unknown}).
+     *
+     * <p>Reached the way an author reaches it: an anchored position whose declarations leave it one
+     * value, on a line nothing bounds. Every place but that one is stepped past, so the looking runs
+     * out long before the pair search has been offered the places it is allowed to try.
+     */
+    @Test
+    void aPairThatRanOutOfLineToLookAlongComesBackWithThePairSearchsOwnWord() {
+        WitnessSearch oneValueEach = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.just(Value.number(0)),
+                        BESIDE.position(), ValueSet.just(Value.number(0))), NameReach.NONE),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+
+        Realization made = pair(COUNTED, BESIDE, oneValueEach);
+
+        assertEquals(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE,
+                assertInstanceOf(Realization.Unknown.class, made,
+                        "the line holds no pair the declarations leave standing").why(),
+                "and what it says is what this walk says, with the figure beside it");
+        assertTrue(assertInstanceOf(Realization.Unknown.class, made).stoppedBy()
+                        .contains(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT),
+                "the figure it met is the one for how far along the line it looked");
+    }
+
+    private static Realization pair(NumericTerm.FromOnePosition on,
+                                    NumericTerm.FromOnePosition against, WitnessSearch looking) {
+        return new LevelRealizer().realize(
+                new Standing.OfTwoOnOneCarrier(on, against, WHOLE, aStepApart()),
+                NothingTheRulesSay.REGION, looking);
     }
 
     /**
@@ -181,7 +277,8 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
      */
     @Test
     void aPositionNothingWorkedOutSaysSoAndIsNotReadAsUnrestricted() {
-        AdmittedValues admitted = AdmittedValues.of(Map.of(CODE, A_CHARACTER_AT_LEAST));
+        AdmittedValues admitted =
+                AdmittedValues.of(Map.of(CODE, A_CHARACTER_AT_LEAST), NameReach.NONE);
 
         assertEquals(new AdmittedValues.Admitted.Values(A_CHARACTER_AT_LEAST), admitted.at(CODE));
         assertTrue(!A_CHARACTER_AT_LEAST.has(REFUSED),
@@ -202,7 +299,8 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     @Test
     void aBoundaryAtAPositionNothingWorkedOutComposesNothing() {
         WitnessSearch elsewhere = new WitnessSearch(
-                AdmittedValues.of(Map.of(TermPath.of("somewhereElse"), A_CHARACTER_AT_LEAST)),
+                AdmittedValues.of(Map.of(TermPath.of("somewhereElse"), A_CHARACTER_AT_LEAST),
+                        NameReach.NONE),
                 PatternPlan.Budget.OF_A_WITNESS::meter);
 
         assertInstanceOf(Realization.Unknown.class, realize(run(Towards.BELOW), elsewhere),
@@ -267,7 +365,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
                 java.math.BigDecimal.valueOf(8))));
         java.util.concurrent.atomic.AtomicInteger taken = new java.util.concurrent.atomic.AtomicInteger();
         WitnessSearch counting = new WitnessSearch(
-                AdmittedValues.of(Map.of(CODE, onlyEight)),
+                AdmittedValues.of(Map.of(CODE, onlyEight), NameReach.NONE),
                 () -> {
                     taken.incrementAndGet();
                     return PatternPlan.Budget.OF_A_WITNESS.meter();

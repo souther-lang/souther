@@ -255,6 +255,11 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    // After the figures for how many times a thing was tried, because the walking
+                    // is what a reader raises once the trying turns out not to have been what
+                    // stopped the search. Each sits by the trying figure it was split from.
+                    CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
+                    CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.

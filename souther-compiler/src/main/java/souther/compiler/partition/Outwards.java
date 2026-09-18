@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -36,12 +38,12 @@ final class Outwards {
      * The places walked, and how the walk came to end.
      *
      * <p>Two halves of one answer. A caller reading only the first cannot tell a run with nothing
-     * further in it from one this stopped walking, and the three mean different things about an
+     * further in it from one this stopped walking, and the four mean different things about an
      * empty hand.
      *
      * <p><b>No word for "not all of them", which is what a caller has to be stopped from asking
-     * for.</b> Two of the endings answer that alike and are what a reader does two different things
-     * about, so a caller handed the question in that shape names one of them for the other: the
+     * for.</b> Three of the endings answer that alike and are what a reader does different things
+     * about, so a caller handed the question in that shape names one of them for another: the
      * pair search took an order with no step and a figure met for one fact, and told a reader to
      * raise a number that reaches nothing. So what is offered is the ending itself, and every
      * caller says what it does with each.
@@ -62,20 +64,30 @@ final class Outwards {
     /**
      * How a walk came to end.
      *
-     * <p><b>Three, because two of them are limits and they are not the same limit.</b> A figure is a
+     * <p><b>Four, because three of them are limits and no two are the same limit.</b> A figure is a
      * number somebody wrote down and raising it walks further; an order with no step is one this has
      * no way of naming another place on, and raising anything reaches none of them
-     * ({@link CompositionRepertoire}). Held as one boolean, the second was reported as the first —
-     * a reader told to raise a figure that stopped nothing — or as neither, which is a walk of one
+     * ({@link CompositionRepertoire}). Held as one boolean, the last was reported as a figure —
+     * a reader told to raise a number that stopped nothing — or as neither, which is a walk of one
      * place claiming to have walked them all.
+     *
+     * <p><b>And the two figures are two.</b> Taking as many places as were asked for and walking
+     * past as many as were allowed are different stops with different numbers behind them: one is
+     * raised to try more of what was found, the other to look further for something to find. They
+     * were one ending while every place of the run was a place to take, and the narrowings a run
+     * has no word for are what separated them.
      */
     enum Ended {
 
-        /** Neither direction had a value left, so what came back is every place there was. */
+        /** Neither direction had a place left, so what came back is every place there was. */
         HAVING_TRIED_THEM_ALL,
 
-        /** A place the run holds was found and not taken, the caller's figure having been reached. */
-        AT_THE_FIGURE,
+        /** As many places were taken as the caller asked for, and the run holds another. */
+        AT_THE_FIGURE_OF_CANDIDATES,
+
+        /** As many places of the run were walked past as the caller allowed, without that many
+         *  being taken. What stopped this is the looking and not what was found. */
+        AT_THE_FIGURE_OF_PLACES_LOOKED_AT,
 
         /** This order has no step to take, so what came back is the one place this could name and
          *  whether the run holds others is not something this walked. */
@@ -83,30 +95,47 @@ final class Outwards {
     }
 
     /**
-     * At most {@code howManyValues} values of {@code within}, from {@code first} outward, {@code by}
-     * apart.
+     * At most {@code howManyTaken} places of {@code within} that {@code admits} takes in and none
+     * of {@code apart} stands at, from {@code first} outward, {@code by} apart.
      *
-     * <p>Stops early where neither direction has a value left, which is what makes a bounded run
+     * <p>Stops early where neither direction has a place left, which is what makes a bounded run
      * cost its own width rather than the whole allowance.
      *
-     * @param first         a value of the run. Refused where it is none, since a caller with no
-     *                      value to start from has composed nothing — which is not the same as a run
-     *                      with nothing in it, and an empty answer here would be read as the second
+     * <p><b>Every narrowing, and not the run on its own.</b> A run says where a position stops and
+     * has no word for the values the declarations leave it or for a place a rule took out of the
+     * middle of it. Walked by the run alone, the places after the first come from one narrowing and
+     * are judged by the others afterwards — which is the trade this walk's own caller was written
+     * to avoid at the place it starts from, made again at every place after it. So the narrowings
+     * arrive together and a caller cannot ask for a walk that leaves one out.
+     *
+     * <p>A place the run holds and one of the others refuses is stepped past. It is not the run
+     * running out, so the walk goes on, and it is not a place to try, so it is not yielded.
+     *
+     * @param first         a place the run holds and the narrowings take in. Refused where it is
+     *                      none, since a caller with no place to start from has composed nothing —
+     *                      which is not the same as a run with nothing in it, and an empty answer
+     *                      here would be read as the second
      * @param by            the distance between neighbouring candidates, positive
-     * @param howManyValues how many to yield, counting {@code first}
+     * @param howManyTaken  how many places to take, counting {@code first}. What a caller spends
+     *                      on putting them to the rest of its question
+     * @param howManyLookedAt how many places of the run to walk past, counting {@code first}. What
+     *                      a caller spends on the walking, which the one above stopped bounding the
+     *                      moment a place of the run stopped being a place to take. Needed on its
+     *                      own because a run with no end whose places the narrowings all refuse is
+     *                      otherwise a walk nothing stops
      */
     static Walked from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
-                       int howManyValues) {
+                       int howManyTaken, int howManyLookedAt, ValueSet admits, PlacesApart apart) {
         if (by == null || by.signum() <= 0) {
             throw new IllegalArgumentException(
                     "neighbouring candidates are a positive distance apart, or there is no outward:"
                             + " " + by);
         }
-        if (first == null || !within.admits(first)) {
+        if (first == null || !takenIn(first, carrier, within, admits, apart)) {
             throw new IllegalArgumentException(
-                    "walking outward starts from a value of the run, and a caller that has none has"
-                            + " composed nothing rather than found a run with nothing in it: "
-                            + first);
+                    "walking outward starts from a place every narrowing takes in, and a caller that"
+                            + " has none has composed nothing rather than found a run with nothing"
+                            + " in it: " + first);
         }
         // One place where the carrier's values do not count. There is no next place to step to, so
         // the one the caller started from is the whole of what this can name — and never the whole
@@ -123,12 +152,18 @@ final class Outwards {
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
-        // <b>A value found and not taken, never a count that came out even.</b> A run holding
-        // exactly this many and a run this stopped walking come back the same length, so the figure
+        int lookedAt = 1;
+        // <b>A place found and not taken, never a count that came out even.</b> A run holding
+        // exactly this many and a run this stopped walking come back the same length, so a figure
         // being reached says nothing on its own — what says this compiler declined to go further is
-        // a value the run holds that this did not take. Read off the count instead, a run walked to
-        // its end reports a budget nobody reached, and a point nothing could stop is reported as one
-        // this stopped: the same trade this file is here to prevent, made the other way round.
+        // a place the run holds that this did not go on to. Read off the count instead, a run walked
+        // to its end reports a budget nobody reached, and a point nothing could stop is reported as
+        // one this stopped: the same trade this file is here to prevent, made the other way round.
+        //
+        // Which holds of both figures and is why each is asked before its allowance is spent rather
+        // than after. What the looking figure bounds is places examined, so it is met where another
+        // place of the run was found and there is nothing left to examine it with — and never where
+        // examining the last place of the run happened to take the count up to it.
         Ended ended = Ended.HAVING_TRIED_THEM_ALL;
         outward:
         for (int step = 1; ; step++) {
@@ -141,18 +176,50 @@ final class Outwards {
                 if (next == null || !within.admits(next)) {
                     continue;
                 }
-                if (out.size() == howManyValues) {
-                    ended = Ended.AT_THE_FIGURE;   // one the run holds and this is not taking
+                // A place of the run, so the run has not run out and the walk goes on whether or
+                // not this one turns out to be a place to take.
+                took = true;
+                // Another place to examine, and nothing left to examine it with. Asked here —
+                // before the narrowings are put to it — because examining it is what the allowance
+                // is for: spent first and the figure read off the count afterwards, a run whose
+                // last place took the count up to the figure reports a walk this stopped, and
+                // raising the figure reaches a place that is not there.
+                if (lookedAt == howManyLookedAt) {
+                    ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
+                    break outward;
+                }
+                lookedAt++;
+                // Refused by one of the narrowings the run has no word for, which is a place to
+                // step past rather than a place to try. Yielded, it would be a candidate the rules
+                // refuse, offered because the run happened to hold it.
+                if (!takenIn(next, carrier, within, admits, apart)) {
+                    continue;
+                }
+                if (out.size() == howManyTaken) {
+                    // One the run holds, this takes in, and is not taking.
+                    ended = Ended.AT_THE_FIGURE_OF_CANDIDATES;
                     break outward;
                 }
                 out.add(next);
-                took = true;
             }
             if (!took) {
-                break;   // neither direction has a value left, so this walked the whole of it
+                break;   // neither direction has a place left, so this walked the whole of it
             }
         }
         return new Walked(out, ended);
+    }
+
+    /**
+     * Whether every narrowing takes {@code at} in.
+     *
+     * <p>One place the answer is decided, so that the place a walk starts from and the places it
+     * steps to are held to the same thing. Asked of the carrier for the set, because which values
+     * an order writes at a place is the carrier's answer and not a comparison anybody here can
+     * make.
+     */
+    private static boolean takenIn(Place at, Carrier carrier, NumericDomain.Bounds within,
+                                   ValueSet admits, PlacesApart apart) {
+        return within.admits(at) && carrier.admitted(admits, at) && !apart.has(at);
     }
 
     /**

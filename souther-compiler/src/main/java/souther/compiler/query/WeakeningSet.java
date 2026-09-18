@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ClosureGap;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -92,9 +91,7 @@ public final class WeakeningSet {
         if (causes.isEmpty()) {
             return other;
         }
-        List<Weakening> both = new ArrayList<>(causes);
-        both.addAll(other.causes);
-        return folded(both);
+        return folded(causes, other.causes);
     }
 
     public boolean isEmpty() {
@@ -104,10 +101,22 @@ public final class WeakeningSet {
     /** One entry per fact, with what evidenced each accumulated. The map is how the fold is done
      *  and is no part of what comes out of it. */
     private static WeakeningSet folded(Collection<? extends Weakening> causes) {
+        return folded(causes, List.of());
+    }
+
+    /**
+     * The same, of two of them at once.
+     *
+     * <p>Folded from both rather than from a list of both. What is folded into is keyed by the
+     * fact and what puts two entries of one fact together is the same value either way round, so
+     * the answer does not turn on which side was walked first — and laying the two out end to end
+     * to say so made an order out of sets that have none, where nothing that holds one can see it.
+     */
+    private static WeakeningSet folded(Collection<? extends Weakening> causes,
+                                       Collection<? extends Weakening> andAlso) {
         Map<Object, Weakening> byFact = new HashMap<>();
-        for (Weakening each : causes) {
-            byFact.merge(factOf(each), each, WeakeningSet::merged);
-        }
+        causes.forEach(each -> byFact.merge(factOf(each), each, WeakeningSet::merged));
+        andAlso.forEach(each -> byFact.merge(factOf(each), each, WeakeningSet::merged));
         return byFact.isEmpty() ? NONE : new WeakeningSet(Set.copyOf(byFact.values()));
     }
 

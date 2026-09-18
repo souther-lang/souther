@@ -8,6 +8,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.util.Map;
@@ -47,6 +48,11 @@ final class EveryPositionStandsAndTheirSumDoesNot implements SearchRegion {
     @Override
     public SearchRegion apartFrom(NumericTerm.FromOnePosition term, Place at) {
         return this;
+    }
+
+    @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return PlacesApart.NONE;
     }
 
     /**

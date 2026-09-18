@@ -188,7 +188,8 @@ public final class LevelRealizer {
             NumericDomain.Bounds together = commonRange(settled,
                     runs.get(reading.anchors()), two.of(),
                     reading.where().anchor().asACount());
-            Outwards.Walked walked = alongTheLine(together, two.of());
+            Outwards.Walked walked = alongTheLine(together, two.of(), reading.anchors(),
+                    within, looking);
             if (walked == null) {
                 // Nothing composed a place to anchor at, which is this reading's own answer and
                 // says nothing about how much of the line was looked at.
@@ -200,7 +201,10 @@ public final class LevelRealizer {
             // only afterwards they were named for each other.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_CANDIDATES ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT);
                 case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
             }
@@ -277,12 +281,22 @@ public final class LevelRealizer {
     /**
      * How many places along a line a pair is tried at before this stops.
      *
-     * <p>Small on purpose. What a range cannot say is that one of its values is missing, and a rule
-     * that takes a value away takes one — everything that moves an end is in the range already. So
-     * what this steps past is holes, and there are as many of those as the rules state.
+     * <p>Small on purpose. Every place offered here is one the anchored position may stand at, and
+     * a pair that is not written at the first few is rarely written further along. What it costs to
+     * walk past the places it may not stand at is the other figure's.
      */
     private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
             CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
+
+    /**
+     * How many places of that line are walked past to find them.
+     *
+     * <p>Wider than the figure above, and a figure of its own: what the declarations leave the
+     * anchored position and what a rule holds it away from take places out of the middle of the
+     * line, and a walk that steps past one of those has not tried a pair there.
+     */
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT.maximum();
 
     /**
      * The places to try the pair at, from the one the ranges leave outward.
@@ -305,11 +319,28 @@ public final class LevelRealizer {
      * something to ask a walk about: a walk of no places would have to say whether there were more,
      * and there was never a walk.
      */
-    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        Place first = carrier.somethingInside(together.min(), together.max());
+    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier,
+                                                NumericTerm.FromOnePosition anchored,
+                                                souther.compiler.inputs.SearchRegion within,
+                                                WitnessSearch looking) {
+        // Every narrowing the anchored position stands under, and not the common range alone. What
+        // the ranges leave is where the pair can be at all; what the declarations leave that
+        // position and what a rule holds it away from are two more, and a place taken from the
+        // first and refused by either of the others is a pair reported as one nothing composed.
+        //
+        // Composed from and not narrowed by, because the place walked here is written into a row.
+        // A pair standing at a value out of a set nobody established is the same row this class
+        // declines to offer at one position, offered because it was reached through two.
+        ValueSet admits = looking.toComposeFrom(anchored).toCrossTheRunWith();
+        if (admits == null) {
+            return null;
+        }
+        PlacesApart apart = within.apartAt(anchored);
+        Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter());
         return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
-                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT,
+                        admits, apart);
     }
 
     /**
@@ -738,8 +769,15 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
+            // The coset is what the arithmetic leaves the position and the run is where the rules
+            // leave it; what the declarations leave its values is not given to this search, so
+            // there is no set here to narrow by and the identity of that crossing is what goes in.
+            // Each value is still put to the region below, which is where a rule that refuses one
+            // of them answers.
             Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
-                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    ValueSet.ANY, PlacesApart.NONE);
             for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
@@ -755,7 +793,10 @@ public final class LevelRealizer {
             // it, which is this compiler claiming to have been stopped where it was not.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE ->
+                // One figure named twice, because this walk is given no set and no holes: every
+                // place of the run is a place to take, so the looking and the taking are the same
+                // number and the reader is owed the same one whichever arm the walk ended on.
+                case AT_THE_FIGURE_OF_CANDIDATES, AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
                         stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
                 // A progression is a sum of counts, and a sum exists only over orders that count
                 // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
@@ -1019,11 +1060,13 @@ public final class LevelRealizer {
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
-            case Criterion.Within within ->
-                    whatTheValuesAre(term, looking.admitted())
-                            instanceof AdmittedValues.Admitted.Values(ValueSet admits)
-                            ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
-                            : null;
+            // A path the reading puts no position at is not that, and the run is what a value there
+            // is composed from.
+            case Criterion.Within within -> {
+                ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
+                yield admits == null ? null
+                        : someValueIn(within, carrier, bounds, admits, apart, looking::meter);
+            }
         };
         if (offered == null) {
             return null;
@@ -1033,27 +1076,6 @@ public final class LevelRealizer {
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
         return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
-    }
-
-    /**
-     * What the position admits, where the place being composed is a value of it.
-     *
-     * <p>Asked of the location the number is read from rather than of the number, because one location
-     * is measured at as many numbers as the rules name of it and admits one set of values — a rule
-     * about one of those numbers is what leaves the others short, which is the whole reason this set
-     * is here.
-     *
-     * <p><b>And every value there is where the number is one taken of the position rather than its
-     * own.</b> {@code String.length(code)} counts a string and the place composed for it is a count;
-     * the set holds the strings. Put to it, every count would be refused for not being one of them,
-     * and a boundary on a length would stop being offered a row at all. What a value carrying that
-     * count looks like is asked where such a value is written ({@link Witnesses}) and the set reaches
-     * it there.
-     */
-    private static AdmittedValues.Admitted whatTheValuesAre(NumericTerm.FromOnePosition term,
-                                                            AdmittedValues admitted) {
-        return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
-                : new AdmittedValues.Admitted.Values(ValueSet.ANY);
     }
 
     /**

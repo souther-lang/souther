@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,9 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * could put a value under — the reachability was stated, and the answer would be that there is no
  * order for it.
  *
- * <p>So what is asserted is that the way's position was placed. What becomes of the row afterwards
- * is the construction question and is answered by the traversal that owns it: no value is composed
- * at the sum's own name, and the attempt says so rather than throwing.
+ * <p>So the condition is placed and the row is written under one of the cases. Where a row writes to
+ * move a number is where the number is read for every number but this one, and a composer that took
+ * the second for the first would write at the sum's own name — which is nowhere, and came back as a
+ * row nothing could compose a value for.
  */
 class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
 
@@ -77,23 +79,67 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
     }
 
     /**
-     * The composer places the way's position and refuses the row for the reason that is true of it.
+     * The composer places the way's position and the row writes the value under one of the cases.
      *
-     * <p>Asking the traversal that follows a written value instead answers that there is no order
-     * for the number, which is a condition reported as unrepresentable and a row refused for
-     * something that is not the case.
+     * <p>Asking the traversal that follows a written value instead answers that there is nowhere to
+     * write the number, which is a row refused for something that is not the case: the value stands
+     * under whichever case the row is, and a row that is one of them holds it.
      */
     @Test
-    void aConditionOverTheSharedNameIsPlacedAndTheRowIsRefusedForWhatIsTrueOfIt() {
-        Generator.BoundaryAttempt attempt = composing(Count.of(4));
+    void aConditionOverTheSharedNameIsPlacedAndTheRowIsWrittenUnderACase() {
+        Generator.BoundaryAttempt attempt = composing(Count.of(4), ANYWHERE_ON_THE_ORDER);
 
         assertEquals(List.of(), attempt.unrepresented().onTheWay(),
                 "the composer had an order for the name every case spreads: "
                         + attempt.unrepresented());
-        Generator.BoundaryAttempt.Unresolved no = (Generator.BoundaryAttempt.Unresolved) attempt;
-        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                no.why().reason(),
-                "and no value is written at a sum's own name, which is the construction's answer");
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class, attempt,
+                "a value stands at the name under a case, so the row is written: " + attempt);
+        assertTrue(written(built).stream().anyMatch(each -> each.startsWith("P ")),
+                "and the row writes one of the cases the name is spread by: " + written(built));
+    }
+
+    /**
+     * And the row writes the shared name once, where the case holds it.
+     *
+     * <p>Beside the one above rather than folded into it. That one says a row was written at all;
+     * this one says the value went to the name the condition was about — a routing that wrote a
+     * case with nothing at the shared name would leave the condition standing over a name the row
+     * says nothing about.
+     */
+    @Test
+    void theRowHoldsAValueAtTheNameTheConditionWasAbout() {
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class,
+                composing(Count.of(4), ANYWHERE_ON_THE_ORDER));
+
+        assertEquals(1, written(built).stream()
+                        .filter(each -> each.contains("deadline =")).count(),
+                "the row writes the name the cases share, once: " + written(built));
+    }
+
+    /**
+     * What a search is told of the shared name is that the values stand under the cases, and not
+     * that the declarations leave it everything.
+     *
+     * <p>The two narrow the same amount and say unlike things. Read as a set of every value, the
+     * declarations would be answering for a position they were never asked about — and the search
+     * that writes a value would have nothing left to tell it the row goes under a case.
+     */
+    @Test
+    void theSearchIsToldTheValuesStandUnderTheCasesAndNotThatEveryOneIsAdmitted() {
+        AdmittedValues admitted = subject().witnessSearch().admitted();
+
+        assertEquals(new AdmittedValues.Admitted.StandsUnderTheCases(), admitted.at(DEADLINE));
+        assertInstanceOf(AdmittedValues.Admitted.Values.class,
+                admitted.at(domain().reach().crossings().get(0).to()),
+                "and under the case the declarations do answer, which is what makes the answer"
+                        + " above a state of its own");
+    }
+
+    /** The values one row writes, as a person reads them. */
+    private static List<String> written(Generator.BoundaryAttempt.Built built) {
+        return built.row().inputs().stream().map(FixtureTemplate::text).toList();
     }
 
     /** Which question a report about the condition under test would put. */
@@ -101,9 +147,9 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
                     new ConditionOccurrence("b", 0));
 
-    /** A row composed with the plain position fixed at {@code at}, and a condition over the shared
-     *  name on the way to it. */
-    private static Generator.BoundaryAttempt composing(Count at) {
+    /** A row composed with the plain position fixed at {@code at}, and {@code taken} over the
+     *  shared name on the way to it. */
+    private static Generator.BoundaryAttempt composing(Count at, TakenConstraint taken) {
         Axis fixed = axisAt("n");
         return Generator.probeFixing(subject(), "n = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
@@ -111,10 +157,13 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE,
-                        List.of(new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
-                                LinearForm.atom(new NumericTerm.ValueOf(DEADLINE)), Rel.GE)))),
+                        List.of(new OnTheWay.TakenIn(WHERE, taken))),
                 Generator.CandidateCheck.ANY);
     }
+
+    /** {@code r.deadline >= 0}, which every value of the case meets. */
+    private static final TakenConstraint ANYWHERE_ON_THE_ORDER = new TakenConstraint.Affine(
+            LinearForm.atom(new NumericTerm.ValueOf(DEADLINE)), Rel.GE);
 
     // The compilation, read once and answered from.
     private static final Compilation COMPILATION = compiled();

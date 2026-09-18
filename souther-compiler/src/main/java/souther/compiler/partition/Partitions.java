@@ -18,6 +18,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
@@ -2630,13 +2631,14 @@ public final class Partitions {
 
     /**
      * What a search composing a value at one of this phase's positions is given: the sets the
-     * declarations leave them, and what looking for a value in one may cost.
+     * declarations leave them, where a name of one value stands in another, and what looking for a
+     * value in one may cost.
      *
      * <p>Here because this is where what a position admits is already in hand and where what writing
      * one value out may cost is already granted. A search reaching for either would be a second
      * answer about the model beside an allowance nothing granted it.
      */
-    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements) {
+    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements, NameReach reach) {
         java.util.Map<TermPath, ValueSet> sets = new LinkedHashMap<>();
         for (PositionMeasurements at : measurements) {
             // Every position the reading measured, including the ones whose rules leave them
@@ -2644,7 +2646,12 @@ public final class Partitions {
             // a map with a hole in it cannot tell a caller which of the two it is looking at.
             sets.put(at.position().path(), at.position().admits());
         }
-        return new WitnessSearch(AdmittedValues.of(sets), PatternPlan.Budget.OF_A_WITNESS::meter);
+        // And what the same walk saw of the names that stand somewhere other than the position of
+        // the same name one step down, so that a path this measurement has no position at is told
+        // from a position it was left short of. Worked out from the measurements alone, the two
+        // would be one hole in one map.
+        return new WitnessSearch(AdmittedValues.of(sets, reach),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 
     private Partitions() {}

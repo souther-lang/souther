@@ -49,7 +49,8 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     @Test
     void aWalkThatRanOutOfWhatItLooksAtNamesTheFigure() {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
-                List.of(WIDE, NOWHERE), term -> term == NOWHERE ? null : Carrier.WHOLE);
+                List.of(WIDE, NOWHERE), term -> term == NOWHERE ? null : Carrier.WHOLE,
+                NothingTheDeclarationsNarrow.LOOKING);
 
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
@@ -86,7 +87,8 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     private static Set<CompositionBudget> stoppedByOverARunOf(int many) {
         return assertInstanceOf(NumericWitness.Standing.NotFound.class,
                 NumericWitness.of(new ARunOfThisMany(many), List.of(WIDE, NOWHERE),
-                        term -> term == NOWHERE ? null : Carrier.WHOLE),
+                        term -> term == NOWHERE ? null : Carrier.WHOLE,
+                        NothingTheDeclarationsNarrow.LOOKING),
                 "every value of the run leads nowhere, so no pair stands").stoppedBy();
     }
 
@@ -99,7 +101,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     @Test
     void aWalkWithNothingToTryNamesNoFigure() {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
-                List.of(NOWHERE), _ -> null);
+                List.of(NOWHERE), _ -> null, NothingTheDeclarationsNarrow.LOOKING);
 
         assertEquals(Set.of(),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
@@ -111,7 +113,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     @Test
     void aWalkThatFoundSomewhereNamesNoFigure() {
         NumericWitness.Standing standing = NumericWitness.of(NothingTheRulesSay.REGION,
-                List.of(WIDE), _ -> Carrier.WHOLE);
+                List.of(WIDE), _ -> Carrier.WHOLE, NothingTheDeclarationsNarrow.LOOKING);
 
         assertNotNull(assertInstanceOf(NumericWitness.Standing.Found.class, standing,
                         "a whole number stands somewhere in a region nothing narrows").at(),

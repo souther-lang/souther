@@ -8,6 +8,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
@@ -64,6 +65,16 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
                                       souther.compiler.numeric.Place at) {
             told.add(new TakenConstraint.AwayFrom(term, at));
             return this;
+        }
+
+        /** Read back off what this was told, so the two answers about a hole cannot disagree. */
+        @Override
+        public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+            return PlacesApart.of(told.stream()
+                    .filter(each -> each instanceof TakenConstraint.AwayFrom away
+                            && away.term().equals(term))
+                    .map(each -> ((TakenConstraint.AwayFrom) each).at())
+                    .toList());
         }
 
         @Override

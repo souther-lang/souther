@@ -121,7 +121,8 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(TermPath.of(path));
         Quantities quantities = quantities();
         NumericWitness.Standing stood = NumericWitness.of(quantities.region(), List.of(term),
-                each -> quantities.ordersOf(each).answered());
+                each -> quantities.ordersOf(each).answered(),
+                NothingTheDeclarationsNarrow.LOOKING);
         return stood instanceof NumericWitness.Standing.Found found ? found.at().get(term) : null;
     }
 

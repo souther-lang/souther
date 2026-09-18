@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -156,6 +157,65 @@ class ANameTheCasesShareStandsUnderEachCaseTest {
         assertEquals(List.of("o.q@A.limit", "o.q@B.limit"),
                 spelled(read.positionsNamed(TermPath.of("o"),
                         new RuleKey(List.of("q", "limit")))));
+    }
+
+    /**
+     * A shared name is sorted as standing under the cases, with what a row has to be to hold it.
+     *
+     * <p>The one sorting every reader of the difference acts on. A search narrowing by sets wants to
+     * know there is no position here; a composer wants to know where a row writes instead — and both
+     * come from this, so the two cannot part over a name one of them happened to read differently.
+     *
+     * <p>The condition travels with each position because a row is one value. Answered as positions
+     * alone, two names of one sum could be sent under two cases and the row would be asked to be
+     * both.
+     */
+    @Test
+    void aSharedNameIsSortedAsStandingUnderEachCase() {
+        InputDomain read = reading(SHARED, "read");
+        TermPath at = TermPath.of("q").then("limit");
+
+        NameReach.Standing.UnderTheCases under = assertInstanceOf(
+                NameReach.Standing.UnderTheCases.class, read.reach().standingOf(at));
+        assertEquals(List.of("q@A.limit", "q@B.limit"),
+                under.standings().stream().map(each -> each.position().toString()).toList());
+        assertEquals(List.of("q", "q"), under.standings().stream()
+                        .flatMap(each -> each.assuming().refinements().keySet().stream())
+                        .map(TermPath::toString).toList(),
+                "each of them stands only where the value at the sum turned out to be that case");
+    }
+
+    /** An ordinary name is sorted as standing where it is written, which is every name but those. */
+    @Test
+    void anOrdinaryNameIsSortedAsStandingWhereItIs() {
+        InputDomain read = reading(SHARED, "readOne");
+
+        assertInstanceOf(NameReach.Standing.AtThePathItself.class,
+                read.reach().standingOf(TermPath.of("q").then("limit")));
+    }
+
+    /**
+     * A name under two sums is moved one crossing at a time, and what comes back says so.
+     *
+     * <p>Which is what a caller acting on one has to know: a position answered with here can be a
+     * name that crosses again, and a row written at it would go to the inner sum's own name. Run to
+     * a fixed point instead, this would answer with a case of every sum on the way and the choices
+     * would multiply inside a record of what a walk saw.
+     */
+    @Test
+    void aNameUnderTwoSumsIsMovedOneCrossingAtATime() {
+        InputDomain read = reading(NESTED, "read");
+        TermPath at = TermPath.of("q").then("s").then("deep");
+
+        NameReach.Standing.UnderTheCases outer = assertInstanceOf(
+                NameReach.Standing.UnderTheCases.class, read.reach().standingOf(at));
+        assertEquals(List.of("q@OA.s.deep", "q@OB.s.deep"),
+                outer.standings().stream().map(each -> each.position().toString()).toList(),
+                "the outer sum is taken and the inner one is still on the way");
+        outer.standings().forEach(each -> assertInstanceOf(
+                NameReach.Standing.UnderTheCases.class,
+                read.reach().standingOf(each.position()),
+                "and what came back crosses again: " + each.position()));
     }
 
     /** The position this reading made at {@code spelled}. */

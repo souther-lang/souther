@@ -13,11 +13,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.SequencedSet;
 
 /**
  * One line a rule drew, and what a row is owed at each of the points it has.
@@ -55,7 +53,7 @@ import java.util.SequencedSet;
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers) {
 
     public Border {
-        if (answers == null || !answers.keySet().equals(pointsOf(origin))) {
+        if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
                     + " line has: " + answers + ", where its rule has " + pointsOf(origin));
         }
@@ -89,6 +87,20 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
+     * Whether a border answers at each of the points its line has and at no other.
+     *
+     * <p>Asked of what the points are and not of the order they come in. Which points a line has is
+     * one question and which order they are walked in is another, and the check that a border is
+     * total is the first of them: a border whose entries were built in some other order answers at
+     * the same places. Written as an equality between the keys and the points, it read whichever
+     * of the two the collection on the right happened to have.
+     */
+    private static boolean answersEveryPoint(Map<DomainPoint, PointAnswer> answers,
+                                             List<DomainPoint> points) {
+        return answers.size() == points.size() && answers.keySet().containsAll(points);
+    }
+
+    /**
      * Every point this line has, which is what its rule says and not what a reading found.
      *
      * <p>One derivation, asked where a border is built and again where one is assessed, so that a
@@ -98,7 +110,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * have a run either way — which one of them is inside the partition the border bounds is the
      * rule's answer and no part of which point it is.
      */
-    public static SequencedSet<DomainPoint> pointsOf(LineOrigin origin) {
+    public static List<DomainPoint> pointsOf(LineOrigin origin) {
         List<DomainPoint> points = new ArrayList<>();
         points.add(new DomainPoint.AtTheLine());
         switch (origin.lineFacts().claim()) {
@@ -112,14 +124,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         points.add(new DomainPoint.InTheRegion(Towards.BELOW));
         points.add(new DomainPoint.InTheRegion(Towards.ABOVE));
         // Walked in the order the technique names them, and the two sides of a role in the order
-        // the values are in. Which point is which is the set; this is how a reader is walked
-        // through it, and a report that showed a line's points in the order a switch happened to
-        // fill them in would move them about as the shapes of line changed.
+        // the values are in. A report that showed a line's points in the order a switch happened
+        // to fill them in would move them about as the shapes of line changed, so the order is
+        // part of what this answers — and the answer is a sequence, whose own equality sees it.
+        // Answered as a set, two orders of these points were one value and nothing downstream
+        // could have disagreed with a walk that had them the other way round.
         points.sort(Comparator
                 .comparing((DomainPoint point) ->
                         PointRole.of(point, origin.lineFacts().holdsAt(point)))
                 .thenComparingInt(point -> point.side() == Towards.BELOW ? 0 : 1));
-        return new LinkedHashSet<>(points);
+        return List.copyOf(points);
     }
 
     /** What this border asks of the rows at one of its points. */
