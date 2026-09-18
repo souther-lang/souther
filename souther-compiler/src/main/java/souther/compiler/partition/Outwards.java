@@ -64,20 +64,30 @@ final class Outwards {
     /**
      * How a walk came to end.
      *
-     * <p><b>Three, because two of them are limits and they are not the same limit.</b> A figure is a
+     * <p><b>Four, because three of them are limits and no two are the same limit.</b> A figure is a
      * number somebody wrote down and raising it walks further; an order with no step is one this has
      * no way of naming another place on, and raising anything reaches none of them
-     * ({@link CompositionRepertoire}). Held as one boolean, the second was reported as the first —
-     * a reader told to raise a figure that stopped nothing — or as neither, which is a walk of one
+     * ({@link CompositionRepertoire}). Held as one boolean, the last was reported as a figure —
+     * a reader told to raise a number that stopped nothing — or as neither, which is a walk of one
      * place claiming to have walked them all.
+     *
+     * <p><b>And the two figures are two.</b> Taking as many places as were asked for and walking
+     * past as many as were allowed are different stops with different numbers behind them: one is
+     * raised to try more of what was found, the other to look further for something to find. They
+     * were one ending while every place of the run was a place to take, and the narrowings a run
+     * has no word for are what separated them.
      */
     enum Ended {
 
-        /** Neither direction had a value left, so what came back is every place there was. */
+        /** Neither direction had a place left, so what came back is every place there was. */
         HAVING_TRIED_THEM_ALL,
 
-        /** A place the run holds was found and not taken, the caller's figure having been reached. */
-        AT_THE_FIGURE,
+        /** As many places were taken as the caller asked for, and the run holds another. */
+        AT_THE_FIGURE_OF_CANDIDATES,
+
+        /** As many places of the run were walked past as the caller allowed, without that many
+         *  being taken. What stopped this is the looking and not what was found. */
+        AT_THE_FIGURE_OF_PLACES_LOOKED_AT,
 
         /** This order has no step to take, so what came back is the one place this could name and
          *  whether the run holds others is not something this walked. */
@@ -106,14 +116,16 @@ final class Outwards {
      *                      which is not the same as a run with nothing in it, and an empty answer
      *                      here would be read as the second
      * @param by            the distance between neighbouring candidates, positive
-     * @param howManyPlaces how many places of the run to look at, counting {@code first}. Places
-     *                      and not values yielded: what the figure bounds is the walking, and a
-     *                      stretch the narrowings refuse is walked whether or not anything is taken
-     *                      from it — counted the other way, a run with no end whose values are all
-     *                      refused is a walk nothing stops
+     * @param howManyTaken  how many places to take, counting {@code first}. What a caller spends
+     *                      on putting them to the rest of its question
+     * @param howManyLookedAt how many places of the run to walk past, counting {@code first}. What
+     *                      a caller spends on the walking, which the one above stopped bounding the
+     *                      moment a place of the run stopped being a place to take. Needed on its
+     *                      own because a run with no end whose places the narrowings all refuse is
+     *                      otherwise a walk nothing stops
      */
     static Walked from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
-                       int howManyPlaces, ValueSet admits, PlacesApart apart) {
+                       int howManyTaken, int howManyLookedAt, ValueSet admits, PlacesApart apart) {
         if (by == null || by.signum() <= 0) {
             throw new IllegalArgumentException(
                     "neighbouring candidates are a positive distance apart, or there is no outward:"
@@ -160,18 +172,28 @@ final class Outwards {
                     continue;
                 }
                 // A place of the run, so the run has not run out and the walk goes on whether or
-                // not this one is taken. Counted here for the same reason: what the figure bounds
-                // is the walking, and a stretch every narrowing refuses is walked through.
+                // not this one is taken.
                 took = true;
-                if (++lookedAt > howManyPlaces) {
-                    ended = Ended.AT_THE_FIGURE;   // one the run holds and this is not taking
+                // Refused by one of the narrowings the run has no word for, which is a place to
+                // step past rather than a place to try. Yielded, it would be a candidate the rules
+                // refuse, offered because the run happened to hold it. What it spends is the
+                // looking, and it is the looking that has to stop somewhere.
+                if (!takenIn(next, carrier, within, admits, apart)) {
+                    if (++lookedAt >= howManyLookedAt) {
+                        ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
+                        break outward;
+                    }
+                    continue;
+                }
+                if (out.size() == howManyTaken) {
+                    // One the run holds, this takes in, and is not taking.
+                    ended = Ended.AT_THE_FIGURE_OF_CANDIDATES;
                     break outward;
                 }
-                // And refused by one of the narrowings the run has no word for, which is a place
-                // to step past rather than a place to try. Yielded, it would be a candidate the
-                // rules refuse, offered because the run happened to hold it.
-                if (takenIn(next, carrier, within, admits, apart)) {
-                    out.add(next);
+                out.add(next);
+                if (++lookedAt >= howManyLookedAt) {
+                    ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
+                    break outward;
                 }
             }
             if (!took) {

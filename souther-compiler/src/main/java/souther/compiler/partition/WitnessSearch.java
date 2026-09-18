@@ -57,8 +57,42 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
      * Written out wherever a place is composed, a search added later reads the set of a location
      * against a count and refuses every value the position has.
      */
-    public AdmittedValues.Admitted valuesAt(NumericTerm.FromOnePosition term) {
+    private AdmittedValues.Admitted valuesAt(NumericTerm.FromOnePosition term) {
         return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
                 : new AdmittedValues.Admitted.Values(ValueSet.ANY);
+    }
+
+    /**
+     * The set to narrow a search by: what the declarations leave the position, or every value there
+     * is where nothing worked one out.
+     *
+     * <p>For a search asked whether values exist that meet a question — never for one that writes
+     * the value it finds into a row. What such a search answers is about the region, not about what
+     * the declarations can be shown to admit, so a set nobody established is knowledge it does not
+     * have rather than a set it may narrow by: narrowed by that, the question would be narrower
+     * than what was established.
+     *
+     * <p>{@link ValueSet#ANY} here is the identity of the crossing and never an answer about what
+     * the position admits.
+     */
+    public ValueSet toNarrowBy(NumericTerm.FromOnePosition term) {
+        return valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
+                ? set : ValueSet.ANY;
+    }
+
+    /**
+     * The set to compose a value out of, or null where nothing worked one out.
+     *
+     * <p>For a search whose answer is written into a row. A value composed out of a set nobody
+     * established is a row offered at a position whose rules were never read, so there is nothing
+     * to compose from and the search says so in the word it has for composing nothing.
+     *
+     * <p><b>The other answer to the same three states, and both are named here because the question
+     * decides which.</b> Written at each search instead, one reading of the input composed a value
+     * out of what nothing established while another beside it refused to — and which of the two a
+     * position got depended on which reading reached it first.
+     */
+    public ValueSet toComposeFrom(NumericTerm.FromOnePosition term) {
+        return valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set) ? set : null;
     }
 }

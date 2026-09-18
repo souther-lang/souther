@@ -53,6 +53,17 @@ final class NumericWitness {
             CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
 
     /**
+     * How many places of the run are walked past to find those values.
+     *
+     * <p>The other figure, because the two stopped being one number when the walk began stepping
+     * over places the declarations and the rules refuse. This one bounds the looking: a run with no
+     * end whose places are all refused is otherwise walked forever, and a reader told the figure
+     * above where this one stopped the walk is sent to raise a number that changes nothing.
+     */
+    private static final int PLACES_A_POSITION_IS_LOOKED_AT =
+            CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT.maximum();
+
+    /**
      * Where each of {@code terms} may stand together inside {@code within}, or null where this found
      * no such assignment.
      *
@@ -189,14 +200,14 @@ final class NumericWitness {
         // The three narrowings this position stands under, read once and handed to the walk whole.
         // What the arithmetic leaves the number is one of them; the walk is held to the other two
         // at every place it reaches, and not only at the one it starts from.
-        ValueSet admits = admittedAt(term, looking);
+        ValueSet admits = looking.toNarrowBy(term);
         PlacesApart apart = within.apartAt(term);
         Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
         if (first == null) {
             return false;
         }
         Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
-                VALUES_A_POSITION_IS_TRIED_AT, admits, apart);
+                VALUES_A_POSITION_IS_TRIED_AT, PLACES_A_POSITION_IS_LOOKED_AT, admits, apart);
         for (Place tried : walked) {
             SearchRegion next = within.given(term, tried);
             if (next.emptiness().isPresent()) {
@@ -215,9 +226,14 @@ final class NumericWitness {
             // Every value this position had to offer was tried and none of them led anywhere.
             case HAVING_TRIED_THEM_ALL -> { }
             // There were more, and a figure of this compiler's is why they were not tried, which is
-            // what the caller is owed beside the empty hand.
-            case AT_THE_FIGURE ->
+            // what the caller is owed beside the empty hand. Which figure, because raising one of
+            // them tries more of what the walk found and raising the other looks further for
+            // something to find, and a reader handed the wrong one raises a number that reaches
+            // nothing.
+            case AT_THE_FIGURE_OF_CANDIDATES ->
                     stoppedBy.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+            case AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
+                    stoppedBy.add(CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT);
             // And an order with no step to take, where the one place this named is not the whole of
             // what the position holds. Nothing is recorded, because what was left is a population
             // and what travels from here is figures: an entry made here would tell a reader to raise
@@ -226,25 +242,6 @@ final class NumericWitness {
             case WITH_NO_STEP_TO_TAKE -> { }
         }
         return false;
-    }
-
-    /**
-     * What the declarations leave the position, or every value there is where nothing worked that
-     * out.
-     *
-     * <p><b>The identity of the crossing where there is no set to cross with, and never an answer
-     * about what the position admits.</b> What this search is asked is whether the region admits an
-     * assignment, not whether the declarations can be shown to admit the value — so a set nobody
-     * established is knowledge this search does not have rather than a set it may narrow by, and a
-     * question narrowed by something nobody established is narrower than what was established.
-     *
-     * <p>Whether a row can be written at the place stays the construction's, which owns the word
-     * for a position no value is written at. Decided here, a name every case of a sum spreads would
-     * be reported as a position nothing could place rather than as one nothing writes.
-     */
-    private static ValueSet admittedAt(NumericTerm.FromOnePosition term, WitnessSearch looking) {
-        return looking.valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
-                ? set : ValueSet.ANY;
     }
 
     private NumericWitness() {}

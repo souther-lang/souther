@@ -201,7 +201,10 @@ public final class LevelRealizer {
             // only afterwards they were named for each other.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_CANDIDATES ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT);
                 case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
             }
@@ -286,6 +289,16 @@ public final class LevelRealizer {
             CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
 
     /**
+     * How many places of that line are walked past to find them.
+     *
+     * <p>Wider than the figure above, and a figure of its own: what the declarations leave the
+     * anchored position and what a rule holds it away from take places out of the middle of the
+     * line, and a walk that steps past one of those has not tried a pair there.
+     */
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT.maximum();
+
+    /**
      * The places to try the pair at, from the one the ranges leave outward.
      *
      * <p>Every place on the line carries the pair as well as any other — where they stand is a
@@ -314,13 +327,20 @@ public final class LevelRealizer {
         // the ranges leave is where the pair can be at all; what the declarations leave that
         // position and what a rule holds it away from are two more, and a place taken from the
         // first and refused by either of the others is a pair reported as one nothing composed.
-        ValueSet admits = looking.valuesAt(anchored)
-                instanceof AdmittedValues.Admitted.Values(ValueSet set) ? set : ValueSet.ANY;
+        //
+        // Composed from and not narrowed by, because the place walked here is written into a row.
+        // A pair standing at a value out of a set nobody established is the same row this class
+        // declines to offer at one position, offered because it was reached through two.
+        ValueSet admits = looking.toComposeFrom(anchored);
+        if (admits == null) {
+            return null;
+        }
         PlacesApart apart = within.apartAt(anchored);
         Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter());
         return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
-                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, admits, apart);
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT,
+                        admits, apart);
     }
 
     /**
@@ -756,6 +776,7 @@ public final class LevelRealizer {
             // of them answers.
             Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
                     carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
                     ValueSet.ANY, PlacesApart.NONE);
             for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
@@ -772,7 +793,10 @@ public final class LevelRealizer {
             // it, which is this compiler claiming to have been stopped where it was not.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE ->
+                // One figure named twice, because this walk is given no set and no holes: every
+                // place of the run is a place to take, so the looking and the taking are the same
+                // number and the reader is owed the same one whichever arm the walk ended on.
+                case AT_THE_FIGURE_OF_CANDIDATES, AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
                         stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
                 // A progression is a sum of counts, and a sum exists only over orders that count
                 // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
@@ -1037,8 +1061,7 @@ public final class LevelRealizer {
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
             case Criterion.Within within ->
-                    looking.valuesAt(term)
-                            instanceof AdmittedValues.Admitted.Values(ValueSet admits)
+                    looking.toComposeFrom(term) instanceof ValueSet admits
                             ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
                             : null;
         };

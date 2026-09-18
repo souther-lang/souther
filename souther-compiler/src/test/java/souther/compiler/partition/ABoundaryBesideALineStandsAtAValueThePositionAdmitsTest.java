@@ -105,6 +105,70 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
                 PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 
+    /** The two positions of a pair, on an order with a step, since a distance is arithmetic and a
+     *  pair over strings has none. */
+    private static final NumericTerm.FromOnePosition COUNTED =
+            new NumericTerm.ValueOf(TermPath.of("counted"));
+
+    private static final NumericTerm.FromOnePosition BESIDE =
+            new NumericTerm.ValueOf(TermPath.of("beside"));
+
+    private static final Carrier WHOLE = new Carrier.Whole();
+
+    /** A pair held a step apart, read from whichever of the two is settled first. */
+    private static Criterion.Within aStepApart() {
+        // A distance and not a place: what a pair is held at is how far apart the two stand, which
+        // is a count of the order they share.
+        Level apart = new Level.ACount(souther.compiler.numeric.Count.of(1));
+        Seam parted = Seam.of(LevelSpace.steppingBy(java.math.BigDecimal.ONE), apart,
+                Towards.ABOVE);
+        return new Criterion.Within(
+                new Band(Band.endAt(parted, null, Towards.ABOVE),
+                        Band.endAt(null, null, Towards.BELOW)),
+                apart, Towards.BELOW);
+    }
+
+    /**
+     * A pair one of whose positions nothing worked out a set for composes nothing, either way round.
+     *
+     * <p>The same answer this class already holds one position to, put to the search that reaches a
+     * position through two of them. A pair is searched from either end — which of them is settled
+     * first is this compiler's own arrangement and no part of what the rule said — so a reading that
+     * composed out of the unknown set while its mirror declined would make whether a row is offered
+     * at a position depend on which way round the pair happened to be read.
+     *
+     * <p>Both arrangements have to decline for that to hold, and one of them anchors the position
+     * whose set was worked out. Anchoring it is not the question: the value it goes on to settle is
+     * at the position nothing was worked out about, and that is where the row would be written.
+     */
+    @Test
+    void aPairWithOneSideNothingWorkedOutComposesNothingEitherWayRound() {
+        WitnessSearch bothWorkedOut = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY,
+                        BESIDE.position(), ValueSet.ANY)),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+        WitnessSearch onlyOne = new WitnessSearch(
+                AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY)),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
+
+        // The positive control: with both sets worked out the same pair is composed, so what the
+        // two below show is the missing set and not a pair nothing could have built.
+        assertInstanceOf(Realization.Found.class, pair(COUNTED, BESIDE, bothWorkedOut),
+                "both sets are worked out, so the pair stands somewhere");
+
+        assertInstanceOf(Realization.Unknown.class, pair(COUNTED, BESIDE, onlyOne),
+                "one side of the pair had no set worked out, so no value is composed at it");
+        assertInstanceOf(Realization.Unknown.class, pair(BESIDE, COUNTED, onlyOne),
+                "and naming the pair the other way round reaches the same answer");
+    }
+
+    private static Realization pair(NumericTerm.FromOnePosition on,
+                                    NumericTerm.FromOnePosition against, WitnessSearch looking) {
+        return new LevelRealizer().realize(
+                new Standing.OfTwoOnOneCarrier(on, against, WHOLE, aStepApart()),
+                NothingTheRulesSay.REGION, looking);
+    }
+
     /**
      * Either side of the line is offered a value the declarations leave standing.
      *

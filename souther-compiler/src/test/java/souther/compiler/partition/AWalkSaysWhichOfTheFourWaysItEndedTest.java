@@ -20,18 +20,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * How a walk outward ended, which is not one question with two answers.
  *
- * <p>A walk may end having tried every place there was; it may end at a figure somebody wrote down,
- * with a place the run holds left untaken; and it may end because the order has no step to take,
- * where the one place it started from is the whole of what it can name and what else the run holds
- * is not something it walked.
+ * <p>A walk may end having tried every place there was; it may end having taken as many places as
+ * it was asked for, with a place the run holds left untaken; it may end having walked past as many
+ * places as it was allowed without taking that many; and it may end because the order has no step
+ * to take, where the one place it started from is the whole of what it can name and what else the
+ * run holds is not something it walked.
  *
- * <p><b>The last two are both limits and are not the same limit.</b> A figure is a number to raise
- * and raising it goes past; an order with no step is reached by no number at all. A caller handed
- * one for the other is sent to raise something that had already run to its end, or told that
+ * <p><b>The last three are all limits and no two are the same limit.</b> A figure is a number to
+ * raise and raising it goes past; an order with no step is reached by no number at all. A caller
+ * handed one for the other is sent to raise something that had already run to its end, or told that
  * nothing would have helped where a figure would. So they are told apart here, where the walk knows,
  * and not worked out afterwards from a count of what came back.
+ *
+ * <p>And the two figures are two numbers. One is raised to try more of what the walk found, the
+ * other to look further for something to find; they were one while every place the run held was a
+ * place to take, and the narrowings a run has no word for are what separated them.
  */
-class AWalkSaysWhichOfTheThreeWaysItEndedTest {
+class AWalkSaysWhichOfTheFourWaysItEndedTest {
 
     /**
      * A run of strings that is one string has been walked entirely.
@@ -75,8 +80,31 @@ class AWalkSaysWhichOfTheThreeWaysItEndedTest {
     void anOrderWithAStepEndsTheOtherTwoWays() {
         assertEquals(Outwards.Ended.HAVING_TRIED_THEM_ALL,
                 walkOfCounts(between("0", "3"), 8));
-        assertEquals(Outwards.Ended.AT_THE_FIGURE,
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_CANDIDATES,
                 walkOfCounts(between("0", "100"), 4));
+    }
+
+    /**
+     * The two figures are two, and a walk says which of them stopped it.
+     *
+     * <p>They were one number while every place the run held was a place to take. A narrowing the
+     * run has no word for separates them: the walk may step past place after place and take none,
+     * and what a reader raises to reach further is not what they raise to try more of what was
+     * found. Reported as one, an author is sent to raise a number that changes nothing.
+     */
+    @Test
+    void aWalkSaysWhichOfItsTwoFiguresStoppedIt() {
+        // Every place of the run refused, so the taking never advances and the looking is what
+        // runs out.
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("-100", "100"), 8, 5,
+                        ValueSet.just(Value.number(0)), PlacesApart.NONE).ended());
+        // And nothing refused, where the same walk runs out of candidates first.
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_CANDIDATES,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("-100", "100"), 4, 64,
+                        ValueSet.ANY, PlacesApart.NONE).ended());
     }
 
     /**
@@ -115,7 +143,7 @@ class AWalkSaysWhichOfTheThreeWaysItEndedTest {
     @Test
     void aPlaceANarrowingRefusesIsSteppedPastAndIsNotTheRunRunningOut() {
         Outwards.Walked walked = Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
-                new Carrier.Whole(), between("-3", "3"), 8,
+                new Carrier.Whole(), between("-3", "3"), 8, 64,
                 ValueSet.ANY, PlacesApart.of(List.of(Count.of(1), Count.of(-1))));
 
         assertEquals(List.of(Count.of(0), Count.of(2), Count.of(-2), Count.of(3), Count.of(-3)),
@@ -129,7 +157,7 @@ class AWalkSaysWhichOfTheThreeWaysItEndedTest {
     @Test
     void aValueTheDeclarationsRefuseIsSteppedPastTheSameWay() {
         Outwards.Walked walked = Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
-                new Carrier.Whole(), between("-2", "2"), 8,
+                new Carrier.Whole(), between("-2", "2"), 8, 64,
                 ValueSet.allBut(Value.number(1)), PlacesApart.NONE);
 
         assertEquals(List.of(Count.of(0), Count.of(-1), Count.of(2), Count.of(-2)),
@@ -139,12 +167,14 @@ class AWalkSaysWhichOfTheThreeWaysItEndedTest {
 
     private static Outwards.Ended walkOfStrings(Endpoint low, Endpoint high) {
         return Outwards.from(Text.of("x"), Count.of(1), Carrier.TEXT,
-                new NumericDomain.Bounds(low, high), 8, ValueSet.ANY, PlacesApart.NONE).ended();
+                new NumericDomain.Bounds(low, high), 8, 64, ValueSet.ANY,
+                PlacesApart.NONE).ended();
     }
 
     private static Outwards.Ended walkOfCounts(NumericDomain.Bounds within, int howMany) {
         return Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
-                new Carrier.Whole(), within, howMany, ValueSet.ANY, PlacesApart.NONE).ended();
+                new Carrier.Whole(), within, howMany, 1024, ValueSet.ANY,
+                PlacesApart.NONE).ended();
     }
 
     private static NumericDomain.Bounds between(String low, String high) {

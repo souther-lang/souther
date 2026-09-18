@@ -649,6 +649,11 @@ public final class Generator {
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
+                             // The walking and not the trying: this one stopped before the pair
+                             // search had been offered the places it is allowed to try, so what it
+                             // says is that places were left unlooked at rather than that the
+                             // places looked at composed nothing.
+                             PLACES_A_PAIR_IS_LOOKED_AT,
                              // The numbers past this one were never asked for, so what the search
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the
@@ -662,6 +667,10 @@ public final class Generator {
                         // ({@link DecisionReading.Enumeration}).
                         case TIMES_THE_RULES_ARE_ASKED_AGAIN,
                              VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
+                             // Beside it for the same reason: what either of them stopped is the
+                             // getting past a condition on the way, and the row is composed either
+                             // way.
+                             PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                              VALUES_A_POINT_IS_TRIED_WITH,
                              DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
                              PATHS_OF_A_DECISION_READ -> throw new IllegalArgumentException(

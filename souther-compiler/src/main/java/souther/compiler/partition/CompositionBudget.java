@@ -75,6 +75,16 @@ public enum CompositionBudget {
      *  those as the rules state. */
     PLACES_A_PAIR_IS_TRIED_AT(64),
 
+    /**
+     * How many places of that line are looked at to find those.
+     *
+     * <p>The walking beside the trying, held apart from {@link #PLACES_A_PAIR_IS_TRIED_AT} for the
+     * reason {@link #PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT} is held apart from its own: a place
+     * the line holds that the declarations refuse the anchored position, or that a rule holds it
+     * away from, is walked through and is no pair to try.
+     */
+    PLACES_A_PAIR_IS_LOOKED_AT(512),
+
     /** How many steps a walk over the positions of a form may take. A run without an end is not
      *  walked to the end at any length. */
     STEPS_A_SEARCH_MAY_TAKE(200_000),
@@ -109,6 +119,26 @@ public enum CompositionBudget {
      *  composing that stopped: the row is composed, and what was not composed against is one
      *  condition on the way ({@link ReachabilityGap}). */
     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
+
+    /**
+     * How many places of the run such a position stands on are looked at to find those values.
+     *
+     * <p><b>Beside the one above and not the same figure.</b> That one bounds the values put to the
+     * rest of the question; this one bounds the walking done to reach them. They were one number
+     * while every place the run held was a value to try — and they are not, because what the
+     * declarations leave the position and what a rule holds it away from take places out of the
+     * middle of a run without ending it.
+     *
+     * <p>Raising them does different things. Raising the first tries more of what was found;
+     * raising this one looks further for something to find. A reader told the first where this one
+     * stopped the walk is sent to raise a number that changes nothing, which is what one figure
+     * standing for both comes to.
+     *
+     * <p>Wider than the first for the same reason: a stretch every narrowing refuses is walked
+     * through and costs this and not that. Needed at all because a run with no end whose values are
+     * all refused is otherwise a walk nothing stops.
+     */
+    PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT(64),
 
     /**
      * How many values a point is tried with after a row composed for one of them does not stand

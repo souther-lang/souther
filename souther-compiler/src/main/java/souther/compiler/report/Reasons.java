@@ -122,6 +122,8 @@ final class Reasons {
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
+                case PLACES_A_PAIR_IS_LOOKED_AT ->
+                        "how many places along a pair's line are looked at";
                 case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
                 case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
                 case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
@@ -130,6 +132,8 @@ final class Reasons {
                 case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
                 case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
                         "how many values a position on the way is tried at";
+                case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
+                        "how many places of a position on the way are looked at";
                 case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
