@@ -3541,6 +3541,10 @@ public final class Generator {
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             here = here.given(each.getKey().term(), each.getValue());
         }
+        // Once for the input rather than once for each condition on the way. What its positions
+        // admit is the same answer at every one of them, and working it out where it is spent walks
+        // every position of the input once per condition.
+        WitnessSearch looking = subject.witnessSearch();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             // What the cut says, asked as the one thing it says. A cut over two positions is a
             // statement about their sum, and the rules can leave that sum nowhere while leaving each
@@ -3605,8 +3609,7 @@ public final class Generator {
             // pair as often as not.
             NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
-                            term -> subject.quantities().ordersOf(term).answered(),
-                            subject.witnessSearch());
+                            term -> subject.quantities().ordersOf(term).answered(), looking);
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest.
             //
