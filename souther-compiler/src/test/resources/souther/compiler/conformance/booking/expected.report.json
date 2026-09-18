@@ -2,7 +2,7 @@
   "schemaVersion" : 23,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation", "rule_unread" ],
+  "weakening" : [ "body_not_in_evaluation", "rule_unread" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -3659,7 +3659,7 @@
   }, {
     "module" : "conformance.holds",
     "status" : "partial",
-    "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation" ],
+    "weakening" : [ "body_not_in_evaluation" ],
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
@@ -3669,7 +3669,7 @@
       "pending" : 0,
       "rowObligations" : [ ],
       "status" : "partial",
-      "weakening" : [ "bodies_not_elaborated", "body_not_in_evaluation" ],
+      "weakening" : [ "body_not_in_evaluation" ],
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
@@ -3707,8 +3707,8 @@
       },
       "branch" : {
         "status" : "unavailable",
-        "reason" : "bodies_not_elaborated",
-        "weakening" : [ "bodies_not_elaborated" ]
+        "reason" : "body_was_not_read",
+        "weakening" : [ "body_not_in_evaluation" ]
       },
       "findings" : [ ]
     } ]

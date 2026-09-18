@@ -231,6 +231,35 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
                 "a position of a body nobody read is not a position the model divides no way");
     }
 
+    /**
+     * And the arms of it are short of this behavior's body, not of its module's bodies.
+     *
+     * <p>The measure of arms read whether the whole check held a body for the behavior, and said
+     * the module's bodies had not been elaborated where it did not. This module's check holds a
+     * body for {@code omitted} — {@link #theBodyIsInTheWholeCheckAndNotInWhatMayBeRun} is that
+     * fact — so the sentence was false of the one model it was said about, and the arms said it
+     * beside a partition measure naming the behavior.
+     */
+    @Test
+    void theArmsAreShortOfThisBehaviorsBodyAndNotOfItsModules() {
+        Compilation measured = measured();
+
+        Adequacy.BranchEvidence branch = measured.db()
+                .ask(new Adequacy.BranchCoverage("probe.up")).value().get("omitted");
+
+        assertEquals(WeakeningSet.of(new Weakening.BodyNotInEvaluation("omitted")),
+                branch.measured().weakening(),
+                "the arms went without the reading of this behavior's body");
+        assertEquals(Adequacy.BranchEvidence.BodyWasNotRead.BODY_WAS_NOT_READ,
+                branch.measured().why(),
+                "and say so as the measure beside them does");
+        // And the behavior whose body this image does carry is measured, which is what makes the
+        // module-wide sentence false rather than merely coarse.
+        assertTrue(measured.db().ask(new Adequacy.BranchCoverage("probe.up")).value()
+                        .get("apart").measured().weakening().isEmpty(),
+                "the behavior beside it went without nothing");
+    }
+
     /** What the partition measure of {@code omitted} is left undivided at. */
     private static List<UndividedPosition> undividedOf(Compilation measured) {
         return measured.db().ask(new Adequacy.Dividing("probe.up", "omitted")).value()

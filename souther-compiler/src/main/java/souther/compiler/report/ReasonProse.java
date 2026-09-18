@@ -188,8 +188,9 @@ record ReasonProse(Introduction introduction, String said) {
         return switch (reason) {
             // The model says this behavior writes a body. What it owes is unknown rather than
             // nothing, which is the difference the line saying this exists to show.
-            case Adequacy.BranchEvidence.Unelaborated it -> switch (it) {
-                case BODIES_NOT_ELABORATED -> "this module's bodies were not elaborated";
+            case Adequacy.BranchEvidence.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what arms it has is unknown";
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
                 case UNREADABLE -> "the arms could not be read";

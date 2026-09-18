@@ -244,52 +244,25 @@ public sealed interface Weakening {
     }
 
     /**
-     * The behavior's checked body is here and the image a run is made in does not carry it.
+     * The model gives this behavior a body, and the image the run was measured in does not carry
+     * it.
      *
-     * <p>Beside {@link BodiesNotElaborated} and not one of them, because they are different facts
-     * about different things. That one is a compile that did not get as far as producing the
-     * checked bodies, and it is the module's: one stop, however many behaviors went looking. This
-     * one is a body that came out and an evaluation that may not run it, which is a closure over
-     * the module's implementations and is settled per behavior — the behavior beside it in the same
-     * module may well be run.
+     * <p>The whole of what a measure knows, and nothing about how it came about. A body its own
+     * rules refused, one an image left out because an implementation it reaches could not be made,
+     * and a module nothing elaborated at all are one fact here — which of them it was is the
+     * elaboration's answer, and a measure that named it would be reporting the route rather than
+     * the hole. {@code BodyReading.NotInElaboration} is the same sentence one rung down, and this
+     * is what it costs a measure.
      *
-     * <p>Said as the first, a report puts a module-wide stop on a module that did not stop, and
-     * every behavior of it carries a word that is false of the ones this image does hold.
-     *
-     * <p>Named by the behavior for the reason that one is named by the module: what the answer is
-     * of is what it should be named by.
+     * <p>Named by the behavior, because that is what the answer is of. Which implementations an
+     * image carries is a closure over a module's implementations and is settled per behavior, so a
+     * word quantified over the module says of every behavior of it something true of one — and the
+     * module whose check was made in full is then reported as one that did not compile.
      */
     record BodyNotInEvaluation(String behavior) implements Weakening {
 
         /** Which implementations an image carries is settled by what came out, and a run under
          *  wider allowances is made in the same image. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
-        }
-    }
-
-    /**
-     * The elaborated bodies a measure counts inside were not made, so what they hold was not read.
-     *
-     * <p>Not a reading of the model that stopped and not an observation that went missing: the
-     * declarations are here and say a body is written, and what did not come back is the checked
-     * body. The measure that needed it has no number, and what it needed to get one is this.
-     *
-     * <p>Named by the module, because that is what the answer is of: one compile that did not get
-     * that far is one fact however many behaviors went looking for it, and naming the behavior
-     * would make it as many facts as the module has.
-     *
-     * <p>It had no arm, and what it cost is what #996 was found through. A behavior whose body was
-     * not elaborated was answered as a behavior with no body — which is a claim about the model, is
-     * false, and is contradicted by the {@code implemented} on the line above it in the same
-     * report.
-     */
-    record BodiesNotElaborated(String module) implements Weakening {
-
-        /** Nothing was compared against a figure. The compile did not get that far, and a run under
-         *  wider allowances does not get further — a build that compiles is a different run's
-         *  input, not a wider run of this one. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;

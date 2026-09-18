@@ -20,7 +20,7 @@ import souther.compiler.observe.MeasureReason;
  * could not say what it may hold without running one.
  */
 public sealed interface FailureReason extends MeasureReason
-        permits Adequacy.BranchEvidence.Unelaborated,
+        permits Adequacy.BranchEvidence.BodyWasNotRead,
                 Adequacy.BranchEvidence.Unreadable,
                 Adequacy.RowReading.Unavailable,
                 DecisionEvidence.Unreadable,

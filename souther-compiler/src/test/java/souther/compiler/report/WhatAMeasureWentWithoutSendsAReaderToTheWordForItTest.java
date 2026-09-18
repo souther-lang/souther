@@ -104,8 +104,9 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
      */
     private static ReaderDisposition theWitness() {
         return new ReaderDisposition.LookAtWhatTheMeasureWentWithout(
-                new Subject.OfAModule("probe.unelaborated"),
-                new WeakeningVocabulary.AWordOfThisDocuments(WeakeningWord.BODIES_NOT_ELABORATED));
+                new Subject.OfABehavior("hold"),
+                new WeakeningVocabulary.AWordOfThisDocuments(
+                        WeakeningWord.BODY_NOT_IN_EVALUATION));
     }
 
     /**
@@ -116,34 +117,25 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
      * outranks it ({@link AdequacyReport#assessment()}).
      */
     @Test
-    void aModuleWhoseBodiesWereNotMadeSendsAReaderToWhatTheMeasureWentWithout() {
+    void aBehaviorWhoseBodyWasNotMadeSendsAReaderToWhatTheMeasureWentWithout() {
         List<ReaderDisposition> reached = measured().assessment().uncertainties().stream()
                 .map(ReaderDisposition::of)
                 .filter(ReaderDisposition.LookAtWhatTheMeasureWentWithout.class::isInstance)
                 .toList();
 
-        // Two things, each said of what it is true of. Nothing lowered this module's bodies, and
-        // the measures of the behavior were made against an image that carries none — so a reader
-        // is told the module's publication and the behavior's measure, and neither of them stands
-        // for the other.
-        assertEquals(Set.of(theWitness(), new ReaderDisposition.LookAtWhatTheMeasureWentWithout(
-                        new Subject.OfABehavior("hold"),
-                        new WeakeningVocabulary.AWordOfThisDocuments(
-                                WeakeningWord.BODY_NOT_IN_EVALUATION))),
-                new LinkedHashSet<>(reached),
-                () -> "this model is written to go without the bodies of a module and the reading"
-                        + " of one behavior's body, and what it reached was "
-                        + measured().assessment().uncertainties().stream()
-                                .map(ReaderDisposition::of).toList());
+        // One thing, said of what it is true of. Every measure of this behavior went without the
+        // same reading, and the word is the behavior's: the module a body failed to elaborate in
+        // is not what a reader is sent to, because the module beside it whose image merely leaves
+        // one body out reaches this same arm.
+        assertEquals(Set.of(theWitness()), new LinkedHashSet<>(reached),
+                () -> "this model is written to go without the reading of one behavior's body,"
+                        + " and what it reached was " + measured().assessment().uncertainties()
+                                .stream().map(ReaderDisposition::of).toList());
         ReaderDisposition.LookAtWhatTheMeasureWentWithout it = assertInstanceOf(
-                ReaderDisposition.LookAtWhatTheMeasureWentWithout.class,
-                reached.stream().filter(each -> each instanceof
-                                ReaderDisposition.LookAtWhatTheMeasureWentWithout went
-                                && went.subject() instanceof Subject.OfAModule)
-                        .findFirst().orElse(null));
-        assertEquals(new Subject.OfAModule("probe.unelaborated"), it.subject());
+                ReaderDisposition.LookAtWhatTheMeasureWentWithout.class, reached.getFirst());
+        assertEquals(new Subject.OfABehavior("hold"), it.subject());
         assertEquals(new WeakeningVocabulary.AWordOfThisDocuments(
-                WeakeningWord.BODIES_NOT_ELABORATED), it.said());
+                WeakeningWord.BODY_NOT_IN_EVALUATION), it.said());
     }
 
     /**
@@ -159,8 +151,8 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
 
         assertTrue(unresolved.stream().anyMatch(each ->
                         each instanceof AdequacyUncertainty.ByWeakening it
-                                && it.cause() instanceof Weakening.BodiesNotElaborated),
-                () -> "nothing here says a body was never elaborated: " + unresolved);
+                                && it.cause() instanceof Weakening.BodyNotInEvaluation),
+                () -> "nothing here says a body was never read: " + unresolved);
     }
 
     /**
@@ -182,7 +174,7 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
                 "a refused verdict is open on nothing");
         assertTrue(refused.assessment().uncertainties().stream().anyMatch(each ->
                         each instanceof AdequacyUncertainty.ByWeakening it
-                                && it.cause() instanceof Weakening.BodiesNotElaborated
+                                && it.cause() instanceof Weakening.BodyNotInEvaluation
                                 && ReaderDisposition.of(each).equals(theWitness())),
                 () -> "the gap took the witness with it: " + refused.assessment().uncertainties());
     }

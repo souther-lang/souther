@@ -127,14 +127,17 @@ public enum WeakeningWord {
     /** A position whose rules nothing enumerated. */
     RULES_NOT_REACHED,
 
-    /** The bodies of the module were not elaborated, so what is inside them was not read. */
-    BODIES_NOT_ELABORATED,
     /**
-     * A behavior whose checked body the image a run was made in does not carry.
+     * A behavior the model gives a body that the image the run was measured in does not carry.
      *
-     * <p>Beside the word above and not one of them. That one is a compile that did not produce the
-     * checked bodies at all, and it is the module's; this is a body that came out and an evaluation
-     * that may not run it, which is settled per behavior — the behavior beside it may well run.
+     * <p>One word for every way that happens: a body its own rules refused, one left out because an
+     * implementation it reaches could not be made, and a module nothing elaborated at all. What a
+     * measure knows is that nothing read the body, and which route the image took to not having it
+     * is no part of what a reader acts on.
+     *
+     * <p>Said of the behavior. The module's word this replaces was true of a compile that stopped
+     * and false of every module whose check was made and whose evaluation image is smaller — and a
+     * reader shown it went looking for a module that had failed to compile.
      */
     BODY_NOT_IN_EVALUATION,
 

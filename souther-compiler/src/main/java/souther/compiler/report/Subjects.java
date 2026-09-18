@@ -56,7 +56,6 @@ final class Subjects {
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it ->
                     new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
-            case Weakening.BodiesNotElaborated it -> new Subject.OfAModule(it.module());
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->
                     new Subject.OfABehavior(it.behavior());

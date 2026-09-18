@@ -1317,7 +1317,7 @@ public final class Adequacy {
                     db.ask(new Placements(name)).value();
             Map<String, DecisionEvidence> out = new LinkedHashMap<>();
             read.value().forEach((behavior, rules) -> out.put(behavior, new DecisionEvidence(rules,
-                    whatTheRowsTook(name, rules,
+                    whatTheRowsTook(behavior, rules,
                             placed == null ? null : placed.get(behavior),
                             RowReadings.readingFor(byTarget, behavior), numbering))));
             return Answer.of(Ordered.map(out));
@@ -1337,7 +1337,7 @@ public final class Adequacy {
          * hands back the same empty list for both — which is what let a rule a row may already take
          * be reported as one no row takes (issue #996).
          */
-        private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String module,
+        private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String behavior,
                 souther.compiler.partition.DecisionReading rules,
                 souther.compiler.partition.RulesTaken against,
                 RowReading observed, Optional<SiteNumbering> numbering) {
@@ -1345,11 +1345,16 @@ public final class Adequacy {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
             }
             if (against == null) {
-                // The model says this behavior writes a body and nothing lowered it. What its rows
-                // take is unknown rather than none, and reads identically without this.
+                // The rules of this behavior's body were read and the image the run was measured in
+                // carries no body to put the rows against. What they take is unknown rather than
+                // none, and reads identically without this.
+                //
+                // Said of the behavior, because that is what is missing: the reading beside this
+                // one is of one behavior's body, and the module it is in may have every other body
+                // it owns.
                 return new Measurement.FailedToMeasure<>(
                         DecisionEvidence.Unreadable.THE_BODY_WAS_NOT_READ,
-                        WeakeningSet.of(new Weakening.BodiesNotElaborated(module)));
+                        WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior)));
             }
             if (observed.armsUnseen()) {
                 // The rows ran and carry no account of where they went, so nothing can be put
@@ -3316,22 +3321,27 @@ public final class Adequacy {
         }
 
         /**
-         * The bodies this measure counts arms in were not made.
+         * The body this measure counts arms in is not in the image the run was measured in.
          *
-         * <p>Named for the absence and not for any of the things that cause it: a module the
-         * compile stopped in has no elaborated bodies, and nothing here can tell which of the ways
-         * that happens it was. What a reader of this knows is that the model says a body is written
-         * and what it holds was not read.
+         * <p>Named for the absence and not for any of the things that cause it: a body its own
+         * rules refused, one an image left out because what it reaches could not be made, and a
+         * module nothing elaborated at all are one fact to a measure of arms, and which of them it
+         * was is the elaboration's answer rather than this measure's.
+         *
+         * <p>About this behavior and not about its module. A module the whole check of which was
+         * made still has bodies an evaluation image does not carry, so the arms of one behavior can
+         * be unreadable beside another's that were counted — and a word quantified over the module
+         * says something false of the modules where that happens.
          *
          * <p>Its own reason rather than {@link NoArms#NO_BODY}, which is the claim it used to be
-         * answered with. That claim is about the model and this is about the compile, and the two
-         * were one answer while the measure read the elaborated bodies for both (issue #996).
+         * answered with. That claim is about the model and this is about the image, and the two
+         * were one answer while the measure read the elaborated bodies for both (issue #996). The
+         * same word the partition and the border beside it give, in a type of its own for the
+         * reason each of theirs is.
          */
-        public enum Unelaborated implements FailureReason {
-            BODIES_NOT_ELABORATED;
+        public enum BodyWasNotRead implements FailureReason {
+            BODY_WAS_NOT_READ;
 
-            /** The module the behavior is in, which another behavior of the same run need not be
-             *  in. */
             @Override
             public MeasureReason.About about() {
                 return MeasureReason.About.THE_BEHAVIOR;
@@ -3342,12 +3352,12 @@ public final class Adequacy {
             return new BranchEvidence(new Measure.NotApplicable<>(reason));
         }
 
-        /** The model says this behavior writes a body and nothing elaborated it, so what it owes
-         *  was not read. */
-        public static BranchEvidence unelaborated(String module) {
+        /** The model says this behavior writes a body and the image this run was measured in does
+         *  not carry it, so what it owes was not read. */
+        public static BranchEvidence bodyNotInEvaluation(String behavior) {
             return new BranchEvidence(new Measurement.FailedToMeasure<>(
-                    Unelaborated.BODIES_NOT_ELABORATED,
-                    WeakeningSet.of(new Weakening.BodiesNotElaborated(module))));
+                    BodyWasNotRead.BODY_WAS_NOT_READ,
+                    WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior))));
         }
 
         public static BranchEvidence notAsked(BranchEvidence.NotAsked reason) {
@@ -3569,8 +3579,9 @@ public final class Adequacy {
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
-                BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
-                        checked != null && checked.behaviorBodies().containsKey(behavior.name()),
+                BranchEvidence absent = whyNoArms(behavior.name(),
+                        prepared.value().isComposition(behavior),
+                        bodyReading(db, name, checked, behavior.name()),
                         arms, arrives, observed);
                 if (absent != null) {
                     return absent;
@@ -3607,23 +3618,43 @@ public final class Adequacy {
          * neither, so it answered {@code NO_BODY} for every behavior in it — beside a report line
          * saying {@code implemented} (issue #996).
          *
-         * @param writesItsOwnBody what the declarations say, from the one reader of them
-         * @param bodyRead         whether this behavior's elaborated body came back, which is what
-         *                         the arms
-         *                         and the plan below are read from
+         * <p><b>And what the image holds of the body is asked of the one classifier.</b> Whether a
+         * behavior has a body, and whether this image carries it, are the two questions
+         * {@link BodyReading} answers, and this measure reads its answer rather than asking the
+         * bodies again. Asked here as a {@code containsKey}, the arms of a behavior an image left
+         * out were reported as the bodies of its module not having been made — a sentence about a
+         * module whose check was made in full.
+         *
+         * @param isComposition whether this is a {@code >->}, whose arms are its stages' and which
+         *                      is the one thing about a behavior this may answer from the
+         *                      declarations alone
+         * @param reading       what the image the run was measured in holds of this behavior's
+         *                      body, which is what the arms and the plan below are read from
          */
-        private static BranchEvidence whyNoArms(String module, boolean writesItsOwnBody,
-                boolean bodyRead,
+        private static BranchEvidence whyNoArms(String behavior, boolean isComposition,
+                souther.compiler.partition.BodyReading reading,
                 List<CoverageSites.ArmSite> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
                 RowReading observed) {
-            if (!writesItsOwnBody) {
+            if (isComposition) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
-            if (!bodyRead) {
-                // The model says there is a body. Nothing read it, so what it owes is unknown —
-                // which is not the same as owing nothing, and reads identically without this.
-                return BranchEvidence.unelaborated(module);
+            // A switch over the three, so that a fourth thing an image can hold of a body is a
+            // compile error here rather than whichever of these it happens to resemble.
+            BranchEvidence absent = switch (reading) {
+                // Nothing supplies a body here: no `let` of this name, and nothing to look inside.
+                // A claim about the model, which is why it is the same answer a composition gets.
+                case souther.compiler.partition.BodyReading.NoBody _ ->
+                        BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
+                // The model says there is a body and this image has none of it, so what it owes is
+                // unknown — which is not the same as owing nothing, and reads identically without
+                // this.
+                case souther.compiler.partition.BodyReading.NotInElaboration _ ->
+                        BranchEvidence.bodyNotInEvaluation(behavior);
+                case souther.compiler.partition.BodyReading.Read _ -> null;
+            };
+            if (absent != null) {
+                return absent;
             }
             // What is owed, and not what was numbered. An arm the rules prove nothing arrives at is
             // instrumented and is not owed, so a behavior whose every numbered arm is one of those
