@@ -993,6 +993,7 @@ The `+...+` spread is defined as follows.
 * The taken-in fields are laid out flatly. A `+Submitted+` value is referenced directly as `+x.applicant+` (not nested as `+x.common.applicant+`).
 * The taken-in data's invariants are inherited too. The invariants of `+TravelRequestCommon+` are checked when `+Submitted+` is constructed. The spread carries not only fields but invariants.
 * [[spread-fields-do-not-collide]]A field-name collision is a compile error.
+* [[a-data-does-not-spread-itself]]A data MUST NOT spread itself, directly or through a chain of spreads. A value holds the fields of everything it spreads, so a data that spreads its way back to itself is made of itself and has no value. Two spreads that reach one data are not this: they bring that data's fields in twice, which is the collision above.
 * A spread is not inheritance. `+Submitted+` is not a subtype of `+TravelRequestCommon+`; the two are not assignment-compatible. They only share fields.
 * A spread is an element of the same comma sequence as fields. It appears inside `+{+` separated by `+,+`, and multiple may be written. By convention it is placed first. It uses the same `+...+` as the value-level record-literal spread (<<record-literal>>).
 
@@ -4858,6 +4859,17 @@ Hint: Remove `Missing` from the `constructs` clause.
 ----
 
 A unit data is constructed and carries no construction authority, so it is in no behavior's construction set and is named in no clause (<<constructs-excludes-unit-data>>). Distinct from E1006, which says the body never built the data: here the body may well build it, and the entry is still wrong. Keeping the two apart is what lets E1006 go on meaning "declared but never built".
+
+[#e1027]
+=== A data spreads itself
+
+[,text]
+----
+Data `Pair` spreads itself through `Other` -> `Pair`. A value holds the fields of everything it
+spreads, so a data that spreads its way back to itself is made of itself.
+----
+
+Reported at the spread the ring is entered by, naming the spreads it goes round by (<<a-data-does-not-spread-itself>>). Answered of the declarations alone and before anything works out what a value of one holds, so the fields, the rules and the counts are read over a graph that terminates. Self-reference through a *field* is how a tree is written and is unaffected (<<self-referential-data>>); this is about the spreads. Two spreads reaching one data is E1004 and not this.
 
 [#e1003-removed]
 === (retired)

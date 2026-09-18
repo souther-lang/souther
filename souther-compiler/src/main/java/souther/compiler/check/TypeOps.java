@@ -1083,19 +1083,33 @@ public final class TypeOps {
      * belong to the declaring module's own check, which has already run.
      */
     public static Type fieldType(Hir.Data data, String field, Symbols symbols) {
+        return fieldType(data, field, symbols, new LinkedHashSet<>());
+    }
+
+    /** {@code onThePath} is what is being read above this, and what makes the walk finite. Nothing
+     *  is said about a spread onto it: what a field of a declaration holds is a question with no
+     *  answer on a graph the language refuses, and one where it does not arise on one it admits. */
+    private static Type fieldType(Hir.Data data, String field, Symbols symbols,
+                                  Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return fieldType(f);
             }
         }
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data included = spreadTarget(inc, symbols);
-            if (included != null) {
-                Type t = fieldType(included, field, symbols);
+        onThePath.add(data.declares());
+        try {
+            for (Hir.Name inc : data.includes()) {
+                Hir.Data included = spreadTarget(inc, symbols);
+                if (included == null || onThePath.contains(included.declares())) {
+                    continue;
+                }
+                Type t = fieldType(included, field, symbols, onThePath);
                 if (t != null) {
                     return t;
                 }
             }
+        } finally {
+            onThePath.remove(data.declares());
         }
         return null;
     }
@@ -1111,16 +1125,29 @@ public final class TypeOps {
 
     /** Whether a data has a field of that name, without resolving any type. */
     public static boolean hasField(Hir.Data data, String field, Symbols symbols) {
+        return hasField(data, field, symbols, new LinkedHashSet<>());
+    }
+
+    /** As {@link #fieldType(Hir.Data, String, Symbols, Set)}: the path is what makes it finite, and
+     *  a spread onto it is passed over without a word. */
+    private static boolean hasField(Hir.Data data, String field, Symbols symbols,
+                                    Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return true;
             }
         }
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data included = spreadTarget(inc, symbols);
-            if (included != null && hasField(included, field, symbols)) {
-                return true;
+        onThePath.add(data.declares());
+        try {
+            for (Hir.Name inc : data.includes()) {
+                Hir.Data included = spreadTarget(inc, symbols);
+                if (included != null && !onThePath.contains(included.declares())
+                        && hasField(included, field, symbols, onThePath)) {
+                    return true;
+                }
             }
+        } finally {
+            onThePath.remove(data.declares());
         }
         return false;
     }
@@ -1231,7 +1258,7 @@ public final class TypeOps {
     public static List<InvariantHeader> invariantHeadersGoverning(
             TypeSymbol.AtModule named, Symbols symbols) {
         List<InvariantHeader> headers = new ArrayList<>();
-        for (Hir.InvariantClause clause : settledClauses(named, symbols)) {
+        for (Hir.InvariantClause clause : settledClauses(named, symbols, new LinkedHashSet<>())) {
             headers.add(new InvariantHeader(clause.name(), clause.pos()));
         }
         return headers;
@@ -1253,24 +1280,35 @@ public final class TypeOps {
      */
     static List<Hir.InvariantClause> settledClausesGoverning(
             TypeSymbol.AtModule named, DerivedSymbols symbols) {
-        return settledClauses(named, symbols);
+        return settledClauses(named, symbols, new LinkedHashSet<>());
     }
 
-    /** The same for a reader that wants only what every representation agrees on, which is why this
-     *  takes any world. Private, so the world a clause's body is read from stays said by the method
-     *  a caller names. */
+    /**
+     * The same for a reader that wants only what every representation agrees on, which is why this
+     * takes any world. Private, so the world a clause's body is read from stays said by the method
+     * a caller names.
+     *
+     * <p>A spread onto the path contributes nothing and there is nowhere here to say it was cut:
+     * what this hands back is the clauses and nothing beside them. That is left as it is rather than
+     * widened into a second answer — whether every rule that governs a declaration was reached is
+     * {@link ExpandedRules}'s to say and is said there, and a graph that makes this short is one the
+     * language refuses before either of them is read.
+     */
     private static List<Hir.InvariantClause> settledClauses(
-            TypeSymbol.AtModule named, Symbols symbols) {
+            TypeSymbol.AtModule named, Symbols symbols, Set<TypeSymbol.AtModule> onThePath) {
         if (!(symbols.declaredNode(named) instanceof Hir.Data data)) {
             return List.of();
         }
+        onThePath.add(named);
         List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             if (inc.answered() instanceof Hir.Name.Denoting denoting
-                    && denoting.type() instanceof TypeSymbol.AtModule spread) {
-                invs.addAll(settledClauses(spread, symbols));
+                    && denoting.type() instanceof TypeSymbol.AtModule spread
+                    && !onThePath.contains(spread)) {
+                invs.addAll(settledClauses(spread, symbols, onThePath));
             }
         }
+        onThePath.remove(named);
         invs.addAll(data.invariants());
         return invs;
     }
@@ -1290,7 +1328,7 @@ public final class TypeOps {
             throw new IllegalArgumentException(
                     "reading a declaration's clauses takes somewhere to read them from");
         }
-        return governedBy(named, symbols, form);
+        return governedBy(named, symbols, form, new LinkedHashSet<>());
     }
 
     /**
@@ -1368,18 +1406,26 @@ public final class TypeOps {
      * the world's. Only where nothing declares it at all are there no spreads to be short of.
      */
     private static ExpandedRules governedBy(
-            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form) {
+            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form,
+            Set<TypeSymbol.AtModule> onThePath) {
         ExpandedClauseResult stated = form.of(named.key());
         Hir.Def declared = symbols.declaredNode(named);
         ExpandedRules found = new ExpandedRules(List.of(),
                 declared != null || stated instanceof ExpandedClauseResult.NotDeclared);
         if (declared instanceof Hir.Data data) {
+            onThePath.add(named);
             for (Hir.Name inc : data.includes()) {
                 if (inc.answered() instanceof Hir.Name.Denoting denoting
                         && denoting.type() instanceof TypeSymbol.AtModule spread) {
-                    found = found.and(governedBy(spread, symbols, form));
+                    // A spread onto the path is rules not reached, and not rules there are none of.
+                    // Dropped quietly, what a ring leaves would be handed on as every rule that
+                    // governs the declaration.
+                    found = found.and(onThePath.contains(spread)
+                            ? new ExpandedRules(List.of(), false)
+                            : governedBy(spread, symbols, form, onThePath));
                 }
             }
+            onThePath.remove(named);
         }
         return found.and(rulesOf(named, stated));
     }

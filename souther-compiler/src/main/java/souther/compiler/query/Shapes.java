@@ -11,6 +11,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
+import souther.compiler.check.ProductSpreads;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.EffectiveFieldTypes;
@@ -38,7 +39,9 @@ import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -1030,6 +1033,59 @@ public final class Shapes {
     }
 
     /**
+     * That no product this module declares reaches itself through its spreads, and no product those
+     * reach does either.
+     *
+     * <p>Read from the declarations as resolution left them and from nothing else. What a value of a
+     * product holds, what rules govern it and how many values it has are each worked out by walking
+     * the spreads, and each of those walks is finite only over a graph with no ring in it — so the
+     * question is settled here, once, and the walks are asked afterwards. Asked of every declaration
+     * the spreads reach and not only of this module's, because a walk started here goes wherever the
+     * spreads go.
+     *
+     * <p>Absent where a ring is found, which is what keeps the readers below from being started on a
+     * graph they have no end in. What the report points at is the first spread of the ring, written
+     * on the declaration the ring closes on — a {@code ...} the author can take out, and the one
+     * their eye goes to when they are told which declaration is made of itself.
+     *
+     * <p><b>Found here, said where it is written.</b> The walk crosses into whatever the spreads
+     * name, so a module that spreads a declaration of a ring finds that ring and has no reading to
+     * give — and the ring is not its author's to take apart. Every declaration of a ring is written
+     * in one module, since a spread crossing out and back would be two modules importing each other;
+     * that module asks this of itself and says it there. Reported by whoever found it, one mistake
+     * would be said once for every module downstream of it
+     * ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
+     */
+    public record WellFoundedSpreads(String name) implements Key<ProductSpreads.WellFounded> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<ProductSpreads.WellFounded> compute(Db db) {
+            Answer<List<TypeSymbol.AtModule>> declared = db.ask(new Front.DeclaredTypes(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            ProductSpreads.Of found = ProductSpreads.of(declared.value(), named -> {
+                Answer<Hir.Def> def = db.ask(new Names.ResolvedDeclaration(named.key()));
+                return def.present() ? def.value() : null;
+            });
+            return switch (found) {
+                case ProductSpreads.WellFounded wellFounded -> Answer.of(wellFounded);
+                case ProductSpreads.ReachesItself ring -> ring.writtenIn(name)
+                        ? Answer.absent(Report.of(Diagnostic
+                                .at(ring.written().name().reportedAt())
+                                .say(new DataMessage.ADataSpreadsItself(
+                                        ring.declaration().name(), ring.through()))
+                                .build()))
+                        : Answer.absent();
+            };
+        }
+    }
+
+    /**
      * Which of this module's declarations no value satisfies, and what shows it.
      *
      * <p>An answer of its own so that what a body's check depends on is this and not the clauses it
@@ -1053,7 +1109,12 @@ public final class Shapes {
             Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
-            if (!written.present() || !policy.present()) {
+            // What a count walks is the spreads, and the walk ends because the graph does. Asked
+            // before anything is counted rather than guarded inside the walk: a declaration that
+            // reaches itself has no count to be given, and the refusal is one sentence about the
+            // declaration rather than one per reader that met it.
+            Answer<ProductSpreads.WellFounded> spreads = db.ask(new WellFoundedSpreads(name));
+            if (!written.present() || !policy.present() || !spreads.present()) {
                 return Answer.absent();
             }
             // Answered either way, because what a reader of this does about a count it has not been
@@ -1539,7 +1600,12 @@ public final class Shapes {
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.types.Type>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
-            if (!settled.present() || !scope.present() || !helpers.present()) {
+            // Elaborating a clause reads the rules of everything a declaration spreads, which is a
+            // walk of the spreads. Asked here for the same reason the count asks it: the graph is
+            // held to having an end before anything is read over it.
+            Answer<ProductSpreads.WellFounded> spreads = db.ask(new WellFoundedSpreads(name));
+            if (!settled.present() || !scope.present() || !helpers.present()
+                    || !spreads.present()) {
                 return Answer.absent();
             }
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();

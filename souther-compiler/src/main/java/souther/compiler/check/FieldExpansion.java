@@ -32,8 +32,8 @@ import java.util.Set;
  * <p><b>Total over a cyclic graph.</b> A spread reaching a declaration already being expanded is a
  * back edge and is handed back as one rather than followed, so that the expansion of any graph is
  * finite. What a back edge means is not decided here: a declaration that spreads itself is refused
- * where declarations are held to their rules, and a reader that answers about a program mid-edit
- * has an answer to give either way.
+ * before anything reads what one of them holds ({@link ProductSpreads}), and a reader that answers
+ * about a program mid-edit has an answer to give either way.
  *
  * <p><b>A declaration reached twice down two spreads is expanded twice.</b> Which is not a cost
  * being overlooked but the thing being asked: the two fields it brings in are two fields with one
