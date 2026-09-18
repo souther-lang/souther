@@ -1,8 +1,6 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +40,11 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
     /** {@code constant + Σ weight·position}, written as pairs of a position and its weight. */
     private static LinearForm<String> form(long constant, Object... weighed) {
-        Map<String, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
         for (int each = 0; each < weighed.length; each += 2) {
-            coefs.put((String) weighed[each], BigDecimal.valueOf((Integer) weighed[each + 1]));
+            coefs.put((String) weighed[each], ExactRatio.of((Integer) weighed[each + 1]));
         }
-        return new LinearForm<>(BigDecimal.valueOf(constant), coefs);
+        return new LinearForm<>(ExactRatio.of(constant), coefs);
     }
 
     /** {@code y <= weight·x} beside {@code y >= weight·x + 1}. */

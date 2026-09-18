@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -34,7 +32,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(n));
+        return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
     /** {@code a + b - c}, which is of neither shape: three atoms, so it is kept as written. */

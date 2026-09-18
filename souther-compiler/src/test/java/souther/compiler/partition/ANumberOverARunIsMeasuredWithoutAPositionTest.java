@@ -101,11 +101,11 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         assertEquals("List.sum(lines[*].amount)", over.left(),
                 "a report names the number, which is what the rule is about");
         assertEquals(BorderQuantity.Stands.YES,
-                stands(over, new Criterion.AtTheLevel(new Level.ACount(Count.of(100000))),
+                stands(over, new Criterion.AtTheLevel(Level.OfTheQuantity.of(100000)),
                         rowHolding(60000, 40000)),
                 "a row whose lines come to the total stands on the line");
         assertEquals(BorderQuantity.Stands.NO,
-                stands(over, new Criterion.AtTheLevel(new Level.ACount(Count.of(100000))),
+                stands(over, new Criterion.AtTheLevel(Level.OfTheQuantity.of(100000)),
                         rowHolding(60000, 39999)),
                 "and one that comes to anything else does not");
     }
@@ -126,7 +126,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
                 LinearForm.atom((NumericTerm) TOTAL),
                 Map.of(TOTAL, WHOLE));
         Standing standing = over.standingAt(
-                new Criterion.AtTheLevel(new Level.ACount(Count.of(100000))));
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(100000)));
 
         Realization made = new LevelRealizer().realize(standing, NothingTheRulesSay.REGION,
                 NothingTheDeclarationsRefuse.at());

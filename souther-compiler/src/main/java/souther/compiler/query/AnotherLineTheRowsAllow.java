@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -16,9 +17,6 @@ import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -82,7 +80,7 @@ public sealed interface AnotherLineTheRowsAllow {
      *                    worked out. What the measurement itself reached, and never where a row has
      *                    to be written: it is a witness of the condition and not the condition
      */
-    record OneDoes(QuantityKey direction, BigDecimal cut, Towards keptOn,
+    record OneDoes(QuantityKey direction, ExactRatio cut, Towards keptOn,
                    Map<NumericTerm, Place> tellsApartAt) implements AnotherLineTheRowsAllow {
 
         public OneDoes {
@@ -117,7 +115,7 @@ public sealed interface AnotherLineTheRowsAllow {
             // line and a region disagreeing
             // about what the positions are measured on, and the region it would leave is where
             // every row stands rather than where the two lines differ.
-            return within.assuming(new LinearForm<>(cut.negate(), direction.direction()),
+            return within.assuming(new LinearForm<>(cut.negated(), direction.direction()),
                     keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
         }
 
@@ -136,8 +134,7 @@ public sealed interface AnotherLineTheRowsAllow {
 
         /** How a report names the line, which is the direction spelled as an author writes a form. */
         public String label() {
-            return OrderedAffineBoundary.spelled(direction.direction()) + " = "
-                    + cut.stripTrailingZeros().toPlainString();
+            return OrderedAffineBoundary.spelled(direction.direction()) + " = " + cut.spelled();
         }
 
         /**
@@ -405,7 +402,7 @@ public sealed interface AnotherLineTheRowsAllow {
             return new CouldNotTell(new Unsettled.TheRowsAreAllOnOneSide());
         }
         for (QuantityKey other : family) {
-            BigDecimal cut = keeping(other, boundary.satisfiedOn(), satisfying, refusing);
+            ExactRatio cut = keeping(other, boundary.satisfiedOn(), satisfying, refusing);
             if (cut == null) {
                 continue;
             }
@@ -447,7 +444,7 @@ public sealed interface AnotherLineTheRowsAllow {
      * the first is past the second there is nowhere to put it, and the rows have told the two lines
      * apart.
      */
-    private static BigDecimal keeping(QuantityKey other, Towards satisfiedOn,
+    private static ExactRatio keeping(QuantityKey other, Towards satisfiedOn,
                                       List<Map<NumericTerm, Place>> satisfying,
                                       List<Map<NumericTerm, Place>> refusing) {
         // Some row the rule keeps, which is settled before this is called. Asked without one, the
@@ -456,13 +453,13 @@ public sealed interface AnotherLineTheRowsAllow {
         if (satisfying.isEmpty()) {
             throw new IllegalArgumentException("a threshold that keeps none of the rows");
         }
-        BigDecimal furthest = null;
+        ExactRatio furthest = null;
         for (Map<NumericTerm, Place> values : satisfying) {
-            BigDecimal at = OrderedAffineBoundary.along(other.direction(), values);
+            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
             furthest = furthest == null ? at : beyond(satisfiedOn, furthest, at);
         }
         for (Map<NumericTerm, Place> values : refusing) {
-            BigDecimal at = OrderedAffineBoundary.along(other.direction(), values);
+            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
             // Strictly past the threshold, because the threshold itself is kept: a row the model
             // refuses that lands exactly there would be kept by this line, and the two would not
             // answer alike at it.
@@ -475,8 +472,9 @@ public sealed interface AnotherLineTheRowsAllow {
     }
 
     /** Whichever of the two is further along the side the rule is satisfied on. */
-    private static BigDecimal beyond(Towards satisfiedOn, BigDecimal a, BigDecimal b) {
-        return satisfiedOn == Towards.BELOW ? a.max(b) : a.min(b);
+    private static ExactRatio beyond(Towards satisfiedOn, ExactRatio a, ExactRatio b) {
+        boolean first = satisfiedOn == Towards.BELOW ? a.compareTo(b) >= 0 : a.compareTo(b) <= 0;
+        return first ? a : b;
     }
 
     /**
@@ -500,16 +498,16 @@ public sealed interface AnotherLineTheRowsAllow {
      * at all.
      */
     private static Map<NumericTerm, Place> partingAt(OrderedAffineBoundary boundary,
-                                                     QuantityKey other, BigDecimal cut,
+                                                     QuantityKey other, ExactRatio cut,
                                                      List<Map<NumericTerm, Place>> satisfying,
                                                      List<Map<NumericTerm, Place>> refusing,
                                                      List<OrderedAffineBoundary> elsewhere,
                                                      WayToTheBorder way) {
-        Map<NumericTerm, BigDecimal> along = alongTheLine(boundary.direction(), other);
+        Map<NumericTerm, ExactRatio> along = alongTheLine(boundary.direction(), other);
         if (along == null) {
             return null;
         }
-        BigDecimal moves = weighing(other, along);
+        ExactRatio moves = weighing(other, along);
         if (moves.signum() == 0) {
             return null;
         }
@@ -544,25 +542,27 @@ public sealed interface AnotherLineTheRowsAllow {
      * @param steps   how far from the row it is, which is what makes one input nearer than another
      */
     record Parting(Map<NumericTerm, Place> at, boolean reached, boolean visible,
-                   BigDecimal steps) {}
+                   ExactRatio steps) {}
 
     /** Whatever {@code values} reaches by stepping along the model's own line, collected into
      *  {@code found}. */
-    private static void partings(OrderedAffineBoundary boundary, QuantityKey other, BigDecimal cut,
+    private static void partings(OrderedAffineBoundary boundary, QuantityKey other, ExactRatio cut,
                                  Map<NumericTerm, Place> values,
-                                 Map<NumericTerm, BigDecimal> along, BigDecimal moves,
+                                 Map<NumericTerm, ExactRatio> along, ExactRatio moves,
                                  boolean kept, Reaches reaches,
                                  List<OrderedAffineBoundary> elsewhere,
                                  List<Parting> found) {
-        BigDecimal at = OrderedAffineBoundary.along(other.direction(), values);
-        for (BigDecimal steps
-                : stepsAround(cut.subtract(at).divide(moves, 0, RoundingMode.DOWN))) {
+        ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
+        ExactRatio crossing = cut.minus(at).dividedBy(moves);
+        // Truncated towards nought, which is what a whole number of steps short of the crossing is.
+        for (ExactRatio steps
+                : stepsAround(crossing.numerator().divide(crossing.denominator()))) {
             // Asked by standing at the input rather than by reasoning about which way the
             // arithmetic came out. Which side of its own threshold a value falls on is the same
             // question here as everywhere, and a number of steps worked out from the signs would be
             // a second answer to it, right until one of the four ways the signs can fall was
             // written down wrong.
-            if (kept == keeps(boundary.satisfiedOn(), cut, at.add(steps.multiply(moves)))) {
+            if (kept == keeps(boundary.satisfiedOn(), cut, at.plus(steps.times(moves)))) {
                 continue;
             }
             Map<NumericTerm, Place> moved = movedBy(boundary, values, along, steps);
@@ -671,7 +671,7 @@ public sealed interface AnotherLineTheRowsAllow {
             return switch (taken) {
                 case TakenConstraint.Affine(var form, var rel) ->
                         rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
-                                .add(form.constant()).signum());
+                                .plus(form.constant()).signum());
                 case TakenConstraint.Ordered(
                         var term, var place, var rel) -> rel.holds(at.get(term).compareTo(place));
                 case TakenConstraint.AwayFrom(var term, var place) ->
@@ -691,24 +691,24 @@ public sealed interface AnotherLineTheRowsAllow {
     /** What a step does to a form: the positions it moves, weighed as the form weighs them. The
      *  rest are the same at both ends and cancel, which is why the numbers this does not have are
      *  not needed. */
-    private static BigDecimal moves(Map<NumericTerm, BigDecimal> coefs,
+    private static ExactRatio moves(Map<NumericTerm, ExactRatio> coefs,
                                     Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
-        BigDecimal by = BigDecimal.ZERO;
-        for (Map.Entry<NumericTerm, BigDecimal> each : coefs.entrySet()) {
+        ExactRatio by = ExactRatio.ZERO;
+        for (Map.Entry<NumericTerm, ExactRatio> each : coefs.entrySet()) {
             Place was = from.get(each.getKey());
             Place now = at.get(each.getKey());
             if (was == null || now == null) {
                 continue;   // not a position the step moves, so it is the same at both ends
             }
-            by = by.add(Count.number(now).at().subtract(Count.number(was).at())
-                    .multiply(each.getValue()));
+            by = by.plus(Count.number(now).exactly().minus(Count.number(was).exactly())
+                    .times(each.getValue()));
         }
         return by;
     }
 
     /** Whether a condition that held still holds once what it is over has moved by {@code by}, or
      *  null where the move could go either way. */
-    private static Boolean whatAStepDoesTo(Rel rel, BigDecimal by) {
+    private static Boolean whatAStepDoesTo(Rel rel, ExactRatio by) {
         if (by.signum() == 0) {
             return true;   // nothing moved it, so it answers what it answered
         }
@@ -725,7 +725,7 @@ public sealed interface AnotherLineTheRowsAllow {
 
     /** Whether a line satisfied on {@code satisfiedOn} of {@code cut} keeps a value at {@code at}.
      *  The threshold's own value is kept, which is what makes it the tightest one there is. */
-    private static boolean keeps(Towards satisfiedOn, BigDecimal cut, BigDecimal at) {
+    private static boolean keeps(Towards satisfiedOn, ExactRatio cut, ExactRatio at) {
         return satisfiedOn == Towards.BELOW ? at.compareTo(cut) <= 0 : at.compareTo(cut) >= 0;
     }
 
@@ -737,23 +737,23 @@ public sealed interface AnotherLineTheRowsAllow {
      * names. Standing still is not among them: the rows already answer alike there, which is what
      * the threshold was chosen to make true.
      */
-    private static List<BigDecimal> stepsAround(BigDecimal crossing) {
-        List<BigDecimal> out = new ArrayList<>();
+    private static List<ExactRatio> stepsAround(java.math.BigInteger crossing) {
+        List<ExactRatio> out = new ArrayList<>();
         for (int away = -2; away <= 2; away++) {
-            BigDecimal steps = crossing.add(BigDecimal.valueOf(away));
+            ExactRatio steps = ExactRatio.of(crossing.add(java.math.BigInteger.valueOf(away)));
             if (steps.signum() != 0) {
                 out.add(steps);
             }
         }
-        out.sort(Comparator.comparing(BigDecimal::abs));
+        out.sort(Comparator.comparing(ExactRatio::abs));
         return out;
     }
 
     /** What a direction weighs a step to, where a step names only the positions it moves. */
-    private static BigDecimal weighing(QuantityKey of, Map<NumericTerm, BigDecimal> step) {
-        BigDecimal at = BigDecimal.ZERO;
-        for (Map.Entry<NumericTerm, BigDecimal> each : step.entrySet()) {
-            at = at.add(weight(of, each.getKey()).multiply(each.getValue()));
+    private static ExactRatio weighing(QuantityKey of, Map<NumericTerm, ExactRatio> step) {
+        ExactRatio at = ExactRatio.ZERO;
+        for (Map.Entry<NumericTerm, ExactRatio> each : step.entrySet()) {
+            at = at.plus(weight(of, each.getKey()).times(each.getValue()));
         }
         return at;
     }
@@ -767,20 +767,20 @@ public sealed interface AnotherLineTheRowsAllow {
      * leaves the model's own weight of the pair at nothing. That the same step is not nothing under
      * {@code other} is what the two weighing them differently means.
      */
-    private static Map<NumericTerm, BigDecimal> alongTheLine(QuantityKey wrote, QuantityKey other) {
+    private static Map<NumericTerm, ExactRatio> alongTheLine(QuantityKey wrote, QuantityKey other) {
         List<NumericTerm> terms = new ArrayList<>(named(wrote, other));
         for (int i = 0; i < terms.size(); i++) {
             for (int j = i + 1; j < terms.size(); j++) {
-                BigDecimal mine = weight(wrote, terms.get(i));
-                BigDecimal ours = weight(wrote, terms.get(j));
-                BigDecimal turned = weight(other, terms.get(i)).multiply(ours)
-                        .subtract(weight(other, terms.get(j)).multiply(mine));
-                if (turned.signum() == 0 || !whole(mine) || !whole(ours)) {
+                ExactRatio mine = weight(wrote, terms.get(i));
+                ExactRatio ours = weight(wrote, terms.get(j));
+                ExactRatio turned = weight(other, terms.get(i)).times(ours)
+                        .minus(weight(other, terms.get(j)).times(mine));
+                if (turned.signum() == 0 || !mine.isWhole() || !ours.isWhole()) {
                     continue;
                 }
-                Map<NumericTerm, BigDecimal> step = new LinkedHashMap<>();
+                Map<NumericTerm, ExactRatio> step = new LinkedHashMap<>();
                 step.put(terms.get(i), ours);
-                step.put(terms.get(j), mine.negate());
+                step.put(terms.get(j), mine.negated());
                 return step;
             }
         }
@@ -791,14 +791,17 @@ public sealed interface AnotherLineTheRowsAllow {
      *  has no value where it lands. */
     private static Map<NumericTerm, Place> movedBy(OrderedAffineBoundary boundary,
                                                    Map<NumericTerm, Place> values,
-                                                   Map<NumericTerm, BigDecimal> step,
-                                                   BigDecimal steps) {
+                                                   Map<NumericTerm, ExactRatio> step,
+                                                   ExactRatio steps) {
         Map<NumericTerm, Place> moved = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : values.entrySet()) {
-            BigDecimal by = step.getOrDefault(each.getKey(), BigDecimal.ZERO);
-            BigDecimal at = Count.number(each.getValue()).at().add(by.multiply(steps));
+            ExactRatio by = step.getOrDefault(each.getKey(), ExactRatio.ZERO);
+            ExactRatio at = Count.number(each.getValue()).exactly().plus(by.times(steps));
             Carrier carrier = boundary.of().carrierOf(each.getKey());
-            Place there = carrier == null ? null : carrier.onTheGrid(new Count(at));
+            // Where the step lands is a value of the position or it is nowhere, which is the same
+            // edge a row is written at: a place the carrier has no count for is no place at all.
+            Count count = Count.at(at);
+            Place there = carrier == null || count == null ? null : carrier.onTheGrid(count);
             if (there == null) {
                 return null;
             }
@@ -817,12 +820,8 @@ public sealed interface AnotherLineTheRowsAllow {
                 .toList();
     }
 
-    private static BigDecimal weight(QuantityKey of, NumericTerm term) {
-        return of.direction().getOrDefault(term, BigDecimal.ZERO);
-    }
-
-    private static boolean whole(BigDecimal at) {
-        return at.stripTrailingZeros().scale() <= 0;
+    private static ExactRatio weight(QuantityKey of, NumericTerm term) {
+        return of.direction().getOrDefault(term, ExactRatio.ZERO);
     }
 
 }

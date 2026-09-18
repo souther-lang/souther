@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -13,8 +14,6 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.numeric.Towards;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -129,10 +128,11 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
 
     /** {@code y <= 3 * x}, which is the line the fixture's rows leave standing beside its own. */
     private static AnotherLineTheRowsAllow.OneDoes beside() {
-        Map<NumericTerm, BigDecimal> direction = new LinkedHashMap<>();
-        direction.put(X, BigDecimal.valueOf(-3));
-        direction.put(Y, BigDecimal.ONE);
-        return new AnotherLineTheRowsAllow.OneDoes(new QuantityKey(direction), BigDecimal.ZERO,
+        Map<NumericTerm, ExactRatio> direction = new LinkedHashMap<>();
+        direction.put(X, ExactRatio.of(-3));
+        direction.put(Y, ExactRatio.ONE);
+        return new AnotherLineTheRowsAllow.OneDoes(new QuantityKey(direction),
+                ExactRatio.ZERO,
                 Towards.BELOW, at(1, 3));
     }
 }

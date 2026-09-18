@@ -37,10 +37,10 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
             "x", Granularity.DISCRETE, "y", Granularity.DISCRETE, "z", Granularity.DISCRETE);
 
     private static LinearForm<String> form(Object... parts) {
-        Map<String, BigDecimal> coefs = new LinkedHashMap<>();
-        BigDecimal constant = BigDecimal.ZERO;
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        ExactRatio constant = ExactRatio.ZERO;
         for (int i = 0; i < parts.length; i += 2) {
-            BigDecimal weight = BigDecimal.valueOf(((Number) parts[i + 1]).longValue());
+            ExactRatio weight = ExactRatio.of(((Number) parts[i + 1]).longValue());
             if (parts[i] == null) {
                 constant = weight;
             } else {
@@ -155,10 +155,8 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
     }
 
     private static AffineConstraint<String> stated(LinearForm<String> f, Rel rel) {
-        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((position, weight) -> coefs.put(position, ExactRatio.of(weight)));
-        AffineConstraint.Read<String> read = AffineConstraint.of(coefs,
-                ExactRatio.of(f.constant()), rel, position -> Granularity.DISCRETE);
+        AffineConstraint.Read<String> read = AffineConstraint.of(f.coefs(),
+                f.constant(), rel, position -> Granularity.DISCRETE);
         return ((AffineConstraint.Read.Stated<String>) read).constraint();
     }
 }

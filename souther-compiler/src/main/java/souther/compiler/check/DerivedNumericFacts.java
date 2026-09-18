@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
@@ -871,7 +872,8 @@ final class DerivedNumericFacts {
         BigDecimal by = theOneValueOf(divisor);
         if (by != null) {
             facts.addAll(leftOver(
-                    quotient.numerator().minus(LinearForm.<FactSubject>atom(atom).times(by)),
+                    quotient.numerator().minus(LinearForm.<FactSubject>atom(atom)
+                            .times(ExactRatio.of(by))),
                     divisor, numerator));
         }
         return new Says.These(List.copyOf(facts));
@@ -931,8 +933,10 @@ final class DerivedNumericFacts {
         if (dividend.liesWithin(AT_OR_BELOW_NOUGHT)) {
             facts.add(new NumericConstraint(left, Rel.LE));
         }
-        BigDecimal magnitude = noFurtherFromNoughtThan(divisor);
-        if (magnitude != null) {
+        BigDecimal written = noFurtherFromNoughtThan(divisor);
+        if (written != null) {
+            ExactRatio magnitude =
+                    ExactRatio.of(written);
             facts.add(new NumericConstraint(left.minus(LinearForm.constant(magnitude)), Rel.LT));
             facts.add(new NumericConstraint(left.plus(LinearForm.constant(magnitude)), Rel.GT));
         }

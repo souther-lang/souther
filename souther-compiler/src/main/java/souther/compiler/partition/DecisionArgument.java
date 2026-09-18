@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import java.math.BigDecimal;
+import souther.compiler.numeric.ExactRatio;
 
 /**
  * What a dependency was asked about, as what tells two askings apart.
@@ -52,20 +52,20 @@ public sealed interface DecisionArgument {
      * {@code 42} ask one question, and a column apiece for them would be the spelling telling them
      * apart.
      */
-    record OfANumber(BigDecimal value) implements DecisionArgument {
+    record OfANumber(ExactRatio value) implements DecisionArgument {
 
         public OfANumber {
             if (value == null) {
                 throw new IllegalArgumentException("a number argument is some number");
             }
-            // The value as the arithmetic compares it, so that `42` and `42.0` are one argument
-            // for the reason they are one number.
-            value = value.stripTrailingZeros();
+            // The value as the arithmetic compares it, which an exact ratio already is: it is kept
+            // in lowest terms, so `42` and `42.0` are one argument for the reason they are one
+            // number.
         }
 
         @Override
         public String spelled() {
-            return value.toPlainString();
+            return value.spelled();
         }
 
         @Override

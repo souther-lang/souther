@@ -5,14 +5,13 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -331,7 +330,9 @@ final class Predicates {
 
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
-            new NumericConstraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of(),
+            new NumericConstraint(
+                    LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
+            null, List.of(),
             null);
 
     /**
@@ -1350,7 +1351,7 @@ final class Predicates {
             return null;
         }
         FactSubject atom = choosing.keySet().iterator().next();
-        BigDecimal coefficient = owed.form().coefs().get(atom);
+        ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
         for (Choice.Arm arm : choosing.get(atom).arms()) {
             LinearForm<FactSubject> answered = terms.affineOf(arm.answers(), at);

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
@@ -34,11 +35,12 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
 
     /** The form {@code c1 * t1 + c2 * t2 ...}, written as the pairs an author would read. */
     private static LinearForm<NumericTerm> form(Object... pairs) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
-            coefs.put(term((String) pairs[i]), new BigDecimal((String) pairs[i + 1]));
+            coefs.put(term((String) pairs[i]),
+                    ExactRatio.of(new BigDecimal((String) pairs[i + 1])));
         }
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     /**
@@ -82,8 +84,10 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
      */
     @Test
     void aQuantitySaysHowMuchOfItAFormWrote() {
-        assertEquals(new BigDecimal("2"), QuantityKey.per(form("n", "2")));
-        assertEquals(new BigDecimal("3"), QuantityKey.per(form("a", "3", "b", "6")));
-        assertEquals(new BigDecimal("1"), QuantityKey.per(form("a", "1", "b", "2")));
+        assertEquals(ExactRatio.of(2), QuantityKey.per(form("n", "2")));
+        assertEquals(ExactRatio.of(3),
+                QuantityKey.per(form("a", "3", "b", "6")));
+        assertEquals(ExactRatio.of(1),
+                QuantityKey.per(form("a", "1", "b", "2")));
     }
 }

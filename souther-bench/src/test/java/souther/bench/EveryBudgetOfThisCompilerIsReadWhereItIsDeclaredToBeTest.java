@@ -146,7 +146,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the steps a search may take, marked where there is no room for another"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#outward("
                             + "ILsouther/compiler/partition/CandidateDomain$Outward;"
-                            + "Ljava/math/BigDecimal;Ljava/math/BigDecimal;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
                             + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/LevelRealizer$Reached;",
                     "walks a progression as far as this walks one, and says that is why"),

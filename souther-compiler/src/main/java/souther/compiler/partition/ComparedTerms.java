@@ -174,8 +174,10 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
         }
         // The distance as the number it is. Held as a count of the carrier's steps, a threshold
         // that is not a whole number of them — which two decimals a rule holds half apart give —
-        // was an exception thrown out of the measure.
-        return new ComparedTerms(hereOn, thereOn, new Count(read.cut()));
+        // was an exception thrown out of the measure. A distance no decimal is belongs to no
+        // carrier's counts at all, and this shape declines it the way a line on one position does.
+        Count apart = Count.at(read.cut());
+        return apart == null ? null : new ComparedTerms(hereOn, thereOn, apart);
     }
 
 }

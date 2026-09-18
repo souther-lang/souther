@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -111,6 +109,6 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+        return LinearForm.constant(ExactRatio.of(n));
     }
 }

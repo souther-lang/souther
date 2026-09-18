@@ -9,6 +9,7 @@ import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
@@ -195,12 +196,12 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
      */
     @Test
     void aRunOpenAtItsLineIsReadInTheQuantitysOwnUnits() {
-        java.math.BigDecimal three = new java.math.BigDecimal("3");
+        ExactRatio three = ExactRatio.of(3);
         souther.compiler.check.Carrier dense = new souther.compiler.check.Carrier.Dense();
         LevelSpace decimals = LevelSpace.onACarrier(dense);
         Seam third = Seam.of(
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(three)),
-                new Level.ACount(new Count(java.math.BigDecimal.ONE)), Towards.BELOW,
+                Level.OfTheQuantity.of(1), Towards.BELOW,
                 new Seam.Scale(three, dense));
         Band below = QuantityArrangement.of(decimals, byItsOwnRule(third)).bands().get(0);
 

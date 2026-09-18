@@ -7,7 +7,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 
 import java.util.List;
@@ -60,7 +59,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     private static Realization realizedIn(souther.compiler.inputs.SearchRegion within) {
         Standing standing = new BorderQuantity.OverAForm("decide",
                 LinearForm.atom((NumericTerm) WIDE), Map.of(WIDE, WHOLE))
-                .standingAt(new Criterion.AtTheLevel(new Level.ACount(Count.of(4))));
+                .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
         return new LevelRealizer().realize(standing, within, NothingTheDeclarationsRefuse.at());
     }
 
@@ -140,7 +139,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
                 LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
                 Map.of(WIDE, WHOLE,
                         NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
-                .standingAt(new Criterion.AtTheLevel(new Level.ACount(Count.of(4))));
+                .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
 
         assertEquals(new Realization.Impossible(),
                 new LevelRealizer().realize(standing, EveryPositionStandsAndTheirSumDoesNot.REGION,
@@ -165,7 +164,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
         Standing standing = new BorderQuantity.OverAForm("decide",
                 LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
                 Map.of(WIDE, WHOLE, NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
-                .standingAt(new Criterion.AtTheLevel(new Level.ACount(Count.of(4))));
+                .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
 
         Realization made = new LevelRealizer().realize(standing,
                 APositionLeftNothingOnlyOnceAnotherIsFixed.of(WIDE, NOWHERE),

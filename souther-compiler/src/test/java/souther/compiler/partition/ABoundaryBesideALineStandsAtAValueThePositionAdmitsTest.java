@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -120,8 +121,9 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     private static Criterion.Within aStepApart() {
         // A distance and not a place: what a pair is held at is how far apart the two stand, which
         // is a count of the order they share.
-        Level apart = new Level.ACount(souther.compiler.numeric.Count.of(1));
-        Seam parted = Seam.of(LevelSpace.steppingBy(java.math.BigDecimal.ONE), apart,
+        Level apart = Level.OfTheQuantity.of(1);
+        Seam parted = Seam.of(
+                LevelSpace.steppingBy(ExactRatio.ONE), apart,
                 Towards.ABOVE);
         return new Criterion.Within(
                 new Band(Band.endAt(parted, null, Towards.ABOVE),

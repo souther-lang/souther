@@ -2,9 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Count;
-
-import java.math.BigDecimal;
+import souther.compiler.numeric.ExactRatio;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,13 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnOrderSaysWhereALineCanBeAtAllTest {
 
     private static Level at(long count) {
-        return new Level.ACount(new Count(BigDecimal.valueOf(count)));
+        return Level.OfTheQuantity.of(count);
     }
 
     /** An order that steps is parted anywhere, including where it takes nothing. */
     @Test
     void anOrderThatCountsIsPartedAtALevelItDoesNotTake() {
-        LevelSpace evens = LevelSpace.steppingBy(BigDecimal.TWO);
+        LevelSpace evens = LevelSpace.steppingBy(ExactRatio.of(2));
 
         assertTrue(evens.canCutAt(at(9)),
                 "the even numbers part between eight and ten, which is a line at nine");

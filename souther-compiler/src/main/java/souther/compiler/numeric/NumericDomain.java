@@ -33,10 +33,11 @@ import java.util.Set;
  * positions it names, so every range handed downstream was short of what the rules said.
  *
  * <p>Instances are immutable — each operation returns a fresh domain, threaded functionally like
- * {@code TotalityChecker}'s scope map. Constants are {@link BigDecimal} at the edges, because that is
- * what a carrier counts in and what a model writes; inside, the arithmetic is exact
- * ({@link ExactRatio}), since dividing is what deriving a bound does and neither of those is closed
- * under it.
+ * {@code TotalityChecker}'s scope map. The arithmetic is exact throughout ({@link ExactRatio}),
+ * which is what a form arrives holding: dividing is what deriving a bound does, and neither a
+ * carrier's counts nor a model's decimals are closed under it. A bound becomes a
+ * {@link BigDecimal} where it is handed to a reader that writes one ({@link #written}), and nowhere
+ * else.
  */
 public final class NumericDomain<A> {
 
@@ -106,10 +107,8 @@ public final class NumericDomain<A> {
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
-        Map<A, ExactRatio> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((atom, coef) -> coefs.put(atom, ExactRatio.of(coef)));
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                coefs, ExactRatio.of(f.constant()), rel, knowing.kinds::get);
+                f.coefs(), f.constant(), rel, knowing.kinds::get);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
@@ -145,11 +144,13 @@ public final class NumericDomain<A> {
         LinearForm<A> form = LinearForm.atom(atom);
         NumericDomain<A> out = this;
         if (bounds.min() != null) {
-            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.min().at()).at())),
+            out = out.assume(
+                    form.minus(LinearForm.constant(Count.number(bounds.min().at()).exactly())),
                     bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
         }
         if (bounds.max() != null) {
-            out = out.assume(form.minus(LinearForm.constant(Count.number(bounds.max().at()).at())),
+            out = out.assume(
+                    form.minus(LinearForm.constant(Count.number(bounds.max().at()).exactly())),
                     bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
         }
         return out;
@@ -415,7 +416,7 @@ public final class NumericDomain<A> {
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, ExactRatio.of(f.constant()), rel, kinds::get)) {
+        return switch (AffineConstraint.of(coefs, f.constant(), rel, kinds::get)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
@@ -459,14 +460,13 @@ public final class NumericDomain<A> {
         return !isBottom() && entails(f, rel.denied(), true);
     }
 
-    /** A written form's weights, as the exact arithmetic holds them, with the positions it does not
-     *  actually weigh left out. */
+    /** A form's weights with the positions it does not actually weigh left out. A form composed by
+     *  the arithmetic drops those as it goes; one built by naming its coefficients need not have. */
     private Map<A, ExactRatio> weighed(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>();
         f.coefs().forEach((atom, coef) -> {
-            ExactRatio weight = ExactRatio.of(coef);
-            if (!weight.isZero()) {
-                coefs.put(atom, weight);
+            if (!coef.isZero()) {
+                coefs.put(atom, coef);
             }
         });
         return coefs;
@@ -508,7 +508,7 @@ public final class NumericDomain<A> {
      */
     private Asked<A> goalOf(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = weighed(f);
-        ExactRatio constant = ExactRatio.of(f.constant());
+        ExactRatio constant = f.constant();
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
         // same thing are put into the same words by the same code. Doing the division here instead
         // would be a second account of what one rule is — which is the thing being removed.

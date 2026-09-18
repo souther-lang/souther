@@ -5,6 +5,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.OrderedInterval;
@@ -17,8 +18,6 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -169,7 +168,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
 
     private static ConstraintState<FactSubject> numbersAtBottom() {
         return ConstraintState.<FactSubject>top()
-                .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
+                .taking(LinearForm.constant(ExactRatio.ONE), Rel.LE, Map.of());
     }
 
     private static ConstraintState<FactSubject> factsAtBottom() {

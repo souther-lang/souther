@@ -12,7 +12,6 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Incompleteness;
@@ -119,7 +118,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
     }
 
     private static Criterion atTheLevel(long at) {
-        return new Criterion.AtTheLevel(new Level.ACount(Count.of(at)));
+        return new Criterion.AtTheLevel(Level.OfTheQuantity.of(at));
     }
 
     private static BorderQuantity.OverAForm form() {

@@ -129,6 +129,13 @@ public record LevelInterval(Bound low, Bound high) {
      * <p>Which is why what comes back has to be put to {@link #contains} before it stands for
      * anything. The envelope is inside the run and is not the run, and an end the run does hold is
      * carried as the end it is.
+     *
+     * <p><b>For a coordinate's own order and no other.</b> Narrowing inward loses a level no
+     * decimal is, and that is sound exactly where the levels are a carrier's values, which every
+     * decimal is one of. An order whose own values are a third apart has levels this envelope
+     * cannot name, and asking it this way answers that a run holding one holds nothing — so
+     * {@link LevelSpace.Lattice} reads its runs at the exact places they stop at
+     * ({@link CutPosition#exactly}) and comes here only to look for something to write down.
      */
     public souther.compiler.numeric.NumericDomain.Bounds toLookIn(int digits) {
         return new souther.compiler.numeric.NumericDomain.Bounds(
@@ -144,17 +151,10 @@ public record LevelInterval(Bound low, Bound high) {
         // by. Rounded to a number first, an end the run holds became one it stops short of.
         Level itself = bound.at().asALevelOfTheQuantity();
         if (itself != null) {
-            return new souther.compiler.numeric.Endpoint(placeOf(itself), bound.inclusive());
+            return new souther.compiler.numeric.Endpoint(itself.asAPlace(), bound.inclusive());
         }
         souther.compiler.numeric.Place inside = bound.at().justBeyond(into, digits);
         return inside == null ? null : souther.compiler.numeric.Endpoint.inclusive(inside);
-    }
-
-    private static souther.compiler.numeric.Place placeOf(Level level) {
-        return switch (level) {
-            case Level.ACount count -> count.at();
-            case Level.OnACarrier on -> on.at();
-        };
     }
 
     @Override

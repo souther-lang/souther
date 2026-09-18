@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
@@ -10,8 +11,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
-
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -60,8 +59,8 @@ class OneNumberOfADerivedQuantityIsNotOneNumberOfItsPositionsTest {
             new BorderQuantity.Apart("take", on("n"), on("m"));
 
     private static final BorderQuantity WHAT_A_FORM_COMES_TO = new BorderQuantity.OverAForm("take",
-            new LinearForm<>(BigDecimal.ZERO,
-                    Map.of(value("n"), BigDecimal.ONE, value("m"), BigDecimal.ONE)),
+            new LinearForm<>(ExactRatio.ZERO,
+                    Map.of(value("n"), ExactRatio.ONE, value("m"), ExactRatio.ONE)),
             Map.of(value("n"), on("n"), value("m"), on("m")));
 
     /** An item at one level of the quantity, which is one number of it. */

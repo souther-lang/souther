@@ -7,7 +7,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.ObservedValue;
 
@@ -38,10 +37,10 @@ class ARowIsWalkedOnceHoweverManyQuestionsAreAskedOfItTest {
             new NumericTerm.ValueOf(TermPath.of("choco"));
 
     private static final Criterion AT_A_HUNDRED =
-            new Criterion.AtTheLevel(new Level.ACount(Count.of(100)));
+            new Criterion.AtTheLevel(Level.OfTheQuantity.of(100));
 
     private static final Criterion AT_A_THOUSAND =
-            new Criterion.AtTheLevel(new Level.ACount(Count.of(1000)));
+            new Criterion.AtTheLevel(Level.OfTheQuantity.of(1000));
 
     @Test
     void readingARowWalksEachOfTheQuantitysPositionsOnce() {

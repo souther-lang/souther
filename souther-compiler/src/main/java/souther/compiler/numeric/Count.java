@@ -60,6 +60,30 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
+     * The count an exact number is, or null where no count is it.
+     *
+     * <p><b>The edge exact reasoning becomes a value on a carrier at.</b> Every carrier's order is
+     * counted in decimals and the algebra above it is not: a form weighed by a third puts a level a
+     * third along, and no count is a third. Null says that and never that this could not work it
+     * out — {@link ExactRatio#asWrittenDecimal} is exact, so a caller is told which of the two it
+     * has rather than handed a number that cannot be asked.
+     *
+     * <p>Whether the carrier holds the count it is a separate question and the carrier's own
+     * ({@link Granularity}): a third is no count anywhere, and a half is a count no whole-numbered
+     * order stands at.
+     */
+    public static Count at(ExactRatio number) {
+        BigDecimal written = number.asWrittenDecimal();
+        return written == null ? null : new Count(written);
+    }
+
+    /** This count as the exact number it is, which never loses anything: every finite decimal is a
+     *  ratio. */
+    public ExactRatio exactly() {
+        return ExactRatio.of(at);
+    }
+
+    /**
      * The count {@code steps} further along the order.
      *
      * <p>Whole steps only. What one step means is the carrier's — a day for a date, a second for a
@@ -79,9 +103,13 @@ public record Count(BigDecimal at) implements Place {
      *
      * <p>Both are counts, because the domain that proves what a position holds reasons over
      * differences: {@code a - b <= 0} bounds one position through another, and what it carries either
-     * side of the comparison is a coordinate. Scaling is there for the same reason — a rule may relate
-     * a position to a multiple of another — and the factor is a plain number rather than a count,
-     * since a coefficient is not a place on any order.
+     * side of the comparison is a coordinate. Scaling is there for the same reason — a run is
+     * stepped by so many of its steps — and the factor is a plain number rather than a count, since
+     * how many steps is no place on any order.
+     *
+     * <p>Not what weighs a count by a coefficient. What a form comes to is on no carrier's order at
+     * all and need not be a number any carrier counts to, so that arithmetic is
+     * {@link ExactRatio}'s, reached through {@link #exactly}.
      */
     public Count plus(Count other) {
         return new Count(at.add(other.at));

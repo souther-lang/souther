@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
@@ -135,10 +136,10 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
 
     /** The region with {@code y - 2x <= 0} taken in. */
     private static SearchRegion related() {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(term("y"), BigDecimal.ONE);
-        coefs.put(term("x"), BigDecimal.valueOf(-2));
-        return region().assuming(new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE).taken();
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(term("y"), ExactRatio.ONE);
+        coefs.put(term("x"), ExactRatio.of(-2));
+        return region().assuming(new LinearForm<>(ExactRatio.ZERO, coefs), Rel.LE).taken();
     }
 
     /** The form {@code one - other}. */

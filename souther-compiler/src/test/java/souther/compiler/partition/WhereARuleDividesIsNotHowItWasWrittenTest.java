@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -101,7 +102,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void twoDivisionsWithNoValueEitherSideOfThemAreStillTwo() {
-        LevelSpace thirds = LevelSpace.overFiniteDecimals(new java.math.BigDecimal("3"));
+        LevelSpace thirds =
+                LevelSpace.overFiniteDecimals(ExactRatio.of(3));
         Seam one = Seam.of(thirds, count("1"), Towards.BELOW);
         Seam two = Seam.of(thirds, count("2"), Towards.BELOW);
 
@@ -121,7 +123,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void aRuleWrittenInTwosPartsTheWholeNumbersWhereOneWrittenInOnesDoes() {
-        java.math.BigDecimal two = new java.math.BigDecimal("2");
+        ExactRatio two = ExactRatio.of(2);
         Seam plain = Seam.of(WHOLE, at("4"), Towards.BELOW);
         Seam scaled = Seam.of(LevelSpace.steppingBy(two), count("9"), Towards.BELOW,
                 new Seam.Scale(two, new Carrier.Whole()));
@@ -142,8 +144,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void twoRulesOverThirdsPartTheDecimalsInOnePlace() {
-        java.math.BigDecimal three = new java.math.BigDecimal("3");
-        java.math.BigDecimal six = new java.math.BigDecimal("6");
+        ExactRatio three = ExactRatio.of(3);
+        ExactRatio six = ExactRatio.of(6);
         LevelSpace thirds = LevelSpace.overFiniteDecimals(
                 LevelSpace.generatorOverFiniteDecimals(three));
         LevelSpace sixths = LevelSpace.overFiniteDecimals(
@@ -169,7 +171,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void whetherALineKeepsItsOwnValueIsAskedInTheQuantitysUnits() {
-        java.math.BigDecimal two = new java.math.BigDecimal("2");
+        ExactRatio two = ExactRatio.of(2);
         Seam.Scale scale = new Seam.Scale(two, new Carrier.Whole());
         LevelSpace evens = LevelSpace.steppingBy(two);
 
@@ -182,6 +184,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
     }
 
     private static Level count(String number) {
-        return new Level.ACount(new Count(new java.math.BigDecimal(number)));
+        return new Level.OfTheQuantity(
+                ExactRatio.of(new java.math.BigDecimal(number)));
     }
 }

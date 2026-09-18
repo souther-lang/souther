@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
@@ -785,7 +786,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // And read back into the units this rule wrote, which is what its own quantity measures
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
-            java.math.BigDecimal per = each.cuts().per();
+            ExactRatio per = each.cuts().per();
             List<Parting> beside =
                     byQuantity.getOrDefault(each.cuts().quantity().key(), List.of())
                             .stream().map(parting -> parting.scaledBy(per)).toList();
@@ -1027,10 +1028,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * answering a different question here as well.
      */
     private static Place placeOf(Level level) {
-        return switch (level) {
-            case Level.OnACarrier on -> on.at();
-            case Level.ACount count -> count.at();
-        };
+        return level.asAPlace();
     }
 
     /**
