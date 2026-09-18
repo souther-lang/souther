@@ -4,8 +4,8 @@ import souther.compiler.values.InOneOrder;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,10 +70,10 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
                     "a position with a zero coefficient is one the form does not name: "
                             + InOneOrder.of(unweighed));
         }
-        // Kept in the order it was written until every walk of it asks for one ({@link #entriesIn}).
-        // Copied into a map that keeps none, the walks that still take it as it comes would be
-        // taking an order the runtime made up afresh on every run.
-        coefs = Collections.unmodifiableMap(new LinkedHashMap<>(coefs));
+        // Held in no order at all, which is what this says it is. Every walk of these positions
+        // asks for one ({@link #entriesIn}) and nothing takes them as they come, which is a rule
+        // rather than a habit — AFormIsWalkedThroughTheOrderItsPositionsDecideTest.
+        coefs = Map.copyOf(coefs);
     }
 
     /**
@@ -88,7 +88,9 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      *         what a constant comparison settles is not a constraint about anybody
      */
     public static <A> Scaled<A> of(Map<A, Rational> coefs) {
-        Map<A, Rational> weighed = new LinkedHashMap<>();
+        // The mapping being built, in no order — what a form holds is in none, and one kept here
+        // would be one a reader could start taking again on the way in.
+        Map<A, Rational> weighed = new HashMap<>();
         coefs.forEach((atom, coef) -> {
             if (!coef.isZero()) {
                 weighed.put(atom, coef);
@@ -97,8 +99,10 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         if (weighed.isEmpty()) {
             return null;
         }
+        // What every weight shares, which is a question about the weights and not about which of
+        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
         Rational shared = AdditiveImage.divisorOf(weighed.values());
-        Map<A, Rational> primitive = new LinkedHashMap<>();
+        Map<A, Rational> primitive = new HashMap<>();
         weighed.forEach((atom, coef) -> primitive.put(atom, coef.dividedBy(shared)));
         return new Scaled<>(new CanonicalForm<>(primitive), shared);
     }
@@ -177,7 +181,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      * this safe to be as simple as it looks.
      */
     public <B> CanonicalForm<B> over(Renaming<A, B> naming) {
-        Map<B, Rational> out = new LinkedHashMap<>();
+        Map<B, Rational> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
         return new CanonicalForm<>(out);
     }
@@ -185,7 +189,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
-        Map<A, Rational> out = new LinkedHashMap<>();
+        Map<A, Rational> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
         return new CanonicalForm<>(out);
     }

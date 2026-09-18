@@ -57,7 +57,7 @@ class ABoundIsADifferenceFromNoughtTest {
         }
 
         DifferenceBounds<String> closed() {
-            return DifferenceBounds.over(stated);
+            return DifferenceBounds.over(stated, CanonicalOrder.<String>asTheyCompare());
         }
     }
 
@@ -174,8 +174,8 @@ class ABoundIsADifferenceFromNoughtTest {
         AffineConstraint<String> sum = stated(
                 AffineConstraint.of(weighing(A, 1, B, 1), num(-10), Rel.LE,
                         atom -> Granularity.DISCRETE));
-        assertFalse(DifferenceBounds.canHold(sum));
-        assertTrue(DifferenceBounds.over(List.of(sum)).positions().isEmpty(),
+        assertFalse(DifferenceBounds.canHold(sum, CanonicalOrder.<String>asTheyCompare()));
+        assertTrue(DifferenceBounds.over(List.of(sum), CanonicalOrder.<String>asTheyCompare()).positions().isEmpty(),
                 "so it leaves the positions to whatever holds the rest");
     }
 
@@ -184,7 +184,7 @@ class ABoundIsADifferenceFromNoughtTest {
         AffineConstraint<String> skew = stated(
                 AffineConstraint.of(weighing(A, 2, B, -3), num(-10), Rel.LE,
                         atom -> Granularity.DISCRETE));
-        assertFalse(DifferenceBounds.canHold(skew));
+        assertFalse(DifferenceBounds.canHold(skew, CanonicalOrder.<String>asTheyCompare()));
     }
 
     @Test
@@ -192,7 +192,7 @@ class ABoundIsADifferenceFromNoughtTest {
         AffineConstraint<String> hole = stated(
                 AffineConstraint.of(weighing(A, 1), Rational.ZERO, Rel.NE,
                         atom -> Granularity.DISCRETE));
-        assertFalse(DifferenceBounds.canHold(hole));
+        assertFalse(DifferenceBounds.canHold(hole, CanonicalOrder.<String>asTheyCompare()));
     }
 
     // --- and when the rules leave nothing ----------------------------------------------------------

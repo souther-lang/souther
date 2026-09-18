@@ -596,7 +596,7 @@ public final class NumericDomain<A> {
     /** The one reading of what the rules leave a form, over the state they have been worked out to. */
     private FormReach<A> reading() {
         ClosedState<A> state = closed();
-        return FormReach.over(rules(), state.box(), state.differences());
+        return FormReach.over(rules(), state.box(), state.differences(), order);
     }
 
 

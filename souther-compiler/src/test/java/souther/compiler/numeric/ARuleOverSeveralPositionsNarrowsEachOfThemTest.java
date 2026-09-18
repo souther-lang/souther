@@ -95,8 +95,10 @@ class ARuleOverSeveralPositionsNarrowsEachOfThemTest {
      * reached.
      */
     private static FormReach<String> reading(List<AffineConstraint<String>> rules, Box<String> from) {
-        DifferenceBounds<String> differences = DifferenceBounds.over(rules);
-        return differences.holdsNothing() ? null : FormReach.over(rules, from, differences);
+        DifferenceBounds<String> differences =
+                DifferenceBounds.over(rules, CanonicalOrder.<String>asTheyCompare());
+        return differences.holdsNothing() ? null
+                : FormReach.over(rules, from, differences, CanonicalOrder.<String>asTheyCompare());
     }
 
     // --- the issue's example -----------------------------------------------------------------------

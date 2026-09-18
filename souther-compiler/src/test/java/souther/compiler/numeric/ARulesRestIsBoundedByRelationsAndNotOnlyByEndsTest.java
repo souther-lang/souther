@@ -145,7 +145,8 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
         AffineConstraint<String> rule = stated(form("x", 10, "y", -1), Rel.GE);
         List<AffineConstraint<String>> alone = List.of(rule);
         FormReach<String> reading = FormReach.over(alone, Box.unbounded(),
-                DifferenceBounds.over(alone));
+                DifferenceBounds.over(alone, CanonicalOrder.<String>asTheyCompare()),
+                CanonicalOrder.<String>asTheyCompare());
         Map<String, Rational> itsOwnForm = Map.of("x", Rational.of(10), "y", Rational.of(-1));
 
         assertNotNull(reading.of(itsOwnForm, Rational.ZERO).least(),

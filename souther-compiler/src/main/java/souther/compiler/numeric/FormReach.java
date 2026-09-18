@@ -57,11 +57,15 @@ final class FormReach<A> {
     private final Box<A> ends;
     private final DifferenceBounds<A> differences;
 
+    /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
+    private final CanonicalOrder<A> order;
+
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
-                      DifferenceBounds<A> differences) {
+                      DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         this.rules = rules;
         this.ends = ends;
         this.differences = differences;
+        this.order = order;
     }
 
     /**
@@ -74,12 +78,12 @@ final class FormReach<A> {
      * before it ever builds a round.
      */
     static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
-                                 DifferenceBounds<A> differences) {
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         if (differences.holdsNothing()) {
             throw new IllegalStateException(
                     "nothing is left, so there is no reach to read; ask holdsNothing first");
         }
-        return new FormReach<>(rules, ends, differences);
+        return new FormReach<>(rules, ends, differences, order);
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -189,8 +193,11 @@ final class FormReach<A> {
     private Map<A, Rational> withoutThe(AffineConstraint.HalfSpace<A> premise,
                                         Map<A, Rational> coefs) {
         Map<A, Rational> left = new LinkedHashMap<>(coefs);
-        premise.form().coefs().forEach((position, weight) ->
-                left.merge(position, weight.negated(), Rational::plus));
+        // The premise walked in the one order its positions decide. What comes of the merge is the
+        // same whichever order it is taken in, and the walk is what would let the next change here
+        // start depending on one the premise does not hold.
+        premise.form().entriesIn(order).forEach(each ->
+                left.merge(each.getKey(), each.getValue().negated(), Rational::plus));
         left.values().removeIf(Rational::isZero);
         return left;
     }

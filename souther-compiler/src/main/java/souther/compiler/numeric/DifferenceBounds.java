@@ -77,10 +77,11 @@ public final class DifferenceBounds<A> {
      * both — exactly, here, and again as a plain sum there, which costs a little and says nothing
      * new. So there is one decision about the shape and it is made here.
      */
-    public static <A> DifferenceBounds<A> over(Iterable<AffineConstraint<A>> constraints) {
+    public static <A> DifferenceBounds<A> over(Iterable<AffineConstraint<A>> constraints,
+                                               CanonicalOrder<A> order) {
         Map<Node<A>, Map<Node<A>, RationalCut>> edges = new LinkedHashMap<>();
         for (AffineConstraint<A> each : constraints) {
-            for (Edge<A> edge : edgesOf(each)) {
+            for (Edge<A> edge : edgesOf(each, order)) {
                 edges.computeIfAbsent(edge.from(), k -> new LinkedHashMap<>())
                         .merge(edge.to(), edge.at(), RationalCut::tighterUpper);
             }
@@ -90,8 +91,8 @@ public final class DifferenceBounds<A> {
 
     /** Whether this can hold what {@code constraint} says, in full — which is what the shapes above
      *  amount to, asked directly so that they can be pinned down. */
-    static <A> boolean canHold(AffineConstraint<A> constraint) {
-        return !edgesOf(constraint).isEmpty();
+    static <A> boolean canHold(AffineConstraint<A> constraint, CanonicalOrder<A> order) {
+        return !edgesOf(constraint, order).isEmpty();
     }
 
     /**
@@ -108,10 +109,11 @@ public final class DifferenceBounds<A> {
      * a bound above and a bound below is not restated here. Either every one of them is an edge or
      * this holds none of it: half a rule held is a rule nobody holds.
      */
-    private static <A> List<Edge<A>> edgesOf(AffineConstraint<A> constraint) {
+    private static <A> List<Edge<A>> edgesOf(AffineConstraint<A> constraint,
+                                             CanonicalOrder<A> order) {
         List<Edge<A>> out = new ArrayList<>();
         for (AffineConstraint.HalfSpace<A> half : constraint.halfSpaces()) {
-            Edge<A> edge = edgeOf(half.form(), half.bound());
+            Edge<A> edge = edgeOf(half.form(), half.bound(), order);
             if (edge == null) {
                 return List.of();
             }
@@ -120,10 +122,19 @@ public final class DifferenceBounds<A> {
         return List.copyOf(out);
     }
 
-    private static <A> Edge<A> edgeOf(CanonicalForm<A> form, RationalCut bound) {
-        Map<A, Rational> coefs = form.coefs();
+    /**
+     * The edge one half-space is, or null where it is not of this shape.
+     *
+     * <p>Which two positions the difference is between is read off the weight at each and not off
+     * where either of them comes, so nothing here turns on the walk. It is taken in the one order
+     * the positions decide all the same: a walk of a form is where an order the form does not hold
+     * gets into an answer, and the way to keep it out is to have no walk that could.
+     */
+    private static <A> Edge<A> edgeOf(CanonicalForm<A> form, RationalCut bound,
+                                      CanonicalOrder<A> order) {
+        List<Map.Entry<A, Rational>> coefs = form.entriesIn(order);
         if (coefs.size() == 1) {
-            Map.Entry<A, Rational> only = coefs.entrySet().iterator().next();
+            Map.Entry<A, Rational> only = coefs.getFirst();
             Node<A> position = new Node.OfAPosition<>(only.getKey());
             Node<A> nought = new Node.Nought<A>();
             return only.getValue().signum() > 0
@@ -135,7 +146,7 @@ public final class DifferenceBounds<A> {
         }
         A up = null;
         A down = null;
-        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
+        for (Map.Entry<A, Rational> each : coefs) {
             if (each.getValue().equals(Rational.ONE)) {
                 up = each.getKey();
             } else if (each.getValue().equals(Rational.ONE.negated())) {
