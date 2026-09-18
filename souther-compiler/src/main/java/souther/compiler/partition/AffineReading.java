@@ -143,8 +143,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      */
     static java.util.List<Map.Entry<NumericTerm, BigDecimal>> ordered(
             LinearForm<NumericTerm> form) {
-        return form.coefs().entrySet().stream()
-                .sorted(java.util.Comparator.comparing(each -> each.getKey().toString())).toList();
+        return souther.compiler.inputs.NumericTerms.entriesInOrder(form.coefs());
     }
 
     /**
@@ -164,8 +163,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      */
     static java.util.List<souther.compiler.inputs.FilingCoordinate> filedAt(
             java.util.Collection<NumericTerm> terms) {
-        return terms.stream()
-                .sorted(java.util.Comparator.comparing(NumericTerm::toString))
+        return souther.compiler.inputs.NumericTerms.inOrder(terms).stream()
                 .<souther.compiler.inputs.FilingCoordinate>map(
                         souther.compiler.inputs.FilingCoordinate::of)
                 .distinct().toList();

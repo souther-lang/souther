@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
@@ -462,9 +463,10 @@ public sealed interface BorderQuantity {
     record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
             implements BorderQuantity {
 
+        /** Walked by what each term is called, which is what a form's own equality cannot see. */
         @Override
         public List<NumericTerm> terms() {
-            return List.copyOf(form.coefs().keySet());
+            return NumericTerms.inOrder(form.coefs().keySet());
         }
 
         @Override
