@@ -87,7 +87,7 @@ final class Clauses {
     /** Every rule that applies to {@code named}, as the declarations that wrote them publish them,
      * with whether every one of them was reached. */
     PublishedRules of(TypeSymbol.AtModule named) {
-        return PublishedRules.governing(named, symbols, published, effective);
+        return PublishedRules.governing(named, published, effective);
     }
 
     /**

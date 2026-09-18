@@ -6,6 +6,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.regex.PatternPlan;
@@ -932,6 +933,51 @@ public final class Front {
             }
             return Answer.of(List.copyOf(declared));
         }
+    }
+
+    /**
+     * Whether a module of this compilation writes a declaration of {@code named}.
+     *
+     * <p>Read off what the source was parsed as, which is the rung the question is settled at.
+     * Whether there is such a declaration and whether this compiler could make anything of the
+     * module holding it are two questions, and every answer above the parse is the second one: a
+     * namespace this compilation may not write, an {@code exposing} line that could not be read,
+     * imports that form a ring, a module that does not settle. Each of those is an answer going
+     * absent, and read for the first question each of them would say the declarations that module
+     * writes are declarations nobody wrote — which is the widening the three answers exist to keep
+     * apart, arriving through whichever judgement failed.
+     *
+     * <p>The parse is where it stops. A source that did not parse has no declarations this can
+     * enumerate, and there this does answer that there is none — not a judgement about a module,
+     * but the absence of anything to read it out of.
+     *
+     * <p>A module off the path is answered for out of what was read back from it, that being what a
+     * compilation has of one instead of a source.
+     *
+     * <p>Only what a module of this compilation writes. What the language declares belongs to no
+     * module here and is asked for where a reader has the library, which is before either boundary
+     * has a question about a name being written at all.
+     */
+    public static boolean somethingDeclares(Db db, TypeKey named) {
+        Layout.Of layout = db.ask(new Layout()).value();
+        SourceId id = layout == null ? null : layout.idOfModule().get(named.module());
+        if (id != null) {
+            Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
+            return parsed.present() && writesADeclarationOf(parsed.value().module(), named);
+        }
+        FromPath.OnThePath fromPath = onThePath(db, named.module());
+        return fromPath != null && writesADeclarationOf(fromPath.module(), named);
+    }
+
+    /** Whether {@code module} writes a declaration of {@code named}, by the identity a declaration
+     *  gives for itself — the same one {@link DeclaredTypes} answers with. */
+    private static boolean writesADeclarationOf(Ast.Module module, TypeKey named) {
+        for (Ast.Def def : module.defs()) {
+            if (TypeSymbols.declared(def.declaredKey()).key().equals(named)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

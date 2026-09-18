@@ -158,7 +158,8 @@ sealed interface CaseSpace {
         if (subject instanceof Type.Ref ref
                 && ref.name() instanceof TypeSymbol.AtModule at
                 && kinds.isSum(at.key())
-                && published.of(at.key()) instanceof DeclarationMeaning.Sum sum) {
+                && published.of(at.key())
+                    instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
             return new Cases(subject, "data `" + sum.declares().name() + "`",
                     direct(AtomSpace.declaredCases(sum), published));
         }

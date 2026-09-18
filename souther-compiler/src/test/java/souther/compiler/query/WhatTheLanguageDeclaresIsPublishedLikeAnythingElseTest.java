@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclarationMeaning;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.types.TypeKey;
 
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -42,12 +44,14 @@ class WhatTheLanguageDeclaresIsPublishedLikeAnythingElseTest {
         assertFalse(language.isEmpty(), "the library declares something, or this asks nothing");
 
         for (TypeKey declared : language.keySet()) {
-            Answer<DeclarationMeaning> said = c.db().ask(new Shapes.MeaningOf(declared));
-            assertTrue(said.present(),
-                    "`" + declared + "` is declared by the language and nothing is published"
-                            + " about it");
-            assertTrue(said.value().declares().equals(declared),
-                    "`" + declared + "` was published as `" + said.value().declares() + "`");
+            Answer<PublishedDeclarationResult> said = c.db().ask(new Shapes.MeaningOf(declared));
+            DeclarationMeaning meaning =
+                    assertInstanceOf(PublishedDeclarationResult.Found.class, said.value(),
+                            "`" + declared + "` is declared by the language and what is published"
+                                    + " about it says there is no such declaration, or that it"
+                                    + " could not be read").said();
+            assertTrue(meaning.declares().equals(declared),
+                    "`" + declared + "` was published as `" + meaning.declares() + "`");
         }
     }
 

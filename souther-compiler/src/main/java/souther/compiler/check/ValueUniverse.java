@@ -54,7 +54,8 @@ final class ValueUniverse {
         // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
         // this is one reading of that and not two.
         if (!(base instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(published.of(named.key()) instanceof DeclarationMeaning.Sum _)
+                || !(published.of(named.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))
                 || !TypeOps.isUnitOnlySum(base, kinds, published)) {
             return null;
         }

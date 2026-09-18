@@ -1663,7 +1663,8 @@ public final class TypeOps {
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
                 || (enumeration instanceof TypeSymbol.AtModule at
-                    && published.of(at.key()) instanceof DeclarationMeaning.Sum _
+                    && published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _)
                     && AtomSpace.subjectAtoms(Type.ref(at), published).contains(ref.name())));
     }
 
