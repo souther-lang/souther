@@ -551,8 +551,8 @@ public sealed interface BorderQuantity {
          * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            return LevelSpace.addedUpOver(on.values().stream()
-                    .map(TermOrders::answered).toList());
+            return LevelSpace.addedUpOver(NumericTerms.inOrder(on.keySet()).stream()
+                    .map(term -> on.get(term).answered()).toList());
         }
 
         /** The order that position is read and written on, and null for a position not in the

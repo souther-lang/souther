@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.partition.QuantityKey;
 
@@ -65,7 +66,8 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
         }
         if (!wrote.direction().keySet().containsAll(weighed)) {
             throw new IllegalArgumentException("a position weighed by a line this is not over: "
-                    + weighed + " against " + wrote.direction().keySet());
+                    + NumericTerms.inOrder(weighed) + " against "
+                    + NumericTerms.inOrder(wrote.direction().keySet()));
         }
         weighed = Set.copyOf(weighed);
     }
