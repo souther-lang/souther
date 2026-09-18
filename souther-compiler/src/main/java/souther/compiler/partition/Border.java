@@ -55,25 +55,31 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     public Border {
         if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
-                    + " line has: " + answers + ", where its rule has " + pointsOf(origin));
+                    + " line has: "
+                    + (answers == null ? null : DomainPoint.inOneOrder(answers.keySet()))
+                    + ", where its rule has " + pointsOf(origin));
         }
         // And an answer at every one of them. A key with nothing under it is the same silence the
         // point set was made total to stop, wearing the shape that was supposed to have refused it.
         if (answers.containsValue(null)) {
             throw new IllegalArgumentException(
-                    "a border with a point it names and does not answer: " + answers);
+                    "a border with a point it names and does not answer: "
+                            + DomainPoint.inOneOrder(answers.keySet()));
         }
         // And an answer of the kind the place is. Whether a point names a value or a run of them is
         // the place's own answer, and a border that came back with a region where a value belongs
         // would have every reader of it deciding what it was holding from the shape it happened to
         // have.
-        for (Map.Entry<DomainPoint, PointAnswer> each : answers.entrySet()) {
-            boolean atTheLine = each.getValue() instanceof PointAnswer.AtLine;
-            boolean inARegion = each.getValue() instanceof PointAnswer.InRegion;
-            if ((atTheLine && !each.getKey().againstTheLine())
-                    || (inARegion && each.getKey().againstTheLine())) {
-                throw new IllegalArgumentException("the " + each.getKey() + " of a border,"
-                        + " answered as " + each.getValue());
+        // Walked by the places, because which of them a refusal names is the answer here and a
+        // mapping keyed by a place says nothing about the order it was filled in.
+        for (DomainPoint point : DomainPoint.inOneOrder(answers.keySet())) {
+            PointAnswer answer = answers.get(point);
+            boolean atTheLine = answer instanceof PointAnswer.AtLine;
+            boolean inARegion = answer instanceof PointAnswer.InRegion;
+            if ((atTheLine && !point.againstTheLine())
+                    || (inARegion && point.againstTheLine())) {
+                throw new IllegalArgumentException("the " + point + " of a border,"
+                        + " answered as " + answer);
             }
         }
         // Walked the one way, whatever order the branch that built them filled them in. Everything
