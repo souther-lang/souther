@@ -2279,24 +2279,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // the product of its positions is a neighbouring technique it is not held to. Asked of the
         // evidence rather than worked out here, so that what is printed and what a build refuses
         // over are the same choice.
-        if (behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
-                var meetings)) {
-            interaction(out, meetings);
-        } else if (partitioned.counted()) {
-            String combinations = combinations(partition.pairs());
-            if (!combinations.isEmpty()) {
-                out.append(String.format("    combination %s%n", combinations));
-                // And which of them no row is in, one to a line, as every gap is named. Summed,
-                // the count says how much of the space the rows cover and nothing about where the
-                // rest of it is — and where it is is the whole of what a reader acts on.
-                for (ReportedFinding f : behavior.reported()) {
-                    if (f.finding().about()
-                            instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                        out.append(String.format("      %s no row is in %s%n",
-                                mark(f.finding()), twoClasses(combination)));
+        //
+        // A switch over the three the criterion has, so a behavior nothing read a body of is not
+        // the same as one whose body was read and brings no decisions together. Written as a test
+        // for the first and an else for the rest, a reading nobody made printed the space of the
+        // positions — telling a reader that this behavior is held to the neighbouring technique,
+        // which is a statement about the model that nothing measured.
+        switch (behavior.evidence().combinations()) {
+        case CombinationCriterion.Interactions(var meetings) -> interaction(out, meetings);
+        case null -> { }
+        case CombinationCriterion.PairFallback _ -> {
+            if (partitioned.counted()) {
+                String combinations = combinations(partition.pairs());
+                if (!combinations.isEmpty()) {
+                    out.append(String.format("    combination %s%n", combinations));
+                    // And which of them no row is in, one to a line, as every gap is named.
+                    // Summed, the count says how much of the space the rows cover and nothing
+                    // about where the rest of it is — and where it is is what a reader acts on.
+                    for (ReportedFinding f : behavior.reported()) {
+                        if (f.finding().about() instanceof
+                                About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
+                            out.append(String.format("      %s no row is in %s%n",
+                                    mark(f.finding()), twoClasses(combination)));
+                        }
                     }
                 }
             }
+        }
         }
         // Counted over the obligations and named as such. A border owes a row at up to four points,
         // so a count of borders would say a border with one point met and three missed was as

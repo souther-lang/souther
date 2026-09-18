@@ -3700,13 +3700,6 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ ],
         "obligations" : [ ],
-        "pairs" : {
-          "total" : 0,
-          "between" : [ ],
-          "status" : "complete",
-          "covered" : 0,
-          "unknown" : 0
-        },
         "notDerivable" : [ "party" ],
         "notRead" : [ ]
       },

@@ -1061,10 +1061,6 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            // A module whose bodies were not elaborated is read all the same, with no body and no
-            // arms to number. What comes back says the behavior's decisions meet nowhere, which is
-            // what a reading of a body nobody has is: the measure is the one the fallback answers,
-            // and a generation asked about it goes on offering whatever else it can.
             CoverageSites.Plan plan =
                     checked.present() ? checked.value().plan() : CoverageSites.Plan.NONE;
             Map<String, souther.compiler.core.Core> bodies =
@@ -1088,6 +1084,15 @@ public final class Adequacy {
             }
             return Answer.of(Ordered.map(out));
         }
+    }
+
+    /** Whether the model gives this behavior a body of its own, read off the declarations. */
+    private static boolean givenABody(
+            Map<String, souther.compiler.check.BehaviorImplementation> implementations,
+            String behavior) {
+        souther.compiler.check.BehaviorImplementation state =
+                implementations == null ? null : implementations.get(behavior);
+        return state != null && state.hasBody();
     }
 
     /**
@@ -1125,10 +1130,29 @@ public final class Adequacy {
                     : Optional.empty();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             int cells = db.ask(new Front.Adequacy()).value().measures().cellsPerGroup();
+            // Where each behavior gets its body, which is the model's answer and the one reader of
+            // the declarations. Whether this elaboration holds that body is the other question,
+            // asked of the elaboration below.
+            Map<String, souther.compiler.check.BehaviorImplementation> implementations =
+                    db.ask(new Bodies.Implementation(name)).value();
             Map<String, InteractionEvidence> out = new LinkedHashMap<>();
             met.value().forEach((behavior, read) -> {
                 souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
                 if (subject == null) {
+                    return;
+                }
+                // A body the model gives this behavior and this elaboration has not got is a
+                // reading nobody made, and no entry is what that is: what chooses a criterion reads
+                // an absence here as one ({@code CombinationCriterion.of}). An entry made from it
+                // says the decisions were read and meet nowhere, which is a statement about the
+                // model — and the one a behavior held to the neighbouring technique is held to.
+                //
+                // Here and not where the meetings are read. That answer is what several readers ask
+                // what a body's meetings are, and a behavior missing from it goes missing from all
+                // of them; what has to be absent is the evidence a criterion is chosen from.
+                if (givenABody(implementations, behavior)
+                        && (!checked.present()
+                                || !checked.value().behaviorBodies().containsKey(behavior))) {
                     return;
                 }
                 souther.compiler.partition.InteractionRequirements asked =
