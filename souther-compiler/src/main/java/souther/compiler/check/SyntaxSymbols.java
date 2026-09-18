@@ -9,7 +9,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -59,11 +58,8 @@ public final class SyntaxSymbols implements NameSense {
             throw CompileException.of(
                     DeclarationRefusals.reportedAsWritten(declared.refusals().get(0)));
         }
-        Map<String, Denotation> names = new HashMap<>();
-        for (Ast.Def def : declared.declarations().values()) {
-            names.put(def.name(),
-                    new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
-        }
+        Map<String, Denotation> names = declared.byName(
+                def -> new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
         return new SyntaxSymbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),

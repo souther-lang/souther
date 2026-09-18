@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.Map;
 
 /**
@@ -124,15 +125,24 @@ public final class StdlibLoader {
     private static Map<String, Ast.Def> everythingTheLibraryDeclares(List<Parsed> sources) {
         Map<String, Ast.Def> declared = new LinkedHashMap<>();
         Map<String, String> declaredBy = new HashMap<>();
+        // Every name written twice, and not the first one reached. Which of several the walk came
+        // to first is the walk's, and a module's declarations are keyed by name rather than
+        // ordered by one — so stopping at the first said which resource to look at off something
+        // no equality of that answer can see. Kept under the name, which is what they collide on.
+        Map<String, List<String>> inMoreThanOne = new TreeMap<>();
         for (Parsed source : sources) {
-            for (Ast.Def def : source.indexed().declarations().values()) {
-                String already = declaredBy.put(def.name(), source.resource());
+            source.indexed().declarations().forEach((name, def) -> {
+                String already = declaredBy.put(name, source.resource());
                 if (already != null) {
-                    throw new IllegalStateException("the standard library declares `" + def.name()
-                            + "` in both " + already + " and " + source.resource());
+                    inMoreThanOne.computeIfAbsent(name,
+                            k -> new ArrayList<>(List.of(already))).add(source.resource());
                 }
-                declared.put(def.name(), def);
-            }
+                declared.put(name, def);
+            });
+        }
+        if (!inMoreThanOne.isEmpty()) {
+            throw new IllegalStateException("the standard library declares a name in more than one"
+                    + " resource: " + inMoreThanOne);
         }
         return declared;
     }
