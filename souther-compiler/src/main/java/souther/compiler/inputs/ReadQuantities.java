@@ -452,9 +452,13 @@ final class ReadQuantities implements Quantities {
      * The same rules, with {@code term} held away from {@code at}.
      *
      * <p>Kept beside the bounds rather than folded into them, because a range says where a run
-     * stops and this says what the run does not hold. What reads it back is the proof that nothing
-     * is left ({@link #emptiness}): a value standing here is one the rules refuse, and that is the
-     * whole of what a hole changes about what this answers.
+     * stops and this says what the run does not hold.
+     *
+     * <p>Two things read it back and they are not one answer. The proof that nothing is left
+     * ({@link #emptiness}) refuses a value already standing here; {@link #apartAt} is what a search
+     * narrows by, so that it never offers one. Left to the first alone, a position whose order has
+     * no step is offered the one place a run gives up and has nothing to offer once that place is
+     * the hole.
      */
     ReadQuantities apartFrom(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at) {
         if (term == null || at == null) {
@@ -464,8 +468,14 @@ final class ReadQuantities implements Quantities {
         return alsoAssuming(new Assumed.ApartFrom(term, at));
     }
 
-    /** Which places the rules hold {@code term} away from. */
-    private souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
+    /**
+     * Which places the rules hold {@code term} away from.
+     *
+     * <p>Read back by the proof that nothing is left and by whatever is choosing a value, which are
+     * the two things a hole is for: one refuses a row already standing at the place, and the other
+     * never offers it.
+     */
+    souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
         List<souther.compiler.numeric.Place> out = new ArrayList<>();
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.ApartFrom each && each.term().equals(term)) {

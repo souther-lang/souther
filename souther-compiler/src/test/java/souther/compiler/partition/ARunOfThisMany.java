@@ -6,6 +6,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.NumericDomain;
 
@@ -44,6 +45,11 @@ record ARunOfThisMany(int many) implements SearchRegion {
     public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
                                   souther.compiler.numeric.Place at) {
         return this;
+    }
+
+    @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return PlacesApart.NONE;
     }
 
 

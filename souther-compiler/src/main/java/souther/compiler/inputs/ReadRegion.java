@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.util.Map;
@@ -44,6 +45,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
                                   souther.compiler.numeric.Place at) {
         ReadQuantities taken = within.apartFrom(term, at);
         return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return within.apartAt(term);
     }
 
     @Override

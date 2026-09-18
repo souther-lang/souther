@@ -643,7 +643,13 @@ public final class Generator {
                 for (CompositionBudget each : budgets) {
                     Reason here = switch (each) {
                         case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
-                             PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
+                             PLACES_A_PAIR_IS_TRIED_AT,
+                             // Beside the figure it was split off, because the word is the walk's
+                             // answer and the figures are what stopped it. Given a word of its own,
+                             // one walk would say two things depending on which of its own numbers
+                             // ran out first — and an answer carrying the word and the budget could
+                             // not be assembled at all ({@link CompositionBudget#splitFrom}).
+                             PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
@@ -662,6 +668,10 @@ public final class Generator {
                         // ({@link DecisionReading.Enumeration}).
                         case TIMES_THE_RULES_ARE_ASKED_AGAIN,
                              VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
+                             // Beside it for the same reason: what either of them stopped is the
+                             // getting past a condition on the way, and the row is composed either
+                             // way.
+                             PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                              VALUES_A_POINT_IS_TRIED_WITH,
                              DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
                              PATHS_OF_A_DECISION_READ -> throw new IllegalArgumentException(
@@ -3541,6 +3551,10 @@ public final class Generator {
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             here = here.given(each.getKey().term(), each.getValue());
         }
+        // Once for the input rather than once for each condition on the way. What its positions
+        // admit is the same answer at every one of them, and working it out where it is spent walks
+        // every position of the input once per condition.
+        WitnessSearch looking = subject.witnessSearch();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             // What the cut says, asked as the one thing it says. A cut over two positions is a
             // statement about their sum, and the rules can leave that sum nowhere while leaving each
@@ -3605,7 +3619,7 @@ public final class Generator {
             // pair as often as not.
             NumericWitness.Standing found = shared || !placeable ? null
                     : NumericWitness.of(here, owing,
-                            term -> subject.quantities().ordersOf(term).answered());
+                            term -> subject.quantities().ordersOf(term).answered(), looking);
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest.
             //
