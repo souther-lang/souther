@@ -241,6 +241,74 @@ Therefore the rule is not that Int and Decimal promote to a common type. It is:
 
 Exact division is one visible way to enter that arithmetic.
 
+### A heterogeneous operator admits two operands; it determines neither
+
+ADR-0066 types a helper's parameter from its body, and says that what an operator asks of an
+operand is answered where that operator's rule is stated. This is that rule for these operators.
+
+The heterogeneous signatures above admit a pair whose types are already settled. They determine
+nothing about an operand whose type is still open.
+
+Left to the implementation, the resolution of an overloaded operator would decide a typing policy
+by accident: with both `Int * Int -> Int` and `Rational * Int -> Rational` available, the
+parameter of `let double (x) = x * 2` has two candidates that differ only in which arm the
+implementation reached first.
+
+So an open operand is determined by the homogeneous signature alone:
+
+```souther
+let double (x) = x * 2         // Int * Int    determines x : Int
+let scale (x) = 1 / 2 * x      // Rational * Rational determines x : Rational
+```
+
+The second is not a Rational because the operator preferred one. Its left operand has type
+Rational already, and the homogeneous rule reads the other side as the same type. A helper that
+wants the heterogeneous operation writes the type it wants:
+
+```souther
+let scale (x: Int) = 1 / 2 * x     // Rational * Int -> Rational
+```
+
+This keeps the claim that heterogeneous arithmetic is not conversion. A conversion relation would
+have let the open parameter be anything embeddable; an operator admitting a pair says nothing
+about a type nothing has settled.
+
+### What Rational answers when a position asks
+
+A type is asked what it answers, and `TypeOps.Requires` is where the two yes/no questions are
+asked: `EQUALITY`, which `==` requires and which a `Set` requires of its element and a `Map` of
+its key; and `EXTERNAL_FORM`, which a data's field, a newtype's base, and a behavior's input and
+output require. Ordering is not one of those — it is a witness, and `Ordering` holds it.
+
+Rational answers:
+
+```text
+EQUALITY       yes
+ordering       yes, by exact mathematical value
+EXTERNAL_FORM  no
+```
+
+`EXTERNAL_FORM no` is what the previous section states, made a property of the type instead of a
+list of places. Every primitive Souther has today answers yes to both, and `TypeOps.answers`
+writes one arm for `Type.Prim`, so adding `RATIONAL` to `Type.Prim` and nothing else would give
+Rational an external form. The arm splits.
+
+What follows is not a list: a data's field, a newtype's base, and a behavior's input and output
+refuse Rational, and refuse a `List<Rational>` or a `Map<String, Rational>` at those positions
+too, because those arms already ask the question of what they hold.
+
+What equality and ordering buy is that Rational is an ordinary value in computation:
+
+```text
+List<Rational>   Set<Rational>   Map<Rational, V>   Option<Rational>   (Int, Rational)
+```
+
+are usable inside a computation, and `List.sort`, `min` and `max` work over Rational.
+
+The heterogeneous rule does not reach the library. `Set.contains(v, s)` takes its element at the
+one type the signature names, and an `Int` is not a member of a `Set<Rational>`. Exact
+heterogeneous comparison is a rule about those operators, not about every position that compares.
+
 ### Equality and ordering follow the same rule
 
 Rational comparison with Int or Decimal is by exact mathematical value.
@@ -322,27 +390,45 @@ line      : Rational
 Refactoring an arithmetic expression into named intermediate values must not change which numeric
 operations it denotes.
 
-### Information loss is named
+### Changing a value is what needs a policy; failing to represent one is a case
 
-Moving an exact Rational result into a narrower numeric representation requires an operation that
-states the loss policy.
+The rule is about the mathematical value and not about the width of the representation.
 
-The standard library provides explicit exact widening:
+A narrowing that changes the value states how. A narrowing that does not change it has no policy
+to state, and `4 / 2` into `Int`, or `1 / 2` into `Decimal`, changes nothing:
+
+```text
+4 / 2 = exactly 2
+1 / 2 = exactly 0.5m
+```
+
+Requiring a rounding mode there would name a decision nobody made.
+
+So two kinds of narrowing are available to the library, and this decision admits both:
+
+```text
+exact, answering a case where the carrier has no such value
+    Rational -> Int     | <the quotient is not whole>
+    Rational -> Decimal | <the quotient has no finite decimal>
+
+lossy, answering a value and stating what it discarded
+    Rational -> Int      with a rounding mode
+    Rational -> Decimal  with a scale and a rounding mode
+```
+
+Widening is exact and states nothing:
 
 ```text
 Rational.fromInt(Int)         -> Rational
 Rational.fromDecimal(Decimal) -> Rational
 ```
 
-and policy-bearing narrowing, including operations equivalent to:
+The standard-library surface is specified with the library. What this decision fixes is that no
+operation changes a value silently, and that an exact conversion is not made to name a rounding
+policy it does not use.
 
-```text
-Rational.toInt(RoundingMode, Rational) -> Int
-Rational.toDecimal(Int, RoundingMode, Rational) -> Decimal
-```
-
-The precise standard-library surface is specified with the library, but no narrowing operation
-silently chooses a rounding policy.
+A result outside the range its carrier holds aborts where the corresponding arithmetic aborts;
+that is a model error rather than a rounding decision.
 
 `Decimal.divide(dividend, divisor, scale, mode)` remains the operation for a model that wants a
 Decimal quotient and chooses its scale and rounding rule at that point.
@@ -389,7 +475,12 @@ sufficient.
 A numeric newtype inherits an arithmetic operation only when:
 
 1. the operation preserves the newtype's dimension; and
-2. the corresponding base operation is closed over the wrapped type.
+2. the corresponding base operation is **type-closed** over the wrapped type — its static result
+   type is that type.
+
+Type-closed, not total. `Int + Int -> Int` is type-closed and still aborts on overflow, and a
+newtype's own invariant may refuse the value it re-wraps. Neither of those is what this condition
+is about: it asks whether there is an `Int` to wrap at all.
 
 For:
 
@@ -467,28 +558,78 @@ to its scale solely because it entered exact arithmetic.
 The canonical representation used to satisfy that rule belongs to the implementation, not to this
 ADR.
 
-### Source-level Rational and compiler analysis ratios are different concepts
+### The name `Rational` belongs to the language
 
-The compiler already has `souther.compiler.numeric.Rational`. Its current contract explicitly
-describes an exact value used by constraint algebra and says that it is not a number a model
-writes.
+The compiler already has `souther.compiler.numeric.Rational`, whose contract says it is not a
+number a model writes. That concept keeps its meaning and gives up the name; ADR-0117 decides
+what it is called instead and why the two are not one implementation.
 
-That concept remains useful and must not silently acquire the opposite meaning when `Rational`
-becomes a source type.
+## What was weighed and rejected
 
-The implementation therefore gives the compiler-internal concept a distinct name, such as:
+### Keep `/` and add exact division under another name
 
-```text
-ExactRatio
+`//`, or `Rational.divide`, would leave every existing model compiling.
+
+It also leaves the defect. The problem is not that exact division is unavailable — it is that the
+unmarked operator discards information without saying so. Adding a second operator makes the
+exact one the marked case and leaves the truncating one as what an author writes by default.
+Souther pushes a loss policy onto a named operation, so it is lossy division that takes a name,
+and `/` is the operation that states none because it discards nothing.
+
+### Diagnose the suspicious case and keep the rest
+
+Refusing `1 / 2` while admitting `x / 2` leaves the same loss wherever the dividend is not a
+literal, and makes the type of an expression depend on how it was written. A warning is not a
+numeric semantics.
+
+### Refuse `/` entirely and keep only named division
+
+This removes accidental truncation and also removes the ordinary exact expression that motivated
+the change. The language can represent the quotient; refusing to write it down is a worse answer
+than typing it.
+
+### A numeric tower with implicit promotion
+
+`Int` and `Decimal` would promote to `Rational` on meeting, and `1 + 1m` would compile because
+both are rationals. That erases the explicit `Int`/`Decimal` boundary `[#stdlib-decimal]` states,
+and makes Rational a numeric supertype. Heterogeneous operators give the arithmetic without the
+conversion relation.
+
+### Contextual numeric literals
+
+Letting the expected type decide what `1` means would replace ADR-0033's literal rule as a side
+effect of fixing division, and would make an expression's meaning depend on where it sits. It
+raises defaulting and generalisation questions exact division does not.
+
+### Require `fromInt` / `fromDecimal` at every mixed operand
+
+Explicit, consistent, and it makes the motivating guard read as conversion plumbing:
+
+```souther
+guard Rational.fromInt(y) < (-1 / 2) * Rational.fromInt(x) + Rational.fromInt(30)
 ```
 
-and reserves `Rational` for the Souther language type.
+The conversion carries no information at an operator position — the operator already says which
+arithmetic is being done. It is worth writing where a value is stored, passed, or returned, which
+is exactly where this decision keeps it.
 
-Its JVM carrier likewise need not have the Java simple name `Rational`; a name such as
-`RationalValue` keeps the runtime value distinct from compiler analysis machinery.
+### Answer Decimal where the quotient terminates and Rational where it does not
 
-The exact class names are implementation details, but two values with different contracts must
-not continue under the same conceptual name.
+The result type would depend on the value, so `a / b` has no static type, and `1m / 4m` and
+`1m / 3m` would differ in type. Both answer Rational instead.
+
+### Keep the Decimal operator rounding as it does
+
+A finite Decimal is not closed under division, so any fixed precision discards information for
+`1m / 3m` and says nothing about it. A Decimal quotient remains available from `Decimal.divide`,
+where the scale and mode are the model's.
+
+### Rewrite the expression where an analysis can recognise it
+
+Clearing denominators in a guard would type the motivating expression without a Rational type at
+all. It special-cases what one analysis happens to recognise, stops working once the value is
+named or leaves that fragment, and makes admitted arithmetic depend on the consumer. ADR-0117
+takes the same alternative up on the compiler side.
 
 ## Consequences
 
@@ -511,6 +652,19 @@ Rational.
 
 A quotient that happens to be integral remains Rational, so typing never depends on constant
 evaluation.
+
+Exact arithmetic begins at the subexpression that produced a Rational and does not reach back up
+the expression. For `a: Int`:
+
+```souther
+a * 2 / 2      // a * 2 is Int, and overflows as Int arithmetic does
+a / 2 * 2      // a / 2 is Rational, and everything after it is exact
+```
+
+The two are different expressions and this decision does not make them one. Nothing promotes an
+operation because a later operation is exact, and nothing reassociates an expression to reach an
+exact reading — which is the same statement as "a Rational operand admits the operation", read
+from the other end.
 
 A numeric newtype no longer inherits scalar division when its carrier's quotient leaves that
 carrier.
@@ -538,6 +692,8 @@ arithmetic; closure over the wrapped type is also required.
 * ADR-0009: Decimal scale is not part of value identity
 * ADR-0033: numeric literals and arithmetic operators
 * ADR-0047: comparison and arithmetic of single-value newtypes
+* ADR-0066: a helper's parameter types come from its body — and what an operator asks of an
+  operand is stated with that operator
 * ADR-0095: standard-library naming grammar
 * ADR-0112: a backend does not change a value to fit a host API
 * ADR-0117: affine interpretation keeps coefficients exact

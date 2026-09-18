@@ -1,6 +1,6 @@
 # ADR-0117: Affine interpretation keeps coefficients exact
 
-Status: Proposed. Specialises ADR-0111.
+Status: Proposed. Specialises ADR-0111. Follows ADR-0116.
 
 ## Context
 
@@ -12,41 +12,87 @@ constant + Σ coefficient · atom
 
 so different consumers no longer keep competing accounts of the arithmetic an expression denotes.
 
-`LinearForm` currently represents that result as:
+`LinearForm` represents that result as:
 
 ```java
 BigDecimal constant
 Map<A, BigDecimal> coefs
 ```
 
-while `NumericDomain` already uses exact rational arithmetic when solving the resulting
-constraints.
+and nothing is lost there today. `BigDecimal` holds a finite decimal exactly, the affine grammar
+composes only addition, subtraction, negation and a scalar multiply — `AffineForms.composed`
+refuses `DIV` outright, its comment saying that a divide truncates for `Int` — and finite decimals
+are closed under what is composed. `NumericDomain` then lifts the whole form into exact ratios
+before it reasons:
 
-The split matters because affine reasoning is not closed over finite decimals. A rule such as:
-
-```text
-3 * x <= 1
+```java
+f.coefs().forEach((atom, coef) -> coefs.put(atom, Rational.of(coef)));
+...
+Rational.of(f.constant())
 ```
 
-places a derived boundary at one third. Rounding that value before the constraint algebra sees it
-changes the relation being reasoned about.
+`Rational.of` on a finite decimal is exact, so the third that `3 * x <= 1` puts on `x` is derived
+in exact arithmetic and was never a `BigDecimal`. The rounding that would make this decision
+urgent is not happening.
 
-ADR-0116 makes the same issue visible directly in source arithmetic:
+What changes it is ADR-0116. `-1 / 2` becomes an expression whose value is a coefficient, and:
 
 ```souther
 guard y < -1 / 2 * x + 30
 ```
 
-The affine form of this expression contains an exact coefficient of `-1/2`. Reading it first as a
-finite `BigDecimal` would discard information before it reached the exact algebra.
+has an affine meaning whose coefficient is not a finite decimal. Two things are missing at once:
+the grammar does not admit `/` at all, so the guard is read as no form rather than as a form with
+a fractional coefficient; and the representation could not hold the coefficient if it did.
 
-The reason to fix this is nevertheless independent of source-level Rational. An affine
-interpretation that claims to say what arithmetic an expression came to should not approximate
-that arithmetic merely because a later consumer already has a more exact representation.
+So the affine reading has to decide what division means to it, and once it admits one, its
+arithmetic domain is no longer closed over finite decimals.
 
 ## Decision
 
-**Affine interpretation carries exact coefficients.**
+### The affine reading admits division by a constant
+
+A quotient is affine where its divisor is a constant. What counts as constant is read, not
+spelled: a divisor is constant where reading it as an affine form yields a form with no
+coefficients.
+
+```text
+form / divisor, divisor read as a form with no coefficients and a non-zero constant
+    = form scaled by the reciprocal of that constant
+
+form / divisor, divisor read as a form with any coefficient
+    = not affine
+
+form / divisor, divisor read as the constant nought
+    = not affine
+```
+
+So these read alike:
+
+```souther
+x / 2
+x / (1 + 1)
+
+let two = 2
+x / two
+```
+
+and these are not affine:
+
+```souther
+x / y
+1 / x
+```
+
+A zero divisor makes no form. The operation aborts where it is reached, so there is no value for a
+form to be about, and building one would state an arithmetic meaning for an expression that
+answers nothing.
+
+Reading the divisor as a form rather than as a literal is what keeps ADR-0111's rule: a name given
+a constant is read through to the constant, so extracting `let two = 2` changes what an author
+wrote and not what the reading makes of it.
+
+### Affine interpretation carries exact coefficients
 
 `LinearForm<A>` represents its constant and coefficients with the compiler's exact ratio type
 rather than `BigDecimal`.
@@ -59,46 +105,18 @@ LinearForm<A> =
     + Σ exact coefficient · atom
 ```
 
-Int and Decimal constants are embedded exactly when the affine reader encounters them.
+Int and Decimal constants are embedded exactly when the affine reader encounters them, and a
+Rational expression admitted by ADR-0116 is read as the same exact mathematical value.
 
-A Rational expression admitted by ADR-0116 is read as the same exact mathematical value.
-
-No rounding occurs while an expression is being interpreted as an affine form.
-
-### The exact ratio is compiler arithmetic, not a model value
-
-The existing `souther.compiler.numeric.Rational` already represents the mathematical object
-needed by this decision.
-
-Once ADR-0116 introduces a source type named `Rational`, keeping both concepts under that name
-would give the compiler class a contract opposite to the language type: its current documentation
-deliberately says that it is not a number a model writes.
-
-The compiler-internal type is therefore renamed to a name such as:
-
-```text
-ExactRatio
-```
-
-Its role remains:
-
-> the exact scalar representation used by compiler numeric reasoning.
-
-It is used by both `LinearForm` and `NumericDomain`.
-
-It is not the runtime carrier of the Souther `Rational` primitive.
-
-This preserves the distinction the existing implementation was trying to express between exact
-reasoning and a value that stands at a model position.
+`NumericDomain` then receives the form in the domain it already reasons in, and the lift through
+`Rational.of` at its boundary goes away rather than becoming a rounding step.
 
 ### Exact coefficients do not change a position's carrier
 
 An exact coefficient says how a numeric expression relates its atoms. It does not say what values
 those atoms themselves may take.
 
-Thus an Int input remains on the Int lattice and a Decimal input remains on the Decimal carrier.
-
-For:
+An Int input remains on the Int lattice and a Decimal input remains on the Decimal carrier. For:
 
 ```souther
 guard y < -1 / 2 * x + 30
@@ -107,10 +125,8 @@ guard y < -1 / 2 * x + 30
 with `x: Int` and `y: Int`, the affine reader carries the coefficient `-1/2` exactly, while `x`
 and `y` remain integer positions.
 
-Exact Rational coefficients therefore introduce neither Rational input positions nor Rational ON
-points.
-
-The distinction between an exact ratio used in reasoning and a `Place` on a carrier remains.
+Exact coefficients therefore introduce neither Rational input positions nor Rational ON points,
+and the distinction between an exact ratio used in reasoning and a `Place` on a carrier remains.
 
 ### Conversion to a carrier happens only at the carrier edge
 
@@ -123,9 +139,8 @@ That edge is responsible for whether an exact ratio:
 * must be widened outward for a bound;
 * determines that no carrier value exists at that exact point.
 
-`LinearForm` does not make that decision.
-
-This keeps exact arithmetic and carrier granularity as separate concerns.
+`LinearForm` does not make that decision. This keeps exact arithmetic and carrier granularity as
+separate concerns.
 
 ### Exact Decimal embedding must remain compact
 
@@ -133,30 +148,79 @@ Embedding a Decimal into compiler exact arithmetic must not eagerly materialise 
 because a mathematical fraction can be written with that denominator.
 
 A Decimal compact in the source representation must not cause work proportional to its scale
-solely by becoming an affine coefficient.
+solely by becoming an affine coefficient. The canonical representation that satisfies this belongs
+to the implementation.
 
-The concrete canonical representation used to satisfy that requirement belongs to the
-implementation.
+### The compiler's ratio and the language's Rational are two types
+
+ADR-0116 gives the name `Rational` to the language type. The compiler's
+`souther.compiler.numeric.Rational` takes another — `ExactRatio` — and keeps its contract: the
+exact scalar that compiler numeric reasoning is done in, used by `LinearForm` and `NumericDomain`,
+and not the runtime carrier of a model's value.
+
+They hold the same mathematical domain, so sharing one implementation is the obvious question.
+The reason not to is the boundary the compiler already draws.
+`TheRuntimePackageIsTheBackendsToNameTest` refuses any mention of `souther.runtime` from the
+areas that reason about what a declaration is — `types`, `check`, `stdlib`, `semantics`,
+`partition`, `inputs`, `core`, `flow` — because what a declaration *is* and what one backend calls
+it are two things. The runtime carrier of `Rational` is the JVM backend's physical representation
+and would be another backend's to choose differently; an analysis reasoning in it would be one
+whose soundness depended on which backend was linked.
+
+The alternative is a third target-neutral module holding an exact ratio both could use. That buys
+one shared implementation for the cost of a new architecture boundary maintained for a single
+type, and this decision does not take it.
+
+`numeric` is in neither set that test names, so the rule it holds does not currently reach the
+package this exact ratio lives in. It is added to the target-neutral set, which is what makes this
+paragraph a rule rather than an intention.
+
+## Alternatives
+
+### Keep `BigDecimal` and clear denominators where a form becomes a constraint
+
+```text
+y < -1/2 x + 30
+```
+
+normalises to:
+
+```text
+2y < -x + 60
+```
+
+whose coefficients are whole numbers, so `LinearForm` could stay on `BigDecimal` and the exactness
+would be recovered at the constraint edge.
+
+It answers a different question from the one `LinearForm` answers. A form is what an expression
+*comes to*, not a comparison against nought: clearing denominators preserves the relation and not
+the value, and `-1 / 2 * x + 30` has a value at every `x` whether or not anything compares it.
+Every reader that asks what an expression came to — the adequacy measure reads a rule for the line
+it draws, not only the check that discharges it — would get a form scaled by a factor that came
+from a comparison it is not making.
+
+It also puts two accounts of one expression's arithmetic back where ADR-0111 left one: the reading
+would hold approximate coefficients and the constraint step would hold exact ones, and a named
+intermediate value read at the first would not agree with the same expression read at the second.
 
 ## Consequences
 
-`LinearForm` no longer uses `BigDecimal` as its arithmetic domain.
+The affine grammar admits `/` by a constant, so a model writing an exact coefficient has its rule
+read rather than silently unread. A divisor with an atom in it is still not affine, and an author
+whose rule goes unread for that reason is in the case the grammar already had.
 
-The current exact-ratio implementation becomes the common scalar representation used by affine
-interpretation and `NumericDomain`, rather than exactness appearing only after the affine
-boundary.
+`LinearForm` no longer uses `BigDecimal` as its arithmetic domain, and `NumericDomain` no longer
+lifts a form into ratios at its own boundary — one exact scalar reaches both.
 
-The rename from compiler `Rational` to `ExactRatio` also removes the false implication that the
-compiler analysis object is the runtime representation of ADR-0116's source-level `Rational`.
+The rename off `Rational` removes the implication that the compiler's analysis object is the
+runtime representation of ADR-0116's language type, and `numeric` joins the packages that may not
+name the runtime package.
 
-Existing `Place` and carrier abstractions remain distinct. A fraction such as one third can
-participate in exact reasoning without thereby becoming a value a Decimal or Int input can take.
+`Place` and the carriers remain distinct. A third can take part in exact reasoning without becoming
+a value a Decimal or Int input can take.
 
-Readers of affine forms do not acquire new rounding rules. Any approximation or outward rounding
-remains owned by the edge that turns an exact result into a carrier-specific bound.
-
-This decision is useful independently of ADR-0116, although exact source division makes the
-existing loss at the `LinearForm` boundary directly observable.
+Readers of affine forms acquire no rounding rules. Any approximation or outward rounding stays with
+the edge that turns an exact result into a carrier-specific bound.
 
 ## References
 
@@ -166,5 +230,5 @@ existing loss at the `LinearForm` boundary directly observable.
 * Specification: `[#invariant-discharge-arithmetic]`, `[#example-partition]`,
   `[#example-adequacy]`
 * `souther.compiler.check.AffineForms`
-* `souther.compiler.numeric.LinearForm`
-* the compiler exact-ratio type currently named `souther.compiler.numeric.Rational`
+* `souther.compiler.numeric.LinearForm`, `souther.compiler.numeric.NumericDomain`
+* `souther.compiler.types.TheRuntimePackageIsTheBackendsToNameTest`
