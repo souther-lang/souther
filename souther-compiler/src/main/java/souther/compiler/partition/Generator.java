@@ -3586,7 +3586,7 @@ public final class Generator {
                 // number, because every question below is about the place the row writes: what else
                 // is being written there, whether one value answers them all, and which location
                 // the value is gathered under.
-                Writing asked = writeFor(subject, term, assumed);
+                Writing asked = writeFor(subject, term, assumed, looking);
                 if (asked == null) {
                     // Nothing routes it. The name crosses into a case whose reading stopped, or
                     // into cases the row cannot be any of beside what it already assumes — and a
@@ -3703,18 +3703,24 @@ public final class Generator {
      * — and a row asked to write at the sum's own name writes nowhere, which is how a condition
      * over such a name came back as one nothing composed a value for.
      *
-     * <p>The case is chosen here and held in what the row assumes, so every name of one sum is
-     * written under one case however many cuts name them. Chosen by the first that the row can
-     * still be: a row already taken to be one case keeps it, and a row that is not yet anything
-     * takes the case the model declares first.
+     * <p><b>Asked of what the declarations came to at the place, and not of where a name stands.</b>
+     * Where a name stands is structure, and structure says the same thing about a position this
+     * reading answered for and about a path it never reached — so a writer that sorted by it alone
+     * would offer a value at a position whose rules were never read. The three states are
+     * {@link AdmittedValues.Admitted}'s, and this is the reader they were made for.
      *
-     * <p>Null for the two states a row cannot be written under. A name whose case the reading
-     * stopped short of has a position whose rules were never read, and a row written there would be
-     * offered at one nothing answered for; a name that crosses again under the case is one this has
-     * not finished moving ({@link NameReach#standingOf}), and a value written at what came back
-     * would be written at another sum's own name.
+     * <p>The place's own answer and not the set a search composes from. What narrows a value is the
+     * number's question — a count taken of a position is not one of the position's values and is
+     * not held to its set ({@link WitnessSearch#toComposeFrom}) — and where a row writes is the
+     * place's, whichever number of it was asked for. Asked as the composing set, a count at a name
+     * the cases share would be told a set narrows nothing and sent to write at the sum's own name.
+     *
+     * <p>Null where nothing worked out what the place holds, and null where a name crosses into
+     * cases the row cannot be any of. Both are rows this composes nothing for, and neither is a
+     * place to write at anyway.
      */
-    private static Writing writeFor(MeasuredInput subject, NumericTerm term, Requirements assumed) {
+    private static Writing writeFor(MeasuredInput subject, NumericTerm term, Requirements assumed,
+                                    WitnessSearch looking) {
         NumericTerm.FromOnePosition at = term.atOnePosition();
         // A number no single position answers is written where its run is rebuilt, and a run has no
         // name of a sum's to be read at. Left to the sorting below, the position it does not have
@@ -3722,39 +3728,90 @@ public final class Generator {
         if (at == null) {
             return new Writing(RealizationTarget.of(term), assumed);
         }
-        return switch (subject.reach().standingOf(at.position())) {
-            case NameReach.Standing.AtThePathItself _ ->
-                    new Writing(new RealizationTarget.AtOnePosition(at), assumed);
-            case NameReach.Standing.CasesIncomplete _ -> null;
-            case NameReach.Standing.UnderTheCases(List<NameReach.CaseStanding> standings) ->
-                    underOneCase(subject, at, standings, assumed);
-        };
+        return whereARowWritesIt(subject, looking, at, assumed);
     }
 
     /**
-     * The first of {@code standings} the row can still be taken to be, or null where it can be none
-     * of them.
+     * The place a row rebuilds to move {@code term}, taking each crossing on the way.
      *
-     * <p>In the order the model declares the cases, which is the order the walk met them. A row that
-     * could be written under a later case and not under the first is not found here — what this
-     * settles is where the name is written, and whether the value can be built there is the
+     * <p><b>A name that crosses is followed until it reaches a place the reading answered for.</b>
+     * The sorting moves a name one crossing at a time and says so ({@link NameReach#standingOf}), so
+     * a name under two sums comes back as a name under one — and a writer that stopped at the first
+     * answer would refuse every position two sums down, which the reading has and can state a set
+     * for. Each step is one case taken, and the row has to be all of them at once.
+     *
+     * <p>The case at each crossing is the first the row can still be: one already taken keeps it,
+     * and a row that is not yet anything takes the case the model declares first. A row that could
+     * be written under a later case and not under this one is not looked for here — what this
+     * settles is where the name is written, and whether a value can be built there is the
      * construction's answer further on.
+     *
+     * <p>Bounded by the crossings the walk recorded, because each step takes one of them and no
+     * step takes one twice. Running past that is this compiler disagreeing with its own reading
+     * rather than a search that could be allowed more.
      */
-    private static Writing underOneCase(MeasuredInput subject, NumericTerm.FromOnePosition at,
-                                        List<NameReach.CaseStanding> standings,
-                                        Requirements assumed) {
-        for (NameReach.CaseStanding standing : standings) {
-            if (!(assumed.merge(standing.assuming())
-                    instanceof Requirements.Merge.Merged(Requirements both))) {
-                continue;
+    private static Writing whereARowWritesIt(MeasuredInput subject, WitnessSearch looking,
+                                             NumericTerm.FromOnePosition term,
+                                             Requirements assumed) {
+        TermPath here = term.position();
+        Requirements taken = assumed;
+        for (int crossed = 0; crossed <= subject.reach().crossings().size(); crossed++) {
+            switch (looking.admitted().at(here)) {
+                // The reading answered for this place, so it is where the row writes. The first
+                // time round that is the place the number is read at, and after a crossing it is
+                // the position under the cases taken to get here.
+                case AdmittedValues.Admitted.Values _ -> {
+                    return new Writing(here.equals(term.position())
+                            ? new RealizationTarget.AtOnePosition(term)
+                            : new RealizationTarget.AtOnePositionElsewhere(term, here), taken);
+                }
+                // Nothing worked out what this place holds. A value written here would be offered
+                // at a position whose rules this compiler never read, which is the row this
+                // declines to compose however it was reached.
+                case AdmittedValues.Admitted.NotWorkedOut _ -> {
+                    return null;
+                }
+                case AdmittedValues.Admitted.StandsUnderTheCases _ -> {
+                    Crossed under = oneCaseFurtherDown(subject, here, taken);
+                    if (under == null) {
+                        return null;
+                    }
+                    here = under.to();
+                    taken = under.taken();
+                }
             }
-            // And a position that crosses again, which this has not finished moving. Written at,
-            // the value would go to the inner sum's own name and nowhere.
-            if (!(subject.reach().standingOf(standing.position())
-                    instanceof NameReach.Standing.AtThePathItself)) {
-                continue;
+        }
+        throw new IllegalStateException(
+                "a name was followed past every crossing this reading recorded: " + term);
+    }
+
+    /** One crossing taken: where the name stands under the case, and what the row is now taken to
+     *  be. */
+    private record Crossed(TermPath to, Requirements taken) {}
+
+    /**
+     * The name at {@code here} moved under the first case the row can still be, or null where it
+     * can be none of them.
+     *
+     * <p>Asked of the same sorting the state above came from, since that is where the cases are.
+     * What the row has to be travels back with the place, because a row written under one case at
+     * one name and another at the next would be asked for a value that is two cases at once — and
+     * {@link Requirements#merge} is what refuses that rather than a rule written here.
+     */
+    private static Crossed oneCaseFurtherDown(MeasuredInput subject, TermPath here,
+                                              Requirements taken) {
+        if (!(subject.reach().standingOf(here)
+                instanceof NameReach.Standing.UnderTheCases(List<NameReach.CaseStanding> under))) {
+            // The state above was read off this same sorting, so anything else here is this
+            // compiler holding two answers about one name.
+            throw new IllegalStateException(
+                    "a name the search was told stands under the cases stands at none: " + here);
+        }
+        for (NameReach.CaseStanding standing : under) {
+            if (taken.merge(standing.assuming())
+                    instanceof Requirements.Merge.Merged(Requirements both)) {
+                return new Crossed(standing.position(), both);
             }
-            return new Writing(new RealizationTarget.AtOnePositionUnderACase(at, standing), both);
         }
         return null;
     }

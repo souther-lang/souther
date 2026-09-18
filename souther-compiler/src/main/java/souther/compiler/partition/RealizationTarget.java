@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
@@ -54,7 +53,7 @@ public sealed interface RealizationTarget {
      *
      * <p>Where the number is read and where it is written are one location here, because a term
      * says nothing about where a name stands. A caller that knows where the walk saw the name stand
-     * builds {@link AtOnePositionUnderACase} instead — and only such a caller can, which is why
+     * builds {@link AtOnePositionElsewhere} instead — and only such a caller can, which is why
      * this answers with the place the term names rather than guessing at a case.
      */
     static RealizationTarget of(NumericTerm term) {
@@ -84,8 +83,8 @@ public sealed interface RealizationTarget {
     }
 
     /**
-     * A number read at a name every case of a sum spreads, realized by writing the value under one
-     * of those cases.
+     * A number read at one place and written at another, which is what a name every case of a sum
+     * spreads comes to.
      *
      * <p><b>Where the two places come apart.</b> The number is the one the rules and the report are
      * about and it is read at the sum's own name; the value answering it is written under whichever
@@ -93,33 +92,40 @@ public sealed interface RealizationTarget {
      * name — which is a location no value goes to, and the answer for a condition over such a name
      * was that nothing here composes one.
      *
-     * <p>The case is part of this and not chosen further down. A row is one value, so every name of
-     * one sum is written under one case: two of these disagreeing about the case would be a row
-     * asked to be both, and a reader further on has no way to tell that the pair came from one sum.
+     * <p><b>The place and not the steps taken to reach it.</b> A name under two sums is written two
+     * cases down, and how many crossings that was is the routing's business and no part of what a
+     * row writes. Held as the one case taken, this type would say that a name is ever only one
+     * crossing from where it is written, which is a limit of a search written into the vocabulary
+     * every reader of a target shares.
      *
-     * @param term  the number, read where the rules name it
-     * @param under where that number stands once the value is the case this is for, which is the
-     *              location whose whole value the row rebuilds
+     * <p>What the row has to be to hold the value is read off {@link #writeRoot} and is not a second
+     * component here: a path states the narrowings taken to reach it
+     * ({@link TermPath#requirements}), and a case recorded beside it would be a second answer free
+     * to disagree with the path it is about.
+     *
+     * @param term      the number, read where the rules name it
+     * @param writeRoot where the value answering it stands, which is the location whose whole value
+     *                  the row rebuilds
      */
-    record AtOnePositionUnderACase(NumericTerm.FromOnePosition term,
-                                   NameReach.CaseStanding under) implements RealizationTarget {
+    record AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
+                                  TermPath writeRoot) implements RealizationTarget {
 
-        public AtOnePositionUnderACase {
-            if (term == null || under == null) {
+        public AtOnePositionElsewhere {
+            if (term == null || writeRoot == null) {
                 throw new IllegalArgumentException(
-                        "a number written under a case is a number, and a case it is written"
-                                + " under");
+                        "a number written away from where it is read is a number, and a place it"
+                                + " is written at");
+            }
+            if (writeRoot.equals(term.position())) {
+                throw new IllegalArgumentException(
+                        "a number written where it is read is an AtOnePosition, and this one is at "
+                                + writeRoot);
             }
         }
 
         @Override
-        public TermPath writeRoot() {
-            return under.position();
-        }
-
-        @Override
         public String toString() {
-            return term + " at " + under.position();
+            return term + " at " + writeRoot;
         }
     }
 
