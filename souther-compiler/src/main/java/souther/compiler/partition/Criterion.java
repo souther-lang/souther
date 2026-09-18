@@ -323,7 +323,8 @@ public sealed interface Criterion {
      * <p><b>{@code left} names the whole of the quantity.</b> An end only the rule that drew it can
      * name says how much of the quantity that rule wrote, and this spells that by writing the
      * multiple in front — which is what a quantity of one coordinate does and is not what a form of
-     * several does ({@link BorderQuantity#left(java.math.BigDecimal)} rebuilds the form instead). A
+     * several does ({@link BorderQuantity#left(souther.compiler.numeric.ExactRatio)} rebuilds the
+     * form instead). A
      * run bounded that way, on a line a declaration is owed over a relation between two positions,
      * would come out spelled as the multiple of the first of them. No model here writes one; the
      * limit is said rather than guessed at.

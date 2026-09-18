@@ -16,8 +16,8 @@ import souther.compiler.numeric.Rel;
  * search below it composed against rules wider than the rows that reach it.
  *
  * <p><b>Not a widening of the first.</b> {@link Place} is where a value sits on its carrier's order
- * and {@link java.math.BigDecimal} is a scalar of the arithmetic; the second is not the general case
- * of the first. A form carrying places would be a sum of things that do not add, so what is held
+ * and {@link souther.compiler.numeric.ExactRatio} is a scalar of the arithmetic; the second is not
+ * the general case of the first. A form carrying places would be a sum of things that do not add, so what is held
  * apart here is which question each shape can be asked: an {@link Affine} runs through the numeric
  * algebra, and an {@link Ordered} is a bound on one position's own order.
  */
