@@ -9,8 +9,8 @@ import souther.compiler.query.Weakening;
  * One thing a scope's measures did not come to an answer about.
  *
  * <p>Named for what it is and not for what a verdict makes of it. One of these holds a verdict open
- * where nothing outranks it, and sits under a gap where something does — the entry is the same
- * either way, and a name saying it is an opening made the two look like one thing
+ * where nothing outranks it and sits under a gap where something does — the entry is the same
+ * either way, and a name taken from the first of those made the two look like one thing
  * ({@link AdequacyAssessment}).
  *
  * <p>Not a {@link Weakening}, and that is the whole of why this type exists. A verdict is settled
@@ -59,7 +59,8 @@ public sealed interface AdequacyUncertainty {
 
         public ByWeakening {
             if (cause == null) {
-                throw new IllegalArgumentException("a verdict held open by nothing is settled");
+                throw new IllegalArgumentException(
+                        "a measure that went without nothing went without nothing");
             }
         }
 

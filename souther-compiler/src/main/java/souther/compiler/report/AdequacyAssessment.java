@@ -20,10 +20,8 @@ import java.util.List;
  * and an entry sitting beside a gap is read as an entry that does not exist.
  *
  * <p>Of a scope, and every scope this report can be narrowed to has one. A narrowed report works
- * its own out again from the parts it kept rather than selecting from these, so the two are
- * related by what the narrowing keeps and not by containment: narrowed to a module it holds a
- * subset of these, and narrowed to a behavior it can hold an entry this does not — an obligation
- * of the module's declarations, answered again without the rows of the behaviors that left
+ * its own out again from the parts the projection kept rather than selecting from these, so no
+ * containment between two scopes is promised here — what each holds is what its own parts came to
  * ({@link AdequacyReport#only(String, String)}).
  *
  * @param gaps what the measures found that the rows are asked for and is not there

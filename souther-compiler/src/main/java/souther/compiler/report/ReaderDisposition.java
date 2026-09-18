@@ -103,25 +103,30 @@ public sealed interface ReaderDisposition {
     record Settled() implements ReaderDisposition {}
 
     /**
-     * Where one thing holding a verdict open leaves a reader.
+     * Where one thing a scope did not answer leaves a reader.
+     *
+     * <p>Of the entry and not of what a verdict makes of it. One of these sits under a gap as
+     * readily as it holds a verdict open, and a reader sent somewhere by it is sent to the same
+     * place either way — which is why this is asked of the assessment rather than of what a
+     * verdict is willing to show ({@link AdequacyAssessment}).
      *
      * <p>The sensitivity first, then the entry, then what it is about. A wider run reaching it is an
      * operation this compiler knows is appropriate, and it is the same answer whatever the entry is
      * about — so it is asked once, above, rather than repeated below it.
      *
-     * <p>Then the entry, because what is open about a place is the entry's answer and not the
-     * place's: one point is named both by a measurement nobody made and by a showing that came to
+     * <p>Then the entry, because what went unanswered about a place is the entry's answer and not
+     * the place's: one point is named both by a measurement nobody made and by a showing that came to
      * nothing, and a reader is sent to different things by the two.
      *
-     * <p>Switches with no {@code default}, so an opening or a subject added later is a compile
+     * <p>Switches with no {@code default}, so an uncertainty or a subject added later is a compile
      * error here rather than an entry this report has nothing to say about.
      */
-    static ReaderDisposition of(AdequacyUncertainty opening) {
-        Subject subject = opening.subject();
-        if (opening.runSensitivity() == RunSensitivity.MAY_CHANGE) {
+    static ReaderDisposition of(AdequacyUncertainty unanswered) {
+        Subject subject = unanswered.subject();
+        if (unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
             return new WidenTheRun(subject);
         }
-        return switch (opening) {
+        return switch (unanswered) {
             case AdequacyUncertainty.NotMeasured it ->
                     new LookAtWhyNothingWasMeasured(subject, it.why());
             case AdequacyUncertainty.ShowingStopped _,

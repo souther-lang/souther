@@ -94,6 +94,19 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
     }
 
     /**
+     * The disposition this model is written to reach, as the two tests above pin it.
+     *
+     * <p>Written out so the case below can say the witness is the same one rather than that
+     * something reached the same arm. A model short of a second thing that lands on this arm would
+     * satisfy the weaker sentence while the thing being witnessed had gone.
+     */
+    private static ReaderDisposition theWitness() {
+        return new ReaderDisposition.LookAtWhatTheMeasureWentWithout(
+                new Subject.OfAModule("probe.unelaborated"),
+                new WeakeningVocabulary.AWordOfThisDocuments(WeakeningWord.BODIES_NOT_ELABORATED));
+    }
+
+    /**
      * The model goes without something, and where that leaves a reader is the word for it.
      *
      * <p>Read off the assessment. What this model's verdict is depends on what else it is short of
@@ -152,10 +165,10 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
                         + refused.adequacyGaps());
         assertTrue(refused.whatKeepsTheVerdictOpen().isEmpty(),
                 "a refused verdict is open on nothing");
-        assertTrue(refused.assessment().uncertainties().stream()
-                        .map(ReaderDisposition::of)
-                        .anyMatch(ReaderDisposition.LookAtWhatTheMeasureWentWithout.class
-                                ::isInstance),
+        assertTrue(refused.assessment().uncertainties().stream().anyMatch(each ->
+                        each instanceof AdequacyUncertainty.ByWeakening it
+                                && it.cause() instanceof Weakening.BodiesNotElaborated
+                                && ReaderDisposition.of(each).equals(theWitness())),
                 () -> "the gap took the witness with it: " + refused.assessment().uncertainties());
     }
 }

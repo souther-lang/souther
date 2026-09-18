@@ -1537,7 +1537,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * What one measurement opens the verdict on beside the facts it went without.
+     * What one measurement leaves unanswered beside the facts it went without.
      *
      * <p>A {@code switch} over the states with no {@code default}, because this is the same question
      * {@link #adequacy()} asks of the same value and the two must not be able to answer differently.
@@ -1558,20 +1558,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * And what one obligation opens it on, which is what it is undecided about.
+     * And what one obligation leaves unanswered, which is what it is undecided about.
      *
      * <p>Read from the disposition and never from the coverage beneath it. Those are two questions
      * and {@link #adequacy()} asks the first: whether a row can be written at a point is settled
      * from the coverage <em>and</em> what showed a row is writable, so three of the four ways an
      * obligation is undecided leave the coverage with nothing to have gone without. Asked of the
-     * coverage, a point nothing could show a row for held the verdict open and named nothing.
+     * coverage, a point nothing could show a row for went unanswered and named nothing.
      *
      * <p>A reading that stopped adds nothing here, and that is not an omission: what it met is the
      * coverage's own {@code WeakeningSet}, which the union above already holds. Counted again it
      * would be one fact said twice, which is what a set is for.
      *
      * <p>{@code Undecided} refuses an empty list at construction and every arm below yields an
-     * entry, so an obligation that holds the verdict open cannot come back with nothing.
+     * entry, so an obligation that is undecided cannot come back with nothing.
      */
     static void unresolvedBy(List<AdequacyUncertainty> out, Subject subject,
                          ObligationDisposition disposition) {
