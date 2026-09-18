@@ -28,6 +28,9 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
         reached = List.copyOf(reached);
     }
 
+    /** What a spread onto the path comes to: no clause of its own, and not everything reached. */
+    private static final PublishedRules NOT_REACHED = new PublishedRules(List.of(), false);
+
     /** These and {@code other}'s together, reaching everything only where both did. */
     PublishedRules and(PublishedRules other) {
         List<ClauseMeaning> both = new ArrayList<>(reached);
@@ -72,6 +75,13 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
      * rule about declarations either — a declaration that spreads its way round to itself is refused
      * before any reading of it is made ({@link ProductSpreads}), and the cut here is what lets this
      * come back rather than run out of stack if it is ever handed a graph that was not.
+     *
+     * <p><b>A spread onto the path contributes rules not reached.</b> Not nothing: what comes back
+     * from a ring is some of the clauses and not all of them, and a walk that dropped the edge
+     * quietly would hand that back as every rule there is. Which of the partial answers a ring gives
+     * still turns on which of its declarations was asked for first, and what keeps that from
+     * reaching anybody is that each of them says it is short — a reader of rules that were not all
+     * reached has a word for it already and does not read the ones that were.
      */
     static PublishedRules governing(TypeSymbol.AtModule named, Symbols symbols,
                                     PublishedDeclarations published,
@@ -108,9 +118,9 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
         PublishedRules out = new PublishedRules(List.of(), true);
         for (DeclarationReference each : product.includes()) {
             if (each instanceof DeclarationReference.Named it
-                    && it.declaration() instanceof TypeSymbol.AtModule spread
-                    && !onThePath.contains(spread)) {
-                out = out.and(governing(spread, symbols, published, found, onThePath));
+                    && it.declaration() instanceof TypeSymbol.AtModule spread) {
+                out = out.and(onThePath.contains(spread) ? NOT_REACHED
+                        : governing(spread, symbols, published, found, onThePath));
             }
         }
         onThePath.remove(named);

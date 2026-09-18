@@ -1044,10 +1044,12 @@ public final class Shapes {
      * spreads go.
      *
      * <p>Absent where a ring is found, which is what keeps the readers below from being started on a
-     * graph they have no end in. The ring is this module's to report: a spread crossing into another
-     * module and back is two modules importing each other, which is refused before any of this, so a
-     * ring reached from here closes on a declaration written here
-     * ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
+     * graph they have no end in. What the report points at is the first spread of the ring, written
+     * on the declaration the ring closes on — a {@code ...} the author can take out, and the one
+     * their eye goes to when they are told which declaration is made of itself. The ring is this
+     * module's to report: a spread crossing into another module and back is two modules importing
+     * each other, which is refused before any of this, so a ring reached from here closes on a
+     * declaration written here ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
      */
     public record WellFoundedSpreads(String name) implements Key<ProductSpreads.WellFounded> {
         @Override

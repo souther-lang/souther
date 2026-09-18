@@ -1086,6 +1086,9 @@ public final class TypeOps {
         return fieldType(data, field, symbols, new LinkedHashSet<>());
     }
 
+    /** {@code onThePath} is what is being read above this, and what makes the walk finite. Nothing
+     *  is said about a spread onto it: what a field of a declaration holds is a question with no
+     *  answer on a graph the language refuses, and one where it does not arise on one it admits. */
     private static Type fieldType(Hir.Data data, String field, Symbols symbols,
                                   Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
@@ -1125,6 +1128,8 @@ public final class TypeOps {
         return hasField(data, field, symbols, new LinkedHashSet<>());
     }
 
+    /** As {@link #fieldType(Hir.Data, String, Symbols, Set)}: the path is what makes it finite, and
+     *  a spread onto it is passed over without a word. */
     private static boolean hasField(Hir.Data data, String field, Symbols symbols,
                                     Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
@@ -1278,9 +1283,17 @@ public final class TypeOps {
         return settledClauses(named, symbols, new LinkedHashSet<>());
     }
 
-    /** The same for a reader that wants only what every representation agrees on, which is why this
-     *  takes any world. Private, so the world a clause's body is read from stays said by the method
-     *  a caller names. */
+    /**
+     * The same for a reader that wants only what every representation agrees on, which is why this
+     * takes any world. Private, so the world a clause's body is read from stays said by the method
+     * a caller names.
+     *
+     * <p>A spread onto the path contributes nothing and there is nowhere here to say it was cut:
+     * what this hands back is the clauses and nothing beside them. That is left as it is rather than
+     * widened into a second answer — whether every rule that governs a declaration was reached is
+     * {@link ExpandedRules}'s to say and is said there, and a graph that makes this short is one the
+     * language refuses before either of them is read.
+     */
     private static List<Hir.InvariantClause> settledClauses(
             TypeSymbol.AtModule named, Symbols symbols, Set<TypeSymbol.AtModule> onThePath) {
         if (!(symbols.declaredNode(named) instanceof Hir.Data data)) {
@@ -1403,9 +1416,13 @@ public final class TypeOps {
             onThePath.add(named);
             for (Hir.Name inc : data.includes()) {
                 if (inc.answered() instanceof Hir.Name.Denoting denoting
-                        && denoting.type() instanceof TypeSymbol.AtModule spread
-                        && !onThePath.contains(spread)) {
-                    found = found.and(governedBy(spread, symbols, form, onThePath));
+                        && denoting.type() instanceof TypeSymbol.AtModule spread) {
+                    // A spread onto the path is rules not reached, and not rules there are none of.
+                    // Dropped quietly, what a ring leaves would be handed on as every rule that
+                    // governs the declaration.
+                    found = found.and(onThePath.contains(spread)
+                            ? new ExpandedRules(List.of(), false)
+                            : governedBy(spread, symbols, form, onThePath));
                 }
             }
             onThePath.remove(named);
