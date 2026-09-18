@@ -571,11 +571,16 @@ final class ContainersAddingUp {
      * where it is over a run. One question about two terms and not two questions: what is added up
      * is what stands at a path under the container, and where the path stops is the whole
      * difference.
+     *
+     * <p>Asked of the number and not of the target it is realized by. What is added up is read
+     * where the rules name it, and where a row writes to move it is another question with another
+     * owner ({@link RealizationTarget#writeRoot}) — so a way of writing a number added later is not
+     * a second answer about which occurrences a container counts.
      */
     private static TermPath occurrences(RealizationTarget target) {
-        return switch (target) {
-            case RealizationTarget.AtOnePosition one -> one.term().position().element();
-            case RealizationTarget.OverARun over -> over.term().source().subjectPath();
+        return switch (target.term()) {
+            case NumericTerm.FromOnePosition one -> one.position().element();
+            case NumericTerm.TakenOver over -> over.source().subjectPath();
         };
     }
 
