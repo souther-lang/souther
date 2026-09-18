@@ -188,7 +188,8 @@ public final class LevelRealizer {
             NumericDomain.Bounds together = commonRange(settled,
                     runs.get(reading.anchors()), two.of(),
                     reading.where().anchor().asACount());
-            Outwards.Walked walked = alongTheLine(together, two.of());
+            Outwards.Walked walked = alongTheLine(together, two.of(), reading.anchors(),
+                    within, looking);
             if (walked == null) {
                 // Nothing composed a place to anchor at, which is this reading's own answer and
                 // says nothing about how much of the line was looked at.
@@ -305,11 +306,21 @@ public final class LevelRealizer {
      * something to ask a walk about: a walk of no places would have to say whether there were more,
      * and there was never a walk.
      */
-    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        Place first = carrier.somethingInside(together.min(), together.max());
+    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier,
+                                                NumericTerm.FromOnePosition anchored,
+                                                souther.compiler.inputs.SearchRegion within,
+                                                WitnessSearch looking) {
+        // Every narrowing the anchored position stands under, and not the common range alone. What
+        // the ranges leave is where the pair can be at all; what the declarations leave that
+        // position and what a rule holds it away from are two more, and a place taken from the
+        // first and refused by either of the others is a pair reported as one nothing composed.
+        ValueSet admits = looking.valuesAt(anchored)
+                instanceof AdmittedValues.Admitted.Values(ValueSet set) ? set : ValueSet.ANY;
+        PlacesApart apart = within.apartAt(anchored);
+        Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter());
         return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
-                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, admits, apart);
     }
 
     /**
@@ -738,8 +749,14 @@ public final class LevelRealizer {
         private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
                                 java.math.BigDecimal coef,
                                 souther.compiler.inputs.SearchRegion here) {
+            // The coset is what the arithmetic leaves the position and the run is where the rules
+            // leave it; what the declarations leave its values is not given to this search, so
+            // there is no set here to narrow by and the identity of that crossing is what goes in.
+            // Each value is still put to the region below, which is where a rule that refuses one
+            // of them answers.
             Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
-                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    ValueSet.ANY, PlacesApart.NONE);
             for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;

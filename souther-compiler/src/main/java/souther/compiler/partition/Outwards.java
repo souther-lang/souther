@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -83,30 +85,45 @@ final class Outwards {
     }
 
     /**
-     * At most {@code howManyValues} values of {@code within}, from {@code first} outward, {@code by}
-     * apart.
+     * At most {@code howManyPlaces} places of {@code within} that {@code admits} takes in and none
+     * of {@code apart} stands at, from {@code first} outward, {@code by} apart.
      *
-     * <p>Stops early where neither direction has a value left, which is what makes a bounded run
+     * <p>Stops early where neither direction has a place left, which is what makes a bounded run
      * cost its own width rather than the whole allowance.
      *
-     * @param first         a value of the run. Refused where it is none, since a caller with no
-     *                      value to start from has composed nothing — which is not the same as a run
-     *                      with nothing in it, and an empty answer here would be read as the second
+     * <p><b>Every narrowing, and not the run on its own.</b> A run says where a position stops and
+     * has no word for the values the declarations leave it or for a place a rule took out of the
+     * middle of it. Walked by the run alone, the places after the first come from one narrowing and
+     * are judged by the others afterwards — which is the trade this walk's own caller was written
+     * to avoid at the place it starts from, made again at every place after it. So the narrowings
+     * arrive together and a caller cannot ask for a walk that leaves one out.
+     *
+     * <p>A place the run holds and one of the others refuses is stepped past. It is not the run
+     * running out, so the walk goes on, and it is not a place to try, so it is not yielded.
+     *
+     * @param first         a place the run holds and the narrowings take in. Refused where it is
+     *                      none, since a caller with no place to start from has composed nothing —
+     *                      which is not the same as a run with nothing in it, and an empty answer
+     *                      here would be read as the second
      * @param by            the distance between neighbouring candidates, positive
-     * @param howManyValues how many to yield, counting {@code first}
+     * @param howManyPlaces how many places of the run to look at, counting {@code first}. Places
+     *                      and not values yielded: what the figure bounds is the walking, and a
+     *                      stretch the narrowings refuse is walked whether or not anything is taken
+     *                      from it — counted the other way, a run with no end whose values are all
+     *                      refused is a walk nothing stops
      */
     static Walked from(Place first, Count by, Carrier carrier, NumericDomain.Bounds within,
-                       int howManyValues) {
+                       int howManyPlaces, ValueSet admits, PlacesApart apart) {
         if (by == null || by.signum() <= 0) {
             throw new IllegalArgumentException(
                     "neighbouring candidates are a positive distance apart, or there is no outward:"
                             + " " + by);
         }
-        if (first == null || !within.admits(first)) {
+        if (first == null || !takenIn(first, carrier, within, admits, apart)) {
             throw new IllegalArgumentException(
-                    "walking outward starts from a value of the run, and a caller that has none has"
-                            + " composed nothing rather than found a run with nothing in it: "
-                            + first);
+                    "walking outward starts from a place every narrowing takes in, and a caller that"
+                            + " has none has composed nothing rather than found a run with nothing"
+                            + " in it: " + first);
         }
         // One place where the carrier's values do not count. There is no next place to step to, so
         // the one the caller started from is the whole of what this can name — and never the whole
@@ -123,6 +140,7 @@ final class Outwards {
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
+        int lookedAt = 1;
         // <b>A value found and not taken, never a count that came out even.</b> A run holding
         // exactly this many and a run this stopped walking come back the same length, so the figure
         // being reached says nothing on its own — what says this compiler declined to go further is
@@ -141,18 +159,39 @@ final class Outwards {
                 if (next == null || !within.admits(next)) {
                     continue;
                 }
-                if (out.size() == howManyValues) {
+                // A place of the run, so the run has not run out and the walk goes on whether or
+                // not this one is taken. Counted here for the same reason: what the figure bounds
+                // is the walking, and a stretch every narrowing refuses is walked through.
+                took = true;
+                if (++lookedAt > howManyPlaces) {
                     ended = Ended.AT_THE_FIGURE;   // one the run holds and this is not taking
                     break outward;
                 }
-                out.add(next);
-                took = true;
+                // And refused by one of the narrowings the run has no word for, which is a place
+                // to step past rather than a place to try. Yielded, it would be a candidate the
+                // rules refuse, offered because the run happened to hold it.
+                if (takenIn(next, carrier, within, admits, apart)) {
+                    out.add(next);
+                }
             }
             if (!took) {
-                break;   // neither direction has a value left, so this walked the whole of it
+                break;   // neither direction has a place left, so this walked the whole of it
             }
         }
         return new Walked(out, ended);
+    }
+
+    /**
+     * Whether every narrowing takes {@code at} in.
+     *
+     * <p>One place the answer is decided, so that the place a walk starts from and the places it
+     * steps to are held to the same thing. Asked of the carrier for the set, because which values
+     * an order writes at a place is the carrier's answer and not a comparison anybody here can
+     * make.
+     */
+    private static boolean takenIn(Place at, Carrier carrier, NumericDomain.Bounds within,
+                                   ValueSet admits, PlacesApart apart) {
+        return within.admits(at) && carrier.admitted(admits, at) && !apart.has(at);
     }
 
     /**

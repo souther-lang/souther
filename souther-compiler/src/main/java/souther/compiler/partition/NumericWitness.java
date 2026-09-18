@@ -6,6 +6,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
 import java.util.LinkedHashMap;
@@ -185,12 +186,17 @@ final class NumericWitness {
         if (runs == null) {
             return false;
         }
-        Place first = firstOf(term, carrier, runs, within, looking);
+        // The three narrowings this position stands under, read once and handed to the walk whole.
+        // What the arithmetic leaves the number is one of them; the walk is held to the other two
+        // at every place it reaches, and not only at the one it starts from.
+        ValueSet admits = admittedAt(term, looking);
+        PlacesApart apart = within.apartAt(term);
+        Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
         if (first == null) {
             return false;
         }
-        Outwards.Walked walked =
-                Outwards.from(first, Count.of(1), carrier, runs, VALUES_A_POSITION_IS_TRIED_AT);
+        Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
+                VALUES_A_POSITION_IS_TRIED_AT, admits, apart);
         for (Place tried : walked) {
             SearchRegion next = within.given(term, tried);
             if (next.emptiness().isPresent()) {
@@ -223,40 +229,22 @@ final class NumericWitness {
     }
 
     /**
-     * The place this walk starts from, or null where nothing composed one.
+     * What the declarations leave the position, or every value there is where nothing worked that
+     * out.
      *
-     * <p><b>Three things say where a value may be, and the search starts inside all of them.</b> The
-     * run is where the arithmetic leaves the number; the set is what the declarations leave the
-     * position, which the arithmetic has no word for; and the places held apart are the values a
-     * rule took out of the middle of the run, which a range cannot say. Taken from the run alone and
-     * put to the other two afterwards, the first candidate is refused and the walk has to reach the
-     * next one to recover — and on an order with no step there is no next one, so whichever of the
-     * three refused it leaves the position with nothing offered at all.
+     * <p><b>The identity of the crossing where there is no set to cross with, and never an answer
+     * about what the position admits.</b> What this search is asked is whether the region admits an
+     * assignment, not whether the declarations can be shown to admit the value — so a set nobody
+     * established is knowledge this search does not have rather than a set it may narrow by, and a
+     * question narrowed by something nobody established is narrower than what was established.
      *
-     * <p>Which is why the crossing is asked of the carrier rather than filtered here: it narrows the
-     * search by each of the three instead of judging what came back, and it builds a machine over
-     * the set once the ends of the run are exhausted.
-     *
-     * <p><b>And a position no set was worked out for is narrowed by the other two and by nothing
-     * else.</b> What this is asked is whether the region admits an assignment, not whether the
-     * declarations can be shown to admit the value — so a set nobody established is knowledge this
-     * search does not have rather than a set it may search against, and a question narrowed by
-     * something nobody established is narrower than what was established. Whether a row can be
-     * written at the place is the construction's, which owns the word for a position no value is
-     * written at; decided here, a name every case of a sum spreads would be reported as a position
-     * nothing could place rather than as one nothing writes.
+     * <p>Whether a row can be written at the place stays the construction's, which owns the word
+     * for a position no value is written at. Decided here, a name every case of a sum spreads would
+     * be reported as a position nothing could place rather than as one nothing writes.
      */
-    private static Place firstOf(NumericTerm.FromOnePosition term, Carrier carrier,
-                                 NumericDomain.Bounds runs, SearchRegion within,
-                                 WitnessSearch looking) {
-        // The identity of the crossing where there is no set to cross with, and never an answer
-        // about what the position admits. The two other narrowings are asked either way: a hole
-        // dropped here is a candidate the region refuses one step later, with nothing left to offer
-        // in its place wherever the order has no step.
-        ValueSet admits =
-                looking.valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
-                        ? set : ValueSet.ANY;
-        return carrier.somethingOtherThan(within.apartAt(term), runs, admits, looking.meter());
+    private static ValueSet admittedAt(NumericTerm.FromOnePosition term, WitnessSearch looking) {
+        return looking.valuesAt(term) instanceof AdmittedValues.Admitted.Values(ValueSet set)
+                ? set : ValueSet.ANY;
     }
 
     private NumericWitness() {}

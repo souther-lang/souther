@@ -6,9 +6,13 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -98,14 +102,49 @@ class AWalkSaysWhichOfTheThreeWaysItEndedTest {
                         .notAllOf());
     }
 
+    /**
+     * A place the run holds and a narrowing refuses is stepped past, not yielded, and is not the
+     * run running out.
+     *
+     * <p>The three answers a walk gives are about the run. What the declarations leave a position
+     * and what a rule holds it away from are not in the run, so a place either of them refuses is
+     * one the walk goes through: yielded, it would be a candidate the rules refuse offered because
+     * the run happened to hold it; read as the end of the run, everything past it would go
+     * unwalked and the walk would say it had tried them all.
+     */
+    @Test
+    void aPlaceANarrowingRefusesIsSteppedPastAndIsNotTheRunRunningOut() {
+        Outwards.Walked walked = Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
+                new Carrier.Whole(), between("-3", "3"), 8,
+                ValueSet.ANY, PlacesApart.of(List.of(Count.of(1), Count.of(-1))));
+
+        assertEquals(List.of(Count.of(0), Count.of(2), Count.of(-2), Count.of(3), Count.of(-3)),
+                walked.places(),
+                "the two places held apart are stepped past and the run beyond them is walked");
+        assertEquals(Outwards.Ended.HAVING_TRIED_THEM_ALL, walked.ended(),
+                "and the run still ran out, which is what the ending is about");
+    }
+
+    /** And the same for the set, which is the other narrowing a run has no word for. */
+    @Test
+    void aValueTheDeclarationsRefuseIsSteppedPastTheSameWay() {
+        Outwards.Walked walked = Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
+                new Carrier.Whole(), between("-2", "2"), 8,
+                ValueSet.allBut(Value.number(1)), PlacesApart.NONE);
+
+        assertEquals(List.of(Count.of(0), Count.of(-1), Count.of(2), Count.of(-2)),
+                walked.places(),
+                "the value the declarations refuse is not offered, and the rest of the run is");
+    }
+
     private static Outwards.Ended walkOfStrings(Endpoint low, Endpoint high) {
         return Outwards.from(Text.of("x"), Count.of(1), Carrier.TEXT,
-                new NumericDomain.Bounds(low, high), 8).ended();
+                new NumericDomain.Bounds(low, high), 8, ValueSet.ANY, PlacesApart.NONE).ended();
     }
 
     private static Outwards.Ended walkOfCounts(NumericDomain.Bounds within, int howMany) {
         return Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1),
-                new Carrier.Whole(), within, howMany).ended();
+                new Carrier.Whole(), within, howMany, ValueSet.ANY, PlacesApart.NONE).ended();
     }
 
     private static NumericDomain.Bounds between(String low, String high) {

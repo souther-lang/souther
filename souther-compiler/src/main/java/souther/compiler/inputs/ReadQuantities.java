@@ -452,9 +452,13 @@ final class ReadQuantities implements Quantities {
      * The same rules, with {@code term} held away from {@code at}.
      *
      * <p>Kept beside the bounds rather than folded into them, because a range says where a run
-     * stops and this says what the run does not hold. What reads it back is the proof that nothing
-     * is left ({@link #emptiness}): a value standing here is one the rules refuse, and that is the
-     * whole of what a hole changes about what this answers.
+     * stops and this says what the run does not hold.
+     *
+     * <p>Two things read it back and they are not one answer. The proof that nothing is left
+     * ({@link #emptiness}) refuses a value already standing here; {@link #apartAt} is what a search
+     * narrows by, so that it never offers one. Left to the first alone, a position whose order has
+     * no step is offered the one place a run gives up and has nothing to offer once that place is
+     * the hole.
      */
     ReadQuantities apartFrom(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at) {
         if (term == null || at == null) {
