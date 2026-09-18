@@ -7,7 +7,6 @@ import souther.compiler.query.Weakening;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -88,7 +87,7 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
      * second refusal — something else about the model breaking — fails here instead of leaving the
      * same entry behind and the witness green ({@link WrittenWitness}).
      */
-    private static final Set<String> THE_REJECTED_CONSTRUCTION = Set.of("E2010");
+    private static final List<String> THE_REJECTED_CONSTRUCTION = List.of("E2010");
 
     private static AdequacyReport measured() {
         return WrittenWitness.refusedOnly(THE_REJECTED_CONSTRUCTION, MODEL);

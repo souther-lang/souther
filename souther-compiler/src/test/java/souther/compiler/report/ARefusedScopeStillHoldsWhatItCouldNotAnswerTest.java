@@ -100,8 +100,8 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     /**
      * What the analysis came to does not depend on where the reader is standing.
      *
-     * <p>A narrowed report works its entries out again from the parts it kept, so what is held is
-     * that doing so invents nothing: an entry a narrowed report holds is one the whole report
+     * <p>A report narrowed to a module works its entries out again from the parts it kept, and
+     * what is held is that doing so invents nothing: an entry it holds is one the whole report
      * holds. The other direction — that a selection keeps every entry belonging to it — is not
      * asked, because which subject belongs to which selection is the selection's answer and is
      * written down nowhere to hold it against.

@@ -51,16 +51,35 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      * a claim belongs: its subject is the models this repository carries, so it runs where they are
      * the subject.
      *
-     * <p>One scope apiece and not one per selection. A narrowed report invents no entry the whole
-     * one does not hold, so there is none for a selection to show that asking the compilation
-     * misses ({@link AdequacyReport#assessment()}).
+     * <p><b>Every scope the published projection can make, and not the compilation alone.</b>
+     * Asking the compilation would be enough if a narrowed report only ever held entries the whole
+     * one holds. It does not: narrowed to one behavior, a report keeps a line an {@code invariant}
+     * drew and loses the rows of the behaviors that showed a row can be written at it, so it
+     * answers the same obligation again and comes back with an entry the compilation never had.
+     * Those entries reach a reader through {@code only}, which is how a run answers a request
+     * about one behavior, so a law about where entries leave a reader is about them too.
+     *
+     * <p>Repeats are no trouble here. What is asked of an entry is where it sends a reader, and an
+     * entry met twice sends them to the same place both times.
+     *
+     * <p>Asking the compilation alone would be right again once narrowing invents nothing at every
+     * grain. That is the thing that is not true, and it is what this reads instead of assuming
+     * ({@link AdequacyReport#assessment()}).
      */
     private static final List<AdequacyUncertainty> UNRESOLVED = everythingUnresolved();
 
     private static List<AdequacyUncertainty> everythingUnresolved() {
         List<AdequacyUncertainty> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
-            out.addAll(AdequacyReport.of(compilation).assessment().uncertainties());
+            AdequacyReport whole = AdequacyReport.of(compilation);
+            out.addAll(whole.assessment().uncertainties());
+            for (AdequacyReport.ModuleReport module : whole.modules()) {
+                out.addAll(whole.only(module.module(), null).assessment().uncertainties());
+                for (AdequacyReport.BehaviorReport behavior : module.behaviors()) {
+                    out.addAll(whole.only(module.module(), behavior.name())
+                            .assessment().uncertainties());
+                }
+            }
         }
         return List.copyOf(out);
     }

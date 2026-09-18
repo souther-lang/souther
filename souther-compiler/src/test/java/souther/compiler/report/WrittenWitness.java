@@ -5,10 +5,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -38,28 +35,34 @@ final class WrittenWitness {
 
     /** The report of a model nothing is refused about. */
     static AdequacyReport reportOf(String... sources) {
-        return refusedOnly(Set.of(), sources);
+        return refusedOnly(List.of(), sources);
     }
 
     /**
-     * The report of a model refused about these and only these.
+     * The report of a model refused about these and nothing else.
      *
-     * @param codes the diagnostic codes this witness is written to provoke, as a document spells
-     *              them
+     * <p>Counted and not a set of the words. A second refusal carrying a code the witness already
+     * named is a second thing wrong with the model, and asked as a set it reads as the one the
+     * witness asked for.
+     *
+     * @param codes the diagnostic codes this witness is written to provoke, one entry per refusal
+     *              expected, as a document spells them
      */
-    static AdequacyReport refusedOnly(Set<String> codes, String... sources) {
+    static AdequacyReport refusedOnly(List<String> codes, String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        Set<String> refused = compilation.diagnostics().values().stream()
+        List<String> refused = compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .filter(each -> each.diagnostic().severity() == Severity.ERROR)
                 .map(each -> each.diagnostic().code().toString())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .sorted()
+                .toList();
 
-        assertEquals(codes, refused, "a witness says what its model is refused about, and this one"
-                + " is refused about something else");
+        assertEquals(codes.stream().sorted().toList(), refused,
+                "a witness says what its model is refused about, and this one is refused about"
+                        + " something else");
         return AdequacyReport.of(compilation);
     }
 }
