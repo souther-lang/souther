@@ -1,6 +1,6 @@
 # ADR-0116: Division answers an exact Rational quotient
 
-Status: Proposed. Amends ADR-0033 and ADR-0047. ADR-0003's zero-divisor distinction and
+Status: Proposed. Amends ADR-0033, ADR-0047 and ADR-0082. ADR-0003's zero-divisor distinction and
 ADR-0095's naming rule stand.
 
 ## Context
@@ -283,6 +283,17 @@ This keeps the claim that heterogeneous arithmetic is not conversion. A conversi
 have let the open parameter be anything embeddable; an operator admitting a pair says nothing
 about a type nothing has settled.
 
+The rule covers every heterogeneous numeric operator this decision defines, equality and ordering
+included:
+
+```souther
+let belowHalf (x) = x < 1 / 2        // x : Rational
+let isHalf (x) = x == 1 / 2          // x : Rational
+let belowHalf (x: Int) = x < 1 / 2   // Int < Rational, written
+```
+
+Stating it once here is what keeps `+` and `<` from answering the question differently.
+
 ### What Rational answers when a position asks
 
 A type is asked what it answers, and `TypeOps.Requires` is where the two yes/no questions are
@@ -318,6 +329,28 @@ are usable inside a computation, and `List.sort`, `min` and `max` work over Rati
 The heterogeneous rule does not reach the library. `Set.contains(v, s)` takes its element at the
 one type the signature names, and an `Int` is not a member of a `Set<Rational>`. Exact
 heterogeneous comparison is a rule about those operators, not about every position that compares.
+
+A union's external form is asked of its members. `TypeOps.answers` answers `EXTERNAL_FORM` for a
+`Type.Union` unconditionally, which was true while every primitive had one. Rational is the first
+that does not, so the arm descends into the members the way the list, set, option and map arms
+already do — otherwise `hasExternalForm` says yes about a type the boundary refuses, and the
+capability this section states is one `TypeOps` does not hold.
+
+### A numeric fold takes a Rational element
+
+ADR-0082 requires `List.sum` and `List.product` to take an `Int` or a `Decimal` element, because
+those "are the two types `+` and `*` are defined for". This decision adds a third.
+
+Rational is admitted as an element of both. It is closed under `+` and `*`, and its identities are
+the exact values nought and one, which the primitives construct — there is no seed for an author
+to write and no literal rule to change.
+
+The rest of ADR-0082 applies unchanged. The empty list takes its element from the position the
+call is written in, so `let total: Rational = List.sum([])` is answered the way the other two are,
+and a newtype over a numeric base is still not a numeric element.
+
+Left undecided, an accepted ADR would say the numeric elements are `Int` and `Decimal` while this
+one adds a numeric primitive, and the two would disagree about what a numeric type is.
 
 ### Equality and ordering follow the same rule
 
@@ -524,7 +557,34 @@ does not produce an `Int` to wrap again as `Yen`.
 
 The same applies to a newtype directly over Decimal.
 
-The heterogeneous Rational rules also do not unwrap a nominal type:
+### A quotient of one newtype by itself is the Rational the units leave
+
+`ArithmeticCheck` refuses `Amount / Amount` today, and the reason has been that the quotient is a
+value in neither newtype: the units cancel, and Souther had no type for a dimensionless exact
+number. It has one now.
+
+```text
+N / N -> Rational      where both operands are the same newtype
+```
+
+This is not the newtype being unwrapped or converted. The dimension is what cancels, and the
+Rational is what the cancelled quotient is. `Yen(300) / Yen(200)` is three halves — a ratio of two
+amounts of money, which is a number and not an amount — and a model writing it need not reach for
+`.value` on both sides to say so.
+
+Three refusals stay, and they now have three different reasons rather than one:
+
+```text
+Amount / Quantity   the dimension is unknown, not cancelled — nothing says what the quotient is of
+Yen / Int           the dimension survives; the value is a Rational and no Yen holds one
+Int / Yen           an inverse dimension, which the model has not declared
+```
+
+The middle one is where this decision and ADR-0047 meet. Scalar division preserved the dimension
+and was inherited for that reason; it is refused now because it is not type-closed, and refused
+whether or not the dimension survives.
+
+The heterogeneous Rational rules still do not unwrap a nominal type:
 
 ```souther
 yen * (1 / 2)     // error
@@ -700,8 +760,12 @@ no such pair, its quotient for that pair being a whole number Rational holds.
 ADR-0033 is amended where it says `/` yields the operand type and where Decimal `/` chooses an
 implicit precision. Its literal and zero-divisor decisions stand.
 
-ADR-0047 is amended so that dimension preservation alone is not enough for inherited newtype
-arithmetic; closure over the wrapped type is also required.
+ADR-0047 is amended twice. Dimension preservation alone is no longer enough for inherited newtype
+arithmetic — type closure over the wrapped type is also required — and a newtype divided by itself
+answers the Rational its cancelled units leave, a quotient that ADR had no type for.
+
+ADR-0082 is amended to admit a Rational element in `List.sum` and `List.product`. What it says
+about the empty list and about a newtype element is untouched.
 
 ## References
 
@@ -713,6 +777,7 @@ arithmetic; closure over the wrapped type is also required.
 * ADR-0047: comparison and arithmetic of single-value newtypes
 * ADR-0066: a helper's parameter types come from its body — and what an operator asks of an
   operand is stated with that operator
+* ADR-0082: a numeric fold takes its element from the position it is written in
 * ADR-0095: standard-library naming grammar
 * ADR-0112: a backend does not change a value to fit a host API
 * ADR-0117: affine interpretation keeps coefficients exact
