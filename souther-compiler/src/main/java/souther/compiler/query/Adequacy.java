@@ -919,7 +919,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!checked.present()) {
                 // The bodies this would be about were not elaborated, so there is nothing here to
                 // read them off. Answered rather than absent, the places nobody could look for read
@@ -995,7 +995,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!prepared.present() || !reading.present() || !sigs.present()
                     || !checked.present()) {
                 return Answer.absent();
@@ -1056,7 +1056,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!prepared.present() || !reading.present() || !sigs.present()) {
                 return Answer.absent();
             }
@@ -1110,7 +1110,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, InteractionEvidence>> compute(Db db) {
             Answer<Map<String, CoverageRead.Read>> met = db.ask(new Meets(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!met.present()) {
                 return Answer.absent();
             }
@@ -1199,7 +1199,7 @@ public final class Adequacy {
         public Answer<Map<String, souther.compiler.partition.RulesTaken>> compute(Db db) {
             Answer<Map<String, souther.compiler.partition.DecisionReading>> read =
                     db.ask(new DecisionReadings(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!read.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -1249,7 +1249,7 @@ public final class Adequacy {
         public Answer<Map<String, DecisionEvidence>> compute(Db db) {
             Answer<Map<String, souther.compiler.partition.DecisionReading>> read =
                     db.ask(new DecisionReadings(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!read.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -1638,7 +1638,7 @@ public final class Adequacy {
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
             souther.compiler.query.Bodies.Elaborated checkedBodies =
-                    db.ask(new Bodies.Checked(name)).value();
+                    db.ask(new Bodies.Observable(name)).value();
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
@@ -1702,7 +1702,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            db.ask(new Bodies.Checked(name));
+            db.ask(new Bodies.Observable(name));
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -1781,7 +1781,7 @@ public final class Adequacy {
             // space is over every position measured — the difference is what is known, not a
             // rule for one kind of behavior.
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             Set<souther.compiler.partition.AxisId> decided =
                     checked == null || !checked.behaviorBodies().containsKey(spec.name())
                             || met == null || met.get(spec.name()) == null
@@ -1947,7 +1947,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
+                    db.ask(new Bodies.Observable(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
@@ -2001,7 +2001,7 @@ public final class Adequacy {
             DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (evidence == null || !prepared.present() || !sigs.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -2972,7 +2972,7 @@ public final class Adequacy {
      * does not use — and deriving one for it walks every body of the module to say nothing more.
      */
     static Optional<SiteNumbering> numberingOf(Db db, String module) {
-        Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
         return checked == null ? Optional.empty()
                 : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
     }
@@ -3469,14 +3469,18 @@ public final class Adequacy {
             // waits on a run, so taking `Plan.NONE` where the build did not ask for the instrumented
             // classes bought nothing and left a body that owes no arm looking like a body nobody
             // measured (issue #955).
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             CoverageSites.Plan plan =
                     checked == null ? CoverageSites.Plan.NONE : checked.plan();
-            // Whether the bodies came back at all. Which behaviors have one is the model's answer
-            // and is asked of the declarations below; this is the other question — whether what a
-            // body holds could be read — and answering both from this map is what made a module the
-            // compile stopped in report every behavior as one with no body (issue #996).
-            boolean bodiesRead = checked != null;
+            // Whether what a body holds could be read is asked per behavior, below. Which
+            // behaviors have one at all is the model's answer and is asked of the declarations;
+            // answering both from one map is what made a module the compile stopped in report
+            // every behavior as one with no body.
+            //
+            // Per behavior because an elaboration holds some of a module's bodies and not others:
+            // what may be run of a module is a closure over its implementations, so a module-wide
+            // answer here would say the body of a behavior this image has none of was read, and
+            // the measure would go on to report it as owing no arm.
             // Off the value already in hand, which is the same answer numberingOf asks the store
             // for: a module whose bodies were not read has no numbering, and its rows have no
             // account of a run to be read under one.
@@ -3510,7 +3514,8 @@ public final class Adequacy {
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
                 BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
-                        bodiesRead, arms, arrives, observed);
+                        checked != null && checked.behaviorBodies().containsKey(behavior.name()),
+                        arms, arrives, observed);
                 if (absent != null) {
                     return absent;
                 }
@@ -3547,18 +3552,19 @@ public final class Adequacy {
          * saying {@code implemented} (issue #996).
          *
          * @param writesItsOwnBody what the declarations say, from the one reader of them
-         * @param bodiesRead       whether the elaborated bodies came back, which is what the arms
+         * @param bodyRead         whether this behavior's elaborated body came back, which is what
+         *                         the arms
          *                         and the plan below are read from
          */
         private static BranchEvidence whyNoArms(String module, boolean writesItsOwnBody,
-                boolean bodiesRead,
+                boolean bodyRead,
                 List<CoverageSites.ArmSite> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
                 RowReading observed) {
             if (!writesItsOwnBody) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
-            if (!bodiesRead) {
+            if (!bodyRead) {
                 // The model says there is a body. Nothing read it, so what it owes is unknown —
                 // which is not the same as owing nothing, and reads identically without this.
                 return BranchEvidence.unelaborated(module);
@@ -4011,7 +4017,7 @@ public final class Adequacy {
             if (measured == null) {
                 return Answer.absent();
             }
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             CoverageSites.Plan sites = checked == null ? CoverageSites.Plan.NONE : checked.plan();
 
             // Every place a run through an owed arm is recorded at, and not the one the finding
@@ -4178,7 +4184,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
+                    db.ask(new Bodies.Observable(name)).value();
             // What the plan's numbers mean, which a module whose bodies were not read has none of.
             // Taken off the value in hand rather than stood in for, so that such a module says it
             // has none.
@@ -7147,7 +7153,7 @@ public final class Adequacy {
                 // The sentence above says only which behavior, so a rule whose conditions were
                 // dropped here would be a finding two of which a reader cannot act on.
                 case About.ARuleNoRowTakes(var behavior, var ruled) -> {
-                    Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
+                    Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
                     for (DecisionRuleReading read : DecisionRuleReading.of(ruled,
                             checked == null ? CoverageSites.Plan.NONE : checked.plan(), behavior)) {
                         said(db, built, read);

@@ -3356,6 +3356,15 @@ public final class Bodies {
      * caller of another module's unmade implementation did not is short of the second and not of the
      * first ({@link Implementations#everyOneRunnable}).
      *
+     * <p><b>A run is measured in the elaboration that produced the classes it ran.</b> So this is
+     * what every measure of a run reads, and {@link Checked} is what publication reads. A plan is an
+     * index onto the bodies of one elaboration — a partial image and a whole one are two coordinate
+     * systems, whatever the module is called — so a measure that took its numbering from the whole
+     * check would be reading a run against numbers nothing wrote, and would put the structure of a
+     * program that did not run beside the observation of the one that did. A behavior whose
+     * implementation may not be run has no body here, which is what stops a measure inventing
+     * evidence about it.
+     *
      * <p>Nothing is reported from here. What a contradicted claim refuses is a build, and a build
      * refuses over the module it would ship; a refusal raised from an artifact nothing ships would
      * be this compile refusing a model for the first time while answering what may be observed

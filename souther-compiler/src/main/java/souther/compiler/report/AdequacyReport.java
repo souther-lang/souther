@@ -1022,7 +1022,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** Where this compilation numbered the places a run through each construct is recorded. */
     private static CoverageSites.Plan placesOf(Compilation compilation, String module) {
         Bodies.Elaborated checked =
-                compilation.db().ask(new Bodies.Checked(module)).value();
+                compilation.db().ask(new Bodies.Observable(module)).value();
         return checked == null ? CoverageSites.Plan.NONE : checked.plan();
     }
 
