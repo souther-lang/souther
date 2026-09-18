@@ -389,8 +389,14 @@ final class ReadQuantities implements Quantities {
      * so which of the two it was is the answer itself.
      */
     Taking assuming(LinearForm<NumericTerm> form, Rel rel) {
+        // A form weighing no term states nothing, so there is no constraint here to take in or to
+        // refuse. Answered either way it would be an entry about nothing — recorded as taken in, a
+        // condition a reader is told the search was narrowed by; refused, a shortfall of this
+        // compiler where no rule was written. Every caller has a comparison that named a position,
+        // so it is the question that is wrong and it is said here.
         if (form == null || form.coefs().isEmpty()) {
-            return new Taking.Refused(new SearchRegion.Refusal.NoQuantityToTake());
+            throw new IllegalArgumentException(
+                    "a form weighing no term is no constraint to take in: " + form);
         }
         form.coefs().keySet().forEach(this::held);
         // Refused where the form is over positions no one value has, the same as a question about

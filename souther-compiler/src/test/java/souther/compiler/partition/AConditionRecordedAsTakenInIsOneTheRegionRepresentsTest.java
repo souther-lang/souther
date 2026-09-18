@@ -103,13 +103,13 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     @Test
     void theRegionItselfRefusesAFormOverATermWithNoOrder() {
         SearchRegion.Assumption asked = regionOf("recordsAreEqual")
-                .assuming(difference("a", "b"), Rel.EQ);
+                .assuming(difference("recordsAreEqual", "a", "b"), Rel.EQ);
 
         SearchRegion.Refusal.NoOrderUnderATerm why = assertInstanceOf(
                 SearchRegion.Refusal.NoOrderUnderATerm.class,
                 assertInstanceOf(SearchRegion.Assumption.Refused.class, asked,
                         "the region has no order for either position").why());
-        assertEquals(TermPath.of("a"), why.term().subjectPath(),
+        assertEquals(pathOf("recordsAreEqual", "a"), why.term().subjectPath(),
                 "and it names the position it has none for");
     }
 
@@ -148,7 +148,8 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     @Test
     void aTakenInEntryTheRegionCannotCarryIsRefusedLoudly() {
         WayToTheBorder forged = new WayToTheBorder(List.of(new OnTheWay.TakenIn(WHERE,
-                new TakenConstraint.Affine(difference("a", "b"), Rel.EQ))));
+                new TakenConstraint.Affine(
+                        difference("recordsAreEqual", "a", "b"), Rel.EQ))));
 
         assertThrows(IllegalStateException.class,
                 () -> forged.narrowing(regionOf("recordsAreEqual")),
@@ -156,12 +157,28 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
                         + " holding two readings of it");
     }
 
-    /** {@code one - other} over two of the behavior's positions, spelled as a rule about them. */
-    private static LinearForm<NumericTerm> difference(String one, String other) {
+    /**
+     * {@code one - other} over two of the behavior's positions.
+     *
+     * <p>The positions are taken from the reading rather than spelled here, so the form is over the
+     * places this reading has, and a term of it is a term the region can be asked about. What is
+     * assembled is the arithmetic, which is what these two tests are about — the reading has none
+     * to hand for the record pair, since the walk now declines the comparison it would come from.
+     */
+    private static LinearForm<NumericTerm> difference(String behavior, String one, String other) {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(new NumericTerm.ValueOf(TermPath.of(one)), BigDecimal.ONE);
-        coefs.put(new NumericTerm.ValueOf(TermPath.of(other)), BigDecimal.ONE.negate());
+        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, one)), BigDecimal.ONE);
+        coefs.put(new NumericTerm.ValueOf(pathOf(behavior, other)), BigDecimal.ONE.negate());
         return new LinearForm<>(BigDecimal.ZERO, coefs);
+    }
+
+    /** Where the reading of the behavior's input has the position spelled {@code spelled}. */
+    private static TermPath pathOf(String behavior, String spelled) {
+        List<TermPath> positions = readingOf(behavior).read().domain().positions().stream()
+                .map(souther.compiler.inputs.Position::path).toList();
+        return positions.stream().filter(each -> each.toString().equals(spelled)).findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "no position at " + spelled + " among " + positions));
     }
 
     /** The constraint the body's single condition landed in, coming out the way it was written. */

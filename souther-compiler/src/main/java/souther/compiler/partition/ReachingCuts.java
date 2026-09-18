@@ -257,11 +257,6 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
         return switch (why) {
             case SearchRegion.Refusal.NoOrderUnderATerm _ ->
                     new OnTheWay.Why.QuantityStandsOnNoOrder();
-            // A form weighing no term is a comparison that constrains no position, which is the
-            // word a reading that cancelled already gets. One thing, so one word: an author reading
-            // either is told the rule states no quantity, and there is nothing to change.
-            case SearchRegion.Refusal.NoQuantityToTake _ ->
-                    new OnTheWay.Why.ComparisonStatesNoQuantity();
         };
     }
 

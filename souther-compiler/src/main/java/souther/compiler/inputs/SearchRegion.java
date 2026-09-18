@@ -113,10 +113,6 @@ public interface SearchRegion {
          * that is a distance on nothing.
          */
         record NoOrderUnderATerm(NumericTerm term) implements Refusal {}
-
-        /** The form weighs no term, so there is no quantity to be constrained. Nothing fell short
-         *  here; there is nothing to take in. */
-        record NoQuantityToTake() implements Refusal {}
     }
 
     /**
