@@ -2,6 +2,8 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.report.AdequacyReport;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -16,6 +18,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,13 +103,14 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
     /**
      * Every identity the document writes is one the document explains.
      *
-     * <p>Both places are in this run on purpose: a position pointing at an arm nothing reached, and
-     * a position under a reason about a row nothing was observed for. They are written by different
-     * code and were explained by neither.
+     * <p>Every field this can read is in this run on purpose: a position pointing at an arm nothing
+     * reached, a position under a reason about a row nothing was observed for, and the source a row
+     * subject is named by — under the verdict this document holds open and under the obligation the
+     * row answers. They are written by different code and were explained by none of it.
      *
-     * <p>The third place — a reason whose {@code subject} is itself a source identity — is not
-     * reachable from a command. It is written for a source whose contents nothing could read, and
-     * what a document does with one is asked where such a fact can be built.
+     * <p>The one spelling not here is a reason whose {@code subject} is itself a source identity,
+     * which is not reachable from a command: it is written for a source whose contents nothing could
+     * read, and what a document does with one is asked where such a fact can be built.
      */
     @Test
     void everySourceIdentityWrittenHasAnEntry() throws Exception {
@@ -117,8 +121,13 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         JsonNode report = JSON.readTree(run(sources, "--format", "json").out());
 
         List<Written> written = identitiesIn(report, new ArrayList<>());
-        assertTrue(written.stream().anyMatch(w -> w.field().equals("sourceId")),
-                "a position that points into a source is in this document: " + report);
+        // Every field the vocabulary holds, so that what this walks is what a reader of the schema
+        // would walk. A run reaching one of them and not the others would pass this over the field
+        // it reached and say nothing about the rest.
+        assertEquals(IDENTITY_FIELDS,
+                written.stream().map(Written::field).collect(Collectors.toCollection(
+                        LinkedHashSet::new)),
+                () -> "the identities this document writes are " + written + " in " + report);
 
         Set<String> explained = new LinkedHashSet<>(report.get("sources").propertyNames());
         for (Written each : written) {
@@ -216,21 +225,123 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         assertEquals("stopped.sou", report.get("sources").get("1").asString(), report.toString());
     }
 
+    /**
+     * A field named for a source is defined as one, so the name and the definition agree.
+     *
+     * <p>The vocabulary above is the set of fields written with the shared definition, and a field
+     * that carries an identity while spelling it out for itself is outside that set — which is how
+     * the identity a row subject carries came to be written by the document and read by nothing.
+     * Asked of the names because that is the half a reader of the document sees: two fields called
+     * the same thing that are not the same thing is the other way this drifts.
+     */
+    @Test
+    void everyFieldNamedForASourceIsDefinedAsOne() {
+        List<Defined> named = new ArrayList<>();
+        propertiesNamedForASource(schema(), named);
+
+        assertFalse(named.isEmpty(), "this schema has fields named for a source");
+        for (Defined each : named) {
+            JsonNode ref = each.definition().get("$ref");
+            assertTrue(ref != null && SOURCE_IDENTITY.equals(ref.asString()),
+                    () -> "`" + each.name() + "` is named for a source and is written out as "
+                            + each.definition() + ", so nothing reading the definition finds it");
+        }
+    }
+
+    /** One place the schema defines a field, and what it defines it as. */
+    private record Defined(String name, JsonNode definition) {}
+
+    /** Every property of the schema whose name says it is a source, wherever it sits. */
+    private static void propertiesNamedForASource(JsonNode node, List<Defined> into) {
+        if (node.isArray()) {
+            node.forEach(child -> propertiesNamedForASource(child, into));
+            return;
+        }
+        if (!node.isObject()) {
+            return;
+        }
+        JsonNode properties = node.get("properties");
+        if (properties != null) {
+            for (String property : properties.propertyNames()) {
+                if (property.equals("source") || property.equals("sourceId")) {
+                    into.add(new Defined(property, properties.get(property)));
+                }
+            }
+        }
+        for (String name : node.propertyNames()) {
+            propertiesNamedForASource(node.get(name), into);
+        }
+    }
+
     /** Where a source identity was written, and which one. */
     private record Written(String field, String sourceId) {}
 
     /**
+     * The fields the schema defines as a source identity, which is what one is written under.
+     *
+     * <p>Read from the schema and not listed here, so that the document and what reads it take the
+     * set from one place. A field carrying an identity and defined inline instead would be invisible
+     * to this, which is what {@link #everyFieldNamedForASourceIsDefinedAsOne} refuses.
+     */
+    private static final Set<String> IDENTITY_FIELDS = identityFieldsOf(schema());
+
+    private static Set<String> identityFieldsOf(JsonNode schema) {
+        Set<String> out = new LinkedHashSet<>();
+        definedAsAnIdentity(schema, null, out);
+        return out;
+    }
+
+    /** Every property of {@code node} — at any depth — written as the shared definition. */
+    private static void definedAsAnIdentity(JsonNode node, String named, Set<String> into) {
+        if (node.isArray()) {
+            node.forEach(child -> definedAsAnIdentity(child, null, into));
+            return;
+        }
+        if (!node.isObject()) {
+            return;
+        }
+        JsonNode ref = node.get("$ref");
+        if (named != null && ref != null && SOURCE_IDENTITY.equals(ref.asString())) {
+            into.add(named);
+        }
+        JsonNode properties = node.get("properties");
+        if (properties != null) {
+            for (String property : properties.propertyNames()) {
+                definedAsAnIdentity(properties.get(property), property, into);
+            }
+        }
+        for (String name : node.propertyNames()) {
+            if (!name.equals("properties")) {
+                definedAsAnIdentity(node.get(name), null, into);
+            }
+        }
+    }
+
+    private static final String SOURCE_IDENTITY = "#/$defs/sourceIdentity";
+
+    /** The schema shipped beside this compiler, which is what a reader validates against. */
+    private static JsonNode schema() {
+        try (java.io.InputStream in = AdequacyReport.class.getResourceAsStream(
+                "/souther/adequacy-schema-" + AdequacyReport.SCHEMA_VERSION + ".json")) {
+            return JSON.readTree(in);
+        } catch (java.io.IOException cannotRead) {
+            throw new IllegalStateException("the schema is shipped beside this", cannotRead);
+        }
+    }
+
+    /**
      * The source identities anywhere in a document.
      *
-     * <p>Read off the two spellings the schema gives an identity rather than off the places one is
-     * emitted today: an `+at+` names its source under `+sourceId+` wherever an `+at+` sits, and a
-     * reason's `+subject+` is one exactly where its `+scope+` says `+source+`. So a new place either
-     * of those two is written is covered without this being touched.
+     * <p>Which fields carry one is asked of the schema rather than written here. A field that
+     * carries an identity says so by being defined as {@code sourceIdentity}, so this walks the
+     * schema for the names of those fields and then reads them wherever they sit. A field added to
+     * the document is covered by the definition it is written with, which is the one place the fact
+     * is stated — kept here as a list, it was a list of the places an identity was emitted the day
+     * it was written, and the next place to emit one was outside it.
      *
-     * <p>A third spelling would not be. What holds for one of those is what the writing side is for:
-     * everything that writes an identity goes through one call, and this reads back what a reader of
-     * the schema can see. If a field is ever added under a name of its own, the vocabulary here is
-     * where it has to be said.
+     * <p>The one spelling that cannot say so is a reason's {@code subject}, which is an identity
+     * exactly where its {@code scope} is {@code source} and is the name an author wrote everywhere
+     * else. That much is read from the pair, and the schema's own account of the table says so.
      */
     private static List<Written> identitiesIn(JsonNode node, List<Written> into) {
         if (node.isArray()) {
@@ -240,9 +351,11 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         if (!node.isObject()) {
             return into;
         }
-        JsonNode sourceId = node.get("sourceId");
-        if (sourceId != null && sourceId.isString()) {
-            into.add(new Written("sourceId", sourceId.asString()));
+        for (String field : IDENTITY_FIELDS) {
+            JsonNode written = node.get(field);
+            if (written != null && written.isString()) {
+                into.add(new Written(field, written.asString()));
+            }
         }
         JsonNode scope = node.get("scope");
         if (scope != null && "source".equals(scope.asString())) {

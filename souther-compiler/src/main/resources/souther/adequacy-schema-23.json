@@ -81,13 +81,21 @@
     },
     "sources": {
       "type": "object",
-      "description": "What each source identity written elsewhere in this document is called, keyed on the identity. Every identity the document carries has an entry — a `source` subject, and the `sourceId` of every `at`. Not a list of what the compile was handed: a source this report says nothing about has no entry, so this says which files the report is about rather than which files were read. The names are the ones the same run's diagnostics use, which are chosen from the set of files in front of a reader and are neither stable across runs nor a key — which is why they are here and not in place of the identities. Not in `required`: a document written before this field existed is still a document of this version.",
+      "description": "What each source identity written elsewhere in this document is called, keyed on the identity. Every identity the document carries has an entry: every field defined by `sourceIdentity`, and the `subject` of a reason whose `scope` is `source`, which is an identity for that scope alone and so is spelled as the subject of any other. Said by pointing at the definition rather than by listing the fields, because a list is what the next field to carry one is missing from. Not a list of what the compile was handed: a source this report says nothing about has no entry, so this says which files the report is about rather than which files were read. The names are the ones the same run's diagnostics use, which are chosen from the set of files in front of a reader and are neither stable across runs nor a key — which is why they are here and not in place of the identities. Not in `required`: a document written before this field existed is still a document of this version.",
       "additionalProperties": {
         "type": "string"
       }
     }
   },
   "$defs": {
+    "sourceIdentity": {
+      "type": "string",
+      "description": "A source as the compilation identifies it, written once here for every field that carries one. It is what the caller handed the file over as — a position in a list for a build, a document URI for an editor — and not a name to show a reader: what to call a file depends on which other files are in front of that reader, so it is neither stable across runs nor a key. `sources` says what each of these is called. A field that carries one says so by being defined here, which is what lets a reader find every one of them without a list of the places they appear.",
+      "examples": [
+        "0",
+        "file:///home/dev/model.sou"
+      ]
+    },
     "ruleHandle": {
       "type": "string",
       "description": "How a reader finds a rule, written once here for every field that carries one. A rule the author named is found by that name: a clause of an invariant they called something is `invariant Amount (cap)`, one they named nothing is counted from the top of the declaration as `invariant Amount #2`, a clause of an `ensures` is `ensures charge (refunded)`, and a clause stating one rule over every answer is `ensures charge`. A rule they wrote rather than named has no name to look up and is found by where it is: `comparison@billing.sou:14:22` in a source this document's `sources` table names, and `comparison@7:3` where the file is the reader's to know. Code this compile reads from somewhere it holds no file for is said by what reaches it — `comparison in `Money`, reached at billing.sou:14:22`, or `comparison in `Money`, reached at 7:3`, or `comparison in `Money`` where there was no position to give. The word in front of a place says what kind of rule it is, and is one of the words `ruleId.kind` uses for a rule with no name: `predicate@billing.sou:14:22`, `predicate@7:3`, `predicate in `Money`, reached at billing.sou:14:22`, `predicate in `Money`, reached at 7:3`, `predicate in `Money``, and `fork@billing.sou:14:22`, `fork@7:3`, `fork in `Money`, reached at billing.sou:14:22`, `fork in `Money`, reached at 7:3`, `fork in `Money``. These words are how an author acts on a rule and never what tells one rule from another — two arms of one `ensures` clause may name the same case — which is `ruleId`.",
@@ -2438,8 +2446,7 @@
               "description": "The behavior the row is written for."
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "name": {
               "type": "string",
@@ -2461,8 +2468,7 @@
               "description": "The behavior the row is written for."
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "ordinal": {
               "type": "integer",
@@ -4119,8 +4125,7 @@
       "additionalProperties": false,
       "properties": {
         "sourceId": {
-          "type": "string",
-          "description": "The source, as an identity, read the way a `source` subject is. `sources` says what it is called."
+          "$ref": "#/$defs/sourceIdentity"
         },
         "line": {
           "type": "integer"
@@ -4342,8 +4347,8 @@
           "description": "The definition whose body wrote it."
         },
         "sourceId": {
-          "type": "string",
-          "description": "The source the rows or the stand-in are written in, read the way a `source` subject is. `sources` says what it is called."
+          "$ref": "#/$defs/sourceIdentity",
+          "description": "The source the rows or the stand-in are written in."
         }
       }
     },
@@ -4394,8 +4399,7 @@
               "const": "source"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             }
           }
         },
@@ -4416,8 +4420,7 @@
               "type": "string"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "name": {
               "type": "string",
@@ -4442,8 +4445,7 @@
               "type": "string"
             },
             "source": {
-              "type": "string",
-              "description": "The source, under the name this document gives it."
+              "$ref": "#/$defs/sourceIdentity"
             },
             "ordinal": {
               "type": "integer",

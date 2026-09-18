@@ -86,9 +86,11 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
                 new PublishedSubject.OfAModule("m"),
                 new PublishedSubject.OfABehavior("b"),
                 new PublishedSubject.OfASource(new souther.compiler.source.SourceId("0")),
-                new PublishedSubject.OfARow("b", new souther.compiler.source.SourceId("0"),
+                // Each under a source of its own, so that what one of them writes down cannot be
+                // read as what another did.
+                new PublishedSubject.OfARow("b", new souther.compiler.source.SourceId("1"),
                         "named", null),
-                new PublishedSubject.OfARow("b", new souther.compiler.source.SourceId("0"),
+                new PublishedSubject.OfARow("b", new souther.compiler.source.SourceId("2"),
                         null, 1),
                 new PublishedSubject.AtASpelledPosition("b", "r.cost"),
                 new PublishedSubject.AtAPosition("b", "r.cost", "r.cost@Some"),
@@ -168,6 +170,41 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         }
 
         assertEquals(List.of(), wrong, "the schema shipped beside this refuses a subject it writes");
+    }
+
+    /**
+     * And a subject that carries a source leaves the document owing an explanation of it.
+     *
+     * <p>The table of sources is what a reader resolves an identity against, and it is built by the
+     * act of writing one: everything that writes an identity asks {@link DocumentSources} for the
+     * string, and what was asked for is what the table holds. A subject that wrote the identity
+     * itself would put one in front of a reader that the table never heard of — and the document's
+     * own check for that reads a compile's output, which explains such an identity wherever any
+     * other field of the same document happens to name the same file.
+     *
+     * <p>So it is asked here, where a subject can be written on its own. Both kinds that carry one
+     * are written into one table: a source subject, which is what a source whose contents could not
+     * be read is said of, and a row subject, which names the source the row is written in.
+     */
+    @Test
+    void aSubjectThatCarriesASourceIsExplainedByTheTable() {
+        DocumentSources sources =
+                new DocumentSources(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        Set<String> carried = new LinkedHashSet<>();
+        for (PublishedSubject each : oneOfEach()) {
+            ObjectNode written = JSON.createObjectNode();
+            AdequacyReport.about(written, each, sources);
+            switch (each) {
+                case PublishedSubject.OfASource it -> carried.add(it.source().value());
+                case PublishedSubject.OfARow it -> carried.add(it.source().value());
+                default -> { }
+            }
+        }
+
+        assertEquals(Set.of("0", "1", "2"), carried,
+                "a subject carrying a source is written above, or this asks nothing");
+        assertEquals(carried, sources.table().keySet(),
+                "what a subject wrote and what the document owes an explanation of");
     }
 
     /**
