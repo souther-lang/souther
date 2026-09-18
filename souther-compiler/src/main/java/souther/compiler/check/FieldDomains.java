@@ -2263,22 +2263,30 @@ public final class FieldDomains {
         if (form.isEmpty()) {
             return null;
         }
-        Map<FactSubject, java.math.BigDecimal> coefs = new LinkedHashMap<>();
-        for (Map.Entry<NumberAt<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
-            NumberAt<RuleKey> at = each.getKey();
+        // The atom each coordinate carries, worked out for all of them before any is weighed. What
+        // is asked of the form is asked of every coordinate at once: one this reading takes no
+        // range of leaves the whole form unanswered, and a walk that stopped at the first such
+        // coordinate would be reading a map that promises no order for which one that is.
+        Map<NumberAt<RuleKey>, FactSubject> atoms = new HashMap<>();
+        form.keySet().forEach(at -> {
             FactSubject atom = switch (at.of()) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(countAt.get(at.position())) : null;
             };
-            if (atom == null) {
-                return null;
+            if (atom != null) {
+                atoms.put(at, atom);
             }
-            // Two coordinates of one form can be one atom — a form is written over the names a
-            // rule writes, and a rule may write one of them twice.
-            coefs.merge(atom, each.getValue(), java.math.BigDecimal::add);
+        });
+        if (atoms.size() != form.size()) {
+            return null;
         }
+        // Two coordinates of one form can be one atom — a form is written over the names a rule
+        // writes, and a rule may write one of them twice. What that comes to is a sum, which is the
+        // same sum whichever coordinate is added first.
+        Map<FactSubject, java.math.BigDecimal> coefs = new HashMap<>();
+        form.forEach((at, weight) -> coefs.merge(atoms.get(at), weight, java.math.BigDecimal::add));
         return constraints.numbers().boundsOf(
                 new LinearForm<>(java.math.BigDecimal.ZERO, coefs));
     }
