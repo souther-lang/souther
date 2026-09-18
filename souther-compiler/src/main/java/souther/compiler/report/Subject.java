@@ -30,7 +30,7 @@ import souther.compiler.types.SourceConstructOrigin;
  * attribution vocabulary where a referent belongs, and the attribution would then have to be true
  * of every subject here, including the ones no incompleteness ever raises.
  *
- * <p><b>Two of these cannot be recovered from the fact that raised the opening.</b> A measurement
+ * <p><b>Two of these cannot be recovered from the fact that raised the entry.</b> A measurement
  * nobody made carries only what it was waiting for, and an obligation's disposition carries only
  * what is undecided about it — neither holds the measure or the point it is of. Those identities
  * belong to the walk that found them and have to be handed in. A {@code subjectOf} taking a

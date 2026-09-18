@@ -88,8 +88,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
     void everyWayAnObligationStaysOpenSaysWhatItOpensTheVerdictOn() {
         Map<String, List<String>> said = new LinkedHashMap<>();
         everyWay().forEach((name, why) -> {
-            List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(why)));
+            List<AdequacyUncertainty> out = new ArrayList<>();
+            AdequacyReport.unresolvedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(why)));
             said.put(name, out.stream()
                     .map(each -> each.getClass().getSimpleName() + "/" + each.runSensitivity())
                     .toList());
@@ -130,8 +130,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
     @Test
     void anUndecidedObligationIsAlwaysOpenOnSomething() {
         for (ObligationDisposition.Uncertainty each : everyWay().values()) {
-            List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(each)));
+            List<AdequacyUncertainty> out = new ArrayList<>();
+            AdequacyReport.unresolvedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(each)));
             boolean readings =
                     each instanceof ObligationDisposition.Uncertainty.WhetherARowIsThere
                             .ReadingsStopped;
@@ -141,7 +141,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
             // And names the point the walk reached it at, which is the half a disposition does not
             // hold. Handed over and dropped, every one of these came out as the same entry however
             // many points the module owed a row at (issue #1437).
-            for (AdequacyOpening opened : out) {
+            for (AdequacyUncertainty opened : out) {
                 assertEquals(HANDED_IN, opened.subject(),
                         () -> each + " opened the verdict on something other than the point it is"
                                 + " about");

@@ -1452,20 +1452,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (!adequacyGaps().isEmpty()) {
             return AdequacyStatus.NOT_SATISFIED;
         }
-        // Every measure the verdict rests on came to an answer nothing weakened. A measurement made
-        // in part is one whose gaps may not be gaps, and one that could not be finished came to no
-        // answer at all — neither settles a verdict.
-        //
-        // The support evidence and the domain measures, which are two questions. This used to ask
-        // the second and then reach past it for a list of reasons: a reason about a measure nothing
-        // rests on held the verdict open, and a reason no measure carried held it open on nobody's
-        // authority (issue #996).
-        return Stream.concat(requiredSupport().stream(), requiredEvidence().stream())
-                        .map(Owned::value)
-                        .allMatch(m -> m instanceof Measurement.Complete<?>)
-                        && requiredObligations().stream().map(Owned::value).noneMatch(
-                                owed -> owed.disposition() instanceof ObligationDisposition.Undecided)
-                ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
+        // Asked of the uncertainties themselves rather than of the measures a second time. A
+        // measure short of anything leaves an entry there and a measure complete in every part
+        // leaves none, so the two questions have one answer — worked out twice, they are two that
+        // can differ, and a report saying it is undetermined while naming nothing that holds it
+        // open is what that difference looks like.
+        return unresolved().isEmpty() ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
+    }
+
+    /**
+     * What this scope found and what it has not answered, as one value and before either is
+     * ranked.
+     *
+     * <p>Where a question about the entries themselves is asked. The verdict outranks: a scope with
+     * a gap is refused and {@link #whatKeepsTheVerdictOpen()} is then empty, which is right for a
+     * reader of that verdict and wrong for anyone asking what the analysis came to
+     * ({@link AdequacyAssessment}).
+     */
+    public AdequacyAssessment assessment() {
+        return new AdequacyAssessment(adequacyGaps(), unresolved());
     }
 
     /**
@@ -1489,36 +1494,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * reader was rendering, the same report came to one answer on the page and another in the
      * document.
      */
-    public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
-        if (adequacy() != AdequacyStatus.UNDETERMINED) {
-            return List.of();
-        }
+    public List<AdequacyUncertainty> whatKeepsTheVerdictOpen() {
+        // The verdict written out rather than asked for, which is the same answer and one walk
+        // instead of two: with no gap a scope is undetermined exactly when this is not empty, so
+        // the empty list is what both of the other two verdicts come to anyway. Asked as
+        // `adequacy() == UNDETERMINED`, the entries are built once to answer that and again to
+        // return them.
+        return adequacyGaps().isEmpty() ? unresolved() : List.of();
+    }
+
+    /**
+     * Everything this scope has not answered, whatever its verdict makes of them.
+     *
+     * <p>Beneath the ranking and read by both sides of it. A scope with a gap is refused and shows
+     * none of these to a reader of its verdict, and the entries are there either way — a module
+     * whose bodies were never made is short of them beside a sibling the rows refuse, and the two
+     * facts are about different things.
+     */
+    private List<AdequacyUncertainty> unresolved() {
         // The facts first, folded once. Two measures that went without the same thing went without
         // one thing, and putting them together is what says so.
         WeakeningSet facts = WeakeningSet.none();
-        List<AdequacyOpening> rest = new ArrayList<>();
+        List<AdequacyUncertainty> rest = new ArrayList<>();
         for (Owned<Measurement<?>> each : requiredSupport()) {
             facts = facts.union(each.value().weakening());
-            openedBy(rest, each.subject(), each.value());
+            unresolvedBy(rest, each.subject(), each.value());
         }
         for (Owned<Measure<?>> each : requiredEvidence()) {
             facts = facts.union(each.value().weakening());
             if (each.value() instanceof Measurement<?> measured) {
-                openedBy(rest, each.subject(), measured);
+                unresolvedBy(rest, each.subject(), measured);
             }
         }
         for (Owned<ObligationAssessment> each : requiredObligations()) {
             facts = facts.union(each.value().weakening());
-            openedBy(rest, each.subject(), each.value().disposition());
+            unresolvedBy(rest, each.subject(), each.value().disposition());
         }
-        List<AdequacyOpening> out = new ArrayList<>();
-        facts.causes().forEach(each -> out.add(new AdequacyOpening.ByWeakening(each)));
+        List<AdequacyUncertainty> out = new ArrayList<>();
+        facts.causes().forEach(each -> out.add(new AdequacyUncertainty.ByWeakening(each)));
         out.addAll(rest);
         return out;
     }
 
     /**
-     * What one measurement opens the verdict on beside the facts it went without.
+     * What one measurement leaves unanswered beside the facts it went without.
      *
      * <p>A {@code switch} over the states with no {@code default}, because this is the same question
      * {@link #adequacy()} asks of the same value and the two must not be able to answer differently.
@@ -1529,32 +1548,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * two that are short of something refuse an empty {@code WeakeningSet} at construction, so the
      * union above already holds at least one fact for each of them.
      */
-    static void openedBy(List<AdequacyOpening> out, Subject subject, Measurement<?> measured) {
+    static void unresolvedBy(List<AdequacyUncertainty> out, Subject subject, Measurement<?> measured) {
         switch (measured) {
             case Measurement.NotMeasured<?> never ->
-                    out.add(new AdequacyOpening.NotMeasured(subject, never.why()));
+                    out.add(new AdequacyUncertainty.NotMeasured(subject, never.why()));
             case Measurement.Complete<?> _, Measurement.Partial<?> _,
                  Measurement.FailedToMeasure<?> _ -> { }
         }
     }
 
     /**
-     * And what one obligation opens it on, which is what it is undecided about.
+     * And what one obligation leaves unanswered, which is what it is undecided about.
      *
      * <p>Read from the disposition and never from the coverage beneath it. Those are two questions
      * and {@link #adequacy()} asks the first: whether a row can be written at a point is settled
      * from the coverage <em>and</em> what showed a row is writable, so three of the four ways an
      * obligation is undecided leave the coverage with nothing to have gone without. Asked of the
-     * coverage, a point nothing could show a row for held the verdict open and named nothing.
+     * coverage, a point nothing could show a row for went unanswered and named nothing.
      *
      * <p>A reading that stopped adds nothing here, and that is not an omission: what it met is the
      * coverage's own {@code WeakeningSet}, which the union above already holds. Counted again it
      * would be one fact said twice, which is what a set is for.
      *
      * <p>{@code Undecided} refuses an empty list at construction and every arm below yields an
-     * entry, so an obligation that holds the verdict open cannot come back with nothing.
+     * entry, so an obligation that is undecided cannot come back with nothing.
      */
-    static void openedBy(List<AdequacyOpening> out, Subject subject,
+    static void unresolvedBy(List<AdequacyUncertainty> out, Subject subject,
                          ObligationDisposition disposition) {
         if (!(disposition instanceof ObligationDisposition.Undecided undecided)) {
             return;
@@ -1565,12 +1584,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // One opening, which says one reason. What the readings gave is a set, and asking
                 // for it as one is where an opening with no room for the second says so.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
-                        out.add(new AdequacyOpening.NotMeasured(subject, it.why().asOne()));
+                        out.add(new AdequacyUncertainty.NotMeasured(subject, it.why().asOne()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
                         it.by().by().written().forEach(gap ->
-                                out.add(new AdequacyOpening.ShowingStopped(subject, gap)));
+                                out.add(new AdequacyUncertainty.ShowingStopped(subject, gap)));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
-                        out.add(new AdequacyOpening.NothingShowedARowCanBeWritten(subject));
+                        out.add(new AdequacyUncertainty.NothingShowedARowCanBeWritten(subject));
             }
         }
     }
@@ -1608,7 +1627,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     public UnderAWiderRun underAWiderRun() {
         int mayChange = 0;
         int unaffected = 0;
-        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+        for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
             // A switch with no default, so a third answer is a compile error here rather than one
             // more thing silently counted among what no allowance reaches.
             switch (each.runSensitivity()) {
@@ -1904,7 +1923,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // open and nothing about what they were, with no mark in the body to find them by; the
             // lines below name each one and say where it leaves them, both read from what the
             // measurement established rather than worked out again here.
-            for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+            for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -5938,11 +5957,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<PublishedOpening> said = new ArrayList<>();
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
-        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+        for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
             // The reason beside it, where the kind is one that has one. A measure nobody made says
             // what it was waiting for, and that word is one this document already writes wherever a
             // measure has no number — so a reader meets one vocabulary and not two.
-            Optional<NotMeasuredWord> why = each instanceof AdequacyOpening.NotMeasured it
+            Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
                     ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
             said.add(new PublishedOpening(kindOf(each), why, each.runSensitivity(),
                     publishedSubject(each.subject(), sources, places)));
@@ -6232,24 +6251,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * against. An opening that is a measure going without something writes that weakening's own
      * word instead, for the reason {@link AdequacyOpeningWord} gives.
      */
-    static PublishedOpening.Kind kindOf(AdequacyOpening opening) {
+    static PublishedOpening.Kind kindOf(AdequacyUncertainty opening) {
         return switch (opening) {
-            case AdequacyOpening.ByWeakening it ->
+            case AdequacyUncertainty.ByWeakening it ->
                     new PublishedOpening.Kind.AWeakening(vocabularyOf(it.cause()));
-            case AdequacyOpening.NotMeasured _ ->
+            case AdequacyUncertainty.NotMeasured _ ->
                     new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOT_MEASURED);
             // Two words for the two gaps, rather than one word and a reason beside it. Which of
             // them it was is what a reader acts on and what the sensitivity is read from, so it is
             // the kind: a value read for the point that did not come back, and a composing this
             // compiler declined to do, are not one kind of news.
-            case AdequacyOpening.ShowingStopped it ->
+            case AdequacyUncertainty.ShowingStopped it ->
                     new PublishedOpening.Kind.AnOpening(switch (it.by()) {
                         case EstablishmentGap.Observation _ ->
                                 AdequacyOpeningWord.SHOWING_STOPPED;
                         case EstablishmentGap.Composition _ ->
                                 AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
                     });
-            case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+            case AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
                     new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOTHING_SHOWED_IT);
         };
     }

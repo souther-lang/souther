@@ -6,7 +6,12 @@ import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
 
 /**
- * One thing keeping an adequacy verdict undetermined.
+ * One thing a scope's measures did not come to an answer about.
+ *
+ * <p>Named for what it is and not for what a verdict makes of it. One of these holds a verdict open
+ * where nothing outranks it and sits under a gap where something does — the entry is the same
+ * either way, and a name taken from the first of those made the two look like one thing
+ * ({@link AdequacyAssessment}).
  *
  * <p>Not a {@link Weakening}, and that is the whole of why this type exists. A verdict is settled
  * by everything it rests on having come to an answer, and only one of the ways that fails is a
@@ -16,18 +21,17 @@ import souther.compiler.query.Weakening;
  * finished. Neither does a point the rows are read out at where nothing could show a row can be
  * written: whether one can be is a second question, settled from what showed it and not from the
  * coverage. So a list of weakenings said nothing at all about a model nobody has written rows for,
- * or about a point nothing promised, while the verdict over each stayed open.
+ * or about a point nothing promised, while each went unanswered.
  *
- * <p>Read off the verdict's own predicate rather than assembled beside it. Every arm below is what
- * one of the things {@code adequacy()} walks contributes, so {@code undetermined} and this being
- * empty cannot both be true — which is a property worth having and is the one the conformance
- * corpus produced a counterexample to.
+ * <p>Read off the same three lists the verdict is decided by rather than assembled beside them.
+ * Every arm below is what one of the things those lists hold contributes, so a scope with nothing
+ * here has answered everything it rests on.
  *
  * <p><b>What it is not.</b> Not everything that left the report weaker than it looks: a measure
  * no answer here rests on may be as partial as it likes without the verdict being any less settled
  * by it. And not a second vocabulary — each arm is projected to a word the document already has.
  */
-public sealed interface AdequacyOpening {
+public sealed interface AdequacyUncertainty {
 
     /** Whether a run of this compiler that allows more could get past this. */
     RunSensitivity runSensitivity();
@@ -51,11 +55,12 @@ public sealed interface AdequacyOpening {
      * on what they are printed as — two rules this compiler could not read are two of these, and a
      * document calls them by one word.
      */
-    record ByWeakening(Weakening cause) implements AdequacyOpening {
+    record ByWeakening(Weakening cause) implements AdequacyUncertainty {
 
         public ByWeakening {
             if (cause == null) {
-                throw new IllegalArgumentException("a verdict held open by nothing is settled");
+                throw new IllegalArgumentException(
+                        "a measure that went without nothing went without nothing");
             }
         }
 
@@ -83,7 +88,7 @@ public sealed interface AdequacyOpening {
      * does is a row, and a row is a change to the model rather than a wider run of this compiler
      * over it. What a person may go on to do is the reason's, which is why it travels.
      */
-    record NotMeasured(Subject subject, NotMeasuredReason why) implements AdequacyOpening {
+    record NotMeasured(Subject subject, NotMeasuredReason why) implements AdequacyUncertainty {
 
         public NotMeasured {
             if (subject == null) {
@@ -112,7 +117,7 @@ public sealed interface AdequacyOpening {
      * read for it that did not come back, and a composing for another that never started — and what
      * a reader wants is everything that would have to give.
      */
-    record ShowingStopped(Subject subject, EstablishmentGap by) implements AdequacyOpening {
+    record ShowingStopped(Subject subject, EstablishmentGap by) implements AdequacyUncertainty {
 
         public ShowingStopped {
             if (subject == null) {
@@ -150,7 +155,7 @@ public sealed interface AdequacyOpening {
      * something; here nothing arrived at all, and a reader told a limit stopped it would go looking
      * for a limit nobody hit. Nothing was compared against a figure, so no allowance changes it.
      */
-    record NothingShowedARowCanBeWritten(Subject subject) implements AdequacyOpening {
+    record NothingShowedARowCanBeWritten(Subject subject) implements AdequacyUncertainty {
 
         public NothingShowedARowCanBeWritten {
             if (subject == null) {
