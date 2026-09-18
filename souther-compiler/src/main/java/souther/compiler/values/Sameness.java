@@ -2,7 +2,6 @@ package souther.compiler.values;
 
 import souther.compiler.hash.ValueHash;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -152,7 +151,7 @@ public final class Sameness<A> {
      *  as {@code block} does and several where it cuts them apart. */
     Set<Block<A>> holding(Block<A> block) {
         if (block.isOne()) {
-            return Set.of(blockOf(block.members().iterator().next()));
+            return Set.of(blockOf(TheOnly.of(block.members(), "position of a block of one")));
         }
         Set<Block<A>> out = new LinkedHashSet<>();
         block.members().forEach(each -> out.add(blockOf(each)));
@@ -210,9 +209,18 @@ public final class Sameness<A> {
         }
         Sameness<A> out = this;
         for (Block<A> block : other.joined()) {
-            List<A> members = new ArrayList<>(block.members());
-            for (int each = 1; each < members.size(); each++) {
-                out = out.joining(members.get(0), members.get(each));
+            // Each of the block's positions joined to one of them, and which one that is does not
+            // matter: joining is transitive, so every way of spanning a block reaches the same
+            // relation. Taken off the block as a list and read at its first, which one it was would
+            // be how the positions are spelled — and a reader of this would be none the wiser,
+            // since the relation is the same either way and the list is not.
+            A joinedTo = null;
+            for (A member : block.members()) {
+                if (joinedTo == null) {
+                    joinedTo = member;
+                } else {
+                    out = out.joining(joinedTo, member);
+                }
             }
         }
         return out;

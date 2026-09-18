@@ -11,9 +11,9 @@ import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.values.Emptiness.SidesShownEmpty;
 import souther.compiler.values.Admits;
 import souther.compiler.values.AskedOfARelation;
-import souther.compiler.values.InOneOrder;
 import souther.compiler.values.LeftUnbuilt;
 import souther.compiler.values.StringMachineAnswers;
+import souther.compiler.values.TheOnly;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realized;
 import souther.compiler.values.Refusal;
@@ -603,11 +603,8 @@ sealed interface Confinement<A> {
             // they are met in.
             within = within.meet(sits.apply(position));
         }
-        if (orderedOn.size() > 1) {
-            throw new IllegalStateException("positions held as one value are ordered on "
-                    + InOneOrder.of(orderedOn));
-        }
-        return new Placed(orderedOn.isEmpty() ? null : orderedOn.iterator().next(), within);
+        return new Placed(orderedOn.isEmpty() ? null
+                : TheOnly.of(orderedOn, "order the positions held as one value are on"), within);
     }
 
     /** A block's order and the range its positions leave it, the order being null where nothing

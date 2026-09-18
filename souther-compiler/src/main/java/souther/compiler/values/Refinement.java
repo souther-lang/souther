@@ -75,7 +75,7 @@ public final class Refinement<A> {
                 block.members().forEach(member -> each.put(member, coarser.blockOf(member)));
                 cut.add(block + " holds " + InOneOrder.of(each));
             } else {
-                up.put(block, there.iterator().next());
+                up.put(block, TheOnly.of(there, "block of the coarser relation"));
             }
         }
         if (!cut.isEmpty()) {
@@ -111,7 +111,11 @@ public final class Refinement<A> {
                     + " not hold them as one value: " + block + ", which it holds as "
                     + InOneOrder.of(finer.holding(block)));
         }
-        return coarser.blockOf(block.members().iterator().next());
+        // The one block of the coarser relation holding all of these, which is what the finer
+        // relation having this block means here. Read off one of the positions instead, which one
+        // it was would be how they are spelled — and the two answers are the same only while the
+        // coarser relation really does hold them together, which is the thing being said.
+        return TheOnly.of(coarser.holding(block), "block of the coarser relation");
     }
 
     /**
