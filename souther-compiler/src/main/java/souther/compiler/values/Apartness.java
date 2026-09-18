@@ -5,6 +5,8 @@ import souther.compiler.hash.ValueHash;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -451,13 +453,16 @@ public final class Apartness<A> {
     }
 
     private List<Set<Sameness.Block<A>>> everyPairwiseApartSet() {
-        Map<Sameness.Block<A>, Set<Sameness.Block<A>>> apart = new LinkedHashMap<>();
+        // Which blocks each block is stated to differ from, in no order. Which pairs there are is
+        // what decides the sets; the pairs arrived in some order and this is the one place that
+        // order could have been carried into the walk, so it is not kept here for the walk to take.
+        Map<Sameness.Block<A>, Set<Sameness.Block<A>>> apart = new HashMap<>();
         for (Edge<A> edge : edges) {
             if (edge.isOfOneBlock()) {
                 continue;
             }
-            apart.computeIfAbsent(edge.one(), _ -> new LinkedHashSet<>()).add(edge.other());
-            apart.computeIfAbsent(edge.other(), _ -> new LinkedHashSet<>()).add(edge.one());
+            apart.computeIfAbsent(edge.one(), _ -> new HashSet<>()).add(edge.other());
+            apart.computeIfAbsent(edge.other(), _ -> new HashSet<>()).add(edge.one());
         }
         List<Set<Sameness.Block<A>>> found = new ArrayList<>();
         grow(new LinkedHashSet<>(), new LinkedHashSet<>(apart.keySet()), new LinkedHashSet<>(),
