@@ -29,12 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * be answered by asking a narrower carrier for the same thing — the scope this used to consult
  * reaches its answer through {@code NameSense}, which any carrier of it can hand over, and a rule
  * listing the worlds would let that back in with nothing going red. So every type of this compiler
- * the walk names is a row here, and a second authority arriving is a row nobody wrote.
+ * the walk names is a row here.
  *
  * <p>Read off the compiled class: the constant pool for what it uses, and the descriptors and
  * signatures of its methods and fields for what it is handed and hands on. A type reached by being
  * passed in, held, or answered with is named in one of those, so a carrier with a world inside it is
  * a row too.
+ *
+ * <p><b>What it holds, said exactly.</b> A second authority arriving as a type of this compiler is
+ * a row nobody wrote. One arriving as something that names no such type is not — a question about a
+ * declaration can be handed over as a predicate over addresses, or as a set of them, and neither
+ * adds a row. What stops that is not written down anywhere and is read rather than checked.
  */
 class TheWalkOverWhatDeclarationsPublishReadsNoWorldTest {
 

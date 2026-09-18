@@ -84,6 +84,29 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
         assertEquals("Unavailable", expanded(PRICES_IN_A_RING, AMOUNT));
     }
 
+    /**
+     * And one whose module is refused before its {@code exposing} line is read.
+     *
+     * <p>The other end of the same question. A ring is a judgement about what a module imports and
+     * this is a judgement about the module's own name, and they are cut at opposite ends of what
+     * happens to a source — so an answer to whether a declaration was written is above every one of
+     * them only where it is read off the parse. Written here because every judgement between the
+     * two is one more place an existence answer could have been taken from.
+     */
+    @Test
+    void andOneWhoseModuleIsRefusedByItsNameIsUnavailableToBoth() {
+        String prices = """
+                module souther.mine exposing ( Amount )
+
+                data Amount = Int
+                    invariant value >= 0
+                """;
+        TypeKey mine = new TypeKey("souther.mine", "Amount");
+
+        assertEquals("Unavailable", published(prices, mine));
+        assertEquals("Unavailable", expanded(prices, mine));
+    }
+
     @Test
     void andANameNoModuleWritesIsNotDeclaredToBoth() {
         TypeKey nobody = new TypeKey("shop.prices", "Nobody");
