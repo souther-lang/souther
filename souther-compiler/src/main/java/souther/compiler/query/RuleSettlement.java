@@ -64,8 +64,11 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
             // The inquiry having had no candidate is that same shape without the proof.
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     search instanceof RuleSearch.CameToNothing;
-            // And the rest are what became of a row that was composed.
+            // And the rest are what became of a row that was composed, including the one composed
+            // against less than the way asks: a row short of the way is a row that was built and
+            // tried, and saying it with the word above would deny the row.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _,
+                 RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _,
                  RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _,
                  RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
                     search instanceof RuleSearch.Composed;

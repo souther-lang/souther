@@ -21,17 +21,27 @@ import java.util.Set;
  * missed. Reconciling the two takes knowing which conditions the answer side answered for, and that
  * is a larger set than the ones it could not compose against.
  *
+ * <p><b>And what this holds is not the whole of what a composing was arrived at without.</b> A
+ * condition the walk had no words for is in neither list: nothing downstream ever saw it, so
+ * neither composer wrote anything down about it. It joins where the way does, which is why the
+ * question "was anything left out" is asked of {@link #reconciledWith} and cannot be asked of this
+ * alone — a predicate here would answer it for the two composers and be read as the answer for the
+ * way.
+ *
  * @param onTheWay          what the search could not compose against of the way it was given, which
  *                          is about the values that search writes. A search for an answer of a
  *                          dependency is one of those too, and its caller is where what it came to
  *                          becomes a shortfall about a demand
  * @param onAnAnswer        what the values standing the dependencies in were not composed against
  * @param takenUpByAnAnswer the conditions the demand reading answered for, whether it stated them
- *                          or wrote down that it could not
+ *                          or wrote down that it could not, named the way the reading names a
+ *                          condition. Not by where a report about one points: a helper expanded
+ *                          twice puts two conditions in a body and both are written in one place,
+ *                          so a join on the place would let what became of one answer for the other
  */
 public record CompositionAccount(List<ReachabilityGap> onTheWay,
                                  List<DemandGap> onAnAnswer,
-                                 Set<ConditionReportAnchor> takenUpByAnAnswer) {
+                                 Set<ConditionOccurrence> takenUpByAnAnswer) {
 
     /** A composition that left nothing out, which is what a caller with no dependencies and every
      *  condition composed against has. */
@@ -69,21 +79,15 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
         input.addAll(answers.onTheWay);
         List<DemandGap> demands = new ArrayList<>(onAnAnswer);
         demands.addAll(answers.onAnAnswer);
-        Set<ConditionReportAnchor> taken = new LinkedHashSet<>(takenUpByAnAnswer);
+        Set<ConditionOccurrence> taken = new LinkedHashSet<>(takenUpByAnAnswer);
         taken.addAll(answers.takenUpByAnAnswer);
         return new CompositionAccount(input, demands, taken);
     }
 
-    /** Whether anything was left out, which is what a reader asking whether the row was composed
-     *  against the whole of the way asks. */
-    public boolean leftSomethingOut() {
-        return !onTheWay.isEmpty() || !onAnAnswer.isEmpty();
-    }
-
-    /** Whether this says nothing at all, which is a composing with nothing left out and no answer
-     *  of a dependency to have answered for. */
+    /** Whether this says nothing at all, which is a composing with nothing written down on either
+     *  side and no condition of an answer to have answered for. */
     private boolean isNothing() {
-        return !leftSomethingOut() && takenUpByAnAnswer.isEmpty();
+        return onTheWay.isEmpty() && onAnAnswer.isEmpty() && takenUpByAnAnswer.isEmpty();
     }
 
     /**
@@ -102,7 +106,7 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
     public List<ConditionGap> reconciledWith(WayToTheBorder way) {
         List<ConditionGap> out = new ArrayList<>();
         for (OnTheWay.Declined each : way.declined()) {
-            if (!takenUpByAnAnswer.contains(each.anchor())) {
+            if (!takenUpByAnAnswer.contains(each.condition())) {
                 out.add(new ConditionGap.OfTheInput(new ReachabilityGap.Unstated(each)));
             }
         }

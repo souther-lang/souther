@@ -401,21 +401,6 @@ public final class Generator {
              */
             NOTHING_STANDS_IN_FOR_A_DEPENDENCY,
             /**
-             * A row was composed and part of what the way asks was not in it.
-             *
-             * <p>Not one of the words above, and the difference is what a reader may conclude from
-             * the run. A row was built and it ran; what it did is what a row meeting less than the
-             * way asks does, so where it went says nothing about the way it was composed for. Said
-             * as nothing having been composed, the account would be denying a row that exists; said
-             * as a row like any other, a run that landed elsewhere would stand as the model
-             * refusing the way.
-             *
-             * <p>A fact about this compiler. What the row was composed without is in the account
-             * beside this word ({@link CompositionAccount}), which is where a reader is told which
-             * condition it was and what stopped it.
-             */
-            A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
-            /**
              * The row needs a dependency to answer by what it was applied to, and nothing here
              * writes a table.
              *
@@ -627,7 +612,6 @@ public final class Generator {
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED,
                          NOT_ALL_CANDIDATES_COULD_BE_OFFERED, THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
-                         A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
@@ -719,7 +703,6 @@ public final class Generator {
                     case ALL_CANDIDATES_REJECTED, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                          THE_RULES_LEAVE_NOTHING_THERE,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
-                         A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY,
                          ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
                          NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
                          THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,

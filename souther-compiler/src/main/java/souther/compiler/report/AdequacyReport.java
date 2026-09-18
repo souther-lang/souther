@@ -2962,6 +2962,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // a row that went elsewhere is a way this steered wrong and the model may be fine.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     new Said(0, 0, "a row composed for one took another rule of the same body");
+            // Beside it and after it, because the difference is what a reader may conclude: this
+            // row met less than the way asks, so where it went is what such a row does and not
+            // something about the rule. What it was short of follows this sentence.
+            case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
+                    new Said(0, 1, "a row was composed and run, and what it was composed against"
+                            + " was less than the way asks");
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     new Said(1, PublicationOrders.positionOf(
                                     came.synthesisShortfall().reason()),
@@ -3624,12 +3630,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->
                     "nothing here could answer for a behavior " + at + " depends on, and a row"
                             + " that stands none in is a row nothing applies";
-            // A row exists, which is why this is not the sentence above. What it does not say is
-            // where the row went: it was composed meeting less than the way asks, so the run is an
-            // attempt and not an answer about the way.
-            case A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY ->
-                    "a row was composed for " + at + " without something the way asks of what it"
-                            + " depends on, so where that row went says nothing about it";
             // What this compiler does not write, and not what the model cannot have. An author
             // writes such an environment by hand, so the sentence says what it would be.
             case A_TABLE_IS_WHAT_THIS_NEEDS ->
@@ -5395,6 +5395,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "the_rules_leave_no_value_for_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
+            case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
+                    "a_composed_row_was_short_of_the_way";
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _ ->
                     "the_rule_the_row_took_could_not_be_told";
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ -> "nothing_watched_the_row";

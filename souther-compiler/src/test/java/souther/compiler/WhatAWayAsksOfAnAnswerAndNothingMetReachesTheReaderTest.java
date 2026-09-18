@@ -206,13 +206,13 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
                 .toList();
         assertFalse(unsettled.isEmpty(), "a rule of this body is one no row was seen taking");
         for (RuleSettlement each : unsettled) {
-            assertInstanceOf(RuleRequirement.Unsettled.NothingWasComposedToTry.class,
+            assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay.class,
                     each.requirement(),
                     () -> "a row meeting less than the way asks settles nothing about it: " + each);
-            assertEquals(List.of(Generator.UnresolvedCombination.Reason
-                            .A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY),
-                    reasons(each),
-                    () -> "and says that a row was composed without part of the way: " + each);
+            // And the row it was is not denied. What was composed and run is what the search says
+            // it did, so a reader is not told that nothing was composed to try the rule with.
+            assertInstanceOf(RuleSearch.Composed.class, each.search(),
+                    () -> "a row was composed and tried all the same: " + each);
             assertFalse(each.account().onAnAnswer().isEmpty(),
                     () -> "and which demand it was composed without: " + each);
         }

@@ -2,8 +2,10 @@ package souther.compiler.partition;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The conditions one way through a body consulted, in the order it met them.
@@ -118,16 +120,26 @@ final class DecisionPath {
     AnswersDemanded demands() {
         List<AnswerDemand> stated = new ArrayList<>();
         List<DemandGap.Unstated> declined = new ArrayList<>();
+        Set<ConditionOccurrence> takenUp = new LinkedHashSet<>();
         for (Consulted each : consulted) {
-            switch (asked(each)) {
+            Asked asked = asked(each);
+            switch (asked) {
                 case Asked.Stated(var demand) -> stated.add(demand);
                 case Asked.NotStated(var why) ->
                         declined.add(new DemandGap.Unstated(each.states().anchor(), why));
                 case Asked.OfTheInput _ -> { }
             }
+            // Which condition it is, the way the reading names one, and taken off the walk's own
+            // entry for the same consulted condition. A decline is the only entry that names one,
+            // and it is the only entry this has anything to reconcile with: what the walk took in
+            // it took in, and there is nothing there for the answer side to answer for.
+            if (!(asked instanceof Asked.OfTheInput)
+                    && each.states() instanceof OnTheWay.Declined left) {
+                takenUp.add(left.condition());
+            }
         }
         return stated.isEmpty() && declined.isEmpty()
-                ? AnswersDemanded.NOTHING : new AnswersDemanded(stated, declined);
+                ? AnswersDemanded.NOTHING : new AnswersDemanded(stated, declined, takenUp);
     }
 
     /**

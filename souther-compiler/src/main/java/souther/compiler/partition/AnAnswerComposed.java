@@ -124,7 +124,7 @@ public final class AnAnswerComposed {
             required = both;
         }
         SearchRegion region = subject.quantities().region();
-        List<OnTheWay.TakenIn> cuts = new ArrayList<>();
+        List<Taken> cuts = new ArrayList<>();
         List<DemandGap> unaccounted = new ArrayList<>();
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AComparison(var _, var anchor, var form, var rel))) {
@@ -145,7 +145,9 @@ public final class AnAnswerComposed {
             switch (region.assuming(over, rel)) {
                 case SearchRegion.Assumption.Taken(SearchRegion taken) -> {
                     region = taken;
-                    cuts.add(new OnTheWay.TakenIn(anchor, new TakenConstraint.Affine(over, rel)));
+                    cuts.add(new Taken(
+                            new OnTheWay.TakenIn(anchor, new TakenConstraint.Affine(over, rel)),
+                            each));
                 }
                 case SearchRegion.Assumption.Refused(var why) ->
                         unaccounted.add(new DemandGap.Uncomposed(each, whyRefused(why)));
@@ -155,8 +157,19 @@ public final class AnAnswerComposed {
             return Attempt.nothing(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     unaccounted);
         }
-        return composed(subject, demands, new Reachability.Reaching(region, required, cuts));
+        return composed(subject, cuts, new Reachability.Reaching(region, required,
+                cuts.stream().map(Taken::cut).toList()));
     }
+
+    /**
+     * One demand as the cut a realization was handed for it.
+     *
+     * <p>Kept as the pair rather than looked up again afterwards. What comes back from a
+     * realization is the cut it could not place, and which demand that is is this — asked of the
+     * cut it was built from and not of where a report about it points, since one written
+     * comparison spliced into two calls of a helper is two demands reported at one place.
+     */
+    private record Taken(OnTheWay.TakenIn cut, AnswerDemand demand) {}
 
     /**
      * A region's refusal in the words an account of a demand is written in.
@@ -180,7 +193,7 @@ public final class AnAnswerComposed {
      * would be a subject somebody else made, and the answer read off the first of its values would
      * be an answer about whichever position came first.
      */
-    private static Attempt composed(MeasuredInput subject, List<AnswerDemand> demands,
+    private static Attempt composed(MeasuredInput subject, List<Taken> cuts,
                                     Reachability.Reaching reaching) {
         Generator.BoundaryAttempt attempt = Generator.probeFixing(subject,
                 "an answer of a dependency", Map.of(), NumbersAskedFor.ANYTHING, reaching,
@@ -189,7 +202,7 @@ public final class AnAnswerComposed {
                 // reading building the dependency's own boundary a second way.
                 Generator.CandidateCheck.ANY);
         List<DemandGap> unaccounted =
-                notComposedAgainst(demands, attempt.unrepresented().onTheWay());
+                notComposedAgainst(cuts, attempt.unrepresented().onTheWay());
         if (attempt instanceof Generator.BoundaryAttempt.Built(var row, var _)
                 && row.inputs().size() == 1) {
             return new Attempt(new Outcome.Composed(row.inputs().getFirst()), unaccounted);
@@ -205,9 +218,9 @@ public final class AnAnswerComposed {
      * reads.
      *
      * <p>Read off what the realization came back with rather than worked out again. Every cut it
-     * was handed is a demand of this answer — that is what {@link #of} builds them from — so an
-     * entry it could not place is the demand at that anchor, and a report about it is sent where a
-     * report about the demand is sent.
+     * was handed was built from a demand of this answer and is carried beside it, so an entry it
+     * could not place is that demand — asked of the cut and not of where a report about it points,
+     * which is a place two demands may share.
      *
      * <p>One word for what the realization says in several. What it holds apart there is how it
      * went about looking — a budget it met, a pair of numbers at one location — and what a reader
@@ -215,19 +228,19 @@ public final class AnAnswerComposed {
      * standing together is not one of these and is left where it is: it is a fact about what was
      * asked, and the outcome beside it already says the composition came to nothing.
      */
-    private static List<DemandGap> notComposedAgainst(List<AnswerDemand> demands,
+    private static List<DemandGap> notComposedAgainst(List<Taken> cuts,
                                                       List<ReachabilityGap> unrepresented) {
         if (unrepresented.isEmpty()) {
             return List.of();
         }
         List<DemandGap> out = new ArrayList<>();
         for (ReachabilityGap gap : unrepresented) {
-            if (!(gap instanceof ReachabilityGap.Uncomposed)) {
+            if (!(gap instanceof ReachabilityGap.Uncomposed(var cut, var _))) {
                 continue;
             }
-            for (AnswerDemand each : demands) {
-                if (each.anchor().equals(gap.anchor())) {
-                    out.add(new DemandGap.Uncomposed(each,
+            for (Taken each : cuts) {
+                if (each.cut().equals(cut)) {
+                    out.add(new DemandGap.Uncomposed(each.demand(),
                             new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
                 }
             }

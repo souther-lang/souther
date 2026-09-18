@@ -2195,24 +2195,30 @@ public final class Adequacy {
          * than the way asks reaches whatever it reaches, and reading that as the rule having been
          * gone past would report this compiler's shortfall as something the model does.
          *
-         * <p><b>The one direction, and not both.</b> A row that took the rule took it however it
-         * was composed — the run is what says so, and a witness is a witness. What an incomplete
-         * row cannot do is stand as the negative, so that is the answer this replaces.
+         * <p><b>The one answer it replaces is the negative one.</b> A row that took the rule took it
+         * however it was composed — the run is what says so, and a witness is a witness. A run
+         * nothing watched and a run this reading could not place say that nothing was learned,
+         * which is as true of an incomplete row as of any other and is the more useful of the two
+         * things to be told. What only a whole row may say is that the rule was gone past, so that
+         * is the answer this replaces and the only one.
+         *
+         * <p><b>Asked of the way and not of the account alone.</b> What a composing wrote down is
+         * what its two composers could not act on; a condition the walk had no words for is in
+         * neither list and is still something the row was composed without. The two are one answer
+         * only once the way is in hand, which is what the reconciliation takes.
          */
         private static RuleSettlement whatItsRunSettles(
                 Generator.BoundaryAttempt.Built built, Coverages.Probe probe,
                 souther.compiler.partition.RulesTaken taken,
                 souther.compiler.partition.DecisionReading.Ruled ruled) {
             RuleRequirement went = whereItWent(built.row().toRun(), probe, taken, ruled);
-            if (went instanceof RuleRequirement.Required
-                    || !built.unrepresented().leftSomethingOut()) {
-                return RuleSettlement.of(went, built.unrepresented());
+            if (went instanceof RuleRequirement.Unsettled.AComposedRowWentElsewhere
+                    && !built.unrepresented().reconciledWith(ruled.states()).isEmpty()) {
+                return RuleSettlement.of(
+                        new RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay(),
+                        built.unrepresented());
             }
-            return RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
-                    List.of("a rule of the decision"),
-                    Generator.UnresolvedCombination.Reason
-                            .A_ROW_WAS_COMPOSED_WITHOUT_PART_OF_THE_WAY),
-                    built.unrepresented());
+            return RuleSettlement.of(went, built.unrepresented());
         }
 
         /**
@@ -2271,6 +2277,7 @@ public final class Adequacy {
             return switch (settlement.requirement()) {
                 case RuleRequirement.Required _, RuleRequirement.Excluded _ -> 2;
                 case RuleRequirement.Unsettled.AComposedRowWentElsewhere _,
+                     RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _,
                      RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent _,
                      RuleRequirement.Unsettled.NothingWatchedTheRow _ -> 1;
                 case RuleRequirement.Unsettled.NothingWasComposedToTry _ -> 0;
