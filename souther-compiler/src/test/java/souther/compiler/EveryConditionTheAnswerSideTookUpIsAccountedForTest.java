@@ -89,6 +89,46 @@ class EveryConditionTheAnswerSideTookUpIsAccountedForTest {
                 else No
             """;
 
+    /**
+     * A dependency whose demand a value was composed for, beside one nothing stands in.
+     *
+     * <p>The first composes: a comparison over a number of what it answers is a demand a value is
+     * built to meet. The second does not, and no table is stated for it, so the standing-in comes
+     * to nothing and no row of this is offered. What was composed was still composed, and a demand
+     * a value met is not one nothing composed a value of.
+     */
+    private static final String ONE_COMPOSES_AND_THE_NEXT_STANDS_IN_WITH_NOTHING = TYPES + """
+
+            behavior first : (at: Int) -> R
+            behavior second : (at: Int) -> R
+
+            behavior decides : (m: Int) -> Answer
+                depends on first
+                depends on second
+            let decides (m, first, second) =
+                if first(m).v > 0 then
+                    (if second(m).k == second(m).j then Yes else No)
+                else No
+            """;
+
+    /**
+     * A demand a value was composed for is not said to be one nothing composed a value of, though
+     * the standing-in came to nothing after it.
+     *
+     * <p>The other direction of the same scope. What a walk reached must not be what the account
+     * is taken over — and what it reached and composed must not be forgotten either, or the word
+     * for a demand nothing met is put on one a value meets.
+     */
+    @Test
+    void aDemandAValueWasComposedForIsNotSaidToBeOneNothingComposedFor() {
+        Set<ConditionReportAnchor> accounted =
+                anchorsAccountedFor(ONE_COMPOSES_AND_THE_NEXT_STANDS_IN_WITH_NOTHING);
+
+        assertEquals(1, accounted.size(),
+                () -> "the condition of the dependency nothing stands in is answered for, and the"
+                        + " one a value was composed for is not among them: " + accounted);
+    }
+
     /** What the second call asks is in the account, though nothing was composed for it. */
     @Test
     void anAskingThatWasNeverComposedForIsStillAccountedFor() {
