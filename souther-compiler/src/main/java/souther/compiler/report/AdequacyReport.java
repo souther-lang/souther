@@ -1495,7 +1495,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * document.
      */
     public List<AdequacyUncertainty> whatKeepsTheVerdictOpen() {
-        return adequacy() == AdequacyStatus.UNDETERMINED ? unresolved() : List.of();
+        // The verdict written out rather than asked for, which is the same answer and one walk
+        // instead of two: with no gap a scope is undetermined exactly when this is not empty, so
+        // the empty list is what both of the other two verdicts come to anyway. Asked as
+        // `adequacy() == UNDETERMINED`, the entries are built once to answer that and again to
+        // return them.
+        return adequacyGaps().isEmpty() ? unresolved() : List.of();
     }
 
     /**

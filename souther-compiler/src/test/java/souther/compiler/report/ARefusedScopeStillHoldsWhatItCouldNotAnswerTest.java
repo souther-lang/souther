@@ -7,7 +7,9 @@ import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -107,7 +109,8 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     void narrowingInventsNothing() {
         for (Compilation compilation : RepositoryModels.all()) {
             AdequacyReport whole = AdequacyReport.of(compilation);
-            List<AdequacyUncertainty> ofTheWhole = whole.assessment().uncertainties();
+            Set<AdequacyUncertainty> ofTheWhole =
+                    new HashSet<>(whole.assessment().uncertainties());
             for (AdequacyReport.ModuleReport module : whole.modules()) {
                 for (AdequacyUncertainty each
                         : whole.only(module.module(), null).assessment().uncertainties()) {
