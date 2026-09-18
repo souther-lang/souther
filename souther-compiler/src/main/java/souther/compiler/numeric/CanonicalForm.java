@@ -70,6 +70,9 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
                     "a position with a zero coefficient is one the form does not name: "
                             + InOneOrder.of(unweighed));
         }
+        // Kept in the order it was written until every walk of it asks for one ({@link #entriesIn}).
+        // Copied into a map that keeps none, the walks that still take it as it comes would be
+        // taking an order the runtime made up afresh on every run.
         coefs = Collections.unmodifiableMap(new LinkedHashMap<>(coefs));
     }
 
