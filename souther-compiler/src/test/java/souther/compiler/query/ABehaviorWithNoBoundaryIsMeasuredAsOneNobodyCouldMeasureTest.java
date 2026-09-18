@@ -137,7 +137,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         // whose every measure gave one reason would be this deciding what the others found.
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage("probe.unresolved")).value().get("issue");
-        assertEquals(Adequacy.BranchEvidence.Unelaborated.BODIES_NOT_ELABORATED,
+        assertEquals(Adequacy.BranchEvidence.BodyWasNotRead.BODY_WAS_NOT_READ,
                 branch.measured().why());
     }
 

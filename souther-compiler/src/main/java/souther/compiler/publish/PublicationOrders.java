@@ -80,6 +80,7 @@ public final class PublicationOrders {
             Incompleteness.Code.ROW_UNDECIDED,
             Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,
+            Incompleteness.Code.IMPLEMENTATION_NOT_MADE,
             Incompleteness.Code.LINKAGE_FAILED,
             Incompleteness.Code.OBSERVATION_ABSENT,
             Incompleteness.Code.INSTRUMENTATION_ABSENT);
@@ -350,7 +351,7 @@ public final class PublicationOrders {
                 WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
                 WeakeningWord.A_BORDERS_RUN_NOT_WATCHED,
                 WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
-                WeakeningWord.BODIES_NOT_ELABORATED,
+                WeakeningWord.BODY_NOT_IN_EVALUATION,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 WeakeningWord.RULE_UNREAD,

@@ -120,7 +120,21 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
          * no rows with it. So the request and the empty result are both part of what this says.
          */
-        INSTRUMENTATION_ABSENT(true);
+        INSTRUMENTATION_ABSENT(true),
+        /**
+         * The implementation a row was to be run against was this compile's to make and is not in
+         * the image the row ran in.
+         *
+         * <p>What a reader of this knows is that the row was read and not decided, and that what
+         * stopped it is this compile rather than the model or a limit. A module whose bodies did not
+         * all come out is evaluated against the bodies that may be run; a row about a behavior
+         * reaching one that did not come out has nothing here to be applied to.
+         *
+         * <p>A row that was read, so it is not one of the codes that say no row was. The rows either
+         * side of it in one source were run and answered, and a reading that said none of them was
+         * would be giving this one's reason to all of them.
+         */
+        IMPLEMENTATION_NOT_MADE(false);
 
         private final boolean leftNoRowRead;
 
@@ -166,8 +180,11 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                 // a row the evaluation had no answer for, a row nothing could establish an answerer
                 // for, classes that would not link or were never made, and a source nothing was
                 // observed from are all met again by a run that allows more.
+                // An implementation this compile owned and did not make is met again the same way:
+                // what decided it is which bodies came out, and no run allows more of that.
                 case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
-                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT -> RunSensitivity.UNAFFECTED;
+                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT, IMPLEMENTATION_NOT_MADE ->
+                        RunSensitivity.UNAFFECTED;
             };
         }
     }

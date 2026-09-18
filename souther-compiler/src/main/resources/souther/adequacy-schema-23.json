@@ -213,6 +213,7 @@
           "linkage_failed",
           "observation_absent",
           "instrumentation_absent",
+          "implementation_not_made",
           "probe_mapping_lost",
           "output_cases_unreadable",
           "input_cases_unreadable",
@@ -230,6 +231,7 @@
           "question_unanswered",
           "rules_not_reached",
           "bodies_not_elaborated",
+          "body_not_in_evaluation",
           "behavior_boundary_not_derived",
           "behavior_input_not_read",
           "pair_space_truncated",
@@ -2930,13 +2932,14 @@
           "$ref": "#/$defs/weakening"
         },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first two are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, and `no_arm_obligations` is a body that owes no arm — one that forks nowhere a row can be in or out of, or whose every fork the model's own rules prove nothing arrives at. Both are claims about what the model says. The rest are a behavior that does owe arms: `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names; `bodies_not_elaborated` is the model saying a body is written here and nothing having made it, so what the behavior owes was not read — named for the absence rather than for any of the things that stop a module being elaborated, which nothing here can tell apart. It is what `no_body` used to be answered with, and the two are a claim about the model and a claim about this compile.",
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. The first two are a behavior with no arm to measure at all rather than arms nothing measured, and no row would give it one: `no_body` is a `>->` composition or a behavior with no `let`, and `no_arm_obligations` is a body that owes no arm — one that forks nowhere a row can be in or out of, or whose every fork the model's own rules prove nothing arrives at. Both are claims about what the model says. The rest are a behavior that does owe arms: `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names; `body_was_not_read` is the model saying a body is written here and the image this run was measured in not carrying it, so what the behavior owes was not read — named for the absence rather than for any of the ways an image comes to be without a body, which nothing here can tell apart. It is what `no_body` used to be answered with, and the two are a claim about the model and a claim about this image. `bodies_not_elaborated` is what documents before it said, quantified over the module rather than over the behavior; nothing writes it now.",
           "enum": [
             "no_body",
             "no_arm_obligations",
             "not_asked",
             "unreadable",
             "no_rows",
+            "body_was_not_read",
             "bodies_not_elaborated"
           ]
         },
@@ -3101,9 +3104,10 @@
               "$ref": "#/$defs/weakening"
             },
             "reason": {
-              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no position and was short of something it answers for, so the model is not thereby known to divide none; `nothing_is_divided` is a reading that answered everything it answers for and found no position the model divides, which no row would change; `no_feasible_input` is the declarations leaving the behavior no value to be measured at all, so this measure has no subject rather than having found none — a class is a set of values a row can be written at, and there are none; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages. `no_axis_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no position and was short of something it answers for, so the model is not thereby known to divide none; `nothing_is_divided` is a reading that answered everything it answers for and found no position the model divides, which no row would change; `no_feasible_input` is the declarations leaving the behavior no value to be measured at all, so this measure has no subject rather than having found none — a class is a set of values a row can be written at, and there are none; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages. `body_was_not_read` is a behavior whose body the image this run was made in does not carry: what its own rules say was never asked, so the classes here are what the declarations and the clauses came to and the measure is short of a reading rather than short of nothing. Told apart from the first because that one is a reading that was made and stopped on something it can name, and this one names nothing. `no_axis_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
               "enum": [
                 "the_reading_did_not_run_out",
+                "body_was_not_read",
                 "nothing_is_divided",
                 "no_feasible_input",
                 "no_subject",
@@ -3132,9 +3136,10 @@
               "$ref": "#/$defs/weakening"
             },
             "reason": {
-              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no line and was short of something it answers for, so the model is not thereby known to draw none; `no_rule_draws_a_line` is a reading that answered everything it answers for and found no rule drawing a line, which no row would change since a row cannot make a line; `no_feasible_input` is the declarations leaving the behavior no value to be measured at all, so this measure has no subject rather than having found no rule — a line is a place rows part, and there are no rows to part; `no_subject` is a behavior with no positions of its own. `no_lines_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `the_reading_did_not_run_out` is a reading that produced no line and was short of something it answers for, so the model is not thereby known to draw none; `no_rule_draws_a_line` is a reading that answered everything it answers for and found no rule drawing a line, which no row would change since a row cannot make a line; `no_feasible_input` is the declarations leaving the behavior no value to be measured at all, so this measure has no subject rather than having found no rule — a line is a place rows part, and there are no rows to part; `no_subject` is a behavior with no positions of its own. `body_was_not_read` is the same of this measure: one rule of a body draws a line at every number it names, so a behavior whose body this run's image does not carry is short of that reading rather than known to draw no line. `no_lines_derived` is what the first was called while it also stood for the second, and is retired rather than gone.",
               "enum": [
                 "the_reading_did_not_run_out",
+                "body_was_not_read",
                 "no_rule_draws_a_line",
                 "no_feasible_input",
                 "no_subject",
@@ -4080,7 +4085,7 @@
           "description": "What `subject` names, and so what the reason counts against. A `behavior`, a `position` and a `row` count against the behavior they are in, and each is in one. A `row` says which row of it, as the behavior, the source it is written in and the row's own name: a row written with no name is numbered within its source, so the source is part of saying which row, and two rows of one behavior that did not come back are two things to go and look at. A `module` counts against every behavior in it, because that is what a module holds. A `source` counts against every behavior too, and not for that reason: one is written only where the source was not evaluated, so which behaviors had rows in it is exactly what could not be read."
         },
         "code": {
-          "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. `linkage_failed` is the generated classes not linking: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. One place writes it, an example whose evaluation raised one and observed nothing, so the rows behind it did not run and that is part of what it says. It had three, and the other two were a value being built after the rows had been read — those are the generator's to report and are not written here. `instrumentation_absent` is the classes an arm-measuring evaluation needs not having been made, named for the absence rather than for a backend that failed or inputs that were not there, which nothing here can tell apart. `answerer_not_established` is a row that was not handed to what answers its behavior, because nothing could establish that what answers it was built against this model — either the two builds say different things about something a value crossing between them depends on, or what the answer carries could not be read at all. The rows behind it were read: they were built and held to their invariants, and what is missing is only what the running would have decided. `row_undecided` is a row that did not come back, because the evaluation had no answer for it. `row_evaluation_limit_reached` is the same loss from the other cause: a figure this compiler evaluates rows under — the counted steps, the recursion depth, the clock — stopped the row before it decided anything. Two words because what a reader may do about them differs: a run that allows more keeps the second and meets the first again. One word covers the three figures, since what the measure lost is the same for all of them and the row's own diagnostic says which; a stack the host ran out of is not among them, because nothing here compared anything against it, and it is written as `row_undecided`. `probe_mapping_lost` is what it was called, and no compiler writes it any more: it is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
+          "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. `linkage_failed` is the generated classes not linking: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. One place writes it, an example whose evaluation raised one and observed nothing, so the rows behind it did not run and that is part of what it says. It had three, and the other two were a value being built after the rows had been read — those are the generator's to report and are not written here. `instrumentation_absent` is the classes an arm-measuring evaluation needs not having been made, named for the absence rather than for a backend that failed or inputs that were not there, which nothing here can tell apart. `answerer_not_established` is a row that was not handed to what answers its behavior, because nothing could establish that what answers it was built against this model — either the two builds say different things about something a value crossing between them depends on, or what the answer carries could not be read at all. The rows behind it were read: they were built and held to their invariants, and what is missing is only what the running would have decided. `row_undecided` is a row that did not come back, because the evaluation had no answer for it. `row_evaluation_limit_reached` is the same loss from the other cause: a figure this compiler evaluates rows under — the counted steps, the recursion depth, the clock — stopped the row before it decided anything. Two words because what a reader may do about them differs: a run that allows more keeps the second and meets the first again. One word covers the three figures, since what the measure lost is the same for all of them and the row's own diagnostic says which; a stack the host ran out of is not among them, because nothing here compared anything against it, and it is written as `row_undecided`. `implementation_not_made` is a row whose behavior this compile was to implement and did not, which happens where the module it is in holds a body nothing elaborated: what may be run is that body's module less what reaches it, and a row about a behavior outside that has nothing here to be applied to. Told apart from `answerer_not_established`, where something would apply the row and may not be handed this module's values, and from a behavior nothing implements at all, which is a row waiting rather than a row undecided. The rows beside it in one source were run: this says nothing about them. `probe_mapping_lost` is what it was called, and no compiler writes it any more: it is here because reports of this version were written carrying it, and a version says what its documents may carry rather than what is emitted today.",
           "enum": [
             "value_unreadable",
             "value_truncated",
@@ -4090,6 +4095,7 @@
             "observation_absent",
             "linkage_failed",
             "instrumentation_absent",
+            "implementation_not_made",
             "probe_mapping_lost"
           ]
         },

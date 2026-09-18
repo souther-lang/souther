@@ -260,11 +260,8 @@ public final class ExampleVerifier {
         // What is wrong with the answer rather than with the row, said here because here is the
         // whole of what this caller gets. A bulk run says it once for the behavior and every row of
         // it is in one report; a row handed over on its own is the only place its reader looks, so
-        // one stopping at ANSWERER_ESTABLISHMENT would otherwise carry the phase and nothing that
-        // says why.
-        if (target.handing() instanceof Handing.NotEstablished(Agreement why)) {
-            said.add(cannotBeHeldTo(row.pos(), target.name(), why));
-        }
+        // one stopping with nothing said would otherwise carry a phase and nothing that says why.
+        whyNothingWasHandedOver(target, row.pos()).ifPresent(said::add);
         List<RowOutcome> outcomes = new ArrayList<>();
         checkRow(target, sig, outCases(sig.outputType()), row, said, outcomes);
         if (outcomes.size() != 1) {
@@ -484,6 +481,10 @@ public final class ExampleVerifier {
                         new StandinObservation.Reason.TheImplementationWasNotReached(
                                 "nothing this run was given applies `" + behavior + "`"));
             }
+            case Handing.NotMade _ -> {
+                return new ContractObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotMade(behavior));
+            }
             case Handing.NotEstablished(Agreement why) -> {
                 return new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
@@ -624,6 +625,10 @@ public final class ExampleVerifier {
                         new StandinObservation.Reason.TheImplementationWasNotReached(
                                 "nothing this run was given applies `" + behavior + "`"));
             }
+            case Handing.NotMade _ -> {
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotMade(behavior));
+            }
             case Handing.NotEstablished(Agreement why) -> {
                 return new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
@@ -700,6 +705,7 @@ public final class ExampleVerifier {
     private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
         return switch (phase) {
             case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
+            case IMPLEMENTATION_NOT_MADE -> Incompleteness.Code.IMPLEMENTATION_NOT_MADE;
             case STEP_LIMIT, DEPTH_LIMIT, TIMEOUT ->
                     Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED;
             case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
@@ -826,9 +832,9 @@ public final class ExampleVerifier {
         // Said once for the behavior in this source: not once for each of its rows, and not once for
         // each block they are written in. One answer and one module disagreeing is one fact, and a
         // behavior's rows may be written in as many blocks as they belong in.
-        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
-                && said.add(target.name())) {
-            out.add(cannotBeHeldTo(ex.pos(), target.name(), target.agreement()));
+        java.util.Optional<Diagnostic> why = whyNothingWasHandedOver(target, ex.pos());
+        if (why.isPresent() && said.add(target.name())) {
+            out.add(why.get());
         }
         Sig sig = sigs.get(module.targeted(target.name()));
         if (sig == null) {
@@ -868,12 +874,19 @@ public final class ExampleVerifier {
          * a path that quietly hands the values over anyway.
          */
         Handing handing() {
-            if (!(answer instanceof Answerer.Answer.Something applies)) {
-                return new Handing.NothingApplies();
+            switch (answer) {
+                case Answerer.Answer.Nothing _ -> {
+                    return new Handing.NothingApplies();
+                }
+                case Answerer.Answer.Unavailable _ -> {
+                    return new Handing.NotMade();
+                }
+                case Answerer.Answer.Something applies -> {
+                    return agreement != null && !(agreement instanceof Agreement.Agree)
+                            ? new Handing.NotEstablished(agreement)
+                            : new Handing.MayApply(applies);
+                }
             }
-            return agreement != null && !(agreement instanceof Agreement.Agree)
-                    ? new Handing.NotEstablished(agreement)
-                    : new Handing.MayApply(applies);
         }
     }
 
@@ -885,6 +898,10 @@ public final class ExampleVerifier {
 
         /** Nothing this run was given applies the behavior. */
         record NothingApplies() implements Handing {}
+
+        /** This compile owned the implementation and the image the row runs in holds none, so there
+         *  is nothing here for the row's values to be handed to. */
+        record NotMade() implements Handing {}
 
         /** What would apply it could not be established as being of the module being evaluated, so
          *  no value of this module's may be handed to it. */
@@ -934,16 +951,19 @@ public final class ExampleVerifier {
      * does not depend on the row, and a row that may not be handed over has to be able to stop having
      * been held to everything a row can be held to without being run.
      *
-     * <p>The two ways there is nothing to hold are not the same and are both null. An answer of this
+     * <p>The ways there is nothing to hold are not the same and are all null. An answer of this
      * compile's own is of the module being evaluated because it is of this compile of it — one build,
      * so there is no second set of declarations. A behavior nothing applies has no declarations to
-     * bring at all, and its rows are recorded rather than run whatever any build says.
+     * bring at all, and its rows are recorded rather than run whatever any build says. An
+     * implementation this compile owned and did not make brings none either, and what its rows say
+     * of themselves is decided where they stop rather than here.
      */
     private Agreement heldTo(String behavior, Answerer.Answer answer) {
         // A switch, so an answer this was never shown is a compile error here rather than one of the
-        // two ways silently taken for it.
+        // ways silently taken for it.
         return switch (answer) {
             case Answerer.Answer.Nothing _ -> null;
+            case Answerer.Answer.Unavailable _ -> null;
             case Answerer.Answer.Something something -> switch (something.origin()) {
                 // An answerer is written outside this package, so what it hands back is a thing to
                 // be refused rather than a state of this compiler. Saying nothing is not saying
@@ -958,6 +978,32 @@ public final class ExampleVerifier {
                                 named, declared.get(), published.classes(),
                                 symbols.library()));
             };
+        };
+    }
+
+    /**
+     * What to tell a reader about a behavior whose rows were not handed over, where there is
+     * anything to tell them that is not already written somewhere else.
+     *
+     * <p>A switch over what may be handed a behavior's values, so an answer this was never shown is
+     * a compile error here rather than a row carrying a phase and nothing that says why. Which of
+     * the arms is owed a sentence is the question, and it is asked once: both the caller running one
+     * row and the walk over a whole block read this, and asked in two places one of them would keep
+     * an arm the other had answered for.
+     *
+     * <p>Empty is an answer and not a gap. A row that was handed over has nothing wrong with what
+     * answers it; a behavior nothing implements is waiting and its own report says so; and an
+     * implementation this compile owed and did not make was refused where the body is written, so a
+     * second sentence here would say what an author has already been told, against a row rather
+     * than against the line it is about.
+     */
+    private java.util.Optional<Diagnostic> whyNothingWasHandedOver(ExampleTarget target,
+                                                                   SourcePos at) {
+        return switch (target.handing()) {
+            case Handing.MayApply _, Handing.NothingApplies _, Handing.NotMade _ ->
+                    java.util.Optional.empty();
+            case Handing.NotEstablished(Agreement why) ->
+                    java.util.Optional.of(cannotBeHeldTo(at, target.name(), why));
         };
     }
 
@@ -1702,6 +1748,14 @@ public final class ExampleVerifier {
                 // stopped it was the answer — which is what the row says of itself, rather than being
                 // worked out again by whoever reads it. The behavior's own diagnostic says why.
                 state.incomplete(FailurePhase.ANSWERER_ESTABLISHMENT);
+                return;
+            }
+            case Handing.NotMade _ -> {
+                // The same as far as the row got, and a different reason for stopping there: this
+                // compile owned the implementation and the image holds none. Undecided and not
+                // pending — nothing is going to supply this behavior, so a row saying it waits
+                // would be waiting on nobody.
+                state.incomplete(FailurePhase.IMPLEMENTATION_NOT_MADE);
                 return;
             }
             case Handing.MayApply(Answerer.Answer.Something something) -> applies = something;

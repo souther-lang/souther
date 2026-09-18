@@ -95,8 +95,12 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
                 Measurement.FailedToMeasure.class, measured,
                 () -> "the model says a body is written, so what it owes is unknown rather than"
                         + " nothing: " + measured);
-        assertEquals(Adequacy.BranchEvidence.Unelaborated.BODIES_NOT_ELABORATED, failed.why());
-        assertEquals(WeakeningSet.of(new Weakening.BodiesNotElaborated("example.rooms")),
+        assertEquals(Adequacy.BranchEvidence.BodyWasNotRead.BODY_WAS_NOT_READ, failed.why());
+        // Said of the behavior even here, where every body of the module is missing for the one
+        // reason. What the measure knows is that nothing read this body; a module that stopped and
+        // a module whose image leaves one body out are the same absence to it, and a word that
+        // named the module would be true of this model and false of the other.
+        assertEquals(WeakeningSet.of(new Weakening.BodyNotInEvaluation("pick")),
                 failed.by(), "and says what it went without");
     }
 
@@ -122,12 +126,12 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
         assertEquals("pick", behavior.get("name").asString());
         assertEquals("implemented", behavior.get("implementation").asString(),
                 "the declarations say a body is written here");
-        assertEquals("bodies_not_elaborated", behavior.get("branch").get("reason").asString(),
+        assertEquals("body_was_not_read", behavior.get("branch").get("reason").asString(),
                 () -> "and the arm measure says what stopped it rather than saying the model has"
                         + " no body: " + behavior.get("branch"));
         assertEquals("unavailable", behavior.get("branch").get("status").asString(),
                 "it has no number");
-        assertEquals(List.of("bodies_not_elaborated"),
+        assertEquals(List.of("body_not_in_evaluation"),
                 behavior.get("branch").get("weakening").valueStream()
                         .map(JsonNode::asString).toList(),
                 "and says what it went without, which is what tells it from a measure nobody asked"

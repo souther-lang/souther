@@ -116,6 +116,38 @@ public final class MeasureClosure {
                 by = gaps(by);
             }
         }
+
+        /**
+         * There was no reading of the body to run out.
+         *
+         * <p>Beside {@link Open} and never one of them. Open is a reading that was made and found a
+         * question it could not settle, and it names the questions; this is the absence of that
+         * reading, and it names none — a reading nobody made met no rule, so a gap carried here
+         * would be a subject nothing went looking for.
+         *
+         * <p>Which is not a verdict either. What the model divides this behavior into is whatever
+         * its rules say, and nothing here read them: a measure answering {@code Closed} over this
+         * would be saying the rules divide the positions no further, on the strength of not having
+         * looked.
+         *
+         * <p>Carries nothing and compares as one conclusion, for the reason {@link Closed} does.
+         */
+        record BodyNotRead(String behavior, Set<ClosureGap> besides) implements OfThePartition {
+
+            public BodyNotRead {
+                java.util.Objects.requireNonNull(behavior,
+                        "a body nobody read is some behavior's body");
+                // Copied and not held to being non-empty. That rule is the open arm's: something
+                // has to have been found for a reading to have stopped, and here the readings that
+                // were made may well have found nothing while the body was still not read.
+                besides = Set.copyOf(besides);
+            }
+
+            @Override
+            public String toString() {
+                return "PartitionBodyNotRead";
+            }
+        }
     }
 
     /** Whether the border measure's reading ran out. The same question of the other measure, and a
@@ -151,6 +183,79 @@ public final class MeasureClosure {
                 by = gaps(by);
             }
         }
+
+        /**
+         * There was no reading of the body to run out — see {@link OfThePartition.BodyNotRead}.
+         *
+         * <p>Here as well as there because one rule of a body makes both: a comparison divides the
+         * position it is about and draws a line at the number it names. A reading nobody made is
+         * short of each, and a border measure answering {@code Closed} over it would say the rules
+         * draw no line — which is what {@code BoundaryDerivation.NoRuleDrawsALine} takes a closed
+         * border as the proof of.
+         */
+        record BodyNotRead(String behavior, Set<ClosureGap> besides) implements OfTheBorder {
+
+            public BodyNotRead {
+                java.util.Objects.requireNonNull(behavior,
+                        "a body nobody read is some behavior's body");
+                // Copied and not held to being non-empty. That rule is the open arm's: something
+                // has to have been found for a reading to have stopped, and here the readings that
+                // were made may well have found nothing while the body was still not read.
+                besides = Set.copyOf(besides);
+            }
+
+            @Override
+            public String toString() {
+                return "BorderBodyNotRead";
+            }
+        }
+    }
+
+    /**
+     * Whether there was a reading of the body for a closure to be drawn from.
+     *
+     * <p>What {@link #of} needs of the three a {@link BodyReading} has: a body that was read and one
+     * the model never gives are both readings that happened and run out or do not, and a body this
+     * elaboration has none of is the absence of one. Which of the three it was is settled where the
+     * body is classified; this is that answer projected onto the one question drawing a conclusion
+     * turns on, so nothing here has to be told again what kind of absence it was.
+     */
+    public sealed interface Drawing {
+
+        /** A reading was made, so a conclusion is this class's to draw from what it left. */
+        record FromTheReading() implements Drawing {}
+
+        /**
+         * None was, so there is nothing to conclude from and no question to name.
+         *
+         * <p>Carries whose body went unread, which is what a measurement that went without
+         * something has to be able to say. The behavior's: an image carries some of a module's
+         * implementations and not others.
+         */
+        record NoneWasMade(String behavior) implements Drawing {}
+    }
+
+    /**
+     * What both measures come to where nothing read the body.
+     *
+     * <p>Its own way in rather than a {@code boolean} on {@link #of}. That one draws a conclusion
+     * from the residue of a reading that was made, and the conclusion is its alone to draw; handed
+     * a flag saying there was no reading, it would be two factories in one and the sentence that
+     * only it says {@code Closed} would stop holding.
+     */
+    public static Both bodyNotRead(String behavior, Both besides) {
+        return new Both(
+                new OfThePartition.BodyNotRead(behavior, gapsOf(besides.partition())),
+                new OfTheBorder.BodyNotRead(behavior, gapsOf(besides.border())));
+    }
+
+    /** What a closure of a reading that was made found, whichever way it came out. */
+    private static Set<ClosureGap> gapsOf(OfThePartition closure) {
+        return closure instanceof OfThePartition.Open open ? open.by() : Set.of();
+    }
+
+    private static Set<ClosureGap> gapsOf(OfTheBorder closure) {
+        return closure instanceof OfTheBorder.Open open ? open.by() : Set.of();
     }
 
     /** What the two closures come to, together, so that neither is built from half a reading. */

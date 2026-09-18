@@ -220,9 +220,9 @@ final class ValueClassGen {
         ClassDesc cdX = cd(sum);
         List<ClassDesc> caseCds = new ArrayList<>();
         for (Hir.Name caseName : sum.cases()) {
-            // Every name in a module the backend generates was answered: `Bodies.Checked` hands an
-            // elaboration over only where `Names.Sound` holds of the module, which resolution makes
-            // false as soon as it reports a name denoting nothing.
+            // Every name in a module the backend generates was answered: an elaboration is handed
+            // over only where `Names.Sound` holds of the module, which resolution makes false as
+            // soon as it reports a name denoting nothing.
             caseCds.add(cd(Backend.names(caseName)));
         }
         // How this sum's alternatives are written is settled once, here, and handed to everything

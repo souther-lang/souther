@@ -55,10 +55,13 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_DERIVE = List.of(
-            new Licence("souther.compiler.query.Bodies.Checked.compute", 1,
-                    "the check holds the bodies, so this is where a numbering of them is a"
-                            + " numbering of anything at all. What it decides here is carried by"
-                            + " the answer, and every later walk of these bodies realizes it"));
+            new Licence("souther.compiler.query.Bodies.elaborationOf", 1,
+                    "an elaboration holds the bodies it is of, so this is where a numbering of them"
+                            + " is a numbering of anything at all. What it decides here is carried"
+                            + " by that elaboration, and every later walk of those bodies realizes"
+                            + " it. Two elaborations of one module — what it ships and what of it"
+                            + " may be run — each number their own bodies, and a run is read"
+                            + " against the numbering of the image it ran in"));
 
     /**
      * A door a numbering comes out of, and who may go through it.

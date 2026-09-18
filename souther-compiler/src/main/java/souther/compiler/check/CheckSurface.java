@@ -206,6 +206,12 @@ public final class CheckSurface implements Assembly {
         return Requirements.writesItsOwnBody(module(), behavior);
     }
 
+    /** Whether {@code behavior} is a {@code >->} composition, whose arms, positions and lines are
+     *  its stages' ({@link Requirements#isComposition}). */
+    public boolean isComposition(Hir.BehaviorDef behavior) {
+        return Requirements.isComposition(behavior);
+    }
+
     /** Where {@code behavior}'s body comes from. How the behavior is written, which is a question
      *  about the source and not about what a compile made of it. */
     public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {

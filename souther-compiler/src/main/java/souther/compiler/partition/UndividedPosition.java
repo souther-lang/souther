@@ -4,7 +4,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 
 /**
- * A position no class came back for, and which of the three ways that happened.
+ * A position no class came back for, and which of the four ways that happened.
  *
  * <p>The list of these used to be a list of paths, and everything downstream read a path in it as the
  * model having no distinction to draw there. A position whose rule is written in a form this does not
@@ -16,27 +16,29 @@ import souther.compiler.inputs.TermPath;
  * a position the reading got to the rules of, every question of which was answered, and which no
  * rule is filed at — which is what the word means.
  *
- * <p>The other two are the two ways of not being that, and they are opposite sentences about this
- * compiler. {@link Why.CannotDerive} says the readings did not get far enough for anything about
- * the model to follow; what leaves a position in that state is enumerated where the verdict is
- * made ({@link PendingPosition#complete}) and is not counted again here.
- * {@link Why.StatedWithoutALine} says the other thing — a rule is filed here and came to no line,
+ * <p>The other three are the ways of not being that. {@link Why.CannotDerive} says the readings did
+ * not get far enough for anything about the model to follow; what leaves a position in that state is
+ * enumerated where the verdict is made ({@link PendingPosition#complete}) and is not counted again
+ * here. {@link Why.StatedWithoutALine} says the opposite — a rule is filed here and came to no line,
  * with nothing outstanding about it, so a reader sent after a limit would be looking for one that
- * is not there.
+ * is not there. {@link Why.BodyNotInEvaluation} is neither: the readings ran out, and one of the
+ * writers whose rules they would have taken in is not in the image this run was measured in, which
+ * is true of every position of the behavior at once and of none of them in particular.
  *
- * <p><b>All three are a projection and none is a reading's own account of itself.</b> Whether a
+ * <p><b>All four are a projection and none is a reading's own account of itself.</b> Whether a
  * question stands is asked of the accounting that holds every question a rule raises against
  * whatever answered it, so a reading short of a rule that another reading took in leaves nothing
  * standing. Read instead off what one reading was left with, a rule the reading of ends read from
  * end to end and the reading of values did not take in came out as a position nothing could read.
  *
  * @param at  the position, spelled the way a report names it
- * @param why whether the model draws nothing here, the readings did not get far enough to say, or
- *            a rule filed here came to no line
+ * @param why whether the model draws nothing here, the readings did not get far enough to say, a
+ *            rule filed here came to no line, or the body that would answer here was not in this
+ *            image
  */
 public record UndividedPosition(TermPath at, Why why) {
 
-    /** Which of the three it is. */
+    /** Which of the four it is. */
     public sealed interface Why {
 
         /**
@@ -100,6 +102,23 @@ public record UndividedPosition(TermPath at, Why why) {
          * was lost.
          */
         record StatedWithoutALine() implements Why {}
+
+        /**
+         * The body whose rules would answer here is not in the image this run was measured in, so
+         * nothing about the model follows from there being no class.
+         *
+         * <p>Not {@link CannotDerive}, which says the readings of this position did not get far
+         * enough. Those readings were made and ran out; what is missing is one of the writers whose
+         * rules they would have taken in, and it is missing for every position of the behavior at
+         * once. Said as that one, a reader is sent to this position after a limit that is not at it,
+         * and the two contracts a verdict of it carries — something standing at the position, and a
+         * finding published at it — hold of a fact that is about neither.
+         *
+         * <p>What is short is said where it is true: the measure of the behavior went without the
+         * reading of the body ({@code Weakening.BodyNotInEvaluation}), which is what a reader is
+         * shown and what tells them nothing here was read.
+         */
+        record BodyNotInEvaluation() implements Why {}
     }
 
     /**
@@ -385,6 +404,12 @@ public record UndividedPosition(TermPath at, Why why) {
 
     static UndividedPosition cannotDerive(TermPath at) {
         return new UndividedPosition(at, new Why.CannotDerive());
+    }
+
+    /** What a position of a behavior whose body this image has none of comes to, whatever the
+     *  readings that were made found at it. */
+    static UndividedPosition bodyNotInEvaluation(TermPath at) {
+        return new UndividedPosition(at, new Why.BodyNotInEvaluation());
     }
 
 }

@@ -93,6 +93,28 @@ public final class PartitionDerivation {
         }
     }
 
+    /**
+     * Nothing read the body, so what its rules divide the positions into was never asked.
+     *
+     * <p>Its own reason and not {@link TheReadingDidNotRunOut}. That one is a reading that was made
+     * and stopped on something, and it comes with what it stopped on; this is the reading not
+     * having been made, which names nothing and would be reported beside no gap at all. Said as the
+     * first, a reader is told a question was raised about this model and there is none to go and
+     * look at.
+     *
+     * <p>What did not read it is not here. A module whose bodies were all refused and one whose
+     * implementation this image left out are the same absence to a measure, and which of them it
+     * was is the elaboration's answer rather than this measure's.
+     */
+    public enum BodyWasNotRead implements FailureReason {
+        BODY_WAS_NOT_READ;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
+    }
+
     /** What a behavior measured at its stages rather than at itself comes to. */
     public static Measure<List<PartitionEvidence.AxisCoverage>> noSubject() {
         return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
@@ -117,16 +139,39 @@ public final class PartitionDerivation {
         if (inputIsEmpty != null) {
             return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
         }
-        if (closure instanceof MeasureClosure.OfThePartition.Closed closed) {
-            return at.isEmpty()
+        // A switch over the three a closure has, so a way of not having run out that nobody has
+        // decided about here is a compile error rather than whichever arm a cast happened to take.
+        return switch (closure) {
+            case MeasureClosure.OfThePartition.Closed closed -> at.isEmpty()
                     ? new Measure.NotApplicable<>(new NothingIsDivided(closed))
                     : new Measurement.Complete<>(List.copyOf(at));
-        }
-        WeakeningSet by = weakening(((MeasureClosure.OfThePartition.Open) closure).by());
-        return at.isEmpty()
-                ? new Measurement.FailedToMeasure<>(
-                        TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
-                : new Measurement.Partial<>(List.copyOf(at), by);
+            // Nothing read the body, so the classes here are what the declarations and the clauses
+            // came to and nothing says what the rules of the body add to them. Not the arm above:
+            // an empty answer there is the model dividing this position no way, which is a claim
+            // about rules nobody read. Not the one below either — that one names the questions a
+            // reading left, and a reading nobody made left none.
+            case MeasureClosure.OfThePartition.BodyNotRead unread -> {
+                // What it went without is the reading, said as the one weakening there is for a
+                // body nothing elaborated. Not a question about a rule: a reading nobody made met
+                // none, and naming one would send a reader to a subject nothing looked at.
+                // What it went without: the reading of the body, and whatever the readings that
+                // were made found beside it. Those are theirs to name and are not about the body.
+                WeakeningSet without = WeakeningSet.of(
+                        new Weakening.BodyNotInEvaluation(unread.behavior()))
+                        .union(PartitionDerivation.weakening(unread.besides()));
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                BodyWasNotRead.BODY_WAS_NOT_READ, without)
+                        : new Measurement.Partial<>(List.copyOf(at), without);
+            }
+            case MeasureClosure.OfThePartition.Open open -> {
+                WeakeningSet by = weakening(open.by());
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
+                        : new Measurement.Partial<>(List.copyOf(at), by);
+            }
+        };
     }
 
     /** What an open reading leaves a measurement weaker by. Every gap it found, each as the fact the

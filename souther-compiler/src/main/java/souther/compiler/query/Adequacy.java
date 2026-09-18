@@ -919,7 +919,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!checked.present()) {
                 // The bodies this would be about were not elaborated, so there is nothing here to
                 // read them off. Answered rather than absent, the places nobody could look for read
@@ -927,11 +927,16 @@ public final class Adequacy {
                 // said in the words of a fact about the model.
                 return Answer.absent();
             }
-            Map<String, souther.compiler.core.Core> bodies = checked.value().behaviorBodies();
-            if (bodies.isEmpty()) {
-                // Elaborated, and holding no body: there are no places to be about, and that is
-                // what the model says. Which is why this stays a present answer and the one above
-                // does not.
+            // Which bodies this elaboration holds is not which bodies the model has. An image
+            // holds the implementations that may be run, so a module of them all left out holds
+            // none — and reading that as the model having no body is the same sentence the arm
+            // above refuses to say. Asked per behavior below, where the declarations answer for it.
+            Bodies.Implementations owns =
+                    db.ask(new Bodies.RunnableImplementations(name)).value();
+            if (owns == null || owns.owned().isEmpty()) {
+                // The model gives no behavior here a body: there are no places to be about, and
+                // that is what the model says. Which is why this stays a present answer and the one
+                // above does not.
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan = checked.value().plan();
@@ -962,7 +967,12 @@ public final class Adequacy {
                                         InputDomain read)))) {
                     continue;
                 }
-                souther.compiler.core.Core body = bodies.get(spec.name());
+                // Read per behavior, and the two absences told apart where they are classified.
+                // A body this image has none of is not a behavior the model gives none.
+                souther.compiler.core.Core body =
+                        bodyReading(db, name, checked.value(), spec.name())
+                                instanceof souther.compiler.partition.BodyReading.Read it
+                                ? it.emitted() : null;
                 Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
                 if (body == null || fn == null) {
                     continue;
@@ -995,7 +1005,7 @@ public final class Adequacy {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!prepared.present() || !reading.present() || !sigs.present()
                     || !checked.present()) {
                 return Answer.absent();
@@ -1056,15 +1066,11 @@ public final class Adequacy {
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!prepared.present() || !reading.present() || !sigs.present()) {
                 return Answer.absent();
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            // A module whose bodies were not elaborated is read all the same, with no body and no
-            // arms to number. What comes back says the behavior's decisions meet nowhere, which is
-            // what a reading of a body nobody has is: the measure is the one the fallback answers,
-            // and a generation asked about it goes on offering whatever else it can.
             CoverageSites.Plan plan =
                     checked.present() ? checked.value().plan() : CoverageSites.Plan.NONE;
             Map<String, souther.compiler.core.Core> bodies =
@@ -1091,6 +1097,38 @@ public final class Adequacy {
     }
 
     /**
+     * What one elaboration holds of one behavior's body, classified before anything reads it.
+     *
+     * <p>The one place the two absences are told apart. A tree and a {@code null} are two facts
+     * under one shape, and a reader handed the second decides again — or stops deciding, and says
+     * what the body states on the strength of not having looked. Answered here, what interprets a
+     * body is handed which of the three it has.
+     *
+     * <p>The model's answer comes from the declarations and this elaboration's from what it holds,
+     * and neither is a question about what a body says.
+     */
+    private static souther.compiler.partition.BodyReading bodyReading(
+            Db db, String module, Bodies.Elaborated checked, String behavior) {
+        if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
+            return new souther.compiler.partition.BodyReading.Read(
+                    checked.behaviorBodies().get(behavior),
+                    checked.analysisBodies().get(behavior));
+        }
+        return givenABody(db.ask(new Bodies.Implementation(module)).value(), behavior)
+                ? new souther.compiler.partition.BodyReading.NotInElaboration()
+                : new souther.compiler.partition.BodyReading.NoBody();
+    }
+
+    /** Whether the model gives this behavior a body of its own, read off the declarations. */
+    private static boolean givenABody(
+            Map<String, souther.compiler.check.BehaviorImplementation> implementations,
+            String behavior) {
+        souther.compiler.check.BehaviorImplementation state =
+                implementations == null ? null : implementations.get(behavior);
+        return state != null && state.hasBody();
+    }
+
+    /**
      * The combinations each of one module's bodies states, and which of them the rows made.
      *
      * <p>Beside {@link Decides} and not part of it. A rule is one way through the body and is about
@@ -1110,7 +1148,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, InteractionEvidence>> compute(Db db) {
             Answer<Map<String, CoverageRead.Read>> met = db.ask(new Meets(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!met.present()) {
                 return Answer.absent();
             }
@@ -1125,10 +1163,29 @@ public final class Adequacy {
                     : Optional.empty();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             int cells = db.ask(new Front.Adequacy()).value().measures().cellsPerGroup();
+            // Where each behavior gets its body, which is the model's answer and the one reader of
+            // the declarations. Whether this elaboration holds that body is the other question,
+            // asked of the elaboration below.
+            Map<String, souther.compiler.check.BehaviorImplementation> implementations =
+                    db.ask(new Bodies.Implementation(name)).value();
             Map<String, InteractionEvidence> out = new LinkedHashMap<>();
             met.value().forEach((behavior, read) -> {
                 souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
                 if (subject == null) {
+                    return;
+                }
+                // A body the model gives this behavior and this elaboration has not got is a
+                // reading nobody made, and no entry is what that is: what chooses a criterion reads
+                // an absence here as one ({@code CombinationCriterion.of}). An entry made from it
+                // says the decisions were read and meet nowhere, which is a statement about the
+                // model — and the one a behavior held to the neighbouring technique is held to.
+                //
+                // Here and not where the meetings are read. That answer is what several readers ask
+                // what a body's meetings are, and a behavior missing from it goes missing from all
+                // of them; what has to be absent is the evidence a criterion is chosen from.
+                if (givenABody(implementations, behavior)
+                        && (!checked.present()
+                                || !checked.value().behaviorBodies().containsKey(behavior))) {
                     return;
                 }
                 souther.compiler.partition.InteractionRequirements asked =
@@ -1199,7 +1256,7 @@ public final class Adequacy {
         public Answer<Map<String, souther.compiler.partition.RulesTaken>> compute(Db db) {
             Answer<Map<String, souther.compiler.partition.DecisionReading>> read =
                     db.ask(new DecisionReadings(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!read.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -1249,7 +1306,7 @@ public final class Adequacy {
         public Answer<Map<String, DecisionEvidence>> compute(Db db) {
             Answer<Map<String, souther.compiler.partition.DecisionReading>> read =
                     db.ask(new DecisionReadings(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (!read.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -1260,7 +1317,7 @@ public final class Adequacy {
                     db.ask(new Placements(name)).value();
             Map<String, DecisionEvidence> out = new LinkedHashMap<>();
             read.value().forEach((behavior, rules) -> out.put(behavior, new DecisionEvidence(rules,
-                    whatTheRowsTook(name, rules,
+                    whatTheRowsTook(behavior, rules,
                             placed == null ? null : placed.get(behavior),
                             RowReadings.readingFor(byTarget, behavior), numbering))));
             return Answer.of(Ordered.map(out));
@@ -1280,7 +1337,7 @@ public final class Adequacy {
          * hands back the same empty list for both — which is what let a rule a row may already take
          * be reported as one no row takes (issue #996).
          */
-        private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String module,
+        private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String behavior,
                 souther.compiler.partition.DecisionReading rules,
                 souther.compiler.partition.RulesTaken against,
                 RowReading observed, Optional<SiteNumbering> numbering) {
@@ -1288,11 +1345,16 @@ public final class Adequacy {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
             }
             if (against == null) {
-                // The model says this behavior writes a body and nothing lowered it. What its rows
-                // take is unknown rather than none, and reads identically without this.
+                // The rules of this behavior's body were read and the image the run was measured in
+                // carries no body to put the rows against. What they take is unknown rather than
+                // none, and reads identically without this.
+                //
+                // Said of the behavior, because that is what is missing: the reading beside this
+                // one is of one behavior's body, and the module it is in may have every other body
+                // it owns.
                 return new Measurement.FailedToMeasure<>(
                         DecisionEvidence.Unreadable.THE_BODY_WAS_NOT_READ,
-                        WeakeningSet.of(new Weakening.BodiesNotElaborated(module)));
+                        WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior)));
             }
             if (observed.armsUnseen()) {
                 // The rows ran and carry no account of where they went, so nothing can be put
@@ -1638,7 +1700,7 @@ public final class Adequacy {
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
             souther.compiler.query.Bodies.Elaborated checkedBodies =
-                    db.ask(new Bodies.Checked(name)).value();
+                    db.ask(new Bodies.Observable(name)).value();
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
@@ -1702,7 +1764,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            db.ask(new Bodies.Checked(name));
+            db.ask(new Bodies.Observable(name));
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -1781,7 +1843,7 @@ public final class Adequacy {
             // space is over every position measured — the difference is what is known, not a
             // rule for one kind of behavior.
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             Set<souther.compiler.partition.AxisId> decided =
                     checked == null || !checked.behaviorBodies().containsKey(spec.name())
                             || met == null || met.get(spec.name()) == null
@@ -1947,20 +2009,19 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
+                    db.ask(new Bodies.Observable(name)).value();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Coverages.Partitioned read = Coverages.partitioningOf(spec,
-                    domain.reading(reading.value()), bodies.get(behavior),
+                    domain.reading(reading.value()),
+                    // Which of the three this elaboration holds, settled before anything reads a
+                    // body. The other reading of the same body travels with it, which is where a
+                    // rule about the strings at a position still stands as the author wrote it.
+                    bodyReading(db, name, checked, behavior),
                     plan,
                     arrivalsOf(db.ask(new PathReached(name)).value(), spec),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
-                    // The other reading of the same body, which is where a rule about the strings
-                    // at a position still stands as the operation the author wrote.
-                    checked == null ? null : checked.analysisBodies().get(behavior),
                     // One allowance for this measure, made here and handed on. Asked for again
                     // further in, a position would be allowed its machines once per caller and what
                     // the two came to would be bought by nobody.
@@ -2001,7 +2062,7 @@ public final class Adequacy {
             DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
             if (evidence == null || !prepared.present() || !sigs.present() || !checked.present()) {
                 return Answer.absent();
             }
@@ -2972,7 +3033,7 @@ public final class Adequacy {
      * does not use — and deriving one for it walks every body of the module to say nothing more.
      */
     static Optional<SiteNumbering> numberingOf(Db db, String module) {
-        Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
         return checked == null ? Optional.empty()
                 : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
     }
@@ -3260,22 +3321,27 @@ public final class Adequacy {
         }
 
         /**
-         * The bodies this measure counts arms in were not made.
+         * The body this measure counts arms in is not in the image the run was measured in.
          *
-         * <p>Named for the absence and not for any of the things that cause it: a module the
-         * compile stopped in has no elaborated bodies, and nothing here can tell which of the ways
-         * that happens it was. What a reader of this knows is that the model says a body is written
-         * and what it holds was not read.
+         * <p>Named for the absence and not for any of the things that cause it: a body its own
+         * rules refused, one an image left out because what it reaches could not be made, and a
+         * module nothing elaborated at all are one fact to a measure of arms, and which of them it
+         * was is the elaboration's answer rather than this measure's.
+         *
+         * <p>About this behavior and not about its module. A module the whole check of which was
+         * made still has bodies an evaluation image does not carry, so the arms of one behavior can
+         * be unreadable beside another's that were counted — and a word quantified over the module
+         * says something false of the modules where that happens.
          *
          * <p>Its own reason rather than {@link NoArms#NO_BODY}, which is the claim it used to be
-         * answered with. That claim is about the model and this is about the compile, and the two
-         * were one answer while the measure read the elaborated bodies for both (issue #996).
+         * answered with. That claim is about the model and this is about the image, and the two
+         * were one answer while the measure read the elaborated bodies for both (issue #996). The
+         * same word the partition and the border beside it give, in a type of its own for the
+         * reason each of theirs is.
          */
-        public enum Unelaborated implements FailureReason {
-            BODIES_NOT_ELABORATED;
+        public enum BodyWasNotRead implements FailureReason {
+            BODY_WAS_NOT_READ;
 
-            /** The module the behavior is in, which another behavior of the same run need not be
-             *  in. */
             @Override
             public MeasureReason.About about() {
                 return MeasureReason.About.THE_BEHAVIOR;
@@ -3286,12 +3352,12 @@ public final class Adequacy {
             return new BranchEvidence(new Measure.NotApplicable<>(reason));
         }
 
-        /** The model says this behavior writes a body and nothing elaborated it, so what it owes
-         *  was not read. */
-        public static BranchEvidence unelaborated(String module) {
+        /** The model says this behavior writes a body and the image this run was measured in does
+         *  not carry it, so what it owes was not read. */
+        public static BranchEvidence bodyNotInEvaluation(String behavior) {
             return new BranchEvidence(new Measurement.FailedToMeasure<>(
-                    Unelaborated.BODIES_NOT_ELABORATED,
-                    WeakeningSet.of(new Weakening.BodiesNotElaborated(module))));
+                    BodyWasNotRead.BODY_WAS_NOT_READ,
+                    WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior))));
         }
 
         public static BranchEvidence notAsked(BranchEvidence.NotAsked reason) {
@@ -3469,14 +3535,18 @@ public final class Adequacy {
             // waits on a run, so taking `Plan.NONE` where the build did not ask for the instrumented
             // classes bought nothing and left a body that owes no arm looking like a body nobody
             // measured (issue #955).
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             CoverageSites.Plan plan =
                     checked == null ? CoverageSites.Plan.NONE : checked.plan();
-            // Whether the bodies came back at all. Which behaviors have one is the model's answer
-            // and is asked of the declarations below; this is the other question — whether what a
-            // body holds could be read — and answering both from this map is what made a module the
-            // compile stopped in report every behavior as one with no body (issue #996).
-            boolean bodiesRead = checked != null;
+            // Whether what a body holds could be read is asked per behavior, below. Which
+            // behaviors have one at all is the model's answer and is asked of the declarations;
+            // answering both from one map is what made a module the compile stopped in report
+            // every behavior as one with no body.
+            //
+            // Per behavior because an elaboration holds some of a module's bodies and not others:
+            // what may be run of a module is a closure over its implementations, so a module-wide
+            // answer here would say the body of a behavior this image has none of was read, and
+            // the measure would go on to report it as owing no arm.
             // Off the value already in hand, which is the same answer numberingOf asks the store
             // for: a module whose bodies were not read has no numbering, and its rows have no
             // account of a run to be read under one.
@@ -3509,8 +3579,10 @@ public final class Adequacy {
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
                         reachable == null ? NOTHING_PROVEN
                                 : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN);
-                BranchEvidence absent = whyNoArms(name, prepared.value().writesItsOwnBody(behavior),
-                        bodiesRead, arms, arrives, observed);
+                BranchEvidence absent = whyNoArms(behavior.name(),
+                        prepared.value().isComposition(behavior),
+                        bodyReading(db, name, checked, behavior.name()),
+                        arms, arrives, observed);
                 if (absent != null) {
                     return absent;
                 }
@@ -3546,22 +3618,43 @@ public final class Adequacy {
          * neither, so it answered {@code NO_BODY} for every behavior in it — beside a report line
          * saying {@code implemented} (issue #996).
          *
-         * @param writesItsOwnBody what the declarations say, from the one reader of them
-         * @param bodiesRead       whether the elaborated bodies came back, which is what the arms
-         *                         and the plan below are read from
+         * <p><b>And what the image holds of the body is asked of the one classifier.</b> Whether a
+         * behavior has a body, and whether this image carries it, are the two questions
+         * {@link BodyReading} answers, and this measure reads its answer rather than asking the
+         * bodies again. Asked here as a {@code containsKey}, the arms of a behavior an image left
+         * out were reported as the bodies of its module not having been made — a sentence about a
+         * module whose check was made in full.
+         *
+         * @param isComposition whether this is a {@code >->}, whose arms are its stages' and which
+         *                      is the one thing about a behavior this may answer from the
+         *                      declarations alone
+         * @param reading       what the image the run was measured in holds of this behavior's
+         *                      body, which is what the arms and the plan below are read from
          */
-        private static BranchEvidence whyNoArms(String module, boolean writesItsOwnBody,
-                boolean bodiesRead,
+        private static BranchEvidence whyNoArms(String behavior, boolean isComposition,
+                souther.compiler.partition.BodyReading reading,
                 List<CoverageSites.ArmSite> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
                 RowReading observed) {
-            if (!writesItsOwnBody) {
+            if (isComposition) {
                 return BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
             }
-            if (!bodiesRead) {
-                // The model says there is a body. Nothing read it, so what it owes is unknown —
-                // which is not the same as owing nothing, and reads identically without this.
-                return BranchEvidence.unelaborated(module);
+            // A switch over the three, so that a fourth thing an image can hold of a body is a
+            // compile error here rather than whichever of these it happens to resemble.
+            BranchEvidence absent = switch (reading) {
+                // Nothing supplies a body here: no `let` of this name, and nothing to look inside.
+                // A claim about the model, which is why it is the same answer a composition gets.
+                case souther.compiler.partition.BodyReading.NoBody _ ->
+                        BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
+                // The model says there is a body and this image has none of it, so what it owes is
+                // unknown — which is not the same as owing nothing, and reads identically without
+                // this.
+                case souther.compiler.partition.BodyReading.NotInElaboration _ ->
+                        BranchEvidence.bodyNotInEvaluation(behavior);
+                case souther.compiler.partition.BodyReading.Read _ -> null;
+            };
+            if (absent != null) {
+                return absent;
             }
             // What is owed, and not what was numbered. An arm the rules prove nothing arrives at is
             // instrumented and is not owed, so a behavior whose every numbered arm is one of those
@@ -4011,7 +4104,7 @@ public final class Adequacy {
             if (measured == null) {
                 return Answer.absent();
             }
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             CoverageSites.Plan sites = checked == null ? CoverageSites.Plan.NONE : checked.plan();
 
             // Every place a run through an owed arm is recorded at, and not the one the finding
@@ -4178,7 +4271,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
+                    db.ask(new Bodies.Observable(name)).value();
             // What the plan's numbers mean, which a module whose bodies were not read has none of.
             // Taken off the value in hand rather than stood in for, so that such a module says it
             // has none.
@@ -6617,7 +6710,12 @@ public final class Adequacy {
                     // rule named. Said here as well, they would be one situation under two
                     // sentences, and the one here has no rule to name.
                     case souther.compiler.partition.UndividedPosition.Why.CannotDerive _,
-                         souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _ -> { }
+                         souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _,
+                    // And a position of a behavior whose body this image has none of has no
+                    // finding of its own either: what was short is the reading of the body, said
+                    // once of the measure rather than once at each position it would have reached.
+                         souther.compiler.partition.UndividedPosition.Why.BodyNotInEvaluation _
+                            -> { }
                 }
             }
             // And what this could not read, asked of the one reading that answers it. A position
@@ -7147,7 +7245,7 @@ public final class Adequacy {
                 // The sentence above says only which behavior, so a rule whose conditions were
                 // dropped here would be a finding two of which a reader cannot act on.
                 case About.ARuleNoRowTakes(var behavior, var ruled) -> {
-                    Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
+                    Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
                     for (DecisionRuleReading read : DecisionRuleReading.of(ruled,
                             checked == null ? CoverageSites.Plan.NONE : checked.plan(), behavior)) {
                         said(db, built, read);
