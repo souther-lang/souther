@@ -139,10 +139,10 @@ public record Seam(CutPosition at, Level below, Level above) {
         }
         // The carrier edge, crossed by a reader that has established it can be: a level the written
         // form attains is a whole multiple of what that form wrote, so reading it back in the
-        // quantity's own units lands on a value the position holds. Asked the other way — for a
-        // count where one may not be — this would hand back a level of the exact side under a name
-        // saying it is a value of this carrier, and the two spaces would be mixed from here on.
-        return new Level.OnACarrier(into.onto(), souther.compiler.numeric.Count.number(at));
+        // quantity's own units lands on a value the position holds. Both halves of that are asked,
+        // because a number can be a count and be no value of this order — a half is a count and no
+        // whole number is one.
+        return Level.OnACarrier.held(into.onto(), at);
     }
 
     /**

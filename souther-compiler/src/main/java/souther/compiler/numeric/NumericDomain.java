@@ -808,6 +808,33 @@ public final class NumericDomain<A> {
         }
 
         /**
+         * The same asked of a number the algebra above this reasons in.
+         *
+         * <p><b>The ends come up here rather than the number going down.</b> This range is written
+         * in what a carrier counts, because it is read off the declarations; what is being held
+         * against it may be a number no carrier counts to — a quantity stepping by a third stands at
+         * one. Every count is a ratio, so lifting an end loses nothing and the comparison is the one
+         * it always was; writing the number as a count instead answers about a place it is not at,
+         * or about no place at all.
+         *
+         * <p>Which is why this range needs no exact arithmetic of its own. It is an envelope over
+         * what a row may hold, and an envelope says the same thing in either arithmetic.
+         */
+        public boolean admits(ExactRatio at) {
+            return endAdmits(min, at, true) && endAdmits(max, at, false);
+        }
+
+        /** Whether one end lets {@code at} past it, which is the end's own strictness read against
+         *  the lifted number. */
+        private static boolean endAdmits(Endpoint end, ExactRatio at, boolean lower) {
+            if (end == null) {
+                return true;
+            }
+            int order = Count.number(end.at()).exactly().compareTo(at);
+            return (lower ? order < 0 : order > 0) || (order == 0 && end.inclusive());
+        }
+
+        /**
          * The range holding everything either of these holds: the looser end on each side. An end
          * absent is every value that way, so it is what this answers with wherever either side has
          * none.

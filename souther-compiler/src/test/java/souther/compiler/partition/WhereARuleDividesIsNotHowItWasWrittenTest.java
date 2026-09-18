@@ -219,6 +219,24 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
                 "a third is no value of a whole-numbered position, and this is the edge that says so");
     }
 
+    /**
+     * And so is one whose quotient is a number, where the position does not stand at it.
+     *
+     * <p>The half the number alone does not answer. A half is a count and no whole number is one,
+     * so a share the levels are no multiple of can divide back onto something that is a count and
+     * is a value of nothing — and a level saying it is a value of this order would be saying what
+     * the order denies. Refused at the same edge as a third, and for the other of the two reasons
+     * there are.
+     */
+    @Test
+    void andSoIsOneWhoseQuotientIsNoValueOfThePosition() {
+        Seam.Scale halves = new Seam.Scale(ExactRatio.of(2), new Carrier.Whole());
+
+        assertThrows(IllegalStateException.class,
+                () -> Seam.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, halves),
+                "a half is a count, and the whole numbers stand at none of them");
+    }
+
     /** The quantity's own values a level of one is written against, which are the whole numbers. */
     private static final LevelSpace WHOLE_NUMBERS = LevelSpace.steppingBy(ExactRatio.ONE);
 

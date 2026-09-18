@@ -101,7 +101,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     private static Level reduced(Level written, ExactRatio to) {
         return switch (written) {
             case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
-            case Level.OnACarrier on -> new Level.OnACarrier(on.of(), Count.number(to));
+            case Level.OnACarrier on -> Level.OnACarrier.held(on.of(), to);
         };
     }
 
@@ -297,9 +297,6 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     private static ExactRatio numberOf(Level level) {
-        return switch (level) {
-            case Level.OfTheQuantity counted -> counted.at();
-            case Level.OnACarrier on -> on.at() instanceof Count count ? count.exactly() : null;
-        };
+        return level.asANumber();
     }
 }

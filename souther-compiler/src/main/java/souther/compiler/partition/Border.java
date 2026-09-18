@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
@@ -730,14 +731,40 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         return admits(within, leaves == null ? cut : leaves);
     }
 
-    /** Whether {@code within} holds the value at {@code level}. */
+    /**
+     * Whether the extent of {@code within} reaches the place {@code level} is at.
+     *
+     * <p><b>Not {@link NumericDomain.Bounds#admits}, and the difference is the ends' strictness.</b>
+     * That one asks whether a row may hold the value, so an end it stops short of refuses it. This
+     * asks whether a line is inside the range at all, and a strict end is at the place its own rule
+     * drew — so a rule refusing its own threshold on an order that names no value beside it would
+     * be read as drawing nothing, which is what the account above says this exists not to do. Two
+     * questions, and a reading shared between them answers one of them wrongly.
+     *
+     * <p>Compared as numbers wherever the level is one. What the rules leave is written as places,
+     * because it is read off the declarations, and a level of a quantity stepping by a third is a
+     * number no place is — so the range comes up to the level rather than the level going down to
+     * the range ({@link Level#asANumber}). Both are on the quantity's own order by construction: the
+     * bounds handed in are the bounds of the thing being cut.
+     *
+     * <p>And as places where it is not a number, which is an order whose only level is where two
+     * positions meet. Nothing there has a number for an end to be lifted to.
+     */
     private static boolean admits(NumericDomain.Bounds within, Level level) {
-        // What the rules leave is written as places, because it is read off the declarations, so the
-        // level is read as one to be held against it. Both are on the quantity's own order by
-        // construction: the bounds handed in are the bounds of the thing being cut.
-        Place at = level.asAPlace();
-        return (within.min() == null || at.compareTo(within.min().at()) >= 0)
-                && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+        ExactRatio number = level.asANumber();
+        if (number == null) {
+            Place at = level.asAPlace();
+            return (within.min() == null || at.compareTo(within.min().at()) >= 0)
+                    && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+        }
+        return (within.min() == null || reaching(within.min()).compareTo(number) <= 0)
+                && (within.max() == null || reaching(within.max()).compareTo(number) >= 0);
+    }
+
+    /** One end of a range as the number it stops at. Lifted and never lowered: every count is a
+     *  ratio, and a level of a quantity whose own step is no decimal is a number no count is. */
+    private static ExactRatio reaching(Endpoint end) {
+        return Count.number(end.at()).exactly();
     }
 
     /**
@@ -893,7 +920,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         if (at.isEmpty()) {
             return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
-        return reach.admits(at.get().asAPlace())
+        // Whether a row may be written at it, which is the range's own reading and takes its ends
+        // as they are written — unlike whether the line is inside the range at all ({@link
+        // #admits}). Asked of the number the level is: a quantity stepping by a third stands at one
+        // and no place is it, and what the range says about a number does not depend on which
+        // arithmetic it is asked in.
+        ExactRatio number = at.get().asANumber();
+        return (number == null ? reach.admits(at.get().asAPlace()) : reach.admits(number))
                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }

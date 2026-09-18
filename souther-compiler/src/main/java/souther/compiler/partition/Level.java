@@ -40,6 +40,45 @@ public sealed interface Level {
             }
         }
 
+        /**
+         * The level this carrier holds at an exact number, where the caller has established it
+         * holds one.
+         *
+         * <p><b>Both halves of what a value of a carrier is.</b> A number becomes one by being a
+         * count at all ({@link Count#number(ExactRatio)}) and by being a count this order stands at
+         * ({@link Carrier#onTheGrid}) — halfway between two adjacent moments is a count and is no
+         * date-time. Asking only the first builds a level saying it is a value of an order that has
+         * nothing there, which is what this record's own account says it is not.
+         *
+         * <p>Which is the pair of {@link CutPosition#asAValueOf}, the door a caller asking whether
+         * a position holds a value there takes. That one answers with nothing; this one is for a
+         * caller that has established there is something, and refuses — the two ask one question
+         * and differ only in what an absence means to the reader, so they ask it the same way.
+         *
+         * <p><b>Off the grid and past the end are two answers, and only the first is refused.</b>
+         * {@link Carrier#onTheGrid} says no to both: a number between two of an order's counts is
+         * none of them, and so is one beyond where that order stops. The second is a line a model
+         * wrote and a reader is told about — a size bound past the whole numbers is named as
+         * unaccounted for — so it keeps the place it is at. The first is this compiler having
+         * divided a level by a share its own lattice is no multiple of, and there is nothing to
+         * name.
+         *
+         * <p>For a number this compiler worked out. A place the carrier itself handed over has
+         * already been answered for by the carrier, and the constructor takes those as they are.
+         */
+        public static OnACarrier held(Carrier of, ExactRatio number) {
+            Count count = Count.number(number);
+            Place value = of.onTheGrid(count);
+            if (value != null) {
+                return new OnACarrier(of, value);
+            }
+            if (of.extent().admits(count)) {
+                throw new IllegalStateException(
+                        "this order stands at no value there: " + of + " at " + number);
+            }
+            return new OnACarrier(of, count);
+        }
+
         @Override
         public String toString() {
             return at.key();
@@ -94,6 +133,28 @@ public sealed interface Level {
             throw new IllegalStateException("a level that is not a number was asked for one: " + this);
         }
         return counted.at();
+    }
+
+    /**
+     * This level as the exact number it is, or null where it is a value of an order with no
+     * numbers.
+     *
+     * <p><b>The lift, and the direction a comparison of a level against a place is done in.</b> A
+     * count is a ratio and every finite decimal is one, so reading a place this way loses nothing;
+     * reading a level the other way loses the value itself wherever the quantity counts to a number
+     * no decimal writes. Written the other way round, a comparison against what the rules leave
+     * stopped at a level of a lattice over a third — and the range it was being held against says
+     * nothing about thirds either way.
+     *
+     * <p>Null and not a refusal, because an order with no numbers has a level and no number: two
+     * strings meet somewhere and the place is compared as a place. A reader holding a level it has
+     * established is a number asks {@link #asAnExactNumber}.
+     */
+    default ExactRatio asANumber() {
+        return switch (this) {
+            case OfTheQuantity(ExactRatio at) -> at;
+            case OnACarrier on -> on.at() instanceof Count count ? count.exactly() : null;
+        };
     }
 
     /**
