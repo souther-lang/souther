@@ -11,7 +11,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -115,7 +114,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA)));
         assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
-        assertEquals(List.of(), List.copyOf(out.seal().keySet()));
+        assertEquals(java.util.Set.of(), out.seal().keySet());
     }
 
     /** And through the door a whole set of classes arrives by, which is how the classes compiled for
