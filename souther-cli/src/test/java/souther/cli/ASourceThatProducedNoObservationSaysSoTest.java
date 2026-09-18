@@ -117,7 +117,8 @@ class ASourceThatProducedNoObservationSaysSoTest {
         Incompleteness.Fact only = gaps.get(0).fact();
         assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, only.code(),
                 "the runtime is on this classpath; what happened is that a source was not read");
-        assertEquals(Incompleteness.Scope.SOURCE, only.scope());
+        assertEquals(Incompleteness.Scope.ROW, only.scope(),
+                "and the row it left unread is what the measure is short of");
     }
 
     /** And the word the schema allows is the word that is written. */
@@ -143,7 +144,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
         assertFalse(ran.out().contains("observation_absent"),
                 "no code name reaches a person: " + ran.out());
         assertFalse(ran.out().contains("linkage_failed"), ran.out());
-        assertTrue(ran.out().contains("no rows were read from"),
+        assertTrue(ran.out().contains("nothing was observed for"),
                 "what happened, said as what happened: " + ran.out());
     }
 
@@ -171,7 +172,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
 
         assertFalse(ran.out().contains("observation_absent"),
                 "one wording, written once: " + ran.out());
-        assertTrue(ran.out().contains("// generation stopped for `take`: no rows were read from"),
+        assertTrue(ran.out().contains("// generation stopped for `take`: nothing was observed for"),
                 ran.out());
     }
 

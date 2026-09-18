@@ -107,7 +107,13 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * knows is the linking failed and that the rows behind it did not run.
          */
         LINKAGE_FAILED(true),
-        /** Nothing was observed from here, so what its rows cover is unknown. */
+        /**
+         * Nothing was observed from where this was written, so what it covers is unknown.
+         *
+         * <p>Said of a row where the rows a source holds are known, and of the source where they
+         * are not. Both are one thing happening — an evaluation of a source that came back with
+         * nothing — and they differ in how much of it the compiler can place.
+         */
         OBSERVATION_ABSENT(true),
         /**
          * The classes an arm-measuring evaluation needs were not made.
@@ -251,6 +257,22 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                 Optional.of(souther.compiler.diag.Citation.of(row.at())));
     }
 
+    /**
+     * The same for a row nothing came back for, which has no outcome to read.
+     *
+     * <p>A row that was never run is the row as it is written and nothing else: what it names
+     * itself and where it is written, which is all an identity is made of. Taking the place once
+     * here keeps the pair together as the one above does — the identity and the citation are the
+     * row's, rather than two arguments a caller could pair wrongly — and it is the same
+     * {@link RowRef} the outcome of that row would have carried, so a row that was read and the
+     * same row where it was not are one row and not two.
+     */
+    public static Incompleteness ofRow(Code code, String behavior, RowIdentity identity,
+            SourcePos at) {
+        return new Incompleteness(code, new Target.OfRow(RowRef.of(behavior, at, identity)),
+                Optional.of(Citation.of(at)));
+    }
+
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose
      * measurement it counts against is the behavior and not the path. */
     public static Incompleteness atPosition(Code code, String behavior, String path) {
@@ -332,11 +354,13 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * is, and whether a source holds one is a fact about the compilation that a source id does
          * not carry.
          *
-         * <p>A source answers yes, and that is a reading of the two places that write one. Both are
-         * a source that was not evaluated at all, where which behaviors it wrote rows for is
-         * exactly what could not be read — so every one of them is missing rows it may have held.
-         * A {@code SOURCE} whose contents were known would need the compilation to answer and would
-         * not belong here. Nothing writes one, and this is the claim to re-read if something does.
+         * <p>A source answers yes, and that is a reading of the one place that writes one: a source
+         * nothing was observed from and whose contents nothing could say, where which rows it holds
+         * is exactly what could not be read — so every behavior is missing rows it may have held. A
+         * {@code SOURCE} whose contents were known would need the compilation to answer and would
+         * not belong here; where they are known, the absence is written of each row it left unread,
+         * which answers for itself. This is the claim to re-read if a {@code SOURCE} starts being
+         * written for a source something can read.
          */
         public boolean countsAgainst(String behavior) {
             return behavior().map(behavior::equals).orElse(true);

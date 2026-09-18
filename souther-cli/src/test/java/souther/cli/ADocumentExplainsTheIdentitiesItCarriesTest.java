@@ -42,12 +42,11 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
     /**
      * A model whose rows are never evaluated: a composition names a stage that does not exist, so
      * the module has no meaning to emit and nothing of it runs. Its report carries a reason about
-     * the source, whose subject is that source's identity.
+     * the row that went unread, and a row is named by the source it is written in — which is the
+     * identity this test is here to read.
      *
      * <p>A name and not a body, because that is what leaves the whole source unobserved. A body
-     * that does not check leaves the bodies that do check runnable and their rows observed, and the
-     * reason such a row carries is about the row rather than about the source — which is the
-     * identity this test is here to read.
+     * that does not check leaves the bodies that do check runnable and their rows observed.
      */
     private static String stopped(String module, String type) {
         return String.format("""
@@ -62,7 +61,7 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
                 behavior onwards = passThrough >-> nosuch
 
                 example passThrough
-                    | "through" : (%s(1)) -> %s(1)
+                    | (%s(1)) -> %s(1)
                 """, module, type, type, type, type, type);
     }
 
@@ -101,9 +100,13 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
     /**
      * Every identity the document writes is one the document explains.
      *
-     * <p>Both kinds are in this run on purpose: a reason about a source that could not be read, and a
-     * position pointing at an arm nothing reached. They are written by different code and were
-     * explained by neither.
+     * <p>Both places are in this run on purpose: a position pointing at an arm nothing reached, and
+     * a position under a reason about a row nothing was observed for. They are written by different
+     * code and were explained by neither.
+     *
+     * <p>The third place — a reason whose {@code subject} is itself a source identity — is not
+     * reachable from a command. It is written for a source whose contents nothing could read, and
+     * what a document does with one is asked where such a fact can be built.
      */
     @Test
     void everySourceIdentityWrittenHasAnEntry() throws Exception {
@@ -114,10 +117,8 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         JsonNode report = JSON.readTree(run(sources, "--format", "json").out());
 
         List<Written> written = identitiesIn(report, new ArrayList<>());
-        assertTrue(written.stream().anyMatch(w -> w.field().equals("subject")),
-                "a reason about a source is in this document: " + report);
         assertTrue(written.stream().anyMatch(w -> w.field().equals("sourceId")),
-                "and so is a position that points into one: " + report);
+                "a position that points into a source is in this document: " + report);
 
         Set<String> explained = new LinkedHashSet<>(report.get("sources").propertyNames());
         for (Written each : written) {
@@ -185,7 +186,7 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
         }
         assertEquals(Map.of("0", "a/model.sou", "1", "b/model.sou"), table, asJson.out());
         for (String name : table.values()) {
-            assertTrue(asText.out().contains("no rows were read from `" + name + "`"),
+            assertTrue(asText.out().contains("`passThrough #1 in " + name + "`"),
                     "the report a person reads says " + name + ":\n" + asText.out());
             assertTrue(asJson.err().contains("\"file\":\"" + name + "\""),
                     "and so do the diagnostics of the same run:\n" + asJson.err());

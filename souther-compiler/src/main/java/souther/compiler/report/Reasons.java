@@ -50,9 +50,10 @@ final class Reasons {
      * stopped the row, and they are two codes because the sentence below could say nothing of the
      * phases it was written over that was true at all of them: a row a figure stopped is one a run
      * that allows more keeps, and a row the evaluation had no answer for is not.
-     * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code INSTRUMENTATION_ABSENT}
-     * has one, on a branch taken only where arm coverage was asked for and returning no rows, so
-     * the sentence may name the request and the empty result both.
+     * {@code OBSERVATION_ABSENT} has two and they mean the same thing about two different subjects,
+     * which is why it is the one code whose sentence reads what it is about;
+     * {@code INSTRUMENTATION_ABSENT} has one, on a branch taken only where arm coverage was asked
+     * for and returning no rows, so the sentence may name the request and the empty result both.
      *
      * <p>{@code LINKAGE_FAILED} has one now and had three. The other two were a fill and a boundary
      * that could not build a candidate, and both were things the generator did rather than things a
@@ -77,8 +78,16 @@ final class Reasons {
     static String said(Incompleteness.Fact gap, SourceRendering rendering) {
         String subject = gap.shown(rendering);
         return switch (gap.code()) {
-            case OBSERVATION_ABSENT -> String.format(
-                    "no rows were read from `%s`, so what they cover is unknown", subject);
+            // Its two producers are about two things, so the sentence says which it is about. One
+            // is a source nothing could read the contents of, where what went unread is every row
+            // it holds; the other is a row of a source that produced no observation, and that row
+            // is what went unread. Written as one sentence over both subjects, it said of a row
+            // what is only true of a file.
+            case OBSERVATION_ABSENT -> gap.scope() == Incompleteness.Scope.ROW
+                    ? String.format(
+                            "nothing was observed for `%s`, so what it covers is unknown", subject)
+                    : String.format(
+                            "no rows were read from `%s`, so what they cover is unknown", subject);
             case LINKAGE_FAILED -> String.format(
                     "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(

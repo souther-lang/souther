@@ -78,27 +78,33 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
     /** And the page names them in the order the document writes them in. */
     @Test
     void thePageNamesThemInTheOrderTheDocumentWritesThem() {
+        SourceRendering rendering = SourceRendering.namedByIdentity(SourceLayouts.NONE);
+        // What each is shown as and not what it is filed under: the page writes the one and the
+        // document the other, and comparing two spellings of one fact would fail wherever they
+        // differ rather than wherever the orders do.
         List<String> written = report().modules().get(0).incompleteness().written().stream()
-                .map(each -> each.fact().subject()).toList();
+                .map(each -> each.fact().shown(rendering)).toList();
 
-        assertEquals(written, namedOnThePage(report().human(SourceRendering.namedByIdentity(SourceLayouts.NONE))),
+        assertEquals(written, namedOnThePage(report().human(rendering)),
                 "the page a person reads and the document a build reads say what a module could"
                         + " not read in two orders, so one of them is not the order this compiler"
                         + " decided");
     }
 
-    /** The sources the page says nothing was read from, in the order it says them. */
+    /** The rows the page says nothing was observed for, in the order it says them. */
     private static List<String> namedOnThePage(String page) {
         List<String> out = new ArrayList<>();
         for (String line : page.lines().toList()) {
-            int from = line.indexOf("no rows were read from `");
+            int from = line.indexOf(SAID);
             if (from >= 0) {
-                String rest = line.substring(from + "no rows were read from `".length());
+                String rest = line.substring(from + SAID.length());
                 out.add(rest.substring(0, rest.indexOf('`')));
             }
         }
         return out;
     }
+
+    private static final String SAID = "nothing was observed for `";
 
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSources(SOURCES, ModulePath.EMPTY);

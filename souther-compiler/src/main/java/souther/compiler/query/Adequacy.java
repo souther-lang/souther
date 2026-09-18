@@ -1611,7 +1611,7 @@ public final class Adequacy {
      * counted over were two readings that happened to agree (issue #996).
      *
      * <p>Total over the module's behaviors, and answers for every one of them whether or not
-     * anything was seen: a behavior with no row at all is the case a source nobody could evaluate
+     * anything was seen: a behavior with no row at all is the case a reading nobody could finish
      * matters most for. What the level asked for is answered here as well — a build that does not
      * read rows gets a reading that says so, rather than every caller writing that gate again.
      */
@@ -3898,9 +3898,9 @@ public final class Adequacy {
     /**
      * Every behavior of one module, with what its sources saw and what stopped them.
      *
-     * <p>A reason with no behavior to attach it to — a whole source that could not be evaluated —
-     * belongs to all of them: nothing in it was seen, so nothing about any behavior it holds rows for
-     * is settled.
+     * <p>A reason with no behavior to attach it to — a source nothing could read the contents of —
+     * belongs to all of them: which rows it holds is what could not be read, so nothing about any
+     * behavior it may write rows for is settled.
      */
     static Map<String, RowReading> rowsOf(Db db, String module) {
         Output.RowsRead.Of read = db.ask(new Output.RowsRead(module)).value();

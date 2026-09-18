@@ -376,10 +376,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * call itself measured in full over a debt nobody could measure.
          *
          * <p>Derived and not held. What a module could not read reaches it through the measures that
-         * lost by it — a source none of whose rows were seen counts against every behavior the
-         * module has, and the reading of each of them says so. Read a second time from a list of the
-         * module's own, this report was giving a raw fact its meaning as a weakening, which is a
-         * measure's answer and not a renderer's (issue #953).
+         * lost by it — a source none of whose rows were seen counts against each behavior whose
+         * rows those were, and the reading of each of them says so. Read a second time from a list
+         * of the module's own, this report was giving a raw fact its meaning as a weakening, which
+         * is a measure's answer and not a renderer's (issue #953).
          */
         public WeakeningSet weakenedBy() {
             WeakeningSet out = WeakeningSet.none();
@@ -800,7 +800,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // is a reader deciding what the producer answered (issue #996).
             Adequacy.RowReading reading =
                     Adequacy.RowReadings.readingFor(readings, behavior.name());
-            // Anything larger than a behavior holds this one: a source that could not be evaluated is
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             // Null where the coverage did not answer at all, which is the compile not having got

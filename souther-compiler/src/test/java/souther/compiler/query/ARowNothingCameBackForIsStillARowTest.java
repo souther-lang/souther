@@ -100,6 +100,33 @@ class ARowNothingCameBackForIsStillARowTest {
     }
 
     /**
+     * And the reasons that leaves are of the rows themselves, one each.
+     *
+     * <p>The rows of this source are in front of the reading, each naming itself and saying which
+     * behavior it is of. Said of the source, the same absence would count against every behavior of
+     * the module, including the ones whose rows are written somewhere that was read; said of the
+     * behavior, the two rows here would arrive as one thing to go and look at.
+     */
+    @Test
+    void andTheReasonsThatLeavesAreOfTheRowsThemselves() {
+        Read read = read(List.of(MODULE));
+
+        Map<String, List<Incompleteness>> stopped =
+                read.readingOf(read.sources().getFirst(), null, List.of()).stopped();
+
+        assertEquals(Set.of("billFor"), stopped.keySet());
+        List<Incompleteness> why = stopped.get("billFor");
+        assertEquals(2, why.size(), () -> "one per row that was not read: " + why);
+        for (Incompleteness one : why) {
+            assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, one.code());
+            assertEquals(Incompleteness.Scope.ROW, one.scope());
+            assertEquals("billFor", one.behavior().orElseThrow());
+        }
+        assertEquals(2, why.stream().map(Incompleteness::identity).distinct().count(),
+                () -> "and two rows are two reasons: " + why);
+    }
+
+    /**
      * A row takes the reason of the source it is written in, and not one from beside it.
      *
      * <p>Two sources exampling one behavior, each stopping its own way. Read after the two are
@@ -120,8 +147,9 @@ class ARowNothingCameBackForIsStillARowTest {
                         List.of(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                                 Incompleteness.Scope.BEHAVIOR, "billFor",
                                 read.ran("billFor").getFirst().at()))),
-                rows, named);
-        Output.RowsRead.readOneSource(read.prepared, sources.get(1), null, rows, named);
+                rows, new LinkedHashMap<>(), named);
+        Output.RowsRead.readOneSource(read.prepared, sources.get(1), null, rows,
+                new LinkedHashMap<>(), named);
 
         List<Incompleteness.Code> why = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : rows.get("billFor")) {
@@ -150,8 +178,12 @@ class ARowNothingCameBackForIsStillARowTest {
                 () -> "what it says is: " + lost.getMessage());
     }
 
+    /** One source read: every row it wrote, and the reasons that reading left. */
+    private record OneSource(Map<String, List<Output.RowsRead.ReadRow>> rows,
+                             Map<String, List<Incompleteness>> stopped) {}
+
     /** A compilation, and the pieces a reading of its rows is made from. */
-    private record Read(Answer<Prepared> prepared, Db db, String module) {
+    private record Read(Prepared prepared, Db db, String module) {
 
         List<SourceId> sources() {
             return new ArrayList<>(db.ask(new Front.ExampleSources(module)).value());
@@ -165,10 +197,17 @@ class ARowNothingCameBackForIsStillARowTest {
         /** One source's rows, read against an observation that says {@code rows} and {@code gaps}. */
         Map<String, List<Output.RowsRead.ReadRow>> rowsOf(SourceId source, List<RowOutcome> rows,
                                                           List<Incompleteness> gaps) {
+            return readingOf(source, rows, gaps).rows();
+        }
+
+        /** The same, with what that reading left as well. */
+        OneSource readingOf(SourceId source, List<RowOutcome> rows, List<Incompleteness> gaps) {
             Map<String, List<Output.RowsRead.ReadRow>> out = new LinkedHashMap<>();
+            Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
             Output.RowsRead.readOneSource(prepared, source,
-                    rows == null ? null : observationSaying(rows, gaps), out, new LinkedHashSet<>());
-            return out;
+                    rows == null ? null : observationSaying(rows, gaps), out, stopped,
+                    new LinkedHashSet<>());
+            return new OneSource(out, stopped);
         }
 
         Output.Examples.Of observationSaying(List<RowOutcome> rows, List<Incompleteness> gaps) {
@@ -180,6 +219,6 @@ class ARowNothingCameBackForIsStillARowTest {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         Acceptance.of(compilation);
         Db db = compilation.db();
-        return new Read(db.ask(new Shapes.Prepared("demo")), db, "demo");
+        return new Read(db.ask(new Shapes.Prepared("demo")).value(), db, "demo");
     }
 }

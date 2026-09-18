@@ -7,6 +7,9 @@ import souther.compiler.source.SourceId;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
+import souther.compiler.observe.Target;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -35,6 +38,26 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
+    }
+
+    /**
+     * And a row of a source with no observation says that of the row.
+     *
+     * <p>The other producer of the same code, about the other kind of subject. What the one above
+     * says is true of a file whose contents nothing could read — nothing in it was read — and said
+     * of a row it would claim that of a behavior whose other rows came back.
+     */
+    @Test
+    void aRowNothingWasObservedForSaysItOfTheRow() {
+        String said = Reasons.said(new Incompleteness(
+                Incompleteness.Code.OBSERVATION_ABSENT,
+                new Target.OfRow(new RowRef("take", new SourceId("1"),
+                        new RowIdentity.Unnamed(2))),
+                java.util.Optional.empty()).identity(),
+                new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
+
+        assertEquals("nothing was observed for `take #2 in trip.sou`, so what it covers is unknown",
+                said);
     }
 
     /**
