@@ -108,6 +108,36 @@ class AWalkSaysWhichOfTheFourWaysItEndedTest {
     }
 
     /**
+     * A figure is met where a place was found and not gone on to, and never where a count came out
+     * even.
+     *
+     * <p>Held of both of them, because it is one rule and each figure is a place it has to hold.
+     * A run holding exactly as many places as a figure allows and a run this stopped walking come
+     * back the same length, so the count reaching the figure says nothing on its own. Reported off
+     * the count, an author is told a number of this compiler's is why they got no more — and
+     * raising it reaches a place the run does not hold.
+     */
+    @Test
+    void aFigureIsMetByAPlaceFoundAndNotGoneOnToAndNeverByACountComingOutEven() {
+        // Five places looked at, five allowed, and nothing beyond them.
+        assertEquals(Outwards.Ended.HAVING_TRIED_THEM_ALL,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("0", "4"), 100, 5, ValueSet.ANY, PlacesApart.NONE).ended());
+        // One place further, which is a place this did not look at.
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("0", "5"), 100, 5, ValueSet.ANY, PlacesApart.NONE).ended());
+
+        // And the same boundary for the other figure, which is where the rule was already kept.
+        assertEquals(Outwards.Ended.HAVING_TRIED_THEM_ALL,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("0", "4"), 5, 100, ValueSet.ANY, PlacesApart.NONE).ended());
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_CANDIDATES,
+                Outwards.from(Count.of(BigDecimal.ZERO), Count.of(1), new Carrier.Whole(),
+                        between("0", "5"), 5, 100, ValueSet.ANY, PlacesApart.NONE).ended());
+    }
+
+    /**
      * A walk stopped by the figure may not come back saying what a walk with no step says.
      *
      * <p>Which is what the two vocabularies being apart comes to downstream, and it is refused

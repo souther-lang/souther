@@ -153,12 +153,17 @@ final class Outwards {
         List<Place> out = new ArrayList<>();
         out.add(first);
         int lookedAt = 1;
-        // <b>A value found and not taken, never a count that came out even.</b> A run holding
-        // exactly this many and a run this stopped walking come back the same length, so the figure
+        // <b>A place found and not taken, never a count that came out even.</b> A run holding
+        // exactly this many and a run this stopped walking come back the same length, so a figure
         // being reached says nothing on its own — what says this compiler declined to go further is
-        // a value the run holds that this did not take. Read off the count instead, a run walked to
-        // its end reports a budget nobody reached, and a point nothing could stop is reported as one
-        // this stopped: the same trade this file is here to prevent, made the other way round.
+        // a place the run holds that this did not go on to. Read off the count instead, a run walked
+        // to its end reports a budget nobody reached, and a point nothing could stop is reported as
+        // one this stopped: the same trade this file is here to prevent, made the other way round.
+        //
+        // Which holds of both figures and is why each is asked before its allowance is spent rather
+        // than after. What the looking figure bounds is places examined, so it is met where another
+        // place of the run was found and there is nothing left to examine it with — and never where
+        // examining the last place of the run happened to take the count up to it.
         Ended ended = Ended.HAVING_TRIED_THEM_ALL;
         outward:
         for (int step = 1; ; step++) {
@@ -172,17 +177,22 @@ final class Outwards {
                     continue;
                 }
                 // A place of the run, so the run has not run out and the walk goes on whether or
-                // not this one is taken.
+                // not this one turns out to be a place to take.
                 took = true;
+                // Another place to examine, and nothing left to examine it with. Asked here —
+                // before the narrowings are put to it — because examining it is what the allowance
+                // is for: spent first and the figure read off the count afterwards, a run whose
+                // last place took the count up to the figure reports a walk this stopped, and
+                // raising the figure reaches a place that is not there.
+                if (lookedAt == howManyLookedAt) {
+                    ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
+                    break outward;
+                }
+                lookedAt++;
                 // Refused by one of the narrowings the run has no word for, which is a place to
                 // step past rather than a place to try. Yielded, it would be a candidate the rules
-                // refuse, offered because the run happened to hold it. What it spends is the
-                // looking, and it is the looking that has to stop somewhere.
+                // refuse, offered because the run happened to hold it.
                 if (!takenIn(next, carrier, within, admits, apart)) {
-                    if (++lookedAt >= howManyLookedAt) {
-                        ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
-                        break outward;
-                    }
                     continue;
                 }
                 if (out.size() == howManyTaken) {
@@ -191,10 +201,6 @@ final class Outwards {
                     break outward;
                 }
                 out.add(next);
-                if (++lookedAt >= howManyLookedAt) {
-                    ended = Ended.AT_THE_FIGURE_OF_PLACES_LOOKED_AT;
-                    break outward;
-                }
             }
             if (!took) {
                 break;   // neither direction has a place left, so this walked the whole of it
