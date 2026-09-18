@@ -102,40 +102,42 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
     }
 
     /**
-     * The dispositions a model this repository carries reaches.
+     * The arms with no model written to reach them, watched here until one is.
      *
-     * <p>Written out so that a change which quietly stops producing an entry, or starts answering
-     * one with a different arm, is read here rather than found by someone running the command. The
-     * set and not the counts: how many of a kind a model holds unanswered moves with the model.
+     * <p><b>Not part of the law above and not a claim about these models.</b> What settles an arm is
+     * a model written to produce the entry it answers, and three of the four arms an entry here can
+     * reach have one. This is the fourth: nothing is written for it, so the only thing standing
+     * between it and nobody noticing it has gone is that the corpora still happen to reach it.
+     *
+     * <p>Watching a corpus is the wrong instrument and is what this is a note about. A model made
+     * more adequate takes such a reading away, and the day this fails the answer is not to put the
+     * reading back — it is that the debt came due.
+     *
+     * <p>What the witness needs when it is written is an oracle on the whole route: no error
+     * diagnostic, the expected uncertainty, the subject and reason it carries, and the arm read off
+     * it. Reachability alone is not enough, which a source that reached this arm while failing to
+     * compile is what showed.
      */
-    private static final Set<String> WITNESSED = Set.of(
-            "LookAtTheRule", "LookAtWhyNothingWasMeasured", "LookAtWhatShowedNoRow");
+    private static final Set<String> AWAITING_DEDICATED_WITNESS = Set.of("LookAtWhatShowedNoRow");
 
     /**
-     * Each of those is reached, and an arm not among them is not said anything about here.
+     * The arms still owed a witness have not quietly stopped being reached.
      *
-     * <p>What is held is one direction. An arm these models reach only while one of them is short of
-     * something is reached by accident — the models are evidence about the language and not fixtures
-     * for these arms, and one made more adequate takes such a reading away. So an arm missing from
-     * the list above is not thereby a defect, and neither is one that turns up in what these models
-     * reach without being listed: what would settle either is a model written to reach the arm
-     * through the analysis, which is a different thing from a corpus happening to.
-     *
-     * <p>Which is why nothing here is asked of the arms not listed. Asked of them, this would answer
-     * a question about a written witness with what the corpora are doing this week, and a corpus
-     * change would read as that witness arriving or leaving.
+     * <p>A holding position. Nothing about the arms not named here is asked — those have models
+     * written for them, and asking the corpora about them would answer a question about a written
+     * witness with what the corpora are doing this week.
      */
     @Test
-    void theModelsHereReachTheseDispositions() {
+    void anArmStillOwedAWitnessIsStillReachedByTheseModels() {
         Set<String> reached = new LinkedHashSet<>();
         for (AdequacyUncertainty each : UNRESOLVED) {
             reached.add(ReaderDisposition.of(each).getClass().getSimpleName());
         }
 
-        Set<String> unwitnessed = new LinkedHashSet<>(WITNESSED);
-        unwitnessed.removeAll(reached);
-        assertEquals(Set.of(), unwitnessed,
-                () -> "a disposition held to be reached by these models is reached by none of them."
-                        + " Reached: " + reached);
+        Set<String> gone = new LinkedHashSet<>(AWAITING_DEDICATED_WITNESS);
+        gone.removeAll(reached);
+        assertEquals(Set.of(), gone,
+                () -> "an arm with no model written to reach it is no longer reached by these"
+                        + " models either, so nothing holds it at all. Reached: " + reached);
     }
 }
