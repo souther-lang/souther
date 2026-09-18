@@ -144,6 +144,8 @@ the reading to the values `souther examples --generate` writes, and every type o
 AffineReading   form, cut
 QuantityKey     direction, per
 Cutting         per
+LevelSpace      its generator and step
+Level           what a quantity counts to
 Seam.Scale      per
 CutPosition     written, per
 LevelRealizer   the coefficients it solves with
@@ -176,8 +178,34 @@ domain it solves in.
 **An exact affine scalar stays exact through the partition geometry, and becomes an Int or a Decimal
 only where a candidate is placed on a carrier.**
 
-So the types above carry the exact ratio, and the conversion stays at the edge the next section
-describes. `CutPosition`'s pair keeps its meaning — a level and what it is over — with both exact,
+`Level` and `LevelSpace` are part of that geometry, and the layer where it is easiest to leave a
+`BigDecimal` in the middle of an otherwise exact chain. `BorderQuantity.levels()` builds a
+`LevelSpace` — `steppingBy` and `overFiniteDecimals` both take a `BigDecimal` generator — and a
+counted level is `Level.ACount(Count at)` over `Count(BigDecimal at)`.
+
+A counted affine level is not a carrier count. `Level.ACount`'s own account already says so: a
+number the quantity itself counts to, on no coordinate's carrier. `Count` is the other thing — the
+number a value counts to *on* a carrier's order — and the two shared a representation only while
+every level a form could take was a finite decimal. For `x: Int`:
+
+```souther
+guard 1 / 3 * x < 2
+```
+
+the quantity takes the values a third apart, so the lattice itself is over a ratio no decimal
+writes. This is a different case from a fractional cut over a whole-numbered lattice, and the two
+have to be distinguishable for either to be right.
+
+So `LevelSpace`, its intervals, its generators and its comparisons carry the exact scalar as well,
+and a counted level does too. Whether that is `ACount` holding the exact ratio or a level that
+separates the carrier case from the exact one is the implementation's to choose; what is decided
+here is that it is not a `Count` of a `BigDecimal`.
+
+The mathematics is already there: `AdditiveImage` takes `Map<A, Rational>`, computes its generator
+with `Rational.gcd`, and answers `OverWholeNumbers` or `OverFiniteDecimals` over exact ratios. What
+is left is the representation the geometry hands it.
+
+The conversion to a carrier stays at the edge the next section describes. `CutPosition`'s pair keeps its meaning — a level and what it is over — with both exact,
 and the technique it encodes is no longer the only place exactness can live.
 
 What reaches a fixture is unchanged. Rational answers no external form, so no generated row writes
@@ -292,10 +320,15 @@ is observable. Four models say whether the chain holds:
 ```souther
 guard x < 1 / 3                     -- Int carrier, no Int value on the line
 guard d < 1 / 3                     -- Decimal carrier, a third is no Decimal
+guard 1 / 3 * x < 2                 -- the quantity's own lattice is over a third
 guard y < -1 / 3 * x + 30           -- an exact coefficient
 let slope = -1 / 3
 guard y < slope * x + 30            -- the same, through a name
 ```
+
+The third is the one that says whether `LevelSpace` held. The first two put a fractional cut on a
+whole-numbered lattice; that one makes the lattice itself fractional, and a geometry that only
+carried its cut exactly would pass the first two and fail it.
 
 The first two are the ones that say whether the carrier edge held. A generated row carries a value
 of the position's own type and never a Rational, and a Decimal position whose border falls at a
