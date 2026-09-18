@@ -35,7 +35,7 @@ import java.util.Set;
  * <p>Instances are immutable — each operation returns a fresh domain, threaded functionally like
  * {@code TotalityChecker}'s scope map. Constants are {@link BigDecimal} at the edges, because that is
  * what a carrier counts in and what a model writes; inside, the arithmetic is exact
- * ({@link Rational}), since dividing is what deriving a bound does and neither of those is closed
+ * ({@link ExactRatio}), since dividing is what deriving a bound does and neither of those is closed
  * under it.
  */
 public final class NumericDomain<A> {
@@ -106,10 +106,10 @@ public final class NumericDomain<A> {
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
-        Map<A, Rational> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((atom, coef) -> coefs.put(atom, Rational.of(coef)));
+        Map<A, ExactRatio> coefs = new LinkedHashMap<>();
+        f.coefs().forEach((atom, coef) -> coefs.put(atom, ExactRatio.of(coef)));
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                coefs, Rational.of(f.constant()), rel, knowing.kinds::get);
+                coefs, ExactRatio.of(f.constant()), rel, knowing.kinds::get);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
@@ -409,13 +409,13 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return true;   // an infeasible path discharges anything
         }
-        Map<A, Rational> coefs = weighed(f);
+        Map<A, ExactRatio> coefs = weighed(f);
         if (!kinds.keySet().containsAll(coefs.keySet())) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, Rational.of(f.constant()), rel, kinds::get)) {
+        return switch (AffineConstraint.of(coefs, ExactRatio.of(f.constant()), rel, kinds::get)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
@@ -444,7 +444,7 @@ public final class NumericDomain<A> {
     }
 
     /** {@code form - at}, which is what is bounded to decide whether {@code form <= at}. */
-    private Goal<A> below(CanonicalForm<A> form, Rational at) {
+    private Goal<A> below(CanonicalForm<A> form, ExactRatio at) {
         return new Goal<>(form.coefs(), at.negated());
     }
 
@@ -461,10 +461,10 @@ public final class NumericDomain<A> {
 
     /** A written form's weights, as the exact arithmetic holds them, with the positions it does not
      *  actually weigh left out. */
-    private Map<A, Rational> weighed(LinearForm<A> f) {
-        Map<A, Rational> coefs = new LinkedHashMap<>();
+    private Map<A, ExactRatio> weighed(LinearForm<A> f) {
+        Map<A, ExactRatio> coefs = new LinkedHashMap<>();
         f.coefs().forEach((atom, coef) -> {
-            Rational weight = Rational.of(coef);
+            ExactRatio weight = ExactRatio.of(coef);
             if (!weight.isZero()) {
                 coefs.put(atom, weight);
             }
@@ -473,10 +473,10 @@ public final class NumericDomain<A> {
     }
 
     /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
-    private record Goal<A>(Map<A, Rational> coefs, Rational constant) {
+    private record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {
 
         Goal<A> negated() {
-            Map<A, Rational> out = new LinkedHashMap<>();
+            Map<A, ExactRatio> out = new LinkedHashMap<>();
             coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
             return new Goal<>(out, constant.negated());
         }
@@ -491,7 +491,7 @@ public final class NumericDomain<A> {
      * far as {@code a - b}, and an answer about the second handed back for the first is out by a
      * factor with nothing to say it is.
      */
-    private record Asked<A>(Goal<A> goal, Rational by) {}
+    private record Asked<A>(Goal<A> goal, ExactRatio by) {}
 
     /**
      * A question, in the one form every way of asking it comes to.
@@ -507,14 +507,14 @@ public final class NumericDomain<A> {
      * side of nought the question is about.
      */
     private Asked<A> goalOf(LinearForm<A> f) {
-        Map<A, Rational> coefs = weighed(f);
-        Rational constant = Rational.of(f.constant());
+        Map<A, ExactRatio> coefs = weighed(f);
+        ExactRatio constant = ExactRatio.of(f.constant());
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
         // same thing are put into the same words by the same code. Doing the division here instead
         // would be a second account of what one rule is — which is the thing being removed.
         CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
         if (scaled == null) {
-            return new Asked<>(new Goal<>(Map.of(), constant), Rational.ONE);
+            return new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
         }
         return new Asked<>(
                 new Goal<>(scaled.form().coefs(), constant.dividedBy(scaled.by())), scaled.by());
@@ -530,7 +530,7 @@ public final class NumericDomain<A> {
      * relations had been added to it.
      */
     private boolean proves(Goal<A> goal, boolean strict, boolean withRules) {
-        RationalCut highest = highestProven(goal, withRules);
+        ExactCut highest = highestProven(goal, withRules);
         if (highest == null) {
             return false;
         }
@@ -559,7 +559,7 @@ public final class NumericDomain<A> {
      *                  the one an account of what was derived wants — and not the product of the
      *                  ranges either, which holds less than this does
      */
-    private RationalCut highestProven(Goal<A> goal, boolean withRules) {
+    private ExactCut highestProven(Goal<A> goal, boolean withRules) {
         FormReach<A> reading = reading();
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
@@ -677,14 +677,14 @@ public final class NumericDomain<A> {
             return new Bounds(null, null);
         }
         Asked<A> asked = goalOf(f);
-        RationalCut highest = highestProven(asked.goal(), true);
-        RationalCut lowest = highestProven(asked.goal().negated(), true);
+        ExactCut highest = highestProven(asked.goal(), true);
+        ExactCut lowest = highestProven(asked.goal().negated(), true);
         // Back into the units the caller asked in. The question was answered about the form divided
         // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(
-                lowest == null ? null : written(new RationalCut(
+                lowest == null ? null : written(new ExactCut(
                         lowest.at().negated().times(asked.by()), lowest.inclusive()), false),
-                highest == null ? null : written(new RationalCut(
+                highest == null ? null : written(new ExactCut(
                         highest.at().times(asked.by()), highest.inclusive()), true));
     }
 
@@ -697,7 +697,7 @@ public final class NumericDomain<A> {
      * over then admits everything the rules admit and a hair besides, which is the safe direction: a
      * reader refusing a value the rules leave is the failure nothing downstream can see.
      */
-    private Endpoint written(RationalCut cut, boolean upper) {
+    private Endpoint written(ExactCut cut, boolean upper) {
         if (cut == null) {
             return null;
         }
@@ -866,7 +866,7 @@ public final class NumericDomain<A> {
         return writtenExactly(box.leastOf(atom)) && writtenExactly(box.mostOf(atom));
     }
 
-    private static boolean writtenExactly(RationalCut cut) {
+    private static boolean writtenExactly(ExactCut cut) {
         return cut == null || cut.at().asWrittenDecimal() != null;
     }
 }

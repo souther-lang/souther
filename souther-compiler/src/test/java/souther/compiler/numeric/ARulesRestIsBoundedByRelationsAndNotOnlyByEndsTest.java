@@ -146,19 +146,19 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
         List<AffineConstraint<String>> alone = List.of(rule);
         FormReach<String> reading = FormReach.over(alone, Box.unbounded(),
                 DifferenceBounds.over(alone));
-        Map<String, Rational> itsOwnForm = Map.of("x", Rational.of(10), "y", Rational.of(-1));
+        Map<String, ExactRatio> itsOwnForm = Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
 
-        assertNotNull(reading.of(itsOwnForm, Rational.ZERO).least(),
+        assertNotNull(reading.of(itsOwnForm, ExactRatio.ZERO).least(),
                 "the rule bounds 10x - y below, so reading it plainly says so");
-        assertNull(reading.ofTheRestOf(rule, itsOwnForm, Rational.ZERO).least(),
+        assertNull(reading.ofTheRestOf(rule, itsOwnForm, ExactRatio.ZERO).least(),
                 "and reading it as that rule's own rest does not");
     }
 
     private static AffineConstraint<String> stated(LinearForm<String> f, Rel rel) {
-        Map<String, Rational> coefs = new LinkedHashMap<>();
-        f.coefs().forEach((position, weight) -> coefs.put(position, Rational.of(weight)));
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        f.coefs().forEach((position, weight) -> coefs.put(position, ExactRatio.of(weight)));
         AffineConstraint.Read<String> read = AffineConstraint.of(coefs,
-                Rational.of(f.constant()), rel, position -> Granularity.DISCRETE);
+                ExactRatio.of(f.constant()), rel, position -> Granularity.DISCRETE);
         return ((AffineConstraint.Read.Stated<String>) read).constraint();
     }
 }

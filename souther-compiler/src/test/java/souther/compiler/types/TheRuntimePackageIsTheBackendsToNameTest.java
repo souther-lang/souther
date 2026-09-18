@@ -34,11 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TheRuntimePackageIsTheBackendsToNameTest {
 
     /**
-     * Where a declaration's identity, its scope, its rules and its readings live. None of them is
-     * about a machine.
+     * Where a declaration's identity, its scope, its rules, its readings and the arithmetic those
+     * rules are reasoned in live. None of them is about a machine.
      */
     private static final Set<String> TARGET_NEUTRAL =
-            Set.of("types", "check", "stdlib", "semantics", "partition", "inputs", "core", "flow");
+            Set.of("types", "check", "stdlib", "semantics", "partition", "inputs", "core", "flow",
+                    "numeric");
 
     /**
      * And where naming it is the job. {@code jvm} maps an identity to a physical name;

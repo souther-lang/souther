@@ -66,27 +66,27 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                     if (here.equals(there)) {
                         continue;
                     }
-                    RationalCut apart = closed.differences().differenceBound(here, there);
+                    ExactCut apart = closed.differences().differenceBound(here, there);
                     if (apart == null) {
                         continue;
                     }
-                    RationalCut carried = box.mostOf(there) == null ? null
-                            : RationalCut.meetingBoth(box.mostOf(there), apart);
-                    assertEquals(RationalCut.tighterUpper(box.mostOf(here), carried),
+                    ExactCut carried = box.mostOf(there) == null ? null
+                            : ExactCut.meetingBoth(box.mostOf(there), apart);
+                    assertEquals(ExactCut.tighterUpper(box.mostOf(here), carried),
                             box.mostOf(here),
                             () -> here + " - " + there + " is " + apart + " and " + there
                                     + " is at most " + box.mostOf(there) + ", which puts " + here
                                     + " at " + carried + " and the box left it at "
                                     + box.mostOf(here));
 
-                    RationalCut back = closed.differences().differenceBound(there, here);
+                    ExactCut back = closed.differences().differenceBound(there, here);
                     if (back == null || box.leastOf(there) == null) {
                         continue;
                     }
-                    RationalCut below = new RationalCut(
+                    ExactCut below = new ExactCut(
                             box.leastOf(there).at().minus(back.at()),
                             box.leastOf(there).inclusive() && back.inclusive());
-                    assertEquals(RationalCut.tighterLower(box.leastOf(here), below),
+                    assertEquals(ExactCut.tighterLower(box.leastOf(here), below),
                             box.leastOf(here),
                             () -> there + " - " + here + " is " + back + " and " + there
                                     + " is at least " + box.leastOf(there) + ", which puts " + here
@@ -128,14 +128,14 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
     void aBoxTheRoundsRanOutOnIsClosedUnderTheDifferencesToo() {
         List<Written> system = new ArrayList<>();
         for (String position : List.of("x", "y")) {
-            system.add(new Written(Map.of(position, Rational.ONE), Rational.ZERO, Rel.GE));
-            system.add(new Written(Map.of(position, Rational.ONE), Rational.of(-100), Rel.LE));
+            system.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.ZERO, Rel.GE));
+            system.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-100), Rel.LE));
         }
-        system.add(new Written(Map.of("z", Rational.ONE), Rational.ZERO, Rel.GE));
-        system.add(new Written(Map.of("z", Rational.ONE), Rational.of(-101), Rel.LE));
-        system.add(new Written(halving("x", "y"), Rational.ZERO, Rel.LE));
-        system.add(new Written(halving("y", "x"), Rational.ZERO, Rel.LE));
-        system.add(new Written(apart("z", "x"), Rational.of(-1), Rel.LE));
+        system.add(new Written(Map.of("z", ExactRatio.ONE), ExactRatio.ZERO, Rel.GE));
+        system.add(new Written(Map.of("z", ExactRatio.ONE), ExactRatio.of(-101), Rel.LE));
+        system.add(new Written(halving("x", "y"), ExactRatio.ZERO, Rel.LE));
+        system.add(new Written(halving("y", "x"), ExactRatio.ZERO, Rel.LE));
+        system.add(new Written(apart("z", "x"), ExactRatio.of(-1), Rel.LE));
 
         ClosedState<String> closed =
                 ClosedState.of(read(system, Granularity.DENSE), atom -> Granularity.DENSE);
@@ -147,7 +147,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                 "the rounds ran out and the box is a fixed point of the differences all the same");
         // `z - x <= 1` with `x` wherever the rounds left it, which is what carrying it along the
         // differences puts `z` at — and is where the box has it.
-        assertEquals(closed.box().mostOf("x").at().plus(Rational.ONE),
+        assertEquals(closed.box().mostOf("x").at().plus(ExactRatio.ONE),
                 closed.box().mostOf("z").at(),
                 "the difference did not reach `z` at the end the rounds left `x` at");
     }
@@ -155,22 +155,22 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
     // --- the systems ------------------------------------------------------------------------------
 
     /** {@code 2·above - below}, a rule the differences cannot hold and the rounds have to read. */
-    private static Map<String, Rational> halving(String above, String below) {
-        Map<String, Rational> coefs = new LinkedHashMap<>();
-        coefs.put(above, Rational.of(2));
-        coefs.put(below, Rational.ONE.negated());
+    private static Map<String, ExactRatio> halving(String above, String below) {
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(above, ExactRatio.of(2));
+        coefs.put(below, ExactRatio.ONE.negated());
         return coefs;
     }
 
     /** {@code above - below}, which the differences hold exactly. */
-    private static Map<String, Rational> apart(String above, String below) {
-        Map<String, Rational> coefs = new LinkedHashMap<>();
-        coefs.put(above, Rational.ONE);
-        coefs.put(below, Rational.ONE.negated());
+    private static Map<String, ExactRatio> apart(String above, String below) {
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(above, ExactRatio.ONE);
+        coefs.put(below, ExactRatio.ONE.negated());
         return coefs;
     }
 
-    private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
+    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
     /**
      * A handful of rules over positions bounded both ways, of both shapes.
@@ -182,8 +182,8 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
     private static List<Written> aSystem(Random dice) {
         List<Written> out = new ArrayList<>();
         for (String position : POSITIONS) {
-            out.add(new Written(Map.of(position, Rational.ONE), Rational.of(4), Rel.GE));
-            out.add(new Written(Map.of(position, Rational.ONE), Rational.of(-4), Rel.LE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(4), Rel.GE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-4), Rel.LE));
         }
         int howMany = 2 + dice.nextInt(4);
         for (int i = 0; i < howMany; i++) {
@@ -192,26 +192,26 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
             Rel rel = strict ? Rel.LT : Rel.LE;
             switch (dice.nextInt(3)) {
                 case 0 -> out.add(new Written(
-                        Map.of(POSITIONS.get(dice.nextInt(3)), Rational.ONE),
-                        Rational.of(-threshold), rel));
+                        Map.of(POSITIONS.get(dice.nextInt(3)), ExactRatio.ONE),
+                        ExactRatio.of(-threshold), rel));
                 case 1 -> {
                     String one = POSITIONS.get(dice.nextInt(3));
                     String other = POSITIONS.get(dice.nextInt(3));
                     if (one.equals(other)) {
                         continue;
                     }
-                    Map<String, Rational> coefs = new LinkedHashMap<>();
-                    coefs.put(one, Rational.ONE);
-                    coefs.put(other, Rational.ONE.negated());
-                    out.add(new Written(coefs, Rational.of(-threshold), rel));
+                    Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+                    coefs.put(one, ExactRatio.ONE);
+                    coefs.put(other, ExactRatio.ONE.negated());
+                    out.add(new Written(coefs, ExactRatio.of(-threshold), rel));
                 }
                 // A sum the differences cannot hold, so the outer rounds have something to do.
                 default -> {
-                    Map<String, Rational> coefs = new LinkedHashMap<>();
-                    coefs.put("a", Rational.ONE);
-                    coefs.put("b", Rational.ONE);
-                    coefs.put("c", dice.nextBoolean() ? Rational.ONE : Rational.ONE.negated());
-                    out.add(new Written(coefs, Rational.of(-threshold), rel));
+                    Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+                    coefs.put("a", ExactRatio.ONE);
+                    coefs.put("b", ExactRatio.ONE);
+                    coefs.put("c", dice.nextBoolean() ? ExactRatio.ONE : ExactRatio.ONE.negated());
+                    out.add(new Written(coefs, ExactRatio.of(-threshold), rel));
                 }
             }
         }

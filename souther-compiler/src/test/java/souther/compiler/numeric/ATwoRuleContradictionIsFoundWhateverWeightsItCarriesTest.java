@@ -107,14 +107,14 @@ class ATwoRuleContradictionIsFoundWhateverWeightsItCarriesTest {
 
     @Test
     void aFormIsEmptyAtOneValueOnlyWhereThatValueIsNotReachedFromBothSides() {
-        Rational five = Rational.of(5);
-        assertFalse(new Reach(RationalCut.inclusive(five), RationalCut.inclusive(five)).isEmpty(),
+        ExactRatio five = ExactRatio.of(5);
+        assertFalse(new Reach(ExactCut.inclusive(five), ExactCut.inclusive(five)).isEmpty(),
                 "at least five and at most five runs at five");
-        assertTrue(new Reach(RationalCut.exclusive(five), RationalCut.inclusive(five)).isEmpty(),
+        assertTrue(new Reach(ExactCut.exclusive(five), ExactCut.inclusive(five)).isEmpty(),
                 "above five and at most five runs nowhere");
-        assertTrue(new Reach(RationalCut.inclusive(Rational.of(6)),
-                RationalCut.inclusive(five)).isEmpty(), "at least six and at most five");
-        assertFalse(new Reach(null, RationalCut.inclusive(five)).isEmpty(),
+        assertTrue(new Reach(ExactCut.inclusive(ExactRatio.of(6)),
+                ExactCut.inclusive(five)).isEmpty(), "at least six and at most five");
+        assertFalse(new Reach(null, ExactCut.inclusive(five)).isEmpty(),
                 "an end nobody found leaves it running that way");
     }
 

@@ -46,7 +46,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static final int HIGH = 4;
     private static final int CASES = 300;
 
-    private record Written(Map<String, Rational> coefs, Rational constant, Rel rel) {}
+    private record Written(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {}
 
     @Test
     void everyClosureAgreesWithTheePointsItIsAbout() {
@@ -125,40 +125,40 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static void assertSoundAndTight(List<Written> written, DifferenceBounds<String> closed,
                                             List<Map<String, Integer>> admitted) {
         for (String position : POSITIONS) {
-            RationalCut high = closed.upperBoundOf(position);
-            RationalCut low = closed.lowerBoundOf(position);
+            ExactCut high = closed.upperBoundOf(position);
+            ExactCut low = closed.lowerBoundOf(position);
             int most = admitted.stream().mapToInt(point -> point.get(position)).max().orElseThrow();
             int least = admitted.stream().mapToInt(point -> point.get(position)).min().orElseThrow();
 
-            assertTrue(admits(high, Rational.of(most), true),
+            assertTrue(admits(high, ExactRatio.of(most), true),
                     () -> "unsound: " + written + " admits " + position + " = " + most
                             + " and the closure says " + high);
-            assertTrue(admits(low, Rational.of(least), false),
+            assertTrue(admits(low, ExactRatio.of(least), false),
                     () -> "unsound: " + written + " admits " + position + " = " + least
                             + " and the closure says >= " + low);
-            assertEquals(RationalCut.inclusive(Rational.of(most)), high,
+            assertEquals(ExactCut.inclusive(ExactRatio.of(most)), high,
                     () -> "not tight above at " + position + " for " + written);
-            assertEquals(RationalCut.inclusive(Rational.of(least)), low,
+            assertEquals(ExactCut.inclusive(ExactRatio.of(least)), low,
                     () -> "not tight below at " + position + " for " + written);
 
             for (String other : POSITIONS) {
                 if (position.equals(other)) {
                     continue;
                 }
-                RationalCut apart = closed.differenceBound(position, other);
+                ExactCut apart = closed.differenceBound(position, other);
                 int widest = admitted.stream()
                         .mapToInt(point -> point.get(position) - point.get(other))
                         .max().orElseThrow();
-                assertTrue(admits(apart, Rational.of(widest), true),
+                assertTrue(admits(apart, ExactRatio.of(widest), true),
                         () -> "unsound: " + written + " admits " + position + " - " + other
                                 + " = " + widest + " and the closure says " + apart);
-                assertEquals(RationalCut.inclusive(Rational.of(widest)), apart,
+                assertEquals(ExactCut.inclusive(ExactRatio.of(widest)), apart,
                         () -> "not tight on " + position + " - " + other + " for " + written);
             }
         }
     }
 
-    private static boolean admits(RationalCut cut, Rational value, boolean above) {
+    private static boolean admits(ExactCut cut, ExactRatio value, boolean above) {
         if (cut == null) {
             return true;
         }
@@ -174,9 +174,9 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static List<Written> aSystem(Random dice) {
         List<Written> out = new ArrayList<>();
         for (String position : POSITIONS) {
-            out.add(new Written(Map.of(position, Rational.ONE),
-                    Rational.of(-LOW), Rel.GE));
-            out.add(new Written(Map.of(position, Rational.ONE), Rational.of(-HIGH), Rel.LE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE),
+                    ExactRatio.of(-LOW), Rel.GE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-HIGH), Rel.LE));
         }
         int howMany = 2 + dice.nextInt(4);
         for (int i = 0; i < howMany; i++) {
@@ -189,18 +189,18 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
                 // A weight of two as often as one, so the shape canonicalisation brought in is
                 // exercised rather than assumed.
                 long weight = dice.nextBoolean() ? 1 : 2;
-                out.add(new Written(Map.of(one, Rational.of(weight)),
-                        Rational.of(-threshold * weight), rel));
+                out.add(new Written(Map.of(one, ExactRatio.of(weight)),
+                        ExactRatio.of(-threshold * weight), rel));
             } else {
                 String other = POSITIONS.get(dice.nextInt(POSITIONS.size()));
                 if (one.equals(other)) {
                     continue;
                 }
                 long weight = dice.nextBoolean() ? 1 : 2;
-                Map<String, Rational> coefs = new LinkedHashMap<>();
-                coefs.put(one, Rational.of(weight));
-                coefs.put(other, Rational.of(-weight));
-                out.add(new Written(coefs, Rational.of(-threshold * weight),
+                Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+                coefs.put(one, ExactRatio.of(weight));
+                coefs.put(other, ExactRatio.of(-weight));
+                out.add(new Written(coefs, ExactRatio.of(-threshold * weight),
                         strict ? Rel.LT : Rel.LE));
             }
         }
@@ -239,9 +239,9 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     }
 
     private static boolean holdsAt(Written rule, Map<String, Integer> point) {
-        Rational total = rule.constant();
-        for (Map.Entry<String, Rational> each : rule.coefs().entrySet()) {
-            total = total.plus(each.getValue().times(Rational.of(point.get(each.getKey()))));
+        ExactRatio total = rule.constant();
+        for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
+            total = total.plus(each.getValue().times(ExactRatio.of(point.get(each.getKey()))));
         }
         int sign = total.signum();
         return switch (rule.rel()) {

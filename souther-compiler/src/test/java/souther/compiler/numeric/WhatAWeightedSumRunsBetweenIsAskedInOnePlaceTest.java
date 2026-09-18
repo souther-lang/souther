@@ -20,12 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAWeightedSumRunsBetweenIsAskedInOnePlaceTest {
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Map<String, Rational> weighing(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
             out.put((String) pairs[i], num((Integer) pairs[i + 1]));
         }
@@ -33,11 +33,11 @@ class WhatAWeightedSumRunsBetweenIsAskedInOnePlaceTest {
     }
 
     private static Reach shut(long least, long most) {
-        return Reach.between(RationalCut.inclusive(num(least)), RationalCut.inclusive(num(most)));
+        return Reach.between(ExactCut.inclusive(num(least)), ExactCut.inclusive(num(most)));
     }
 
-    private static Reach reachOf(Map<String, Rational> coefs, Map<String, Reach> positions) {
-        return Reach.of(coefs, Rational.ZERO, positions::get);
+    private static Reach reachOf(Map<String, ExactRatio> coefs, Map<String, Reach> positions) {
+        return Reach.of(coefs, ExactRatio.ZERO, positions::get);
     }
 
     @Test
@@ -68,21 +68,21 @@ class WhatAWeightedSumRunsBetweenIsAskedInOnePlaceTest {
     void oneUnreachedEndMakesTheWholeSumUnreached() {
         Map<String, Reach> positions = new LinkedHashMap<>();
         positions.put("a", shut(0, 5));
-        positions.put("b", Reach.between(RationalCut.inclusive(num(0)),
-                RationalCut.exclusive(num(4))));
+        positions.put("b", Reach.between(ExactCut.inclusive(num(0)),
+                ExactCut.exclusive(num(4))));
         Reach runs = reachOf(weighing("a", 1, "b", 1), positions);
-        assertEquals(RationalCut.inclusive(num(0)), runs.least(), "both reach their least");
-        assertEquals(RationalCut.exclusive(num(9)), runs.most(), "b never quite reaches four");
+        assertEquals(ExactCut.inclusive(num(0)), runs.least(), "both reach their least");
+        assertEquals(ExactCut.exclusive(num(9)), runs.most(), "b never quite reaches four");
     }
 
     /** And an unreached end on the far side of a negative weight is the one that goes unreached. */
     @Test
     void anUnreachedEndTravelsWithTheSignToo() {
         Map<String, Reach> positions = Map.of("a", Reach.between(
-                RationalCut.exclusive(num(1)), RationalCut.inclusive(num(6))));
+                ExactCut.exclusive(num(1)), ExactCut.inclusive(num(6))));
         Reach runs = reachOf(weighing("a", -1), positions);
-        assertEquals(RationalCut.inclusive(num(-6)), runs.least());
-        assertEquals(RationalCut.exclusive(num(-1)), runs.most(),
+        assertEquals(ExactCut.inclusive(num(-6)), runs.least());
+        assertEquals(ExactCut.exclusive(num(-1)), runs.most(),
                 "a never quite reaches one, so minus a never quite reaches minus one");
     }
 
@@ -90,9 +90,9 @@ class WhatAWeightedSumRunsBetweenIsAskedInOnePlaceTest {
     void aPositionUnboundedTheWayItMattersLeavesTheSumUnbounded() {
         Map<String, Reach> positions = new LinkedHashMap<>();
         positions.put("a", shut(0, 5));
-        positions.put("b", Reach.between(RationalCut.inclusive(num(0)), null));
+        positions.put("b", Reach.between(ExactCut.inclusive(num(0)), null));
         Reach runs = reachOf(weighing("a", 1, "b", 1), positions);
-        assertEquals(RationalCut.inclusive(num(0)), runs.least());
+        assertEquals(ExactCut.inclusive(num(0)), runs.least());
         assertNull(runs.most(), "nothing bounds b above, so nothing bounds the sum above");
     }
 

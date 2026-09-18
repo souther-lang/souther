@@ -53,7 +53,7 @@ public sealed interface AffinePreimage {
      *                progression of whole numbers; one whose values fill takes one written in
      *                decimals a model can write
      */
-    record Stepping(Rational from, Rational by, Granularity spacing) implements AffinePreimage {
+    record Stepping(ExactRatio from, ExactRatio by, Granularity spacing) implements AffinePreimage {
 
         /**
          * With the member written as the one between none and {@code by}.
@@ -78,7 +78,7 @@ public sealed interface AffinePreimage {
                         "a progression names values of its position, and a position holds what a"
                                 + " model can write: " + from + " by " + by);
             }
-            from = from.minus(by.times(Rational.of(from.dividedBy(by).floor())));
+            from = from.minus(by.times(ExactRatio.of(from.dividedBy(by).floor())));
         }
     }
 
@@ -91,7 +91,7 @@ public sealed interface AffinePreimage {
      *
      * @param by always positive. One is every finite decimal
      */
-    record Filling(Rational from, Rational by) implements AffinePreimage {
+    record Filling(ExactRatio from, ExactRatio by) implements AffinePreimage {
 
         /**
          * With the units taken out of the generator and the member written as a whole number below
@@ -125,7 +125,7 @@ public sealed interface AffinePreimage {
                         "a member of a coset of the finite decimals is one, and a coset written from"
                                 + " a value that is not has no member that is: " + from);
             }
-            from = Rational.of(from.numerator()
+            from = ExactRatio.of(from.numerator()
                     .multiply(from.denominator().modInverse(by.numerator()))
                     .mod(by.numerator()));
         }

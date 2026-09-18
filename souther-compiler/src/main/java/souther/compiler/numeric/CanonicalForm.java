@@ -28,14 +28,14 @@ import java.util.function.Function;
  * a rule twice the same as asserting it once, and it is the property everything downstream leans on
  * when it stops caring what order the rules arrived in.
  */
-public record CanonicalForm<A>(Map<A, Rational> coefs) {
+public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
 
     public CanonicalForm {
         if (coefs == null || coefs.isEmpty()) {
             throw new IllegalArgumentException("a form names at least one position");
         }
         coefs = Map.copyOf(coefs);
-        for (Map.Entry<A, Rational> each : coefs.entrySet()) {
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
             if (each.getValue().isZero()) {
                 throw new IllegalArgumentException(
                         "a position with a zero coefficient is one the form does not name: "
@@ -55,8 +55,8 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      *         {@code null} where nothing is left — a form that weighs no position is a constant, and
      *         what a constant comparison settles is not a constraint about anybody
      */
-    public static <A> Scaled<A> of(Map<A, Rational> coefs) {
-        Map<A, Rational> weighed = new LinkedHashMap<>();
+    public static <A> Scaled<A> of(Map<A, ExactRatio> coefs) {
+        Map<A, ExactRatio> weighed = new LinkedHashMap<>();
         coefs.forEach((atom, coef) -> {
             if (!coef.isZero()) {
                 weighed.put(atom, coef);
@@ -65,8 +65,8 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
         if (weighed.isEmpty()) {
             return null;
         }
-        Rational shared = AdditiveImage.divisorOf(weighed.values());
-        Map<A, Rational> primitive = new LinkedHashMap<>();
+        ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
+        Map<A, ExactRatio> primitive = new LinkedHashMap<>();
         weighed.forEach((atom, coef) -> primitive.put(atom, coef.dividedBy(shared)));
         return new Scaled<>(new CanonicalForm<>(primitive), shared);
     }
@@ -77,7 +77,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      * @param by never zero and always positive, so dividing a threshold by it leaves which side of
      *           the threshold a value falls on
      */
-    public record Scaled<A>(CanonicalForm<A> form, Rational by) {}
+    public record Scaled<A>(CanonicalForm<A> form, ExactRatio by) {}
 
     /**
      * The values this form can add up to, over positions spaced as {@code spacing} says.
@@ -110,7 +110,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      * this safe to be as simple as it looks.
      */
     public <B> CanonicalForm<B> over(Renaming<A, B> naming) {
-        Map<B, Rational> out = new LinkedHashMap<>();
+        Map<B, ExactRatio> out = new LinkedHashMap<>();
         coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
         return new CanonicalForm<>(out);
     }
@@ -118,7 +118,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
-        Map<A, Rational> out = new LinkedHashMap<>();
+        Map<A, ExactRatio> out = new LinkedHashMap<>();
         coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
         return new CanonicalForm<>(out);
     }
@@ -134,7 +134,7 @@ public record CanonicalForm<A>(Map<A, Rational> coefs) {
      */
     @Override
     public String toString() {
-        java.util.Map<String, Rational> named = new java.util.TreeMap<>();
+        java.util.Map<String, ExactRatio> named = new java.util.TreeMap<>();
         coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
         StringBuilder out = new StringBuilder();
         named.forEach((atom, coef) -> {
