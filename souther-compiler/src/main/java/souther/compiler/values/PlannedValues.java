@@ -268,14 +268,10 @@ public sealed interface PlannedValues<A> {
                 case PlannedHeld.Nothing<A> _ -> Emptiness.EMPTY;
                 case PlannedHeld.Alternatives<A> boxes -> {
                     Emptiness any = Emptiness.identityForJoin();
-                    // In the order the description says — see AdmissibleValues, which spends
-                    // its allowance the same way.
-                    for (PlannedHeld.Alternative<A> box
-                            : PlanOrder.inOrder(boxes.boxes(), PlanOrder::orderOf)) {
+                    for (PlannedHeld.Alternative<A> box : boxes.boxes()) {
                         Emptiness stands = Emptiness.identityForMeet();
                         for (Map.Entry<Sameness.Block<A>, AdmittedPlan> each
-                                : PlanOrder.inOrder(box.at().entrySet(),
-                                        PlanOrder::orderOfADescription)) {
+                                : box.at().entrySet()) {
                             stands = stands.met(askedOf(each.getKey(), each.getValue(), asked));
                             if (stands.endsAMeet()) {
                                 break;
@@ -349,13 +345,7 @@ public sealed interface PlannedValues<A> {
      */
     private static <A> Refusal<A> refusalIn(PlannedHeld.Alternative<A> box,
                                             AskedOfEachBlock<A> asked) {
-        // In the order the description says, and not the order its blocks were put together in —
-        // see {@link AdmissibleValues}, whose walk spends the same allowance.
-        Map<Sameness.Block<A>, AdmittedPlan> at = new java.util.LinkedHashMap<>();
-        for (Map.Entry<Sameness.Block<A>, AdmittedPlan> each
-                : PlanOrder.inOrder(box.at().entrySet(), PlanOrder::orderOfADescription)) {
-            at.put(each.getKey(), each.getValue());
-        }
+        Map<Sameness.Block<A>, AdmittedPlan> at = box.at();
         // The block and not its positions — see {@link AdmissibleValues}.
         return Refusal.ofAnAlternative(at,
                 (block, plan) -> askedOf(block, plan, asked).isEmpty(),
