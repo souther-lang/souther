@@ -62,7 +62,8 @@ public final class SyntaxSymbols implements NameSense {
                 def -> new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
         return new SyntaxSymbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
-                        declared.declarations(), Registry.baseNames(m.exposing())))),
+                        declared.declarations(), declared.asDeclared(),
+                        Registry.baseNames(m.exposing())))),
                 Denoting.of(names, Map.of()), stdlib.names());
     }
 
@@ -113,7 +114,7 @@ public final class SyntaxSymbols implements NameSense {
      */
     public Map<TypeSymbol.AtModule, Ast.Def> declaredHere() {
         Map<TypeSymbol.AtModule, Ast.Def> declared = new LinkedHashMap<>();
-        for (Ast.Def def : registry.declaredIn(module()).values()) {
+        for (Ast.Def def : registry.inDeclarationOrder(module())) {
             if (!(scope.resolve(def.written())
                     instanceof Denotation.Denotes(TypeSymbol.AtModule at))) {
                 // The scope is built from these same declarations, so a module that declares a name

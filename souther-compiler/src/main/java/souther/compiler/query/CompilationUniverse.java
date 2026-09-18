@@ -1,12 +1,12 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Scoping;
-import java.util.List;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -80,12 +80,13 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         // workspace, and a name nothing here has is not a question about the shape of the
         // workspace — an import of a misspelt module would otherwise put every module's imports on
         // the far side of this one's answer.
-        Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
+        Answer<DeclaredNames.Index<Ast.Def>> declarations = db.ask(new Names.Declarations(name));
         if (!declarations.present()) {
             return null;
         }
         Set<String> exposed = db.ask(new Front.Exposes(name)).value();
-        return exposed == null ? null : new Registry.Declared<>(declarations.value(), exposed);
+        return exposed == null ? null : new Registry.Declared<>(declarations.value().declarations(),
+                declarations.value().asDeclared(), exposed);
     }
 
     @Override

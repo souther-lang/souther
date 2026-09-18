@@ -217,7 +217,7 @@ public final class PublishedUniverse {
     /** What a registry has under one reading's name. The {@code exposing} list is read here, on
      *  this side of the seam, and by nothing downstream of it. */
     private static Registry.Declared<Ast.Def> declaredBy(ReadableModule readable) {
-        return new Registry.Declared<>(readable.declarations(),
+        return new Registry.Declared<>(readable.declarations(), readable.asDeclared(),
                 Registry.baseNames(readable.module().exposing()));
     }
 

@@ -49,6 +49,6 @@ class WhatEachDeclarationComesToIsAskedUnderTheNameItIsWrittenByTest {
         for (String name : written) {
             declared.put(name, name);
         }
-        return new DeclaredNames.Index<>(declared, List.of());
+        return new DeclaredNames.Index<>(declared, List.of(written), List.of());
     }
 }

@@ -50,6 +50,16 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      */
     Map<String, Ast.Def> declarations();
 
+    /**
+     * The names of those declarations, in the order the module writes them.
+     *
+     * <p>Beside {@link #declarations} because they are two answers. What stands under a name is a
+     * lookup and is walked by the names; the order the module writes them in is what a reader
+     * rebuilding it puts them back in, and reading that off the lookup gave two readings of one
+     * artifact the same declarations in two orders.
+     */
+    List<String> asDeclared();
+
     /** Where each behavior's body comes from, as the module that declared it decided.
      *
      * <p>Carried rather than derived. A module here published no {@code let}, so a reader working it

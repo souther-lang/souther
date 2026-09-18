@@ -487,6 +487,11 @@ public final class Front {
                 return read.declarations();
             }
 
+            /** The names of those, in the order the module writes them. */
+            public List<String> asDeclared() {
+                return read.asDeclared();
+            }
+
             /** Where each of its behaviors gets its body, as the module that declared it decided. */
             public Map<String, BehaviorImplementation> behaviorImplementations() {
                 return read.behaviorImplementations();
