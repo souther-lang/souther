@@ -93,6 +93,16 @@ Decimal  / Decimal  -> Rational
 Rational / Rational -> Rational
 ```
 
+Unary minus answers the type it is given, Rational included:
+
+```text
+-Rational -> Rational
+```
+
+A model that can write `0 - r` for a Rational `r` and not `-r` would have the negation of a number
+depend on which spelling reaches an operator table. What the standard library offers over a
+Rational beyond the operators is settled with the library.
+
 The static result type does not depend on the value of the quotient:
 
 ```souther
@@ -670,6 +680,15 @@ A numeric newtype no longer inherits scalar division when its carrier's quotient
 carrier.
 
 Rational initially creates no JSON, Java-boundary, input-generation, or ON-point contract.
+
+`Rational` becomes a reserved type name. A primitive's spelling is reserved (E1502), so a model
+declaring `data Rational` stops compiling and is renamed. Nothing in this repository or the
+example corpus declares one.
+
+The published-declaration boundary version moves. A helper signature may write `Rational`, and a
+published declaration crosses a jar as source, so an older compiler would read a signature naming
+a type it has no primitive for — the same reason ADR-0076 moved it when a function type became
+writable there.
 
 The reading rules stated over `/` change with the operator. `[#invariant-discharge-terms]` says
 that `/` and `Int.divide` are two spellings of one truncating quotient and that where both answer

@@ -48,6 +48,12 @@ a fractional coefficient; and the representation could not hold the coefficient 
 So the affine reading has to decide what division means to it, and once it admits one, its
 arithmetic domain is no longer closed over finite decimals.
 
+The semantic need to change `LinearForm` follows ADR-0116. A resource question stands apart from
+it and is already present: `Rational.of(BigDecimal)` builds `BigInteger.TEN.pow(scale)` to embed a
+decimal, so a compact Decimal of a large scale already costs what its scale says at the boundary
+this decision moves. The representation rule below removes that as well, and would be worth
+having if the affine reading never changed at all.
+
 ## Decision
 
 ### The affine reading admits division by a constant
@@ -148,8 +154,9 @@ Embedding a Decimal into compiler exact arithmetic must not eagerly materialise 
 because a mathematical fraction can be written with that denominator.
 
 A Decimal compact in the source representation must not cause work proportional to its scale
-solely by becoming an affine coefficient. The canonical representation that satisfies this belongs
-to the implementation.
+solely by becoming an affine coefficient. This is where the eager `BigInteger.TEN.pow(scale)` the
+current embedding performs goes. The canonical representation that satisfies the rule belongs to
+the implementation.
 
 ### The compiler's ratio and the language's Rational are two types
 
