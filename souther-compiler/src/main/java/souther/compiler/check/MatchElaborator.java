@@ -72,7 +72,9 @@ public final class MatchElaborator {
         String otherSum = null;
         for (TypeSymbol name : symbols.scope().visibleNames()) {
             if (!(name instanceof TypeSymbol.AtModule at)
-                    || !(published.of(at.key()) instanceof DeclarationMeaning.Sum sum)) {
+                    || !(published.of(at.key())
+                            instanceof PublishedDeclarationResult.Found(
+                                    DeclarationMeaning.Sum sum))) {
                 continue;
             }
             List<TypeSymbol> others = AtomSpace.declaredCases(sum);

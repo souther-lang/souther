@@ -118,7 +118,9 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
     /** {@code source}, with {@code declaration} one nobody could work out. */
     private static RuleReadingSource refusing(TypeKey declaration, RuleReadingSource source) {
         return new RuleReadingSource(source.symbols(), source.invariants(),
-                named -> named.equals(declaration) ? null : source.published().of(named),
+                named -> named.equals(declaration)
+                        ? new PublishedDeclarationResult.Unavailable(named)
+                        : source.published().of(named),
                 source.kinds(), source.newtypes(), source.written());
     }
 

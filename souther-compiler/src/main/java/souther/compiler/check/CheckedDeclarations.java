@@ -18,9 +18,9 @@ import java.util.Map;
  * refusing a construction is refusing it by that answer too.
  *
  * <p>Which shape to hand over is asked by the declaration's own identity, and a declaration this
- * compile resolved has one. Two ways of not having one, and each is said as what it is: a
- * declaration this reading cannot reach at all, and one it reaches that the check settled nothing
- * about. Neither is a data with no fields.
+ * compile resolved has one. Three ways of not having one, and each is said as what it is: a name
+ * nothing declares, a declaration this reading cannot reach what it says of, and one it reaches
+ * that the check settled nothing about. None of them is a data with no fields.
  */
 public final class CheckedDeclarations implements souther.compiler.observe.Declarations {
 
@@ -50,12 +50,19 @@ public final class CheckedDeclarations implements souther.compiler.observe.Decla
         // three it is, is the whole of what is read here, and where it was written is not among the
         // answers — so a declaration moved in its file leaves every row read against it alone.
         return switch (published.of(declared.key())) {
-            // A module wrote this one and this reading cannot see it. Said as what it is: a
-            // declaration out of reach is not a declaration with nothing under it.
-            case null -> throw new IllegalStateException("`" + declared + "` is declared by a module"
-                    + " and this reading cannot reach what it declares");
-            case DeclarationMeaning.Product _ -> new Composed.OfFields(fieldsOf(declared));
-            case DeclarationMeaning.Sum _, DeclarationMeaning.Unit _ -> Composed.NOTHING;
+            case PublishedDeclarationResult.Found(DeclarationMeaning.Product _) ->
+                    new Composed.OfFields(fieldsOf(declared));
+            case PublishedDeclarationResult.Found _ -> Composed.NOTHING;
+            // A module wrote this one and this reading cannot see what it says. Said as what it is:
+            // a declaration out of reach is not a declaration with nothing under it.
+            case PublishedDeclarationResult.Unavailable _ ->
+                    throw new IllegalStateException("`" + declared + "` is declared by a module"
+                            + " and this reading cannot reach what it declares");
+            // And a row of a declaration nothing declares is a row this compile had no business
+            // holding: what it was compared against was settled somewhere this cannot see.
+            case PublishedDeclarationResult.NotDeclared _ ->
+                    throw new IllegalStateException("`" + declared + "` is a declaration this"
+                            + " compilation resolved and nothing here declares");
         };
     }
 

@@ -101,7 +101,8 @@ public final class AtomSpace {
             // What the language declares is a case and never a sum, and it has no address to ask
             // about: a name that is not a module's is an atom without anything being asked.
             if (name instanceof TypeSymbol.AtModule at
-                    && published.of(at.key()) instanceof DeclarationMeaning.Sum sum) {
+                    && published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
                 if (expanded.add(name)) {
                     descend(declaredCases(sum), published, atoms, expanded);
                 }

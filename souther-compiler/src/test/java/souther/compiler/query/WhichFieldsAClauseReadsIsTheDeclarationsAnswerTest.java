@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.DeclarationMeaning;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -110,7 +112,9 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
 
     /** What each clause of {@code Range} says it reads, in the order the declaration writes them. */
     private static List<Set<String>> fieldsRead(Compilation c) {
-        DeclarationMeaning meaning = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
+        PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
+        DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
+                "the declaration under test is published").said();
         return ((DeclarationMeaning.Product) meaning).clauses().stream()
                 .map(ClauseMeaning.Stated.class::cast)
                 .map(ClauseMeaning.Stated::fieldsRead)

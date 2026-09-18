@@ -31,6 +31,10 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
     /** What a spread onto the path comes to: no clause of its own, and not everything reached. */
     private static final PublishedRules NOT_REACHED = new PublishedRules(List.of(), false);
 
+    /** No clause, and none there was to reach — which is not the same answer as the one above. */
+    private static final PublishedRules NO_RULE_TO_BE_SHORT_OF =
+            new PublishedRules(List.of(), true);
+
     /** These and {@code other}'s together, reaching everything only where both did. */
     PublishedRules and(PublishedRules other) {
         List<ClauseMeaning> both = new ArrayList<>(reached);
@@ -42,11 +46,11 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
      * The rules that govern a value of {@code named}: the clauses that declaration publishes and
      * the clauses of everything it spreads.
      *
-     * <p>Which declarations the walk visits and what each of them states are two authorities with
-     * two questions, and neither is asked the other's. What a declaration spreads is that
-     * declaration's own answer about itself and is read from what it publishes; whether a name this
-     * could not read is one nothing declares at all is the world's, and is the only thing
-     * {@code symbols} is asked here.
+     * <p>One authority. What a declaration spreads, what it states, and whether there is a
+     * declaration at all are read from what declarations publish, and nothing here reads a world.
+     * An answer that could only say a declaration says nothing would leave the walk to find out
+     * elsewhere which of the two that is, and the only other place holding it is where the
+     * declarations are written — which is what a walk over what they publish is for not reading.
      *
      * <p>A declaration nothing answered for is rules not reached and not rules there are none of.
      * The two are the same empty list and opposite facts: a declaration that states nothing holds
@@ -83,13 +87,12 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
      * reaching anybody is that each of them says it is short — a reader of rules that were not all
      * reached has a word for it already and does not read the ones that were.
      */
-    static PublishedRules governing(TypeSymbol.AtModule named, Symbols symbols,
-                                    PublishedDeclarations published,
+    static PublishedRules governing(TypeSymbol.AtModule named, PublishedDeclarations published,
                                     Map<TypeSymbol.AtModule, PublishedRules> found) {
-        return governing(named, symbols, published, found, new LinkedHashSet<>());
+        return governing(named, published, found, new LinkedHashSet<>());
     }
 
-    private static PublishedRules governing(TypeSymbol.AtModule named, Symbols symbols,
+    private static PublishedRules governing(TypeSymbol.AtModule named,
                                             PublishedDeclarations published,
                                             Map<TypeSymbol.AtModule, PublishedRules> found,
                                             Set<TypeSymbol.AtModule> onThePath) {
@@ -97,30 +100,44 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
         if (known != null) {
             return known;
         }
-        PublishedRules out = walked(named, symbols, published, found, onThePath);
+        PublishedRules out = walked(named, published, found, onThePath);
         found.put(named, out);
         return out;
     }
 
     /** What {@code named} publishes and what its spreads do, walked — see {@link #governing}. */
-    private static PublishedRules walked(TypeSymbol.AtModule named, Symbols symbols,
+    private static PublishedRules walked(TypeSymbol.AtModule named,
                                          PublishedDeclarations published,
                                          Map<TypeSymbol.AtModule, PublishedRules> found,
                                          Set<TypeSymbol.AtModule> onThePath) {
-        DeclarationMeaning said = published.of(named.key());
-        if (!(said instanceof DeclarationMeaning.Product product)) {
-            // Whether anything declares it, which is all the world is asked here. Reaching for the
-            // declaration to find out would make a walk over what declarations publish depend on
-            // where one of them is written.
-            return new PublishedRules(List.of(), said != null || !symbols.declares(named.key()));
-        }
+        return switch (published.of(named.key())) {
+            case PublishedDeclarationResult.Found(DeclarationMeaning.Product product) ->
+                    withWhatItSpreads(named, product, published, found, onThePath);
+            // A form with no `invariant` to write states no rule, and there was nothing else about
+            // it to reach.
+            case PublishedDeclarationResult.Found _ -> NO_RULE_TO_BE_SHORT_OF;
+            // Nothing declares it, so there is no rule of it to be short of — and nothing it
+            // spreads to be short of either, which is why the walk stops here.
+            case PublishedDeclarationResult.NotDeclared _ -> NO_RULE_TO_BE_SHORT_OF;
+            // A declaration whose module could not be read holds whatever its author wrote, and
+            // what came back of it is none of it.
+            case PublishedDeclarationResult.Unavailable _ -> NOT_REACHED;
+        };
+    }
+
+    /** {@code product}'s own clauses and the clauses of everything it spreads. */
+    private static PublishedRules withWhatItSpreads(TypeSymbol.AtModule named,
+                                                    DeclarationMeaning.Product product,
+                                                    PublishedDeclarations published,
+                                                    Map<TypeSymbol.AtModule, PublishedRules> found,
+                                                    Set<TypeSymbol.AtModule> onThePath) {
         onThePath.add(named);
         PublishedRules out = new PublishedRules(List.of(), true);
         for (DeclarationReference each : product.includes()) {
             if (each instanceof DeclarationReference.Named it
                     && it.declaration() instanceof TypeSymbol.AtModule spread) {
                 out = out.and(onThePath.contains(spread) ? NOT_REACHED
-                        : governing(spread, symbols, published, found, onThePath));
+                        : governing(spread, published, found, onThePath));
             }
         }
         onThePath.remove(named);

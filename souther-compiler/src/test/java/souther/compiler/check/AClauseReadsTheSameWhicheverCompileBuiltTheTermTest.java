@@ -116,8 +116,10 @@ class AClauseReadsTheSameWhicheverCompileBuiltTheTermTest {
 
     /** What {@code Held}'s one clause states, as {@code c} publishes it. */
     private static ClauseMeaning.Stated published(Compilation c) {
+        PublishedDeclarationResult said = Shapes.publishedDeclarations(c.db()).of(HELD.key());
         List<ClauseMeaning> clauses = assertInstanceOf(DeclarationMeaning.Product.class,
-                Shapes.publishedDeclarations(c.db()).of(HELD.key()),
+                assertInstanceOf(PublishedDeclarationResult.Found.class, said,
+                        "the declaration under test is published").said(),
                 "the declaration under test is a product").clauses();
         assertEquals(1, clauses.size(), "the declaration under test writes one clause");
         return assertInstanceOf(ClauseMeaning.Stated.class, clauses.getFirst(),

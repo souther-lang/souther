@@ -18,11 +18,11 @@ import souther.compiler.types.TypeKey;
  */
 public interface PublishedDeclarations {
 
-    /** What {@code declaration} says, or null where nothing declares it. */
-    DeclarationMeaning of(TypeKey declaration);
+    /** What is known about what {@code declaration} says. */
+    PublishedDeclarationResult of(TypeKey declaration);
 
     /** Nothing declared anywhere — for a reading over primitives, which asks of no declaration. */
-    PublishedDeclarations NONE = _ -> null;
+    PublishedDeclarations NONE = PublishedDeclarationResult.NotDeclared::new;
 
     /**
      * The reading that makes these, which consults none.

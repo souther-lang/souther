@@ -67,7 +67,9 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
 
         TypeKey held = new TypeKey(module, "Held");
         RuleReadingSource shortOfOne = new RuleReadingSource(whole.symbols(), whole.invariants(),
-                named -> named.equals(held) ? null : whole.published().of(named),
+                named -> named.equals(held)
+                        ? new PublishedDeclarationResult.Unavailable(named)
+                        : whole.published().of(named),
                 whole.kinds(), whole.newtypes(), whole.written());
 
         assertFalse(CountsByComponent.of(declarations, shortOfOne, policy).everyRuleReached(),

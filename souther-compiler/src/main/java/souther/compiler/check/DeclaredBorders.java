@@ -103,7 +103,8 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");
         }
-        if (!(declarations.of(named.key()) instanceof DeclarationMeaning.Product)) {
+        if (!(declarations.of(named.key())
+                instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Product _))) {
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");
         }

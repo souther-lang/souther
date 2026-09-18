@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ProductSpreads;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.EffectiveFieldTypes;
@@ -545,31 +546,42 @@ public final class Shapes {
      * are asking one question — which is what an answer keyed by a declaration has to be, and what
      * {@code WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest} holds the reading to.
      *
-     * <p>Absent where nothing declares it. A declaration the language declares is answered for like
+     * <p>Answered either way where it says nothing, and saying which way it is
+     * ({@link PublishedDeclarationResult}). A declaration the language declares is answered for like
      * any other: it is normal as it stands, having no construction in its clauses left to write out.
      */
-    public record MeaningOf(TypeKey named) implements Key<DeclarationMeaning> {
+    public record MeaningOf(TypeKey named) implements Key<PublishedDeclarationResult> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<DeclarationMeaning> compute(Db db) {
+        public Answer<PublishedDeclarationResult> compute(Db db) {
             // Which of the two answered decides how the meaning is read, and not only which
             // declaration came back. A module's own is read in that module's reading of its
             // declarations; what the language declares is written in no module a compilation holds,
             // so there is no such reading to make and nothing it would answer.
             Answer<Normalized.Def> mine = db.ask(new NormalizedDef(named));
             if (mine.present()) {
-                return Answer.of(DeclarationMeaning.of(mine.value().node(),
-                        db.ruleReadingFor(named.module())));
+                return Answer.of(new PublishedDeclarationResult.Found(DeclarationMeaning.of(
+                        mine.value().node(), db.ruleReadingFor(named.module()))));
             }
             Answer<Stdlib> library = db.ask(new Front.Library());
             Hir.Def declared =
                     library.present() ? library.value().languageDeclaration(named) : null;
-            return declared == null ? Answer.absent()
-                    : Answer.of(DeclarationMeaning.ofLanguage(declared));
+            if (declared != null) {
+                return Answer.of(new PublishedDeclarationResult.Found(
+                        DeclarationMeaning.ofLanguage(declared)));
+            }
+            // Which of the two absences it is, asked of whether anything declares the name at all —
+            // the same question the expanded side asks to tell them apart, so the two boundaries
+            // divide the cases one way rather than each its own. What the attempt found travels
+            // with the answer: a reader told there is a declaration it could not have is short of
+            // what it says and of the reason both.
+            return ClausesExpandedFor.declarationOf(db, named) == null
+                    ? Answer.of(new PublishedDeclarationResult.NotDeclared(named))
+                    : Answer.of(new PublishedDeclarationResult.Unavailable(named), mine.reports());
         }
     }
 
@@ -1481,12 +1493,13 @@ public final class Shapes {
      * which declaration is being asked about is the only input there is. What a reader that takes
      * one depends on is the declarations it asks about, so a reader asking about none depends on
      * nothing.
+     *
+     * <p>Answered for every name, the answer saying which of the three it is, so that a reader
+     * needing to tell a name nothing declares from a declaration whose module could not be read has
+     * it here and asks nobody else.
      */
     public static PublishedDeclarations publishedDeclarations(Db db) {
-        return declaration -> {
-            Answer<DeclarationMeaning> said = db.ask(new MeaningOf(declaration));
-            return said.present() ? said.value() : null;
-        };
+        return declaration -> db.ask(new MeaningOf(declaration)).value();
     }
 
     /**

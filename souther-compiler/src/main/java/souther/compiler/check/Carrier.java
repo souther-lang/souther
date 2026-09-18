@@ -249,7 +249,8 @@ public sealed interface Carrier extends ValueOrder {
      *  declaration is read for that list alone: whether this is an enumeration is already answered. */
     private static Carrier ordinalOf(Ordering.Places places, PublishedDeclarations published) {
         if (!(places.enumeration() instanceof TypeSymbol.AtModule at)
-                || !(published.of(at.key()) instanceof DeclarationMeaning.Sum)) {
+                || !(published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))) {
             return null;
         }
         List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(places.enumeration()), published);
