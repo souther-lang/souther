@@ -92,6 +92,9 @@ final class Reasons {
             case INSTRUMENTATION_ABSENT -> String.format(
                     "the classes `%s` needed for arm coverage could not be made, so none of its"
                             + " rows were read", subject);
+            case IMPLEMENTATION_NOT_MADE -> String.format(
+                    "a row of `%s` was not run because this compile made no implementation for it,"
+                            + " so what it covers is unknown", subject);
             case VALUE_UNREADABLE -> String.format(
                     "a row's value at `%s` could not be read, so which class it is in is unknown",
                     subject);

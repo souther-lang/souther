@@ -484,6 +484,10 @@ public final class ExampleVerifier {
                         new StandinObservation.Reason.TheImplementationWasNotReached(
                                 "nothing this run was given applies `" + behavior + "`"));
             }
+            case Handing.NotMade _ -> {
+                return new ContractObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotMade(behavior));
+            }
             case Handing.NotEstablished(Agreement why) -> {
                 return new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
@@ -624,6 +628,10 @@ public final class ExampleVerifier {
                         new StandinObservation.Reason.TheImplementationWasNotReached(
                                 "nothing this run was given applies `" + behavior + "`"));
             }
+            case Handing.NotMade _ -> {
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotMade(behavior));
+            }
             case Handing.NotEstablished(Agreement why) -> {
                 return new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
@@ -700,6 +708,7 @@ public final class ExampleVerifier {
     private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
         return switch (phase) {
             case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
+            case IMPLEMENTATION_NOT_MADE -> Incompleteness.Code.IMPLEMENTATION_NOT_MADE;
             case STEP_LIMIT, DEPTH_LIMIT, TIMEOUT ->
                     Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED;
             case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
@@ -868,12 +877,19 @@ public final class ExampleVerifier {
          * a path that quietly hands the values over anyway.
          */
         Handing handing() {
-            if (!(answer instanceof Answerer.Answer.Something applies)) {
-                return new Handing.NothingApplies();
+            switch (answer) {
+                case Answerer.Answer.Nothing _ -> {
+                    return new Handing.NothingApplies();
+                }
+                case Answerer.Answer.Unavailable _ -> {
+                    return new Handing.NotMade();
+                }
+                case Answerer.Answer.Something applies -> {
+                    return agreement != null && !(agreement instanceof Agreement.Agree)
+                            ? new Handing.NotEstablished(agreement)
+                            : new Handing.MayApply(applies);
+                }
             }
-            return agreement != null && !(agreement instanceof Agreement.Agree)
-                    ? new Handing.NotEstablished(agreement)
-                    : new Handing.MayApply(applies);
         }
     }
 
@@ -885,6 +901,10 @@ public final class ExampleVerifier {
 
         /** Nothing this run was given applies the behavior. */
         record NothingApplies() implements Handing {}
+
+        /** This compile owned the implementation and the image the row runs in holds none, so there
+         *  is nothing here for the row's values to be handed to. */
+        record NotMade() implements Handing {}
 
         /** What would apply it could not be established as being of the module being evaluated, so
          *  no value of this module's may be handed to it. */
@@ -934,16 +954,19 @@ public final class ExampleVerifier {
      * does not depend on the row, and a row that may not be handed over has to be able to stop having
      * been held to everything a row can be held to without being run.
      *
-     * <p>The two ways there is nothing to hold are not the same and are both null. An answer of this
+     * <p>The ways there is nothing to hold are not the same and are all null. An answer of this
      * compile's own is of the module being evaluated because it is of this compile of it — one build,
      * so there is no second set of declarations. A behavior nothing applies has no declarations to
-     * bring at all, and its rows are recorded rather than run whatever any build says.
+     * bring at all, and its rows are recorded rather than run whatever any build says. An
+     * implementation this compile owned and did not make brings none either, and what its rows say
+     * of themselves is decided where they stop rather than here.
      */
     private Agreement heldTo(String behavior, Answerer.Answer answer) {
         // A switch, so an answer this was never shown is a compile error here rather than one of the
-        // two ways silently taken for it.
+        // ways silently taken for it.
         return switch (answer) {
             case Answerer.Answer.Nothing _ -> null;
+            case Answerer.Answer.Unavailable _ -> null;
             case Answerer.Answer.Something something -> switch (something.origin()) {
                 // An answerer is written outside this package, so what it hands back is a thing to
                 // be refused rather than a state of this compiler. Saying nothing is not saying
@@ -1702,6 +1725,14 @@ public final class ExampleVerifier {
                 // stopped it was the answer — which is what the row says of itself, rather than being
                 // worked out again by whoever reads it. The behavior's own diagnostic says why.
                 state.incomplete(FailurePhase.ANSWERER_ESTABLISHMENT);
+                return;
+            }
+            case Handing.NotMade _ -> {
+                // The same as far as the row got, and a different reason for stopping there: this
+                // compile owned the implementation and the image holds none. Undecided and not
+                // pending — nothing is going to supply this behavior, so a row saying it waits
+                // would be waiting on nobody.
+                state.incomplete(FailurePhase.IMPLEMENTATION_NOT_MADE);
                 return;
             }
             case Handing.MayApply(Answerer.Answer.Something something) -> applies = something;

@@ -80,6 +80,7 @@ public final class PublicationOrders {
             Incompleteness.Code.ROW_UNDECIDED,
             Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,
+            Incompleteness.Code.IMPLEMENTATION_NOT_MADE,
             Incompleteness.Code.LINKAGE_FAILED,
             Incompleteness.Code.OBSERVATION_ABSENT,
             Incompleteness.Code.INSTRUMENTATION_ABSENT);

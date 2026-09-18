@@ -77,6 +77,17 @@ public sealed interface StandinObservation {
          */
         record TheImplementationIsOfAnotherBuild(String said) implements Reason {}
 
+        /**
+         * The implementation was this compile's to make and the image holds none, so there is
+         * nothing here to hand the entry's values to.
+         *
+         * <p>The same gate a row passes ({@code IMPLEMENTATION_NOT_MADE}), said in this vocabulary.
+         * Told apart from {@link TheImplementationWasNotReached}, which is nothing applying the
+         * behavior at all: something was to, and the module it is in holds a body nothing
+         * elaborated.
+         */
+        record TheImplementationWasNotMade(String said) implements Reason {}
+
         /** The observation was given up on: it did not come back within what it was allowed, or it
          *  went through more than the policy admits. Nothing here says the two would have agreed. */
         record TheObservationRanOut(String said) implements Reason {}

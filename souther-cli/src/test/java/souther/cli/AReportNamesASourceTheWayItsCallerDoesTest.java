@@ -40,8 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AReportNamesASourceTheWayItsCallerDoesTest {
 
-    /** A model whose rows are never evaluated: the `constructs` clause promises a construction the
-     * body does not make, which is raised before anything runs. */
+    /**
+     * A model whose rows are never evaluated: a composition names a stage that does not exist, so
+     * the module has no meaning to emit and nothing of it runs.
+     *
+     * <p>A name and not a body. A body that does not check leaves the bodies that do check runnable
+     * and their rows observed, which is a source that produced an observation — and what a source
+     * that produced none is called is what these tests are about.
+     */
     private static String stopped(String module, String type) {
         return String.format("""
                 module %s
@@ -50,12 +56,13 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
                     invariant value >= 0
 
                 behavior passThrough : (a: %s) -> %s
-                    constructs %s
                 let passThrough (a) = a
+
+                behavior onwards = passThrough >-> nosuch
 
                 example passThrough
                     | "through" : (%s(1)) -> %s(1)
-                """, module, type, type, type, type, type, type);
+                """, module, type, type, type, type, type);
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

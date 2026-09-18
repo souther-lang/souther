@@ -109,6 +109,22 @@ public interface Answerer {
          * run by itself the moment something applies that behavior.
          */
         record Nothing() implements Answer {}
+
+        /**
+         * The behavior's implementation was this compile's to make and is not in this image.
+         *
+         * <p>Its own arm and not {@link Nothing}. Nothing is a behavior waiting for something to
+         * supply it, and a row about one is right and complete as far as it goes; this is a row that
+         * was to be run against this compile's own implementation and has none to be run against.
+         * Said as the first, a row would name a reason that is not what happened — waiting on a
+         * stand-in nobody owes it — and an author would be sent to supply what the model already
+         * implements.
+         *
+         * <p>Read off the manifest the emission produced rather than worked out from the module. A
+         * body is written for it and this image holds none, and which of those two facts is the
+         * emitter's decision is the emitter's to have recorded.
+         */
+        record Unavailable() implements Answer {}
     }
 
     /** A behavior, in the environment one row gives it. */

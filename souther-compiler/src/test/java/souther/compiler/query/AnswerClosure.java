@@ -476,6 +476,13 @@ final class AnswerClosure {
             new Known(at(Q + "Bodies$Checked", "souther.compiler.coverage.CoverageSites$Plan",
                     m(ANSWER, "value"), m(Q + "Bodies$Elaborated", "plan")),
                     AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, ONLY_WALKED),
+            // The same place on the elaboration a row is run against. Its own entry because the
+            // question is its own: what may be observed of a module is the whole of it where the
+            // whole came out and what is left of it where it did not, and the plan each holds is
+            // an index onto the bodies that elaboration holds.
+            new Known(at(Q + "Bodies$Observable", "souther.compiler.coverage.CoverageSites$Plan",
+                    m(ANSWER, "value"), m(Q + "Bodies$Elaborated", "plan")),
+                    AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, ONLY_WALKED),
             new Known(at(Q + "Bodies$Expanding", "souther.compiler.stdlib.Stdlib",
                     m(ANSWER, "value"), m("souther.compiler.query.Bodies$Expanding$Of", "table"), m("souther.compiler.check.HelperTable", "stdlib")),
                     STDLIB, ONLY_WALKED),
@@ -770,6 +777,11 @@ final class AnswerClosure {
             // here — which is the whole of what is being allowed, and the maps under it are what
             // it is being allowed for.
             new KnownDeclared(declared(Q + "Bodies$Checked",
+                    "souther.compiler.coverage.CoverageSites$Plan",
+                    part(Q + "Bodies$Elaborated", "plan")),
+                    AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, Traversal.Why.SAYS_NOTHING_OF_ITSELF),
+            // The same place on the elaboration a row is run against, allowed for the same reason.
+            new KnownDeclared(declared(Q + "Bodies$Observable",
                     "souther.compiler.coverage.CoverageSites$Plan",
                     part(Q + "Bodies$Elaborated", "plan")),
                     AN_INDEX_ONTO_THE_ANSWERS_OWN_GRAPH, Traversal.Why.SAYS_NOTHING_OF_ITSELF),

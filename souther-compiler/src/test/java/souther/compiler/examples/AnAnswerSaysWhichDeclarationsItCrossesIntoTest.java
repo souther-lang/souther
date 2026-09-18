@@ -37,7 +37,7 @@ class AnAnswerSaysWhichDeclarationsItCrossesIntoTest {
     @Test
     void whatACompileAppliesCrossesIntoTheDeclarationsBeingEvaluated() {
         GeneratedImplementations manifest =
-                new GeneratedImplementations("example.applying", Set.of("double"));
+                new GeneratedImplementations("example.applying", Set.of("double"), Set.of());
         MemoryClassLoader empty =
                 new MemoryClassLoader(Map.of(), ExampleVerifier.class.getClassLoader());
 

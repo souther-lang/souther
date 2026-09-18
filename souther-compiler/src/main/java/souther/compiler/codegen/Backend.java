@@ -502,20 +502,38 @@ public final class Backend {
                         SpecImplementation.Implemented implemented =
                                 implementations.get(spec.name());
                         if (implemented != null) {
-                            // What this emitter takes, said here rather than by the reading that
-                            // divided the parameters: an editor reads a definition whose parameters
-                            // do not line up and answers what it can about it, and this may not run
-                            // on one at all. The division is the same either way; what differs is
-                            // who may act on it.
-                            if (!implemented.hasCompleteShape()) {
-                                throw new IllegalStateException("`" + module.name() + "."
-                                        + spec.name() + "` is emitted from an implementation whose"
-                                        + " parameters the declaration does not account for");
+                            // The logic, where this elaboration holds a meaning for it. Which
+                            // bodies it holds is the emission: an elaboration of some of a module's
+                            // bodies is one whose other behaviors have no body here to emit, and
+                            // asking it for one is the throw in `elaborated`. Read off the
+                            // elaboration rather than handed in beside it, so what is emitted and
+                            // what the plan was numbered over cannot be two answers.
+                            if (checked.behaviorBodies().containsKey(spec.name())) {
+                                // What this emitter takes, said here rather than by the reading
+                                // that divided the parameters: an editor reads a definition whose
+                                // parameters do not line up and answers what it can about it, and
+                                // this may not run on one at all. The division is the same either
+                                // way; what differs is who may act on it.
+                                if (!implemented.hasCompleteShape()) {
+                                    throw new IllegalStateException("`" + module.name() + "."
+                                            + spec.name() + "` is emitted from an implementation"
+                                            + " whose parameters the declaration does not account"
+                                            + " for");
+                                }
+                                // a fn-implemented behavior: the $Impl holds the logic, the public
+                                // interface (behaviorClass) is what Java code declares (spec
+                                // §jvm-anonymous-union).
+                                out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
+                                        b.generateSpecFn(spec, implemented, requiredNames,
+                                                requiredSuccess, requiredParam));
+                            } else {
+                                // Written down where it is decided. What is missing from the classes
+                                // cannot say whether this compile owed one, and a row about the
+                                // behavior is told two different things by the two answers.
+                                out.leftOut(spec.name());
                             }
-                            // a fn-implemented behavior: the $Impl holds the logic, the public interface
-                            // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
-                            out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
-                                    b.generateSpecFn(spec, implemented, requiredNames, requiredSuccess, requiredParam));
+                            // The declaration whether or not the logic behind it is here, so what
+                            // this module offers a caller is what its source says either way.
                             List<Type> pts = new ArrayList<>();
                             for (Hir.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));

@@ -48,6 +48,8 @@ public final class Emissions {
     private record Emission(GeneratedClass generated, byte[] bytes) {}
 
     private final Map<JvmClassName, Emission> byName = new LinkedHashMap<>();
+    /** The behaviors whose implementation was this emission's to make and was not made. */
+    private final Set<String> leftOut = new LinkedHashSet<>();
     /** Which module these were emitted for, so a set with nothing of a kind in it still says whose
      *  it is. */
     private final String module;
@@ -184,7 +186,22 @@ public final class Emissions {
                 behaviors.add(impl.behavior());
             }
         }
-        return new GeneratedImplementations(module, behaviors);
+        return new GeneratedImplementations(module, behaviors, leftOut);
+    }
+
+    /**
+     * That this emission had an implementation to make for {@code behavior} and did not make one.
+     *
+     * <p>Said here because it cannot be read off what was emitted. What is absent from the classes
+     * is absent whether this compile never owned the implementation — something outside supplies it,
+     * or nothing does yet — or owned it and could not make one that runs, and those are two
+     * different things for a row about the behavior to be told. A reader deciding between them from
+     * the module's declarations would be making the emitter's decision a second time, which is the
+     * decision that knows more than the declarations do.
+     */
+    void leftOut(String behavior) {
+        stillOpen("recording an implementation this emission did not make");
+        leftOut.add(behavior);
     }
 
     /**

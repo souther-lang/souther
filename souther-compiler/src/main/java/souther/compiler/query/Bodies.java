@@ -3027,6 +3027,84 @@ public final class Bodies {
     }
 
     /**
+     * The behaviors of one module whose bodies can be run: their own came out, and so did every
+     * body they reach.
+     *
+     * <p>A behavior's own check is not that answer. What one body is checked against is the
+     * signatures and the stated relations of what it calls ({@link CalleeSigsForBody}) and never
+     * another body, so a behavior calling one whose body was refused checks exactly as it would
+     * have — and a call to a body nothing emitted is a call to nothing at run time. So what may be
+     * run is a closure and not a predicate of one declaration.
+     *
+     * <p>Answered by taking away rather than by building up. A body that did not come out is out,
+     * and so is anything reaching one that is out; what is left over is what may be run. Written the
+     * other way, a cycle of clean bodies proves itself and two behaviors calling each other would be
+     * runnable on nothing but each other's word.
+     *
+     * <p>A behavior whose frontier could not be read is out too. What it reaches is then unknown
+     * rather than empty, and reading it as empty is this answer saying a body reaches nothing on the
+     * strength of not having looked.
+     *
+     * <p>Absent where the module did not settle. No behavior is runnable then either, but that is a
+     * different thing to say, and a reader gating on this must not take "nothing may be run" from an
+     * answer that was never made.
+     */
+    public record RunnableBehaviors(String name) implements Key<Set<String>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<ModuleCheck.Of> module = db.ask(new ModuleCheck(name));
+            if (!settled.present() || !module.present()) {
+                return Answer.absent();
+            }
+            List<String> implemented = bodiesCheckedIn(db, name);
+            Set<String> out = new LinkedHashSet<>();
+            Map<String, Set<String>> reaches = new LinkedHashMap<>();
+            for (String behavior : implemented) {
+                Answer<Set<ValueName.Behavior>> reached =
+                        db.ask(new BehaviorsReached(name, behavior));
+                if (!db.ask(new CheckedBehavior(name, behavior)).present() || !reached.present()) {
+                    continue;
+                }
+                Set<String> here = new LinkedHashSet<>();
+                for (ValueName.Behavior each : reached.value()) {
+                    // This module's own, because a behavior another module declares is emitted with
+                    // that module and is gated where that module is.
+                    if (name.equals(each.module())) {
+                        here.add(each.name());
+                    }
+                }
+                reaches.put(behavior, here);
+                out.add(behavior);
+            }
+            // Until nothing more falls out. One pass takes away only what reaches a body directly,
+            // and what reached that one is as unrunnable as it is.
+            boolean fell = true;
+            while (fell) {
+                fell = false;
+                for (String behavior : List.copyOf(out)) {
+                    for (String each : reaches.get(behavior)) {
+                        // A behavior of this module with no body of its own is supplied from outside
+                        // and is not one of these, so reaching it takes nothing away.
+                        if (implemented.contains(each) && !out.contains(each)) {
+                            out.remove(behavior);
+                            fell = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return Answer.of(Ordered.set(out));
+        }
+    }
+
+    /**
      * The result of type-checking a module. Absent when anything in it is wrong: a module that does
      * not check must not reach codegen, and an importer of it is skipped rather than compiled
      * against a broken module.
@@ -3051,99 +3129,181 @@ public final class Bodies {
             if (!settled.present() || !module.present()) {
                 return Answer.absent();
             }
-            // Whether anything about this module's names came out wrong decides whether it can be
-            // emitted, and nothing else. It must not decide whether the module is checked: the error
-            // type absorbs so that the check can carry on, and stopping here would mean a mistake in
-            // one declaration silencing every other definition in the file.
-            boolean named = Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value());
-            // In the order the module declares them, which is what the numbering below is of.
-            java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
-            Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
-            Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
-            // One reading for the module. Every behavior's check walks the same declarations, so the
-            // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
-            // about a fork does not have to know which behavior's check happened to reach it.
-            Map<souther.compiler.types.SourceConstructOrigin,
-                    souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
-            Map<souther.compiler.types.BindingOwner,
-                    souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();
-            boolean bodiesCheck = true;
             // In the order they are declared, so what the backend emits does not move with what the
             // check happened to ask for first. A module whose own check stopped has none of them —
             // asking would report not being able to see what has already been reported missing.
-            for (String behavior : bodiesCheckedIn(db, name)) {
-                Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
-                if (core.present()) {
-                    bodies.put(behavior, core.value().body());
-                    elements.put(behavior, core.value().elements());
-                    // Only where there is one. A behavior with no representation for the
-                    // analysis to read is absent from here, which is what a reader owed the
-                    // meanings is answered with — the tree beside it is a different question's
-                    // answer and is not a fallback.
-                    if (core.value().analysis() != null) {
-                        analysed.put(behavior, core.value().analysis());
-                    }
-                    decisions.putAll(core.value().decisions().byFork());
-                    supplied.putAll(core.value().supplied().byExpansion());
-                } else {
+            List<String> implemented = bodiesCheckedIn(db, name);
+            boolean bodiesCheck = true;
+            for (String behavior : implemented) {
+                if (!db.ask(new CheckedBehavior(name, behavior)).present()) {
                     bodiesCheck = false;
                 }
             }
-            // A unit the check could not read at all leaves the module without a meaning to emit,
-            // and says nothing of its own: the name it rested on was reported where it was written.
-            // Whatever else the check found is still reported, which is the point of carrying on.
-            // Both, and both after the check. Sound says nothing about this module's names came out
-            // wrong; the tree says it holds no type nobody could name, which can happen with nothing
-            // reported here at all — an import of a module that is here and unusable leaves a hole,
-            // and what is wrong was reported on that module.
-            boolean sound = named
-                    && bodiesCheck
-                    && module.value().sound()
-                    && !TypeOps.holdsAnErroneousType(settled.value());
-            if (!sound) {
+            if (!bodiesCheck || !emittable(db, name, settled.value(), module.value())) {
                 return Answer.absent();
             }
-            // What each body declares cannot arrive, held against what its input's own declarations
-            // leave. Judged here rather than beside each body: it reads the signature, which is the
-            // module's, and a body's own answer must not move when the one beside it is edited.
-            //
-            // Only of a module that came out whole. A model with a hole in it has been reported on
-            // where the hole is, and what a case can arrive at cannot be read through one — asked
-            // anyway, the reading meets a shape no position can have and says so about this
-            // compiler, which is true and is not what the author of a mistyped model needs.
-            souther.compiler.coverage.DecisionSources read =
-                    new souther.compiler.coverage.DecisionSources(decisions);
-            souther.compiler.coverage.SuppliedRules handed = new souther.compiler.coverage.SuppliedRules(supplied);
-            // Whose module these bodies are, said once and here: this is where a module's name and
-            // its trees are both in hand for the first and only time, and everything below takes
-            // the pair rather than two things to put together again.
-            souther.compiler.coverage.ModuleBodies of =
-                    new souther.compiler.coverage.ModuleBodies(name, bodies);
-            // Where the places of these bodies are, walked here and once. What it is an answer
-            // about is the module this check holds, so this is where there is a module to walk;
-            // and the claims below name arms of it, so they are addresses of the plan this answer
-            // goes on to carry rather than of one more that agrees with it.
-            //
-            // Handed to the answer whole. The plan is filed by which Core objects were put in it,
-            // and the objects are the ones this answer holds, so it is worth what the answer is
-            // worth and stops being worth anything the moment it is separated from it. A reader
-            // given only what the plan is a numbering of would have to walk these bodies again to
-            // get back what this call already came to.
-            //
-            // Owed by the answer rather than by what is done with it, so nothing conditions it.
-            // The judging below stops where the signatures or the reading of the inputs are not in
-            // hand, which is a condition on judging a claim and never was one on the bodies having
-            // places: a module whose bodies came out has arms whatever else did not come out, and
-            // an answer carrying no plan is one every reader of it would walk the bodies for.
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(of, read, handed);
-            Map<String, souther.compiler.claims.Claims> claims =
-                    judged(db, of, settled.value(), plan);
-            return Answer.of(
-                    new Elaborated(of, module.value().emittedHelpers(), claims, elements,
-                            read, handed, analysed, plan),
-                    contradicted(db, name, claims));
+            Elaborated whole =
+                    elaborationOf(db, name, settled.value(), module.value(), implemented);
+            return Answer.of(whole, contradicted(db, name, whole.claims()));
         }
+    }
+
+    /**
+     * The elaboration an evaluation of this module's rows may be run against: the bodies that may
+     * be run, and nothing of the ones that may not.
+     *
+     * <p>Beside {@link Checked} and never instead of it. What ships is one module or none, so a
+     * body that did not come out leaves nothing to publish; what a row is run against is a program
+     * this compile never writes out, and a module holding one body nothing elaborated has the rest
+     * of its bodies all the same. So the conditions here are the ones emitting rests on — no name
+     * denoting nothing, no type nobody could name — and the universal one {@link Checked} adds over
+     * every body of the module is the one this does without.
+     *
+     * <p><b>The whole module's answer where there is one.</b> Asked of {@link Checked} first and
+     * handed back as it came, so a module that came out whole is observed against the program it
+     * ships rather than against a second elaboration equal to it. Built again here, the two would
+     * hold equal plans filed under different objects, and what a run recorded would be numbered
+     * against one of them and read against the other.
+     *
+     * <p>Nothing is reported from here. What a contradicted claim refuses is a build, and a build
+     * refuses over the module it would ship; a refusal raised from an artifact nothing ships would
+     * be this compile refusing a model for the first time while answering what may be observed
+     * about it.
+     */
+    public record Observable(String name) implements Key<Elaborated> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Elaborated> compute(Db db) {
+            Answer<Elaborated> whole = db.ask(new Checked(name));
+            if (whole.present()) {
+                return Answer.of(whole.value());
+            }
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<ModuleCheck.Of> module = db.ask(new ModuleCheck(name));
+            if (!settled.present() || !module.present()
+                    || !emittable(db, name, settled.value(), module.value())) {
+                return Answer.absent();
+            }
+            Set<String> runnable = db.ask(new RunnableBehaviors(name)).value();
+            if (runnable == null) {
+                return Answer.absent();
+            }
+            // In the order the module declares them, which is what the numbering is of. Taken from
+            // the declarations and filtered, rather than walked out of the set: a set says which
+            // bodies these are and nothing about the order they were written in.
+            List<String> emitting = new ArrayList<>();
+            for (String behavior : bodiesCheckedIn(db, name)) {
+                if (runnable.contains(behavior)) {
+                    emitting.add(behavior);
+                }
+            }
+            return Answer.of(elaborationOf(db, name, settled.value(), module.value(), emitting));
+        }
+    }
+
+    /**
+     * Whether this module's meanings can be emitted at all, which is less than every body of it
+     * having come out.
+     *
+     * <p>Whether anything about this module's names came out wrong decides whether it can be
+     * emitted, and nothing else. It must not decide whether the module is checked: the error type
+     * absorbs so that the check can carry on, and stopping on it would mean a mistake in one
+     * declaration silencing every other definition in the file.
+     *
+     * <p>Both of the rest, and both after the check. Sound says nothing about this module's names
+     * came out wrong; the tree says it holds no type nobody could name, which can happen with
+     * nothing reported here at all — an import of a module that is here and unusable leaves a hole,
+     * and what is wrong was reported on that module.
+     */
+    private static boolean emittable(Db db, String name, Hir.Module settled, ModuleCheck.Of module) {
+        return Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value())
+                && module.sound()
+                && !TypeOps.holdsAnErroneousType(settled);
+    }
+
+    /**
+     * What the named bodies of one module came to, gathered into the one answer everything below
+     * the check reads.
+     *
+     * <p>{@code emitting} is which bodies this elaboration is of, in the order the module declares
+     * them. Every one of them is a body that came out: which bodies an elaboration holds is the
+     * caller's to decide and whether each of them has a meaning is not, so one named here without
+     * a check behind it is this compiler having asked for an answer about nothing.
+     *
+     * <p>Every number below is made from exactly these bodies. The plan is what the emitter writes
+     * into the bytecode and what a report reads back, so an elaboration of some of a module's
+     * bodies is numbered over those and over nothing it is not going to emit.
+     */
+    private static Elaborated elaborationOf(Db db, String name, Hir.Module settled,
+                                            ModuleCheck.Of module, List<String> emitting) {
+        java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
+        Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
+        Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
+        // One reading for the module. Every behavior's check walks the same declarations, so the
+        // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
+        // about a fork does not have to know which behavior's check happened to reach it.
+        Map<souther.compiler.types.SourceConstructOrigin,
+                souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
+        Map<souther.compiler.types.BindingOwner,
+                souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();
+        for (String behavior : emitting) {
+            Answer<CheckedBody> core = db.ask(new CheckedBehavior(name, behavior));
+            if (!core.present()) {
+                throw new IllegalStateException("`" + name + "." + behavior + "` is named in an"
+                        + " elaboration and its body did not come out");
+            }
+            bodies.put(behavior, core.value().body());
+            elements.put(behavior, core.value().elements());
+            // Only where there is one. A behavior with no representation for the analysis to read
+            // is absent from here, which is what a reader owed the meanings is answered with — the
+            // tree beside it is a different question's answer and is not a fallback.
+            if (core.value().analysis() != null) {
+                analysed.put(behavior, core.value().analysis());
+            }
+            decisions.putAll(core.value().decisions().byFork());
+            supplied.putAll(core.value().supplied().byExpansion());
+        }
+        // What each body declares cannot arrive, held against what its input's own declarations
+        // leave. Judged here rather than beside each body: it reads the signature, which is the
+        // module's, and a body's own answer must not move when the one beside it is edited.
+        //
+        // Only of a module whose meanings came out. A model with a hole in it has been reported on
+        // where the hole is, and what a case can arrive at cannot be read through one — asked
+        // anyway, the reading meets a shape no position can have and says so about this compiler,
+        // which is true and is not what the author of a mistyped model needs.
+        souther.compiler.coverage.DecisionSources read =
+                new souther.compiler.coverage.DecisionSources(decisions);
+        souther.compiler.coverage.SuppliedRules handed = new souther.compiler.coverage.SuppliedRules(supplied);
+        // Whose module these bodies are, said once and here: this is where a module's name and
+        // its trees are both in hand for the first and only time, and everything below takes
+        // the pair rather than two things to put together again.
+        souther.compiler.coverage.ModuleBodies of =
+                new souther.compiler.coverage.ModuleBodies(name, bodies);
+        // Where the places of these bodies are, walked here and once. What it is an answer
+        // about is the module this check holds, so this is where there is a module to walk;
+        // and the claims below name arms of it, so they are addresses of the plan this answer
+        // goes on to carry rather than of one more that agrees with it.
+        //
+        // Handed to the answer whole. The plan is filed by which Core objects were put in it,
+        // and the objects are the ones this answer holds, so it is worth what the answer is
+        // worth and stops being worth anything the moment it is separated from it. A reader
+        // given only what the plan is a numbering of would have to walk these bodies again to
+        // get back what this call already came to.
+        //
+        // Owed by the answer rather than by what is done with it, so nothing conditions it.
+        // The judging below stops where the signatures or the reading of the inputs are not in
+        // hand, which is a condition on judging a claim and never was one on the bodies having
+        // places: a module whose bodies came out has arms whatever else did not come out, and
+        // an answer carrying no plan is one every reader of it would walk the bodies for.
+        souther.compiler.coverage.CoverageSites.Plan plan =
+                souther.compiler.coverage.CoverageSites.of(of, read, handed);
+        return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
+                read, handed, analysed, plan);
     }
 
     /**

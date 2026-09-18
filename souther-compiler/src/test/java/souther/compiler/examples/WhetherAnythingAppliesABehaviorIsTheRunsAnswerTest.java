@@ -173,7 +173,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
     @Test
     void theCompilesOwnAnswererSaysSomethingForWhatItEmittedEvenWithNoClassToLoad() {
         GeneratedImplementations manifest =
-                new GeneratedImplementations("example.applying", Set.of("double"));
+                new GeneratedImplementations("example.applying", Set.of("double"), Set.of());
         MemoryClassLoader empty =
                 new MemoryClassLoader(Map.of(), ExampleVerifier.class.getClassLoader());
 
@@ -253,7 +253,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
             // The compile's own answerer, told that what it applies is `double` — which is what it
             // emitted, so this is its manifest and not a claim about anything else.
             Answerer own = Answering.generatedHere().over(
-                    new GeneratedImplementations(generated.module(), Set.of("double")), compiled);
+                    new GeneratedImplementations(generated.module(), Set.of("double"), Set.of()),
+                    compiled);
             return behavior -> {
                 if (!behavior.equals("doubleFromOutside")) {
                     return new Answerer.Answer.Nothing();

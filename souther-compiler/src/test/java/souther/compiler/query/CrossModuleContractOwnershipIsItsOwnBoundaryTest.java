@@ -91,7 +91,8 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
         byId.put("up.sou", DECLARING);
         byId.put("down.sou", CALLING);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        Output.Classes.Inputs in = Output.Classes.inputs(c.db(), "down");
+        Output.Classes.Inputs in = Output.Classes.inputs(c.db(), "down",
+                Output.Classes.Elaboration.WHOLE);
         return EnsuresEnforcement.in(in.checks(), "down", about);
     }
 
