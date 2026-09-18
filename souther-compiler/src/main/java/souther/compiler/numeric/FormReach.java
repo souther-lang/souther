@@ -232,15 +232,26 @@ final class FormReach<A> {
         if (coefs.size() != 2) {
             return null;
         }
-        java.util.Iterator<Map.Entry<A, ExactRatio>> both = coefs.entrySet().iterator();
-        Map.Entry<A, ExactRatio> one = both.next();
-        Map.Entry<A, ExactRatio> other = both.next();
-        if (!one.getValue().equals(other.getValue().negated())) {
+        // Which of the two is taken away from the other is read off the sign of what each weighs,
+        // and not off which of them the mapping hands over first. The two readings agree wherever
+        // the weights really are one of each sign, which is the only shape this answers about — and
+        // one of them is an answer about the form while the other is about the walk.
+        A above = null;
+        A below = null;
+        ExactRatio by = null;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getValue().signum() > 0) {
+                above = each.getKey();
+                by = each.getValue();
+            } else {
+                below = each.getKey();
+            }
+        }
+        if (above == null || below == null
+                || !coefs.get(above).equals(coefs.get(below).negated())) {
             return null;
         }
-        return one.getValue().signum() > 0
-                ? new Apart<>(one.getKey(), other.getKey(), one.getValue())
-                : new Apart<>(other.getKey(), one.getKey(), other.getValue());
+        return new Apart<>(above, below, by);
     }
 
     /** {@code by · (above - below)}, with {@code by} positive. */

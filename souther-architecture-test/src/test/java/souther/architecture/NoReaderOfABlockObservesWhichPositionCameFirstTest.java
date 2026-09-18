@@ -51,37 +51,6 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
     private static final String THE_BLOCK = "souther/compiler/values/Sameness$Block";
 
     /**
-     * What takes a position out of a walk by where it is rather than by what it is.
-     *
-     * <p>Named by what is called and not by where the call goes, since a reader that does one of
-     * these to what it walked out of a block has the order in its answer whatever it does next.
-     */
-    private static final Set<String> POSITIONAL = Set.of(
-            "getFirst", "getLast", "findFirst", "indexOf", "lastIndexOf",
-            "limit", "skip", "reduce", "toArray", "listIterator",
-            "firstKey", "lastKey", "firstEntry", "lastEntry", "first", "last");
-
-    /**
-     * And the walk asked for its first and nothing else, which is the same read written the long
-     * way.
-     *
-     * <p>Read as the two calls next to each other, because a walk of anything asks for an iterator
-     * and asks it for what is next: every {@code for (each : these)} there is compiles to exactly
-     * those calls, and a rule that named {@code next} would name every reader of a block that walks
-     * one at all. What tells the two apart is what stands between them — a walk asks whether there
-     * is a next one first, and a reader taking the first asks for it straight away.
-     */
-    private static boolean asksAWalkForItsFirstAndNothingElse(List<InvokeInstruction> calls) {
-        for (int at = 0; at + 1 < calls.size(); at++) {
-            if (calls.get(at).name().stringValue().equals("iterator")
-                    && calls.get(at + 1).name().stringValue().equals("next")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * The readers that still take a position out of a block by where it is.
      *
      * <p>None. A reader put here would be one somebody read and found the order could not reach the
@@ -120,6 +89,10 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
                 "a position taken out of a block's walk by hand was not found: " + found);
         assertTrue(found.contains(here + "#theFirstOfThemAsAList"),
                 "a position taken out of a block by where it is in a list was not found: " + found);
+        assertTrue(found.contains(here + "#theFirstOf"),
+                "a position taken by where it is on the far side of a call was not found, so this"
+                        + " rule stops holding wherever somebody draws a line through a reader: "
+                        + found);
     }
 
     /**
@@ -178,6 +151,16 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         static <A> A theFirstOfThemAsAList(souther.compiler.values.Sameness.Block<A> block) {
             return List.copyOf(block.members()).getFirst();
         }
+
+        /** And the same read with a line drawn through the middle of it, which is what a rule asked
+         *  of one method at a time cannot see. */
+        static <A> A theFirstAHelperTakes(souther.compiler.values.Sameness.Block<A> block) {
+            return theFirstOf(block.members());
+        }
+
+        private static <T> T theFirstOf(java.util.Collection<T> these) {
+            return these.iterator().next();
+        }
     }
 
     /**
@@ -206,15 +189,21 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         }
     }
 
-    /** Every method that reads a block's positions and takes one of them by where it is. */
+    /**
+     * Every method holding a block's positions that takes one of them by where it is.
+     *
+     * <p>Holding and not asking: a reader written as {@code first(block.members())} does the same
+     * thing as one written in a line, and a rule that asked each method on its own would say the
+     * second takes a position by where it is and the first does not
+     * ({@link WhoHoldsWhatAReaderHandedOver}).
+     */
     private static List<String> whoReadsOneByWhereItIs(CompiledOutputs where) {
+        WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> reading = new ArrayList<>();
-        for (ClassModel read : where.all()) {
-            for (MethodModel each : read.methods()) {
-                if (asksABlockForItsPositions(each) && takesOneByWhereItIs(each)) {
-                    reading.add(read.thisClass().name().stringValue() + "#"
-                            + each.methodName().stringValue());
-                }
+        for (String holding : handed.holdingWhat(THE_BLOCK, "members")) {
+            if (WhoHoldsWhatAReaderHandedOver.takesSomethingByWhereItIs(
+                    handed.methodNamed(holding))) {
+                reading.add(holding);
             }
         }
         return reading.stream().sorted().distinct().toList();
@@ -228,29 +217,4 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
                         && call.name().stringValue().equals("members"));
     }
 
-    /**
-     * Whether this method takes something out of a walk by where it is.
-     *
-     * <p>Asked of what the method calls and not of what the block's positions reach. A reader that
-     * has one of these in it either does it to what it walked out of a block, which is the defect,
-     * or does it to something else while walking a block, which is a reader doing two things and is
-     * worth being told about either way.
-     */
-    private static boolean takesOneByWhereItIs(MethodModel method) {
-        List<InvokeInstruction> calls = method.code().stream()
-                .flatMap(code -> code.elementStream())
-                .filter(InvokeInstruction.class::isInstance)
-                .map(InvokeInstruction.class::cast)
-                .toList();
-        return calls.stream().anyMatch(call -> POSITIONAL.contains(call.name().stringValue())
-                        || isReadingAListByIndex(call))
-                || asksAWalkForItsFirstAndNothingElse(calls);
-    }
-
-    /** {@code get} of a list or of an iterator's place, which a map is asked the same word. */
-    private static boolean isReadingAListByIndex(InvokeInstruction call) {
-        return call.name().stringValue().equals("get")
-                && (call.owner().asInternalName().equals("java/util/List")
-                        || call.owner().asInternalName().equals("java/util/ArrayList"));
-    }
 }

@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 import souther.compiler.values.InOneOrder;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -130,18 +128,7 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      *         typed — so the pair is named rather than chosen between
      */
     public List<Map.Entry<A, ExactRatio>> entriesIn(CanonicalOrder<A> order) {
-        List<Map.Entry<A, ExactRatio>> out = new ArrayList<>(coefs.entrySet());
-        out.sort(Map.Entry.comparingByKey(order));
-        for (int at = 1; at < out.size(); at++) {
-            A before = out.get(at - 1).getKey();
-            A here = out.get(at).getKey();
-            if (order.compare(before, here) == 0) {
-                throw new IllegalStateException("two positions this form weighs are one to the"
-                        + " order it is walked in and are not one position: " + before + " and "
-                        + here);
-            }
-        }
-        return Collections.unmodifiableList(out);
+        return order.walking(coefs.entrySet(), Map.Entry::getKey);
     }
 
     /** The positions this form weighs, in the one order {@code order} puts them in — see

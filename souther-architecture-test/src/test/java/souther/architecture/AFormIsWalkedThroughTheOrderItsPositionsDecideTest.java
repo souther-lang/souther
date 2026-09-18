@@ -28,12 +28,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What is left of {@code coefs()} is what a mapping answers: what a position weighs, whether the
  * form names one, and how many there are.
  *
- * <p><b>Asked of whether the walk happens and not of what it comes to.</b> A walk whose answer is a
- * sum, a conjunction or a set is one whose result does not depend on the order — and reading a
- * method well enough to know that is reading it, which is the thing that goes wrong once and is not
- * noticed for a year. So the raw walk is what is named, and a reader that is sure the order cannot
- * reach its answer says so here, once, with the reason — rather than each of them being re-read
- * whenever somebody wonders.
+ * <p><b>Asked of what a reader takes by where it is, and not of whether it walks at all.</b> A walk
+ * whose answer is a sum, a union or a conjunction comes to the same thing whichever order it took,
+ * and a rule naming every walk would be a rule about how a fold is spelled. What cannot come to the
+ * same thing is a reader that takes a position out of the walk by where it is — the first of them,
+ * one by its index, the one an iterator hands over straight away — so that is what is named, in the
+ * words {@link WhoHoldsWhatAReaderHandedOver} names it for a block.
+ *
+ * <p><b>And asked of every method the mapping reaches, not of the one that asked for it.</b> A
+ * reader written as {@code firstOf(form.coefs())} takes the same position the same way as one
+ * written in a line; a rule asked of each method on its own sees neither half of it, and extracting
+ * a helper is what happens to a walk that is written twice.
  *
  * <p><b>Every one of those is something to close and not a shape to keep.</b> The list below is
  * what is still to move, and a reader taken off it is one fewer place where the order a form does
@@ -112,10 +117,30 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
     void andAReaderThatDoesTakeTheWalkIsOneThisFinds() {
         List<String> found = whoWalksAForm(AND_WHAT_IS_COMPILED_BESIDE_IT);
 
-        assertTrue(found.contains(AFormWalkedAsItIsHeld.class.getName().replace('.', '/')
-                        + "#positionsAsTheyCome"),
+        String here = AFormWalkedAsItIsHeld.class.getName().replace('.', '/');
+
+        assertTrue(found.contains(here + "#positionsAsTheyCome"),
                 "the one reader written here to walk a form as it is held was not found, so what"
                         + " this rule looks for is not what such a reader does: " + found);
+        assertTrue(found.contains(here + "#asItComes"),
+                "a form walked as it is held on the far side of a call was not found, so this rule"
+                        + " stops holding wherever somebody draws a line through a reader: " + found);
+    }
+
+    /**
+     * And every place the walk is allowed to stop is a place there is.
+     *
+     * <p>A boundary named by something that no longer exists is one nothing stops at, and the rule
+     * would run through whatever stands there now and report its reading of its own answer. So the
+     * names are held against what was compiled.
+     */
+    @Test
+    void andEveryPlaceTheWalkStopsAtIsOneThatExists() {
+        assertEquals(Set.of(),
+                new WhoHoldsWhatAReaderHandedOver(AND_WHAT_IS_COMPILED_BESIDE_IT)
+                        .boundariesThatAreNotThere(),
+                "a walk stops at each of these because of what it promises there, and a name with"
+                        + " nothing under it promises nothing");
     }
 
     /**
@@ -130,31 +155,39 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
         private AFormWalkedAsItIsHeld() {
         }
 
-        static <A> List<A> positionsAsTheyCome(souther.compiler.numeric.CanonicalForm<A> form) {
-            return new ArrayList<>(form.coefs().keySet());
+        static <A> A positionsAsTheyCome(souther.compiler.numeric.CanonicalForm<A> form) {
+            return List.copyOf(form.coefs().keySet()).getFirst();
+        }
+
+        /** And the same read with a line drawn through the middle of it, which is what a rule asked
+         *  of one method at a time cannot see. */
+        static <A> A theFirstAHelperTakes(souther.compiler.numeric.CanonicalForm<A> form) {
+            return asItComes(form.coefs());
+        }
+
+        private static <K, V> K asItComes(java.util.Map<K, V> coefs) {
+            return coefs.keySet().iterator().next();
         }
     }
 
-    /** Every method that asks a form for its coefficients and then walks what it was handed. */
+    /**
+     * Every method holding a form's coefficients that walks what it was handed.
+     *
+     * <p>Holding and not asking: a reader written as {@code asTheyCome(form.coefs())} takes the
+     * walk the mapping happens to give as surely as one that writes it in a line, and a rule asked
+     * of each method on its own would see neither half of it
+     * ({@link WhoHoldsWhatAReaderHandedOver}).
+     */
     private static List<String> whoWalksAForm(CompiledOutputs where) {
+        WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> walking = new ArrayList<>();
-        for (ClassModel read : where.all()) {
-            for (MethodModel each : read.methods()) {
-                if (asksAForm(each) && asks(each, WALKS_IT)) {
-                    walking.add(read.thisClass().name().stringValue() + "#"
-                            + each.methodName().stringValue());
-                }
+        for (String holding : handed.holdingWhat(THE_FORM, "coefs")) {
+            if (WhoHoldsWhatAReaderHandedOver.takesSomethingByWhereItIs(
+                    handed.methodNamed(holding))) {
+                walking.add(holding);
             }
         }
         return walking.stream().sorted().distinct().toList();
-    }
-
-    /** Whether this method asks a form for the mapping it holds. */
-    private static boolean asksAForm(MethodModel method) {
-        return method.code().stream().flatMap(code -> code.elementStream())
-                .anyMatch(element -> element instanceof InvokeInstruction call
-                        && call.owner().asInternalName().equals(THE_FORM)
-                        && call.name().stringValue().equals("coefs"));
     }
 
     /** Whether this method calls one of {@code names} on something that is a mapping or a set. */
