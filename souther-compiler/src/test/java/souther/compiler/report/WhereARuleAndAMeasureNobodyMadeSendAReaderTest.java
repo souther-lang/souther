@@ -1,9 +1,7 @@
 package souther.compiler.report;
 
-import souther.compiler.meta.ModulePath;
 import souther.compiler.publish.MeasureWord;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
@@ -86,10 +84,7 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
             """;
 
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return WrittenWitness.reportOf(source);
     }
 
     /** The one entry of this model whose disposition is the arm under test. */

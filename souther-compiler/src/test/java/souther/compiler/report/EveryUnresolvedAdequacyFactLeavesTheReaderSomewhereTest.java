@@ -51,9 +51,9 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
      * a claim belongs: its subject is the models this repository carries, so it runs where they are
      * the subject.
      *
-     * <p>One scope apiece and not one per selection. What a narrowed report holds is a selection
-     * from what the whole one holds, so asking the compilation asks about all of them
-     * ({@link AdequacyReport#assessment()}).
+     * <p>One scope apiece and not one per selection. A narrowed report invents no entry the whole
+     * one does not hold, so there is none for a selection to show that asking the compilation
+     * misses ({@link AdequacyReport#assessment()}).
      */
     private static final List<AdequacyUncertainty> UNRESOLVED = everythingUnresolved();
 

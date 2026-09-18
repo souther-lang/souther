@@ -2,14 +2,12 @@ package souther.compiler.report;
 
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
-import souther.compiler.meta.ModulePath;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,15 +80,18 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
                 | "a large one is kept" : (Large) -> Kept
             """;
 
-    private static AdequacyReport measured() {
-        return measured(List.of(MODEL));
-    }
+    /**
+     * What this compiler refuses this model about, and the whole of it.
+     *
+     * <p>The refusal is the model's point: a construction its own rule rejects is what leaves the
+     * body unelaborated, so the witness would not reach its arm without it. Written out so that a
+     * second refusal — something else about the model breaking — fails here instead of leaving the
+     * same entry behind and the witness green ({@link WrittenWitness}).
+     */
+    private static final Set<String> THE_REJECTED_CONSTRUCTION = Set.of("E2010");
 
-    private static AdequacyReport measured(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+    private static AdequacyReport measured() {
+        return WrittenWitness.refusedOnly(THE_REJECTED_CONSTRUCTION, MODEL);
     }
 
     /**
@@ -144,7 +145,8 @@ class WhatAMeasureWentWithoutSendsAReaderToTheWordForItTest {
      */
     @Test
     void aGapElsewhereRefusesTheVerdictAndLeavesTheWitnessStanding() {
-        AdequacyReport refused = measured(List.of(MODEL, A_MODULE_WITH_A_GAP));
+        AdequacyReport refused = WrittenWitness.refusedOnly(
+                THE_REJECTED_CONSTRUCTION, MODEL, A_MODULE_WITH_A_GAP);
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, refused.adequacy(),
                 () -> "the second behavior is here to be a gap and is not one: "

@@ -100,13 +100,25 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     /**
      * What the analysis came to does not depend on where the reader is standing.
      *
-     * <p>Narrowing selects and never works the entries out again: an entry a narrowed report holds
-     * is one the whole report holds, and an entry of the whole is held by whichever scope owns its
-     * subject. Only the first half is asked here — which subject belongs to which selection is the
-     * selection's answer and is not written down anywhere to hold this against.
+     * <p>A narrowed report works its entries out again from the parts it kept, so what is held is
+     * that doing so invents nothing: an entry a narrowed report holds is one the whole report
+     * holds. The other direction — that a selection keeps every entry belonging to it — is not
+     * asked, because which subject belongs to which selection is the selection's answer and is
+     * written down nowhere to hold it against.
+     *
+     * <p><b>At the module and not at the behavior, which is a defect and not a choice.</b>
+     * Narrowed to one behavior, a report keeps a line an {@code invariant} drew whenever the
+     * behavior shown carries the type — and drops the rows of every other behavior, which are what
+     * showed a row can be written at the points of that line. The same obligation is then answered
+     * again from strictly less than it was answered from, and comes back undecided: an entry the
+     * whole report does not hold. The debt is the module's and its evidence is the module's, and
+     * only one of the two narrows.
+     *
+     * <p>Not asserted here in either direction. Held, this would fail; pinned the other way, a
+     * defect would become the contract.
      */
     @Test
-    void narrowingInventsNothing() {
+    void narrowingToAModuleInventsNothing() {
         for (Compilation compilation : RepositoryModels.all()) {
             AdequacyReport whole = AdequacyReport.of(compilation);
             Set<AdequacyUncertainty> ofTheWhole =

@@ -19,9 +19,10 @@ import java.util.List;
  * verdict open instead, the same question is answered over whichever scopes happen to have no gap,
  * and an entry sitting beside a gap is read as an entry that does not exist.
  *
- * <p>Of a scope, and every scope this report can be narrowed to has one. What a narrowed report
- * holds is the entries whose subject it kept, so narrowing selects from these rather than working
- * them out again ({@link AdequacyReport#only(String, String)}).
+ * <p>Of a scope, and every scope this report can be narrowed to has one. A narrowed report works
+ * its own out again from the parts it kept rather than selecting from these, so what holds between
+ * them is one direction: narrowing derives from the parts it keeps and must not invent an entry
+ * the wider report does not hold ({@link AdequacyReport#only(String, String)}).
  *
  * @param gaps what the measures found that the rows are asked for and is not there
  * @param uncertainties what has not come to an answer, whatever the verdict makes of them
