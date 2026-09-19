@@ -522,13 +522,38 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (!hasFiniteDecimal()) {
             return null;
         }
-        long tens = Math.min(twos, fives);
         // The scale first, which is the question about the answer; the digits after, which are the work.
-        // A value whose exact decimal needs more places than a scale counts has no such decimal to come
-        // back as, and saying so is better than saying the power could not be built.
-        int scale = asAScale(tens);
+        int scale = aScaleThatClearsBothExponents();
         return new BigDecimal(
-                numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens))), scale);
+                numerator.multiply(raised(added(twos, scale), added(fives, scale))), scale);
+    }
+
+    /**
+     * A scale the decimal this exactly is can be written at.
+     *
+     * <p>A decimal of scale {@code s} is a whole number over {@code 10^s}, and that whole number is this
+     * value's numerator with {@code 2^(twos + s)} and {@code 5^(fives + s)} multiplied into it. So every
+     * {@code s} leaving both of those at or above nought writes the value, and which one is taken is a
+     * choice rather than the answer: the least of them is the most compact decimal there is for the
+     * value, and the ones above it are the same value with the rest of the two powers in its digits.
+     *
+     * <p>Which is why the least one is not simply taken. A scale is thirty-two bits, and the least scale
+     * there is stands above the least power of ten a value of this type can be made of — so a value whose
+     * most compact decimal is past that end still has a decimal, written at the least scale a decimal
+     * holds with what is left of the powers in the digits. Taking the compact one and no other refused
+     * values that had arrived as decimals, which is the one thing the widening promises to be reversible
+     * for.
+     *
+     * <p>The other end is where a value really has no decimal: a scale counts only so far up, and a
+     * value needing more places than that is not one any spelling reaches.
+     */
+    private int aScaleThatClearsBothExponents() {
+        long tens = Math.min(twos, fives);
+        if (tens < -(long) Integer.MAX_VALUE) {
+            throw new ConstraintViolation(
+                    "no Decimal holds a scale of " + BigInteger.valueOf(tens).negate());
+        }
+        return tens > -(long) Integer.MIN_VALUE ? Integer.MIN_VALUE : (int) -tens;
     }
 
     /** This as a whole number where it is one, and null where it is not. */
@@ -673,17 +698,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /** A magnitude given this value's sign. */
     private BigInteger signedLike(BigInteger magnitude) {
         return signum() < 0 ? magnitude.negate() : magnitude;
-    }
-
-    /** A power of ten as the scale that holds it, which is its negation. A scale is thirty-two bits,
-     *  so a power past that is one no decimal holds — and it aborts rather than being built into the
-     *  digits, which is the one thing this is here to avoid. */
-    private static int asAScale(long tens) {
-        long scale = negated(tens);
-        if (scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("no Decimal holds a scale of " + scale);
-        }
-        return (int) scale;
     }
 
     /** The numerator with the powers that multiply it built in. */

@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,6 +59,40 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
         BigDecimal back = Rational.of(written).asDecimal();
 
         assertEquals(0, written.compareTo(back), "the amount is the one that went in: " + back);
+    }
+
+    /**
+     * And so does one whose most compact decimal is past the end a scale counts.
+     *
+     * <p>A decimal is written at any scale that clears both exponents, and the least of them is only the
+     * most compact of the spellings. This decimal's own scale is the least there is, and its digits hold a
+     * factor of ten — so widening it moves that ten into the exponents and the compact spelling of what
+     * came back would need a scale one below the end. The decimal it came from is right there, one place
+     * further up with the ten back in its digits, and that is the one to answer with.
+     *
+     * <p>Which is the same shape as the rest of this class, a step further in: the step was the canonical
+     * spelling for the type on the way out, and a canonical spelling narrower than the type it is for
+     * refuses values the type holds.
+     */
+    @Test
+    void aDecimalWhoseCompactSpellingIsPastTheEndComesBackToo() {
+        BigDecimal written = new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE);
+        Rational exact = Rational.of(written);
+        assertEquals(2147483649L, exact.twos(), "the value this is about");
+
+        BigDecimal back = (BigDecimal) RationalMath.toFiniteDecimal(exact);
+
+        assertEquals(0, written.compareTo(back), "the amount is the one that went in: " + back);
+    }
+
+    /** And the other end is where a decimal really has none: a scale counts only so far up, and no
+     *  spelling of a value needing more places reaches one. */
+    @Test
+    void aValueNeedingMorePlacesThanAScaleCountsHasNoDecimal() {
+        Rational past = new Rational(BigInteger.ONE, BigInteger.ONE, -3_000_000_000L, -3_000_000_000L);
+
+        assertTrue(past.hasFiniteDecimal(), "a denominator of one, so the decimal repeats nowhere");
+        assertThrows(ConstraintViolation.class, () -> RationalMath.toFiniteDecimal(past));
     }
 
     /**
