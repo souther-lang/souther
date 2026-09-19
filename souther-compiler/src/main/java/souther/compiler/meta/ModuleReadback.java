@@ -226,8 +226,8 @@ public final class ModuleReadback {
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
         return new Readback.Ready<>(
-                new AsRead(checked.module(), declared.declarations(), implementations,
-                        checked.claims(), readBack.laidOut()));
+                new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
+                        implementations, checked.claims(), readBack.laidOut()));
     }
 
     /**
@@ -238,6 +238,7 @@ public final class ModuleReadback {
      * the end, rather than a value somebody assembled that looks like one.
      */
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
+                  java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText) implements ReadableModule {
@@ -245,7 +246,8 @@ public final class ModuleReadback {
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
-            declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
+            declarations = Collections.unmodifiableMap(new java.util.TreeMap<>(declarations));
+            asDeclared = java.util.List.copyOf(asDeclared);
             behaviorImplementations =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
             libraryClaims = List.copyOf(libraryClaims);

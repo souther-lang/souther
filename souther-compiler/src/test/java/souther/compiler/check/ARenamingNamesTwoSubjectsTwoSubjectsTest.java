@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
@@ -58,7 +59,8 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     @Test
     void twoSubjectsFromDifferentDomainsMayNotShareAName() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> spread().renamed(InjectiveRenaming.of(subject -> "one name")));
+                () -> spread().renamed(InjectiveRenaming.of(subject -> "one name"),
+                        CanonicalOrder.asTheyAreSpelled()));
 
         assertTrue(refused.getMessage().contains("one subject"), refused.getMessage());
     }
@@ -68,7 +70,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void aNamingThatKeepsThemApartIsCarriedThrough() {
         Map<FactSubject, String> apart = Map.of(ONLY_IN_FACTS, "p.f", ONLY_IN_ORDERED, "p.o",
                 ONLY_IN_VALUES, "p.v", ONLY_IN_NUMBERS, "p.n");
-        ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get));
+        ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get), CanonicalOrder.asTheyAreSpelled());
 
         assertTrue(said.facts().entails("p.f", true));
         assertTrue(said.confinement().holdingNothing().contains("p.o"));
@@ -114,7 +116,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
      *  arrives under one name from both. */
     @Test
     void aSubjectHeldByTwoDomainsIsRenamedOnce() {
-        ConstraintState<FactSubject> both = ConstraintState.<FactSubject>top()
+        ConstraintState<FactSubject> both = ConstraintState.top(FactSubject.inOneOrder())
                 .taking(ONLY_IN_FACTS, true)
                 .takingRead(new Confinement.Planned<>(says(ONLY_IN_FACTS, "A"),
                                 OrderedIntervals.top(), Map.<FactSubject, Carrier>of())
@@ -123,7 +125,8 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
 
         ConstraintState<String> said = both.renamed(
-                InjectiveRenaming.of(subject -> "p#" + asked.getAndIncrement()));
+                InjectiveRenaming.of(subject -> "p#" + asked.getAndIncrement()),
+                CanonicalOrder.asTheyAreSpelled());
 
         assertTrue(said.facts().entails("p#0", true));
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p#0"));
@@ -136,7 +139,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
 
     /** One subject in each domain, and no subject in two of them. */
     private static ConstraintState<FactSubject> spread() {
-        return ConstraintState.<FactSubject>top()
+        return ConstraintState.top(FactSubject.inOneOrder())
                 .taking(ONLY_IN_FACTS, true)
                 .takingRead(new Confinement.Planned<>(says(ONLY_IN_VALUES, "A"),
                                 OrderedIntervals.at(ONLY_IN_ORDERED, new OrderedInterval(

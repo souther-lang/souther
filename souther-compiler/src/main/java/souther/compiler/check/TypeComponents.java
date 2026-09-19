@@ -36,15 +36,35 @@ final class TypeComponents {
         this.edges = edges;
     }
 
-    /** The components of {@code edges}, each one before any component that reads it. */
+    /**
+     * The components of {@code edges}, each one before any component that reads it.
+     *
+     * <p><b>Walked by the names, and not in the order the graph was built.</b> Which component is
+     * found first, and which member of one stands first inside it, are decided by the order the
+     * walk reaches things — and a mapping keyed by a declaration cannot see the order it was
+     * filled in, so two callers holding the same graph could be answered two different ways with
+     * nothing able to tell them apart. Both places the walk chooses from are ordered here, so the
+     * answer is a function of the graph.
+     *
+     * <p>Ordered where the walk reads rather than sorted afterwards. What comes back is in an
+     * order — every component before any that reads it — and sorting the components would be
+     * answering a different question with the same shape.
+     */
     static List<List<TypeSymbol>> of(Map<TypeSymbol, Set<TypeSymbol>> edges) {
         TypeComponents walk = new TypeComponents(edges);
-        for (TypeSymbol each : edges.keySet()) {
+        for (TypeSymbol each : inOneOrder(edges.keySet())) {
             if (!walk.reached.containsKey(each)) {
                 walk.walk(each);
             }
         }
         return walk.found;
+    }
+
+    /** The same declarations, in the one order their names put them in. */
+    private static List<TypeSymbol> inOneOrder(Set<TypeSymbol> named) {
+        List<TypeSymbol> out = new ArrayList<>(named);
+        out.sort(null);
+        return out;
     }
 
     /** Whether {@code component} is one that has to be risen through rather than read once. */
@@ -59,7 +79,7 @@ final class TypeComponents {
         next++;
         standing.push(from);
         onStand.add(from);
-        for (TypeSymbol each : edges.getOrDefault(from, Set.of())) {
+        for (TypeSymbol each : inOneOrder(edges.getOrDefault(from, Set.of()))) {
             if (!reached.containsKey(each)) {
                 walk(each);
                 lowest.put(from, Math.min(lowest.get(from), lowest.get(each)));
@@ -75,6 +95,11 @@ final class TypeComponents {
                 onStand.remove(each);
                 component.add(each);
             } while (!each.equals(from));
+            // Under the names, because the order they come off the stand is the order the walk
+            // happened to reach them and members of one component reach each other — there is no
+            // order among them for it to be. The order between components is another question and
+            // is what the list they are added to answers.
+            component.sort(null);
             found.add(List.copyOf(component));
         }
     }

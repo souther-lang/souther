@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
@@ -463,9 +464,10 @@ public sealed interface BorderQuantity {
     record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
             implements BorderQuantity {
 
+        /** Walked by what each term is called, which is what a form's own equality cannot see. */
         @Override
         public List<NumericTerm> terms() {
-            return List.copyOf(form.coefs().keySet());
+            return NumericTerms.inOrder(form.coefs().keySet());
         }
 
         @Override
@@ -497,8 +499,9 @@ public sealed interface BorderQuantity {
             // what come apart: written this way the pair that disagrees does not exist.
             if (!on.keySet().equals(form.coefs().keySet())) {
                 throw new IllegalArgumentException("a form is over the positions it names, and each"
-                        + " of them is read on one order: " + form.coefs().keySet() + " against "
-                        + on.keySet());
+                        + " of them is read on one order: "
+                        + NumericTerms.inOrder(form.coefs().keySet())
+                        + " against " + NumericTerms.inOrder(on.keySet()));
             }
             // And each entry's orders are that position's own. The key set agreeing says the map
             // is about the right positions and says nothing about which of them each answer came
@@ -549,8 +552,8 @@ public sealed interface BorderQuantity {
          * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            return LevelSpace.addedUpOver(on.values().stream()
-                    .map(TermOrders::answered).toList());
+            return LevelSpace.addedUpOver(NumericTerms.inOrder(on.keySet()).stream()
+                    .map(term -> on.get(term).answered()).toList());
         }
 
         /** The order that position is read and written on, and null for a position not in the
@@ -579,7 +582,8 @@ public sealed interface BorderQuantity {
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             boolean noNumber = false;
             boolean wroteNothing = false;
-            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            for (Map.Entry<NumericTerm, ExactRatio> each
+                    : NumericTerms.entriesInOrder(form.coefs())) {
                 // Taken by the orders this form reads that term on. What the term read is the
                 // reading's to say and what it is worth to the number is the form's, and a
                 // coefficient put against a value read on another order weighs a position by a

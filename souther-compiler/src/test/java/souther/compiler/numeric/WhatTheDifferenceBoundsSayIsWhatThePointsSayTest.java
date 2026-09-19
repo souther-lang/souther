@@ -55,7 +55,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
         for (int round = 0; round < CASES; round++) {
             List<Written> written = aSystem(dice);
             List<AffineConstraint<String>> stated = read(written);
-            DifferenceBounds<String> closed = DifferenceBounds.over(stated);
+            DifferenceBounds<String> closed = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
             List<Map<String, Integer>> admitted = pointsSatisfying(written);
 
             if (admitted.isEmpty()) {
@@ -79,10 +79,10 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
         Random dice = new Random(1016);
         for (int round = 0; round < CASES; round++) {
             List<AffineConstraint<String>> stated = read(aSystem(dice));
-            DifferenceBounds<String> asWritten = DifferenceBounds.over(stated);
+            DifferenceBounds<String> asWritten = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
             List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
             Collections.shuffle(shuffled, dice);
-            DifferenceBounds<String> reordered = DifferenceBounds.over(shuffled);
+            DifferenceBounds<String> reordered = DifferenceBounds.over(shuffled, CanonicalOrder.asTheyAreSpelled());
 
             assertEquals(asWritten.holdsNothing(), reordered.holdsNothing());
             if (asWritten.holdsNothing()) {
@@ -109,8 +109,9 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
             List<AffineConstraint<String>> stated = read(aSystem(dice));
             List<AffineConstraint<String>> doubled = new ArrayList<>(stated);
             doubled.addAll(stated);
-            DifferenceBounds<String> once = DifferenceBounds.over(stated);
-            DifferenceBounds<String> twice = DifferenceBounds.over(doubled);
+            DifferenceBounds<String> once = DifferenceBounds.over(stated, CanonicalOrder.asTheyAreSpelled());
+            DifferenceBounds<String> twice =
+                    DifferenceBounds.over(doubled, CanonicalOrder.asTheyAreSpelled());
             assertEquals(once.holdsNothing(), twice.holdsNothing());
             if (once.holdsNothing()) {
                 continue;

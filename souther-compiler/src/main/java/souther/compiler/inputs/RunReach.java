@@ -4,6 +4,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.ValueGuarantees;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
@@ -58,6 +59,10 @@ final class RunReach {
         ELEMENT
     }
 
+    /** The one order a walk takes these two in, which is the order they are declared. A constant is
+     *  equal to itself and to no other, so the two ends of the law an order owes meet exactly. */
+    private static final CanonicalOrder<Atom> IN_ONE_ORDER = CanonicalOrder.asTheyAreDeclared();
+
     private static final LinearForm<Atom> ACCUMULATOR =
             LinearForm.atom(Atom.ACCUMULATOR);
 
@@ -111,7 +116,7 @@ final class RunReach {
         Map<Atom, Granularity> kinds =
                 Map.of(Atom.ACCUMULATOR, answeredOn, Atom.ELEMENT, observedOn);
         return Induction.proves(element, guaranteed -> new Walked(
-                NumericDomain.<Atom>top().assuming(Atom.ELEMENT, guaranteed, kinds),
+                NumericDomain.top(IN_ONE_ORDER).assuming(Atom.ELEMENT, guaranteed, kinds),
                 guaranteed, seed, step, kinds));
     }
 

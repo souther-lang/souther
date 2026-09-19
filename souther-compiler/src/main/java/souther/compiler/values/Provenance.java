@@ -2,11 +2,9 @@ package souther.compiler.values;
 
 import souther.compiler.hash.ValueHash;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -45,13 +43,17 @@ public final class Provenance<A> {
     private final Set<Removal<A>> removals;
 
     /** Which removals took from each block, so that walking back from one is a lookup apiece. */
-    private final Map<Sameness.Block<A>, List<Removal<A>>> from;
+    private final Map<Sameness.Block<A>, Set<Removal<A>>> from;
 
     public Provenance(Set<Removal<A>> removals) {
         this.removals = Collections.unmodifiableSet(new LinkedHashSet<>(removals));
-        Map<Sameness.Block<A>, List<Removal<A>>> from = new HashMap<>();
+        // Filed in no order. What is asked of these is which removals took from a block, which is a
+        // question about the removals — every one of them is read and the round each happened in is
+        // what a walk back goes by, so an order here would be one nothing asks for and one a reader
+        // could start reading.
+        Map<Sameness.Block<A>, Set<Removal<A>>> from = new HashMap<>();
         this.removals.forEach(removal ->
-                from.computeIfAbsent(removal.block(), _ -> new ArrayList<>()).add(removal));
+                from.computeIfAbsent(removal.block(), _ -> new HashSet<>()).add(removal));
         this.from = from;
     }
 
@@ -90,7 +92,10 @@ public final class Provenance<A> {
                              Set<Sameness.Block<A>> blockers) {
 
         public Removal {
-            blockers = Collections.unmodifiableSet(new LinkedHashSet<>(blockers));
+            // In no order. What a removal says is which neighbours left the value nowhere to go,
+            // each of them on its own, and they are written out in one order wherever one is
+            // written ({@link #toString}).
+            blockers = Collections.unmodifiableSet(new HashSet<>(blockers));
         }
 
         /** The blockers written in one order — see {@link InOneOrder}. */
@@ -130,27 +135,40 @@ public final class Provenance<A> {
      * nothing, and the blocks named beside it are the ones an author is sent to read.
      */
     public Set<Sameness.Block<A>> restingOn(Sameness.Block<A> block) {
-        Set<Sameness.Block<A>> out = new LinkedHashSet<>();
-        Deque<Asked<A>> asking = new ArrayDeque<>();
-        Set<Asked<A>> already = new LinkedHashSet<>();
-        asking.add(new Asked<>(block, Integer.MAX_VALUE));
-        while (!asking.isEmpty()) {
-            Asked<A> here = asking.removeFirst();
-            if (!already.add(here)) {
-                continue;
-            }
-            for (Removal<A> removal : from.getOrDefault(here.block(), List.of())) {
-                if (removal.round() >= here.before()) {
-                    continue;
-                }
-                for (Sameness.Block<A> blocker : removal.blockers()) {
-                    out.add(blocker);
-                    asking.add(new Asked<>(blocker, removal.round()));
-                }
-            }
-        }
+        // In no order. Which blocks the emptying rests on is what this answers, and the walk that
+        // reaches them goes by the rounds — so the order they are reached in is a fact about the
+        // walk, and a reader handed them in it would have that inside whatever it wrote.
+        Set<Sameness.Block<A>> out = new HashSet<>();
+        restingOn(new Asked<>(block, Integer.MAX_VALUE), new HashSet<>(), out);
         out.remove(block);
         return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * The same, walked back from one ask.
+     *
+     * <p>Written as the walk it is rather than as a queue of what is left to ask. A queue holds the
+     * asks in the order they were reached and hands them back in it, which is an order about this
+     * walk and about nothing these values hold — and every ask is reached whichever order they are
+     * taken in, so it was an order nothing needed. What stops the walk is that a round is a number
+     * that goes down, which is what bounds how deep this goes.
+     *
+     * @param already every ask reached, so that a block reached two ways is walked back from once
+     * @param out every block reached, which is what the walk is for
+     */
+    private void restingOn(Asked<A> here, Set<Asked<A>> already, Set<Sameness.Block<A>> out) {
+        if (!already.add(here)) {
+            return;
+        }
+        for (Removal<A> removal : from.getOrDefault(here.block(), Set.of())) {
+            if (removal.round() >= here.before()) {
+                continue;
+            }
+            for (Sameness.Block<A> blocker : removal.blockers()) {
+                out.add(blocker);
+                restingOn(new Asked<>(blocker, removal.round()), already, out);
+            }
+        }
     }
 
     /** The same removals, about the blocks {@code naming} calls these. */

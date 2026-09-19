@@ -377,7 +377,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                                     instanceof souther.compiler.check.NumberAt
                                             .OfWhatNumber.OfWhatAnOperationAnswers
                                     ? "#" + claim.position() : claim.position().toString(),
-                            subject -> "?" + subject);
+                            subject -> "?" + subject,
+                            souther.compiler.numeric.CanonicalOrder.asTheyAreSpelled());
             java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
                     new LinkedHashMap<>();
             taken.named().forEach((subject, spelled) ->

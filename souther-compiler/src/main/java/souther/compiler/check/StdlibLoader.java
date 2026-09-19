@@ -172,7 +172,7 @@ public final class StdlibLoader {
         String module = source.declared().moduleName();
         return SyntaxSymbols.overTheseLibraryNames(module,
                 Registry.ofRead(Map.of(module, new Registry.Declared<>(
-                        source.indexed().declarations(),
+                        source.indexed().declarations(), source.indexed().asDeclared(),
                         Registry.baseNames(source.module().exposing())))),
                 Denoting.of(scope, Map.of()),
                 LibraryNames.ofTheLibraryBeingLoaded(identities));

@@ -118,7 +118,7 @@ class AProofNamesOneBlockAndNotAllOfThemTest {
     @Test
     void oneBlockLeftWithNoValueIsNamedAsThePlacesTogether() {
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        ConstraintState<FactSubject> state = ConstraintState.<FactSubject>top()
+        ConstraintState<FactSubject> state = ConstraintState.top(FactSubject.inOneOrder())
                 .takingRead(worked(emptiedAt(P, Q), sets), sets);
 
         Optional<Emptiness> why = state.holdsNothing(declared());
@@ -284,7 +284,7 @@ class AProofNamesOneBlockAndNotAllOfThemTest {
     @Test
     void aBlockOfPositionsThisValueDoesNotDeclareIsNotNamed() {
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        ConstraintState<FactSubject> state = ConstraintState.<FactSubject>top()
+        ConstraintState<FactSubject> state = ConstraintState.top(FactSubject.inOneOrder())
                 .takingRead(worked(emptiedAt(P, Q), sets), sets);
 
         SequencedMap<FactSubject, Emptiness.AtAField.Where> elsewhere = new LinkedHashMap<>();

@@ -7,6 +7,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -76,6 +77,17 @@ public interface Registry<D> {
      * a "did you mean" may offer. A reader after one declaration asks {@link #declaration}. */
     Map<String, D> declaredIn(String moduleName);
 
+    /**
+     * The same declarations, in the order the module writes them. Empty where there is no such
+     * module.
+     *
+     * <p>Beside {@link #declaredIn} and answering the other question. That one says which
+     * declaration stands under a name and is walked by the names; this says which order the module
+     * writes them in, which is what a reader rebuilding the module or reporting over it reads. Read
+     * off the lookup, that order was the names' wearing the shape of the author's.
+     */
+    List<D> inDeclarationOrder(String moduleName);
+
     /** The base type names {@code moduleName} exposes, with any {@code .decoder} / {@code .encoder}
      * member dropped. Empty when this compilation has no such module. */
     Set<String> exposedBy(String moduleName);
@@ -98,15 +110,34 @@ public interface Registry<D> {
      * @param declarations what it declares, by the name written there
      * @param exposed      the base type names it exposes ({@link #baseNames})
      */
-    record Declared<D>(Map<String, D> declarations, Set<String> exposed) {
+    record Declared<D>(Map<String, D> declarations, List<String> asDeclared, Set<String> exposed) {
 
-        /** Copied in the order the module wrote them. What a module declares is read out in that
-         *  order — a reader rebuilding a module from what a registry has puts its declarations back
-         *  in the order it finds them, so a copy that does not keep it moves them. */
+        /**
+         * The order the module wrote them is an answer of its own and is carried as one.
+         *
+         * <p>What a module declares is read out in that order — a reader rebuilding a module from
+         * what a registry has puts its declarations back in the order it finds them. Left on the
+         * mapping, that order was one nothing comparing two of these could see: the same
+         * declarations written the other way round made a registry equal to this one and rebuilt a
+         * module in another order. So the lookup is walked by the names and the order stands beside
+         * it.
+         */
         public Declared {
-            declarations =
-                    java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(declarations));
+            declarations = java.util.Collections.unmodifiableMap(
+                    new java.util.TreeMap<>(declarations));
+            asDeclared = List.copyOf(asDeclared);
             exposed = Set.copyOf(exposed);
+            if (!Set.copyOf(asDeclared).equals(declarations.keySet())
+                    || asDeclared.size() != declarations.size()) {
+                throw new IllegalArgumentException("a registry writes down the declarations a"
+                        + " module has, each once: " + asDeclared + " against "
+                        + declarations.keySet());
+            }
+        }
+
+        /** What the module declares, in the order it writes them. */
+        public List<D> inDeclarationOrder() {
+            return asDeclared.stream().map(declarations::get).toList();
         }
     }
 
@@ -136,6 +167,12 @@ public interface Registry<D> {
             public Map<String, D> declaredIn(String moduleName) {
                 Declared<D> module = has.get(moduleName);
                 return module == null ? Map.of() : module.declarations();
+            }
+
+            @Override
+            public List<D> inDeclarationOrder(String moduleName) {
+                Declared<D> module = has.get(moduleName);
+                return module == null ? List.of() : module.inDeclarationOrder();
             }
 
             @Override

@@ -73,6 +73,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -4165,9 +4166,13 @@ public final class Adequacy {
                          About.AQuestionNothingAnswered _ -> { }
                 }
             }
+            // Once apiece and in the order the findings were read, which is what the set above
+            // keeps and the list is what says. The same arrangement the classes are gathered in,
+            // and for the reason the four beside them are lists: what is owed is handed on in the
+            // order it is handed on in, and a set would leave that to whoever copied it.
             return Answer.of(new RowWork(classesOwed(measured),
                     arms.values().stream().map(Generator.ArmOwed::new).toList(),
-                    pairs, meetings, rules, pointsOwed(db, name, behavior)));
+                    pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior)));
         }
 
         /**
@@ -4591,7 +4596,7 @@ public final class Adequacy {
          * a second time here the two would be free to disagree about what this behavior owes.
          */
         private static RowsForRules rowsForRules(
-                Db db, String module, String behavior, Set<DecisionRule> asked,
+                Db db, String module, String behavior, List<DecisionRule> asked,
                 RowReading observed,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget,
                 int alreadyOffered) {
@@ -4610,10 +4615,14 @@ public final class Adequacy {
             if (settled == null) {
                 return new RowsForRules(asked, Map.of(), null);
             }
+            // Whether a rule was asked about, asked of what was asked rather than of where it comes
+            // in it: the list says the order the rules are handed on in and this is a membership
+            // question, which is the one thing that order has nothing to do with.
+            Set<DecisionRule> wasAsked = new HashSet<>(asked);
             Map<DecisionRule, Generator.GeneratedRow> out = new LinkedHashMap<>();
             boolean stopped = false;
             for (Map.Entry<DecisionRule, RuleSettlement> each : settled.entrySet()) {
-                if (!asked.contains(each.getKey())
+                if (!wasAsked.contains(each.getKey())
                         || !(each.getValue().requirement()
                                 instanceof RuleRequirement.Required(var stoodBy))) {
                     continue;
@@ -4652,21 +4661,29 @@ public final class Adequacy {
          * discharge it with nothing in a position to notice, which is the whole of what one
          * identity for the two was introduced to make possible.
          *
-         * @param asked         every rule this behavior is owed a row for
+         * <p><b>Asked for, in the order it was asked.</b> What a run is set is handed to it in the
+         * order the measurement's findings name the rules ({@link RowWork}), and that order goes on
+         * to be part of the order a person is shown the items of a block in
+         * ({@code Settlements#requested}). So it is held as the sequence it is: a set says two runs
+         * asked the same thing whichever order they were asked it in, which is not what the reader
+         * downstream is reading.
+         *
+         * @param asked         every rule this behavior is owed a row for, in the order it was
+         *                      asked for them
          * @param byRule        the row a person is handed for each rule that has one
          * @param whyNotTheRest null where every rule asked for has one
          */
-        public record RowsForRules(Set<DecisionRule> asked,
+        public record RowsForRules(List<DecisionRule> asked,
                                    Map<DecisionRule, Generator.GeneratedRow> byRule,
                                    Generator.UnresolvedCombination.Reason whyNotTheRest) {
 
             /** A run that was asked for no rule's row, which is what a behavior nothing searched
              *  has. An answer and not an empty map standing in for one. */
             public static final RowsForRules NOTHING =
-                    new RowsForRules(Set.of(), Map.of(), null);
+                    new RowsForRules(List.of(), Map.of(), null);
 
             public RowsForRules {
-                asked = Ordered.set(asked);
+                asked = List.copyOf(asked);
                 byRule = Ordered.map(byRule);
                 if (!asked.containsAll(byRule.keySet())) {
                     throw new IllegalArgumentException(

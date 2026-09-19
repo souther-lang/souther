@@ -5,6 +5,8 @@ import souther.compiler.hash.ValueHash;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Which blocks of one alternative are stated to hold different values.
@@ -202,13 +205,11 @@ public final class Apartness<A> {
         if (!holdsABlockApartFromItself) {
             return Lacks.none();
         }
-        List<Shown<A>> out = new ArrayList<>();
-        edges.forEach(edge -> {
-            if (edge.isOfOneBlock()) {
-                out.add(Shown.of(new RelationalLack.ABlockApartFromItself<>(edge.one())));
-            }
-        });
-        return Lacks.of(out);
+        return Lacks.of(edges.stream()
+                .filter(Edge::isOfOneBlock)
+                .<Shown<A>>map(edge -> Shown.of(
+                        new RelationalLack.ABlockApartFromItself<>(edge.one())))
+                .collect(Collectors.toSet()));
     }
 
     /** How much walking this relation is, before any of it is walked. */
@@ -452,13 +453,16 @@ public final class Apartness<A> {
     }
 
     private List<Set<Sameness.Block<A>>> everyPairwiseApartSet() {
-        Map<Sameness.Block<A>, Set<Sameness.Block<A>>> apart = new LinkedHashMap<>();
+        // Which blocks each block is stated to differ from, in no order. Which pairs there are is
+        // what decides the sets; the pairs arrived in some order and this is the one place that
+        // order could have been carried into the walk, so it is not kept here for the walk to take.
+        Map<Sameness.Block<A>, Set<Sameness.Block<A>>> apart = new HashMap<>();
         for (Edge<A> edge : edges) {
             if (edge.isOfOneBlock()) {
                 continue;
             }
-            apart.computeIfAbsent(edge.one(), _ -> new LinkedHashSet<>()).add(edge.other());
-            apart.computeIfAbsent(edge.other(), _ -> new LinkedHashSet<>()).add(edge.one());
+            apart.computeIfAbsent(edge.one(), _ -> new HashSet<>()).add(edge.other());
+            apart.computeIfAbsent(edge.other(), _ -> new HashSet<>()).add(edge.one());
         }
         List<Set<Sameness.Block<A>>> found = new ArrayList<>();
         grow(new LinkedHashSet<>(), new LinkedHashSet<>(apart.keySet()), new LinkedHashSet<>(),
@@ -640,36 +644,34 @@ public final class Apartness<A> {
      * counted.
      */
     private boolean outnumberTheirNeighbours(Domains<A> left) {
-        Map<Sameness.Block<A>, Integer> apart = new LinkedHashMap<>();
+        // How many pairs name each block, which is a count and holds no order.
+        Map<Sameness.Block<A>, Integer> apart = new HashMap<>();
         left.blocks().forEach(block -> apart.put(block, 0));
         for (Edge<A> edge : edges) {
             apart.merge(edge.one(), 1, Integer::sum);
             apart.merge(edge.other(), 1, Integer::sum);
         }
-        for (Sameness.Block<A> block : left.blocks()) {
-            switch (left.of(block)) {
-                case Admits.These it -> {
-                    if (it.values().size() <= apart.get(block)) {
-                        return false;
-                    }
-                }
-                // More than the relation has blocks, which is more than any block has neighbours.
-                case Admits.MoreThanCounted _ -> { }
-                case Admits.NotKnown _ -> {
-                    return false;
-                }
-            }
-        }
-        return true;
+        // Asked of every block and not of them one after another. What the argument needs holds of
+        // the relation or of none of it, so this is one question about all of them — and a walk
+        // that stopped at the first block failing it would be answering the same thing through a
+        // walk whose order nothing here settles.
+        return left.blocks().stream().allMatch(block -> switch (left.of(block)) {
+            case Admits.These it -> it.values().size() > apart.get(block);
+            // More than the relation has blocks, which is more than any block has neighbours.
+            case Admits.MoreThanCounted _ -> true;
+            case Admits.NotKnown _ -> false;
+        });
     }
 
     /** A lack at each block a narrowing left no value, beside the removals that left them so. */
     private Reduction<A> emptied(Closure.Contradicted<A> narrowed) {
         RelationalEvidence<A> reached = RelationalEvidence.of(narrowed.provenance());
-        List<Shown<A>> lacks = new ArrayList<>();
-        narrowed.leftNothing().forEach(block -> lacks.add(
-                new Shown<>(new RelationalLack.NoValueLeftForIt<>(block), reached)));
-        return new Reduction.Nothing<>(Lacks.of(lacks));
+        // A lack apiece, gathered in no order: each is filed under the block it is about, and which
+        // block a walk reached first is a fact about the walk that narrowed them.
+        return new Reduction.Nothing<>(Lacks.of(narrowed.leftNothing().stream()
+                .<Shown<A>>map(block ->
+                        new Shown<>(new RelationalLack.NoValueLeftForIt<>(block), reached))
+                .collect(Collectors.toSet())));
     }
 
     /** What the two arguments after a narrowing make of what it left. */

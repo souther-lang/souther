@@ -54,18 +54,38 @@ public final class NumericDomain<A> {
     private final StatedRules<A> stated;
     private final Map<A, Granularity> kinds;
     private final boolean readARuleNothingSatisfies;
+
+    /**
+     * The one order the positions of this domain are walked in, which the caller says because the
+     * caller is the one that knows what a position of it is.
+     *
+     * <p>Carried and not part of what this domain is. What the rules leave is settled by the rules,
+     * and two callers reading one set of rules under two orders read one domain — so this is the
+     * same kind of thing as {@link #closed}: something a reading is worked out through rather than
+     * something a reading is.
+     */
+    private final CanonicalOrder<A> order;
     private List<AffineConstraint<A>> distinctRules;
     private ClosedState<A> closed;
 
     private NumericDomain(StatedRules<A> stated, Map<A, Granularity> kinds,
-                          boolean readARuleNothingSatisfies) {
+                          boolean readARuleNothingSatisfies, CanonicalOrder<A> order) {
         this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
+        this.order = order;
     }
 
-    public static <A> NumericDomain<A> top() {
-        return new NumericDomain<>(StatedRules.none(), Map.of(), false);
+    /**
+     * Everything, over positions {@code order} puts in one order.
+     *
+     * <p>Asked for the order here because working the rules out walks the positions of a form, and
+     * what such a walk takes first has to be settled by the positions rather than by how the rules
+     * were typed. What it is belongs to whatever a position of this domain is, which this is generic
+     * over and the caller is not — see {@link CanonicalOrder}.
+     */
+    public static <A> NumericDomain<A> top(CanonicalOrder<A> order) {
+        return new NumericDomain<>(StatedRules.none(), Map.of(), false, order);
     }
 
     /**
@@ -112,7 +132,7 @@ public final class NumericDomain<A> {
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
-                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true);
+                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -129,7 +149,7 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false);
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order);
     }
 
     /**
@@ -184,7 +204,7 @@ public final class NumericDomain<A> {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain<>(stated, Map.copyOf(next), readARuleNothingSatisfies);
+                : new NumericDomain<>(stated, Map.copyOf(next), readARuleNothingSatisfies, order);
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -209,7 +229,8 @@ public final class NumericDomain<A> {
      * them all is naming everything the rules are about — a rule reaching one this has no spacing
      * for is refused rather than carried across unnamed.
      */
-    public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming) {
+    public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming,
+                                     CanonicalOrder<B> order) {
         // Settled once, over every position these rules speak of, which is what this holds and no
         // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
         // positions, so two independent rules would be carried across as two rules about one number
@@ -221,7 +242,10 @@ public final class NumericDomain<A> {
         for (AffineConstraint<A> rule : rules()) {
             out = out.and(StatedRules.of(rule.over(called)));
         }
-        return new NumericDomain<>(out, Map.copyOf(spacing), readARuleNothingSatisfies);
+        // The order of the names arrived at, and not this one carried across. What puts two
+        // positions in an order is a fact about what a position of that vocabulary is, and the
+        // caller is the one that knows it — the same reason the order is asked for at the top.
+        return new NumericDomain<>(out, Map.copyOf(spacing), readARuleNothingSatisfies, order);
     }
 
     /**
@@ -252,7 +276,7 @@ public final class NumericDomain<A> {
             }
         });
         return new NumericDomain<>(stated.and(other.stated), Map.copyOf(both),
-                readARuleNothingSatisfies || other.readARuleNothingSatisfies);
+                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order);
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------
@@ -266,7 +290,7 @@ public final class NumericDomain<A> {
      */
     private ClosedState<A> closed() {
         if (closed == null) {
-            closed = ClosedState.of(rules(), kinds::get);
+            closed = ClosedState.of(rules(), kinds::get, order);
         }
         return closed;
     }
@@ -347,7 +371,10 @@ public final class NumericDomain<A> {
         Map<A, A> reaches = new LinkedHashMap<>();
         for (AffineConstraint<A> rule : rules()) {
             A first = null;
-            for (A atom : rule.form().coefs().keySet()) {
+            // Walked in the one order the positions decide. Which of a rule's positions the rest
+            // are related to is what this writes down, and taken off the form as it is held that
+            // would be the position the rule was typed first.
+            for (A atom : rule.form().atomsIn(order)) {
                 if (first == null) {
                     first = atom;
                 } else {
@@ -569,7 +596,7 @@ public final class NumericDomain<A> {
     /** The one reading of what the rules leave a form, over the state they have been worked out to. */
     private FormReach<A> reading() {
         ClosedState<A> state = closed();
-        return FormReach.over(rules(), state.box(), state.differences());
+        return FormReach.over(rules(), state.box(), state.differences(), order);
     }
 
 

@@ -925,11 +925,14 @@ public final class Output {
             }
 
             public Of {
-                // Ordered, because what is read out of it is read in an order: a module's behaviors
-                // are shown in the order they were gathered, and a map keyed by a hash would show
-                // one nothing decided, which can differ between two runs of one compiler.
+                // Walked by the names, because what is read out of it is read in an order and two
+                // of these are one value by what stands at each name. Kept in the order they were
+                // gathered, a module whose behaviors were reached another way showed the same
+                // answer in another order, with nothing about the two telling them apart — and
+                // keyed by a hash it showed one nothing decided at all, which two runs of one
+                // compiler need not agree on.
                 byBehavior = java.util.Collections.unmodifiableMap(
-                        new java.util.LinkedHashMap<>(byBehavior));
+                        new java.util.TreeMap<>(byBehavior));
                 everywhere = List.copyOf(everywhere);
             }
         }

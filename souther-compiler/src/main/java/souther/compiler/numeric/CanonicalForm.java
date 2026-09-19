@@ -1,7 +1,12 @@
 package souther.compiler.numeric;
 
-import java.util.LinkedHashMap;
+import souther.compiler.values.InOneOrder;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -27,6 +32,21 @@ import java.util.function.Function;
  * <p>Compared by its map, so two forms that say one thing are one key. That is what makes asserting
  * a rule twice the same as asserting it once, and it is the property everything downstream leans on
  * when it stops caring what order the rules arrived in.
+ *
+ * <p><b>Unordered, and walked through an order the positions themselves decide.</b> What this holds
+ * is a mapping and nothing more: it answers what a position weighs and whether the form names one.
+ * A reader that walks the positions — to work a bound out at each of them, or to say which of them a
+ * rule left unbounded — has the order it walked in inside its answer, so it asks for one rather than
+ * taking what the mapping happens to hand over ({@link #entriesIn}).
+ *
+ * <p>Which order that is belongs to the atom domain and not here. This is generic over what a
+ * position is and has nothing to say about how two of them are told apart; the domain does, and
+ * saying it here would be one policy for every domain or a policy inside a value that says its
+ * contents are the whole of it. {@link CanonicalOrder} is that boundary.
+ *
+ * <p>And not what the positions are written as. A position renders for a person to read, and two of
+ * them rendering alike are not one position ({@link souther.compiler.check.Term}) — so an order
+ * taken off the renderings would weigh one of such a pair twice and the other never.
  */
 public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
 
@@ -34,14 +54,24 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         if (coefs == null || coefs.isEmpty()) {
             throw new IllegalArgumentException("a form names at least one position");
         }
-        coefs = Map.copyOf(coefs);
-        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            if (each.getValue().isZero()) {
-                throw new IllegalArgumentException(
-                        "a position with a zero coefficient is one the form does not name: "
-                                + each.getKey());
+        // Every position with no weight, and not the first one met. What is handed in holds no
+        // order this promises anything about, so a refusal that stopped at the first would tell
+        // two callers that wrote one form two ways two different things about the same mistake.
+        Set<A> unweighed = new HashSet<>();
+        coefs.forEach((atom, coef) -> {
+            if (coef.isZero()) {
+                unweighed.add(atom);
             }
+        });
+        if (!unweighed.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a position with a zero coefficient is one the form does not name: "
+                            + InOneOrder.of(unweighed));
         }
+        // Held in no order at all, which is what this says it is. Every walk of these positions
+        // asks for one ({@link #entriesIn}) and nothing takes them as they come, which is a rule
+        // rather than a habit — AFormIsWalkedThroughTheOrderItsPositionsDecideTest.
+        coefs = Map.copyOf(coefs);
     }
 
     /**
@@ -56,7 +86,9 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      *         what a constant comparison settles is not a constraint about anybody
      */
     public static <A> Scaled<A> of(Map<A, ExactRatio> coefs) {
-        Map<A, ExactRatio> weighed = new LinkedHashMap<>();
+        // The mapping being built, in no order — what a form holds is in none, and one kept here
+        // would be one a reader could start taking again on the way in.
+        Map<A, ExactRatio> weighed = new HashMap<>();
         coefs.forEach((atom, coef) -> {
             if (!coef.isZero()) {
                 weighed.put(atom, coef);
@@ -65,8 +97,10 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         if (weighed.isEmpty()) {
             return null;
         }
+        // What every weight shares, which is a question about the weights and not about which of
+        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
         ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
-        Map<A, ExactRatio> primitive = new LinkedHashMap<>();
+        Map<A, ExactRatio> primitive = new HashMap<>();
         weighed.forEach((atom, coef) -> primitive.put(atom, coef.dividedBy(shared)));
         return new Scaled<>(new CanonicalForm<>(primitive), shared);
     }
@@ -78,6 +112,30 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      *           the threshold a value falls on
      */
     public record Scaled<A>(CanonicalForm<A> form, ExactRatio by) {}
+
+    /**
+     * What this form weighs, in the one order {@code order} puts its positions in.
+     *
+     * <p><b>What a walk of a form reads, and what {@link #coefs} is not for.</b> The mapping answers
+     * what a position weighs and whether the form names it, which are questions about what it holds;
+     * a walk is a question about what to take first, and the mapping has no answer to it. Two forms
+     * that are equal hand this reader one sequence, which is the whole of what an order is asked
+     * for.
+     *
+     * @throws IllegalStateException where two positions this form names compare equal and are not
+     *         one. An order that cannot tell them apart would have this walk weigh one of them
+     *         twice and the other never, and which of the two it was would be how the rule was
+     *         typed — so the pair is named rather than chosen between
+     */
+    public List<Map.Entry<A, ExactRatio>> entriesIn(CanonicalOrder<A> order) {
+        return order.walking(coefs.entrySet(), Map.Entry::getKey);
+    }
+
+    /** The positions this form weighs, in the one order {@code order} puts them in — see
+     *  {@link #entriesIn}, whose refusal this carries. */
+    public List<A> atomsIn(CanonicalOrder<A> order) {
+        return entriesIn(order).stream().map(Map.Entry::getKey).toList();
+    }
 
     /**
      * The values this form can add up to, over positions spaced as {@code spacing} says.
@@ -110,7 +168,7 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      * this safe to be as simple as it looks.
      */
     public <B> CanonicalForm<B> over(Renaming<A, B> naming) {
-        Map<B, ExactRatio> out = new LinkedHashMap<>();
+        Map<B, ExactRatio> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
         return new CanonicalForm<>(out);
     }
@@ -118,7 +176,7 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
     /** This form with every coefficient turned around, which is what reading a comparison the other
      *  way produces. Still canonical: negating leaves what the coefficients share. */
     public CanonicalForm<A> negated() {
-        Map<A, ExactRatio> out = new LinkedHashMap<>();
+        Map<A, ExactRatio> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
         return new CanonicalForm<>(out);
     }

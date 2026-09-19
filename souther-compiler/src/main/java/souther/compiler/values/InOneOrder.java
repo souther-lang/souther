@@ -21,14 +21,18 @@ import java.util.Map;
  * <p>Read off what each part is written as and not off the parts themselves. A value whose parts
  * are written in one order is written in one order however they are held, so this composes down a
  * value made of values without any of them being asked to sort what is inside it twice.
+ *
+ * <p>And said once for the whole compiler rather than once per package. What a refusal names is
+ * written wherever a value that holds no order of its parts is put into a sentence, and a second
+ * spelling of the rule is a second place for it to be forgotten.
  */
-final class InOneOrder {
+public final class InOneOrder {
 
     private InOneOrder() {
     }
 
     /** These, written in one order whichever order they are held in. */
-    static String of(Collection<?> these) {
+    public static String of(Collection<?> these) {
         List<String> out = new ArrayList<>();
         these.forEach(each -> out.add(String.valueOf(each)));
         out.sort(null);
@@ -36,7 +40,7 @@ final class InOneOrder {
     }
 
     /** The same, of what a map holds. */
-    static String of(Map<?, ?> these) {
+    public static String of(Map<?, ?> these) {
         List<String> out = new ArrayList<>();
         these.forEach((key, value) -> out.add(key + "=" + value));
         out.sort(null);

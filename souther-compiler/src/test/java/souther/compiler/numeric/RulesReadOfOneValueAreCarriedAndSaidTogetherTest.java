@@ -42,12 +42,12 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
     /** The rules of one value, under the names the thing holding it calls those numbers by. */
     @Test
     void aRuleSaysTheSameThingUnderOtherNames() {
-        NumericDomain<String> read = NumericDomain.<String>top()
+        NumericDomain<String> read = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").plus(atom("y")).minus(num(5)), Rel.LE, whole("x", "y"))
                 .assume(atom("x"), Rel.GE, whole("x"))
                 .assume(atom("y"), Rel.GE, whole("y"));
 
-        NumericDomain<String> carried = read.over(name -> "p." + name);
+        NumericDomain<String> carried = read.over(name -> "p." + name, CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(Endpoint.inclusive(Count.of(5)),
                 carried.boundsOf(atom("p.x").plus(atom("p.y"))).max());
@@ -63,18 +63,19 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
      */
     @Test
     void aRelationThroughAnUnspellableNumberIsCarriedToo() {
-        NumericDomain<String> read = NumericDomain.<String>top()
+        NumericDomain<String> read = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(atom("hidden")), Rel.LE, whole("x", "hidden"))
                 .assume(atom("hidden").minus(atom("y")), Rel.LE, whole("hidden", "y"));
 
         NumericDomain<String> carried =
-                read.over(name -> name.equals("hidden") ? "<1>" : "p." + name);
+                read.over(name -> name.equals("hidden") ? "<1>" : "p." + name,
+                        CanonicalOrder.asTheyAreSpelled());
 
         assertTrue(carried.entails(atom("p.x").minus(atom("p.y")), Rel.LE),
                 "what the two of them are held apart by went through the number in between");
         // And nothing else says it. Half the relation is half of nothing: neither rule names both
         // of them, so a carrying that kept only the rules it could spell would leave this open.
-        assertFalse(NumericDomain.<String>top()
+        assertFalse(NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                         .assume(atom("p.x").minus(atom("p.hidden")), Rel.LE, whole("p.x", "p.hidden"))
                         .entails(atom("p.x").minus(atom("p.y")), Rel.LE),
                 "one half of the relation proves nothing about the pair");
@@ -83,10 +84,10 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
     /** Two names for one number is a different rule, not a wider reading of this one. */
     @Test
     void twoPositionsCalledOneNameIsRefused() {
-        NumericDomain<String> read = NumericDomain.<String>top()
+        NumericDomain<String> read = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(atom("y")), Rel.LE, whole("x", "y"));
 
-        assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "one"));
+        assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "one", CanonicalOrder.asTheyAreSpelled()));
     }
 
     /**
@@ -100,22 +101,22 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
      */
     @Test
     void twoPositionsCalledOneNameAreRefusedWhereNoRuleNamesBoth() {
-        NumericDomain<String> read = NumericDomain.<String>top()
+        NumericDomain<String> read = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.LE, whole("x"))
                 .assume(atom("y").minus(num(1)), Rel.GE, whole("y"));
 
         assertFalse(read.isBottom(), "nothing here contradicts: x is at nought or below, y at one"
                 + " or above");
-        assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "z"),
+        assertThrows(IllegalArgumentException.class, () -> read.over(_ -> "z", CanonicalOrder.asTheyAreSpelled()),
                 "calling both of them `z` is identifying two numbers, not renaming them");
     }
 
     /** Saying two readings together says everything either of them says. */
     @Test
     void whatIsSaidTogetherIsEverythingBothSay() {
-        NumericDomain<String> one = NumericDomain.<String>top()
+        NumericDomain<String> one = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(3)), Rel.LE, whole("a"));
-        NumericDomain<String> other = NumericDomain.<String>top()
+        NumericDomain<String> other = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("b").minus(num(4)), Rel.LE, whole("b"));
 
         Bounds sum = one.meet(other).boundsOf(atom("a").plus(atom("b")));
@@ -133,9 +134,9 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
      */
     @Test
     void sayingThemTheOtherWayRoundSaysTheSameThing() {
-        NumericDomain<String> one = NumericDomain.<String>top()
+        NumericDomain<String> one = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").plus(atom("b")).minus(num(5)), Rel.LE, whole("a", "b"));
-        NumericDomain<String> other = NumericDomain.<String>top()
+        NumericDomain<String> other = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(1)), Rel.GE, whole("a"));
 
         LinearForm<String> asked = atom("a").plus(atom("b"));
@@ -149,9 +150,9 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
     /** Two readings that cannot both hold leave nothing, which is what a caller acts on. */
     @Test
     void twoReadingsThatContradictLeaveNothing() {
-        NumericDomain<String> one = NumericDomain.<String>top()
+        NumericDomain<String> one = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(3)), Rel.LE, whole("a"));
-        NumericDomain<String> other = NumericDomain.<String>top()
+        NumericDomain<String> other = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(9)), Rel.GE, whole("a"));
 
         assertTrue(one.meet(other).isBottom());
@@ -161,9 +162,9 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
      *  safer of the two to pick. */
     @Test
     void oneNumberSpacedTwoWaysIsRefused() {
-        NumericDomain<String> stepping = NumericDomain.<String>top()
+        NumericDomain<String> stepping = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a"), Rel.GE, whole("a"));
-        NumericDomain<String> filling = NumericDomain.<String>top()
+        NumericDomain<String> filling = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a"), Rel.GE, Map.of("a", Granularity.DENSE));
 
         assertThrows(IllegalStateException.class, () -> stepping.meet(filling));

@@ -57,11 +57,15 @@ final class FormReach<A> {
     private final Box<A> ends;
     private final DifferenceBounds<A> differences;
 
+    /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
+    private final CanonicalOrder<A> order;
+
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
-                      DifferenceBounds<A> differences) {
+                      DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         this.rules = rules;
         this.ends = ends;
         this.differences = differences;
+        this.order = order;
     }
 
     /**
@@ -74,12 +78,12 @@ final class FormReach<A> {
      * before it ever builds a round.
      */
     static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
-                                 DifferenceBounds<A> differences) {
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         if (differences.holdsNothing()) {
             throw new IllegalStateException(
                     "nothing is left, so there is no reach to read; ask holdsNothing first");
         }
-        return new FormReach<>(rules, ends, differences);
+        return new FormReach<>(rules, ends, differences, order);
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -187,10 +191,13 @@ final class FormReach<A> {
     /** {@code coefs} with {@code premise}'s form taken off it, which is what is left to bound once
      *  the premise has been used. */
     private Map<A, ExactRatio> withoutThe(AffineConstraint.HalfSpace<A> premise,
-                                        Map<A, ExactRatio> coefs) {
+                                          Map<A, ExactRatio> coefs) {
         Map<A, ExactRatio> left = new LinkedHashMap<>(coefs);
-        premise.form().coefs().forEach((position, weight) ->
-                left.merge(position, weight.negated(), ExactRatio::plus));
+        // The premise walked in the one order its positions decide. What comes of the merge is the
+        // same whichever order it is taken in, and the walk is what would let the next change here
+        // start depending on one the premise does not hold.
+        premise.form().entriesIn(order).forEach(each ->
+                left.merge(each.getKey(), each.getValue().negated(), ExactRatio::plus));
         left.values().removeIf(ExactRatio::isZero);
         return left;
     }
@@ -225,15 +232,26 @@ final class FormReach<A> {
         if (coefs.size() != 2) {
             return null;
         }
-        java.util.Iterator<Map.Entry<A, ExactRatio>> both = coefs.entrySet().iterator();
-        Map.Entry<A, ExactRatio> one = both.next();
-        Map.Entry<A, ExactRatio> other = both.next();
-        if (!one.getValue().equals(other.getValue().negated())) {
+        // Which of the two is taken away from the other is read off the sign of what each weighs,
+        // and not off which of them the mapping hands over first. The two readings agree wherever
+        // the weights really are one of each sign, which is the only shape this answers about — and
+        // one of them is an answer about the form while the other is about the walk.
+        A above = null;
+        A below = null;
+        ExactRatio by = null;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getValue().signum() > 0) {
+                above = each.getKey();
+                by = each.getValue();
+            } else {
+                below = each.getKey();
+            }
+        }
+        if (above == null || below == null
+                || !coefs.get(above).equals(coefs.get(below).negated())) {
             return null;
         }
-        return one.getValue().signum() > 0
-                ? new Apart<>(one.getKey(), other.getKey(), one.getValue())
-                : new Apart<>(other.getKey(), one.getKey(), other.getValue());
+        return new Apart<>(above, below, by);
     }
 
     /** {@code by · (above - below)}, with {@code by} positive. */
