@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
@@ -337,15 +338,15 @@ public final class Generator {
      *                and are not the same fact, and which of them this is decides what may be
      *                concluded from the row
      */
-    public record ObservedRow(Map<AxisId, Classification> at, Watched watched) {
+    public record ObservedRow(Lookup<AxisId, Classification> at, Watched watched) {
 
         public ObservedRow {
-            at = Map.copyOf(at);
+            Objects.requireNonNull(at, "where the row's values sit");
             watched = watched == null ? new Watched.NoAccount() : watched;
         }
 
         /** A row nothing here can say anything about the run of, for a caller with none to read. */
-        public static ObservedRow unseen(Map<AxisId, Classification> at) {
+        public static ObservedRow unseen(Lookup<AxisId, Classification> at) {
             return new ObservedRow(at, new Watched.NoAccount());
         }
     }

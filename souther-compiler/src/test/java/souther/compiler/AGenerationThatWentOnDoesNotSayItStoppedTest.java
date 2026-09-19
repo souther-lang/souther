@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -121,10 +122,12 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         MeasuredInput subject = subject();
         Axis first = subject.axes().get(0);
         Axis second = subject.axes().get(1);
-        Map<AxisId, Classification> row = new LinkedHashMap<>();
-        row.put(first.id(), new Classification.Unclassified(Incompleteness.atPosition(
-                Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(), first.id().term())));
-        row.put(second.id(), Classification.in(second.classes().get(0).id()));
+        Lookup<AxisId, Classification> row = Lookup.built(put -> {
+            put.put(first.id(), new Classification.Unclassified(Incompleteness.atPosition(
+                    Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(),
+                    first.id().term())));
+            put.put(second.id(), Classification.in(second.classes().get(0).id()));
+        });
 
         souther.compiler.partition.FillResult filled =
                 Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),

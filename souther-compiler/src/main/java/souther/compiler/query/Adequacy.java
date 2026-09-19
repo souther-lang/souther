@@ -1,9 +1,11 @@
 package souther.compiler.query;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.ArmObservation;
+import souther.compiler.observe.Classification;
 import souther.compiler.inputs.TermPath;
 
 
@@ -54,6 +56,7 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
+import souther.compiler.partition.AxisId;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DomainPoint;
@@ -5191,13 +5194,17 @@ public final class Adequacy {
             // the first is what a pair count is taken over, the second is what says which of the
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
-                    .map(row -> new Generator.ObservedRow(
-                            InputClassifications.of(row.inputs(), axes),
-                            // What the row's run recorded, which is the row's own answer. A build
-                            // that records nothing leaves every row with no account of where it
-                            // went, so asking the build again would be the same answer from
-                            // somewhere it is easier to get wrong.
-                            ObservedInputs.of(row, numbering).watched()))
+                    .map(row -> {
+                        Map<AxisId, Classification> placed =
+                                InputClassifications.of(row.inputs(), axes);
+                        return new Generator.ObservedRow(
+                                Lookup.built(put -> placed.forEach(put::put)),
+                                // What the row's run recorded, which is the row's own answer. A
+                                // build that records nothing leaves every row with no account of
+                                // where it went, so asking the build again would be the same
+                                // answer from somewhere it is easier to get wrong.
+                                ObservedInputs.of(row, numbering).watched());
+                    })
                     .toList();
             // One search per way of standing the dependencies in, and their union. What a way
             // leaves open about a union answer is part of what is searched: a case decides which of
