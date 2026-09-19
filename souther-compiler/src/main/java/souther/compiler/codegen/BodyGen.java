@@ -1760,8 +1760,10 @@ final class BodyGen {
                     code.labelBinding(end);
                     yield null;
                 }
-                // `+ - * /` work on two Int or two Decimal operands (spec
-                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
+                // `+ - * /` work on two numbers of one type — Int, Decimal or Rational (spec
+                // §an-operator-takes-the-types-it-is-defined-for). The two arms below are the
+                // carriers' kernels and so are reached by the first two; arithmetic any Rational
+                // takes part in is exact and went to the arm above. Int aborts on overflow, and `/`
                 // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and `/`
                 // over two of them answers an exact quotient that leaves the type and aborts on a
                 // zero divisor as well. Case handling for a zero divisor is the divide/remainder

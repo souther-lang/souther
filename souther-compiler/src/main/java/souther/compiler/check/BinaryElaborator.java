@@ -77,9 +77,11 @@ public final class BinaryElaborator {
                 yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
-                // `+ - * /` work on two Int or two Decimal operands (spec
+                // `+ - * /` work on two numbers of one type — Int, Decimal or Rational — and an
+                // operation with a Rational on one side reads the other at its exact value, which
+                // is the one way two of them meet (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow and `/` aborts on a
-                // zero divisor; `/` answers the exact quotient over either pair and so leaves the
+                // zero divisor; `/` answers the exact quotient over any of them and so leaves the
                 // operand type (ADR-0116). Case handling for a zero divisor is
                 // `Int.truncatingDivide`, `Int.truncatingRemainder` and `Decimal.divide`.
                 Type lt = left.type();

@@ -717,6 +717,30 @@ final class Terms {
         return b.coefs().isEmpty() ? a.times(b.constant()) : null;
     }
 
+    /**
+     * A linear form over a constant divisor, which is that form scaled by the divisor's reciprocal;
+     * null where the divisor is no constant, or is the constant nought.
+     *
+     * <p><b>Constant is what the divisor was read as and not how it was spelled.</b> A form with no
+     * coefficients is a number whatever expression came to it, so {@code x / 2}, {@code x / (1 + 1)}
+     * and {@code x / two} are one reading — which is what keeps naming a value from changing what is
+     * made of the expression it was named out of. A divisor with an atom in it is a form no scalar
+     * scales, and it is not arithmetic this composes.
+     *
+     * <p>Unlike a product, which is a scalar multiply from either side: {@code 1 / x} states an
+     * inverse and is outside this fragment however plain it looks.
+     *
+     * <p>A divisor of nought has no reciprocal to scale by, and the operation it was written in
+     * aborts wherever it is reached — so there is no value for a form to be about, and composing one
+     * would state an arithmetic meaning for an expression that answers nothing.
+     */
+    static <A> LinearForm<A> overAConstant(LinearForm<A> a, LinearForm<A> b) {
+        if (a == null || b == null || !b.coefs().isEmpty() || b.constant().isZero()) {
+            return null;
+        }
+        return a.times(ExactRatio.ONE.dividedBy(b.constant()));
+    }
+
     /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
      * given, or {@code null}. */
     private LinearForm<FactSubject> leafOf(Core n, Denotations at) {
@@ -1447,9 +1471,11 @@ final class Terms {
      * The quotient {@code b} is, or null where there is no rule about it.
      *
      * <p>Only over whole numbers, which is what having a {@link NumericMeaning.TruncatingQuotient}
-     * at all says: {@code /} on {@code Int} truncates toward zero, and on {@code Decimal} it rounds
-     * to a precision the run time sets (spec §stdlib-decimal), which is other arithmetic and not a
-     * quotient this reads. That choice is the operation's and not the path's.
+     * at all says: what {@code Int.truncatingDivide} answers is the whole number left by truncating
+     * toward zero, and a quotient rounded to a scale ({@code Decimal.divide}) is other arithmetic
+     * and not a quotient this reads. That choice is the operation's and not the path's — the
+     * operator's own quotient is exact and has no fraction to place, so it is not among these at
+     * all.
      *
      * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
      * zero, and whether it is the kind of value the operator's divisor could be at all, are asked

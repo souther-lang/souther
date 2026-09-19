@@ -26,9 +26,9 @@ import java.util.Map;
  * first, and a rule the check enforced was one the measure reported as unread.
  *
  * <p><b>The grammar and the walk belong here.</b> Which nodes compose — a literal, a negation,
- * {@code +}, {@code -}, a scalar multiply, a binding, a construction of a newtype, and an
- * elimination standing against the introduction that wrote what it reads — is a fact about the
- * language. A caller supplies only the answers that depend on its
+ * {@code +}, {@code -}, a scalar multiply, a quotient by a constant, a binding, a construction of a
+ * newtype, and an elimination standing against the introduction that wrote what it reads — is a
+ * fact about the language. A caller supplies only the answers that depend on its
  * environment: what an otherwise-uncomposed value is called, what environment lies inside a binding,
  * and which source value a name denotes transparently.
  *
@@ -261,10 +261,11 @@ public final class AffineForms {
             return new Outcome.Composed<>(composed);
         }
         // An expression this composes nothing out of is still the number it folds to, where it
-        // folds to one. `7 / 2` is 3 and `String.length("1A")` is 2, and a clause about either is
-        // decided rather than owed — the run-time check is not what should answer a question the
-        // compiler has already computed. So a divide of two written numbers is read here without a
-        // divide being arithmetic this composes over positions, which it is not.
+        // folds to one. `String.length("1A")` is 2, and a clause about it is decided rather than
+        // owed — the run-time check is not what should answer a question the compiler has already
+        // computed. What is asked here is a written decimal or a whole number, which is every
+        // number a fold answers that the arms above do not: a fold comes to a fraction only through
+        // the operators, and each of those is arithmetic this composes.
         BigDecimal folded = Terms.constantNumber(e, reading.symbols());
         if (folded != null) {
             return new Outcome.Composed<>(
@@ -630,11 +631,19 @@ public final class AffineForms {
             case Core.Binary b when b.op() == BinOp.SUB ->
                     Terms.add(formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped), true);
-            // A scalar multiply by a constant (`Amount * 2`) is linear; `/` and a variable product
-            // are not — a divide truncates for `Int`, and a variable factor is non-linear — so those
-            // come back here as one value rather than as arithmetic over two.
+            // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
+            // not, so a product of two atoms comes back here as one value rather than as arithmetic
+            // over two.
             case Core.Binary b when b.op() == BinOp.MUL ->
                     Terms.scale(formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped));
+            // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
+            // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
+            // either operand's type writes — which is why this is arithmetic over a position at all
+            // rather than a value whose fraction went somewhere the form could not say. Which
+            // divisors are constant, and why `1 / x` is none of them, is `Terms.overAConstant`'s.
+            case Core.Binary b when b.op() == BinOp.DIV ->
+                    Terms.overAConstant(formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped));
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,

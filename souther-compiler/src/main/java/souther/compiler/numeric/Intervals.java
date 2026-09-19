@@ -61,11 +61,16 @@ public final class Intervals {
     }
 
     /**
-     * What {@code x / y} lies between, given what each of them does.
+     * What {@code Int.truncatingDivide(x, y)} lies between, given what each of them does.
      *
-     * <p><b>What this bounds is the values the operation produces.</b> {@code /} over whole numbers
-     * does not answer everywhere, and one of the pairs it aborts on lies inside ranges this is asked
-     * about: {@code Long.MIN_VALUE} over {@code -1} is a quotient no {@code Int} holds (spec
+     * <p>That operation and not the operator. What {@code /} answers is the exact quotient, which
+     * is a number of another type and a form the affine domain carries itself; this is the
+     * whole-number quotient a model asks for by naming it, and a step function is why it is bounded
+     * here rather than composed there.
+     *
+     * <p><b>What this bounds is the values the operation produces.</b> It does not answer
+     * everywhere, and one of the pairs it aborts on lies inside ranges this is asked about:
+     * {@code Long.MIN_VALUE} over {@code -1} is a quotient no {@code Int} holds (spec
      * §stdlib-int), and both of its operands are ordinary values of their type. That pair leaves no
      * value, so what comes back is a range of what the successful divides came to and nothing else.
      * What a caller must not read into it is the other thing: a range coming back — top included —
@@ -123,9 +128,10 @@ public final class Intervals {
      * non-negative quotient would come out owed for the width of one step of a scale nobody was
      * asking about.
      *
-     * <p>{@code /} over {@code Decimal} is not this: it rounds to a significant-digit precision the
-     * run time sets rather than to a scale the domain chose (spec §stdlib-decimal), and where an end
-     * lands under that is not something this states.
+     * <p>{@code Decimal.divide} and not the operator. A scale and a rounding mode are what put a
+     * quotient on a grid, and they are the operation's arguments; {@code /} answers the exact
+     * quotient and rounds nowhere (spec §stdlib-rational), so there is no grid of its own for this
+     * to state where an end lands on.
      *
      * @param scale how many places the answer is rounded to, which the caller has read as a number.
      * @param divisor as {@link #truncatingQuotient} requires it.

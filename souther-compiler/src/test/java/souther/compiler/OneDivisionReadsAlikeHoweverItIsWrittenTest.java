@@ -106,6 +106,20 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
     }
 
     /**
+     * And a quotient is the line the product that clears it draws.
+     *
+     * <p>{@code n > 1 / 3} and {@code 3 * n > 1} hold of the same whole numbers, and the first is
+     * the only one of the pair whose own coefficient is a third. A reading that carried the third
+     * as the nearest number it could write would part them, and it would part them in the direction
+     * an author cannot see: the line would still be drawn, at a place next to the one the model
+     * states.
+     */
+    @Test
+    void aQuotientIsTheLineTheProductThatClearsItDraws() {
+        allAlike("Int", "3 * n > 1", "n > 1 / 3", "n > 2 / 6", "6 * n > 2");
+    }
+
+    /**
      * And a line at a place the carrier names no value at is not moved to one it does.
      *
      * <p>{@code 3 * d} takes every third of a finite decimal and no whole number of thirds. The rule
@@ -118,5 +132,19 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
 
         assertEquals(List.of(), exact.stream().filter(each -> each.contains("0.33")).toList(),
                 "no third is written out: " + exact);
+    }
+
+    /**
+     * And it is the same line whether the third was reached by clearing it or written where it
+     * cuts.
+     *
+     * <p>{@code n <= 1 / 3} puts the third where the rule compares, with no second number for it to
+     * be a ratio against. That is the spelling the carrier edge has nothing to lean on for, and what
+     * it has to come to is what the spelling beside it already comes to: a line the decimals have no
+     * value at, said so rather than moved to the nearest decimal that is one.
+     */
+    @Test
+    void aThirdWrittenWhereItCutsIsTheLineAThirdClearedOutIs() {
+        allAlike("Decimal", "3m * n <= 1m", "n <= 1 / 3");
     }
 }

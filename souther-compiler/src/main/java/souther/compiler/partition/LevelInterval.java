@@ -147,11 +147,17 @@ public record LevelInterval(Bound low, Bound high) {
         if (bound == null) {
             return null;
         }
-        // The end itself where the quantity has a value there, which is the end the run was named
-        // by. Rounded to a number first, an end the run holds became one it stops short of.
+        // The end itself where the quantity has a value there and an order counts to it, which is
+        // the end the run was named by. Rounded to a number first, an end the run holds became one
+        // it stops short of. The second half is asked and not assumed: the rule may write the whole
+        // of the quantity and still cut it where no order has a value — a third is what `d < 1 / 3`
+        // writes — and that is an end to narrow inward past, exactly as a line a multiple left
+        // between two values is.
         Level itself = bound.at().asALevelOfTheQuantity();
-        if (itself != null) {
-            return new souther.compiler.numeric.Endpoint(itself.asAPlace(), bound.inclusive());
+        souther.compiler.numeric.Place named =
+                itself == null ? null : itself.asAPlaceOrNothing();
+        if (named != null) {
+            return new souther.compiler.numeric.Endpoint(named, bound.inclusive());
         }
         souther.compiler.numeric.Place inside = bound.at().justBeyond(into, digits);
         return inside == null ? null : souther.compiler.numeric.Endpoint.inclusive(inside);
