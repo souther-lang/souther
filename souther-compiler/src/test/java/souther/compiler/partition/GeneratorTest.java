@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -156,9 +157,10 @@ class GeneratorTest {
     @Test
     void whatTheRowsAlreadyReachIsNotGeneratedAgain() {
         MeasuredInput subject = modelOf(TRIP, "submit").subject();
-        Map<AxisId, Classification> written = Map.of(
-                new AxisId("submit", "request.kind"), Classification.in("Domestic"),
-                new AxisId("submit", "request.urgent"), Classification.in("true"));
+        Lookup<AxisId, Classification> written = Lookup.built(put -> {
+            put.put(new AxisId("submit", "request.kind"), Classification.in("Domestic"));
+            put.put(new AxisId("submit", "request.urgent"), Classification.in("true"));
+        });
 
         FillResult filled =
                 Generator.fill(subject, List.of(Generator.ObservedRow.unseen(written)),
