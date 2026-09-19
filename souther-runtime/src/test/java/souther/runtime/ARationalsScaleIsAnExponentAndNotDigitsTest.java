@@ -44,13 +44,40 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertEquals(1_000_000_000, taken.reciprocal().twos());
     }
 
-    /** An exponent is thirty-two bits, and a product asking for more of it aborts rather than
+    /**
+     * Every decimal has one of these, including the one whose scale has no positive counterpart.
+     *
+     * <p>The widening is a rule and not a range this type happens to cover: a scale is thirty-two bits
+     * and enters as its negation, so an exponent of the same width would refuse the least scale there
+     * is. This is the value that says the two widths are not the same question.
+     */
+    @Test
+    void theLeastScaleThereIsWidensLikeAnyOther() {
+        Rational taken = Rational.of(new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE));
+
+        assertEquals(2147483648L, taken.twos());
+        assertEquals(2147483648L, taken.fives());
+        assertEquals(BigInteger.ONE, taken.numerator());
+    }
+
+    /** An exponent is sixty-four bits, and a product asking for more of it aborts rather than
      *  answering about a value it cannot hold. */
     @Test
     void anExponentPastWhatIsHeldAborts() {
+        Rational far = new Rational(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0);
+
+        assertThrows(ConstraintViolation.class, () -> far.times(far));
+    }
+
+    /** And a product whose exponents merely add is exact, however far past a scale's own width they
+     *  run — which is the control for the abort above. */
+    @Test
+    void aProductPastWhatAScaleHoldsIsStillExact() {
         Rational taken = Rational.of(COMPACT);
         Rational squared = taken.times(taken);
-        assertThrows(ConstraintViolation.class, () -> squared.times(squared));
+
+        assertEquals(-2_000_000_000L, squared.twos());
+        assertEquals(-4_000_000_000L, squared.times(squared).twos());
     }
 
     /** A millionth of a millionth against one: the brackets on the two logs are nowhere near each

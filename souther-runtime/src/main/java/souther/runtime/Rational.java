@@ -34,18 +34,23 @@ import java.math.BigInteger;
  * representation with a choice in it would have needed a rule there instead, and a container keyed by
  * one of these would have depended on which spelling arrived.
  *
+ * <p><b>Why the exponents are sixty-four bits.</b> Every {@code Int} and every {@code Decimal} has one
+ * exact value here, and that is a rule rather than a range this type happens to cover (ADR-0116). A
+ * {@code Decimal}'s scale is thirty-two bits and enters as its negation, and negating the least
+ * thirty-two-bit number leaves it — so an exponent held to a scale's own width would refuse a decimal
+ * the widening is supposed to take, and stripping a factor of two out of the numerator would push one
+ * more past the end. What a computation can ask for past this width aborts, as an {@code Int}'s
+ * overflow does (spec §jvm-abort).
+ *
  * <p><b>What the exponents cost.</b> Multiplying and dividing add and subtract them and never build
  * them, so scale stays free across both. Adding does build the difference between two exponents,
  * because that is what the exact sum is: {@code 1 + 1E-1000000} has a million digits whatever holds
- * it. Comparing decides from the exponents alone wherever bounds on the magnitudes separate — which
- * is what keeps {@code r < 1} from spelling out a millionth — and falls back to exact whole numbers
- * where they do not. Powers of two and five come arbitrarily close in the log, so that fallback is
- * reachable with small numerators and is not bounded by them.
- *
- * <p>An exponent is a signed 32-bit number, the same resource a {@code Decimal} scale is, and a
- * computation that leaves that range aborts rather than answering (spec §jvm-abort).
+ * it. Comparing decides from bounds on the logs wherever that settles it — which is what keeps
+ * {@code r < 1} from spelling out a millionth — and falls back to exact whole numbers where they do
+ * not. Powers of two and five come arbitrarily close in the log, so that fallback is reachable with
+ * small numerators and is not bounded by them.
  */
-public record Rational(BigInteger numerator, BigInteger denominator, int twos, int fives)
+public record Rational(BigInteger numerator, BigInteger denominator, long twos, long fives)
         implements Comparable<Rational> {
 
     /** Declared before the two values below, which are built by a constructor that reads it. */
@@ -98,21 +103,20 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
             int inNumerator = numerator.getLowestSetBit();
             if (inNumerator > 0) {
                 numerator = numerator.shiftRight(inNumerator);
-                twos = exponent(twos + (long) inNumerator);
+                twos = added(twos, inNumerator);
             }
             int inDenominator = denominator.getLowestSetBit();
             if (inDenominator > 0) {
                 denominator = denominator.shiftRight(inDenominator);
-                twos = exponent(twos - (long) inDenominator);
+                twos = added(twos, -inDenominator);
             }
-            long fivesHere = fives;
             while (true) {
                 BigInteger[] divided = numerator.divideAndRemainder(FIVE);
                 if (divided[1].signum() != 0) {
                     break;
                 }
                 numerator = divided[0];
-                fivesHere++;
+                fives = added(fives, 1);
             }
             while (true) {
                 BigInteger[] divided = denominator.divideAndRemainder(FIVE);
@@ -120,9 +124,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
                     break;
                 }
                 denominator = divided[0];
-                fivesHere--;
+                fives = added(fives, -1);
             }
-            fives = exponent(fivesHere);
         }
     }
 
@@ -141,11 +144,11 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
      *
      * <p>A decimal with scale {@code s} is its unscaled value over {@code 10^s}, which is that value
      * times {@code 2^-s} times {@code 5^-s}. The scale reaches the exponents and nothing is built
-     * from it, so a decimal compact in its own representation stays compact here.
+     * from it, so a decimal compact in its own representation stays compact here — and every decimal
+     * has one of these, the negation of a thirty-two-bit scale being a sixty-four-bit exponent.
      */
     public static Rational of(BigDecimal written) {
-        int scale = written.scale();
-        int exponent = exponent(-(long) scale);
+        long exponent = -(long) written.scale();
         return new Rational(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
     }
 
@@ -179,7 +182,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         if (isZero()) {
             throw new IllegalArgumentException("nought has no reciprocal");
         }
-        return new Rational(denominator, numerator, exponent(-(long) twos), exponent(-(long) fives));
+        return new Rational(denominator, numerator, negated(twos), negated(fives));
     }
 
     /**
@@ -196,8 +199,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         return new Rational(
                 numerator.divide(acrossOne).multiply(other.numerator.divide(acrossTwo)),
                 denominator.divide(acrossTwo).multiply(other.denominator.divide(acrossOne)),
-                exponent(twos + (long) other.twos),
-                exponent(fives + (long) other.fives));
+                added(twos, other.twos),
+                added(fives, other.fives));
     }
 
     public Rational dividedBy(Rational other) {
@@ -222,8 +225,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         if (other.isZero()) {
             return this;
         }
-        int commonTwos = Math.min(twos, other.twos);
-        int commonFives = Math.min(fives, other.fives);
+        long commonTwos = Math.min(twos, other.twos);
+        long commonFives = Math.min(fives, other.fives);
         BigInteger here = numerator.multiply(
                 raised(distance(twos, commonTwos), distance(fives, commonFives)));
         BigInteger there = other.numerator.multiply(
@@ -270,8 +273,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         if (fromBounds != null) {
             return fromBounds;
         }
-        int commonTwos = Math.min(twos, other.twos);
-        int commonFives = Math.min(fives, other.fives);
+        long commonTwos = Math.min(twos, other.twos);
+        long commonFives = Math.min(fives, other.fives);
         BigInteger here = numerator.abs()
                 .multiply(other.denominator)
                 .multiply(raised(distance(twos, commonTwos), distance(fives, commonFives)));
@@ -288,61 +291,91 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
      * <p>Separate from the comparison so that both of its answers are asked for directly. A bracket
      * that never decided would leave every comparison correct and every one of them paying for a
      * power, and a comparison is the reader that cannot tell the two apart.
+     *
+     * <p>Null as well where the bracket's own arithmetic runs off the end of a sixty-four-bit number,
+     * which exponents a run of multiplications reached can do. The exact comparison answers those,
+     * and what it costs is what building the powers costs.
      */
     @Nullable Integer magnitudeFromBounds(Rational other) {
-        if (lowerLog(this) > upperLog(other)) {
-            return 1;
-        }
-        if (upperLog(this) < lowerLog(other)) {
-            return -1;
+        try {
+            if (lowerLog(this) > upperLog(other)) {
+                return 1;
+            }
+            if (upperLog(this) < lowerLog(other)) {
+                return -1;
+            }
+        } catch (ArithmeticException _) {
+            return null;
         }
         return null;
     }
 
     /** A number {@code log2 |r|} is at least, scaled by {@link #LOG_SCALE}. */
     private static long lowerLog(Rational r) {
-        return (r.numerator.abs().bitLength() - 1L) * LOG_SCALE
-                - (long) r.denominator.bitLength() * LOG_SCALE
-                + r.twos * LOG_SCALE
-                + fivesInLog(r.fives, true);
+        return Math.addExact(
+                Math.subtractExact(
+                        Math.multiplyExact(r.numerator.abs().bitLength() - 1L, LOG_SCALE),
+                        Math.multiplyExact((long) r.denominator.bitLength(), LOG_SCALE)),
+                Math.addExact(Math.multiplyExact(r.twos, LOG_SCALE), fivesInLog(r.fives, true)));
     }
 
     /** A number {@code log2 |r|} is below, scaled by {@link #LOG_SCALE}. */
     private static long upperLog(Rational r) {
-        return (long) r.numerator.abs().bitLength() * LOG_SCALE
-                - (r.denominator.bitLength() - 1L) * LOG_SCALE
-                + r.twos * LOG_SCALE
-                + fivesInLog(r.fives, false);
+        return Math.addExact(
+                Math.subtractExact(
+                        Math.multiplyExact((long) r.numerator.abs().bitLength(), LOG_SCALE),
+                        Math.multiplyExact(r.denominator.bitLength() - 1L, LOG_SCALE)),
+                Math.addExact(Math.multiplyExact(r.twos, LOG_SCALE), fivesInLog(r.fives, false)));
     }
 
     /** What the power of five contributes to a bound on the log. Which of the two bounds on
      *  {@code log2 5} makes a number smaller depends on the sign of the exponent, so the side being
      *  built decides which is taken. */
-    private static long fivesInLog(int fives, boolean below) {
+    private static long fivesInLog(long fives, boolean below) {
         long bound = (fives >= 0) == below ? LOG2_FIVE_BELOW : LOG2_FIVE_ABOVE;
-        return fives * bound;
+        return Math.multiplyExact(fives, bound);
     }
 
     /** {@code 2^twos × 5^fives}, both exponents being non-negative. */
-    private static BigInteger raised(int twos, int fives) {
-        BigInteger of = BigInteger.ONE.shiftLeft(twos);
-        return fives == 0 ? of : of.multiply(FIVE.pow(fives));
+    private static BigInteger raised(long twos, long fives) {
+        BigInteger of = BigInteger.ONE.shiftLeft(buildable(twos));
+        return fives == 0 ? of : of.multiply(FIVE.pow(buildable(fives)));
     }
 
     /** How far {@code from} stands above {@code down}, which is never negative and is the size of a
      *  power about to be built. */
-    private static int distance(int from, int down) {
-        return exponent(from - (long) down);
+    private static long distance(long from, long down) {
+        return Math.subtractExact(from, down);
     }
 
-    /** An exponent held to what one is, or the abort of a computation asking for one that is not.
-     *  Thirty-two bits is the resource a scale is, and a value needing more of it has no
-     *  representation here rather than a rounded one. */
-    private static int exponent(long asked) {
-        if (asked < Integer.MIN_VALUE || asked > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("Rational exponent out of range: " + asked);
+    /** Two exponents added, or the abort of a computation asking for one past what is held. Sixty-four
+     *  bits is the exponent's width, and a value needing more of it has no representation here rather
+     *  than a rounded one. */
+    private static long added(long exponent, long by) {
+        try {
+            return Math.addExact(exponent, by);
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Rational exponent out of range: " + exponent + " + " + by);
         }
-        return (int) asked;
+    }
+
+    /** An exponent negated, which the least sixty-four-bit number is not. */
+    private static long negated(long exponent) {
+        try {
+            return Math.negateExact(exponent);
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Rational exponent out of range: -(" + exponent + ")");
+        }
+    }
+
+    /** An exponent as a power something is about to be built to. A power of two past what a positive
+     *  {@code int} counts is one no machine holds the digits of, so it aborts here rather than
+     *  answering a number it could not have built. */
+    private static int buildable(long exponent) {
+        if (exponent < 0 || exponent > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("no Rational is built at a power of " + exponent);
+        }
+        return (int) exponent;
     }
 
     /**
@@ -353,10 +386,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         if (!hasFiniteDecimal()) {
             return null;
         }
-        int scale = exponent(Math.max(0, Math.max(-(long) twos, -(long) fives)));
+        long scale = Math.max(0, Math.max(negated(twos), negated(fives)));
         return new BigDecimal(
-                numerator.multiply(raised(exponent(twos + (long) scale), exponent(fives + (long) scale))),
-                scale);
+                numerator.multiply(raised(added(twos, scale), added(fives, scale))),
+                buildable(scale));
     }
 
     /** This as a whole number where it is one, and null where it is not. */
@@ -383,12 +416,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
 
     /** The denominator with the powers that divide it built in. */
     private BigInteger denominatorWithItsPowers() {
-        return denominator.multiply(raised(atLeastNought(-(long) twos), atLeastNought(-(long) fives)));
+        return denominator.multiply(raised(atLeastNought(negated(twos)), atLeastNought(negated(fives))));
     }
 
     /** {@code e} where it is above nought, and nought where it is not. */
-    private static int atLeastNought(long e) {
-        return e <= 0 ? 0 : exponent(e);
+    private static long atLeastNought(long e) {
+        return Math.max(e, 0);
     }
 
     /**
@@ -397,9 +430,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
      */
     @Override
     public String toString() {
-        long bits = (long) numerator.abs().bitLength() + denominator.bitLength()
-                + Math.abs((long) twos) + Math.abs(fives * LOG2_FIVE_ABOVE / LOG_SCALE);
-        if (bits > SPELLED_BITS) {
+        // The exponents first, and by their own ends rather than through a magnitude: the least
+        // sixty-four-bit number has no positive counterpart, so a reading that took one would answer
+        // about a value it had already left.
+        if (twos > SPELLED_BITS || twos < -SPELLED_BITS
+                || fives > SPELLED_BITS || fives < -SPELLED_BITS
+                || (long) numerator.abs().bitLength() + denominator.bitLength() > SPELLED_BITS) {
             return numerator + "/" + denominator + "×2^" + twos + "×5^" + fives;
         }
         BigInteger up = numeratorWithItsPowers();
