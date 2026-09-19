@@ -179,6 +179,22 @@ public sealed interface Level {
     }
 
     /**
+     * The same question asked rather than established: this level as a place, or null where no
+     * order counts to the number it is.
+     *
+     * <p>The pair {@link Count#at} and {@link Count#number} are, one step out. A reader that means
+     * to write the level down is asking whether there is anything to write — a quantity reaching a
+     * third has a level there and no order has a value at it — and an absence is the answer to
+     * that, not a premise it broke.
+     */
+    default Place asAPlaceOrNothing() {
+        return switch (this) {
+            case OnACarrier on -> on.at();
+            case OfTheQuantity(ExactRatio at) -> Count.at(at);
+        };
+    }
+
+    /**
      * The same distance measured the other way round.
      *
      * <p>For a quantity that is how far two positions stand apart, which is the one kind of level
