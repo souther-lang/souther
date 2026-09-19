@@ -351,9 +351,11 @@ public record Band(BandEnd lower, BandEnd upper) {
         ExactRatio above = over.at().asARule();
         // How much of the quantity each rule wrote, which is the denominator of where its line
         // falls once the fraction is in lowest terms.
-        return below != null && above != null
-                && below.denominator().equals(above.denominator())
-                ? ExactRatio.of(below.denominator()) : null;
+        if (below == null || above == null) {
+            return null;
+        }
+        java.math.BigInteger much = below.asFraction().denominator();
+        return much.equals(above.asFraction().denominator()) ? ExactRatio.of(much) : null;
     }
 
     /** Whether the line below this run keeps its own value, which decides whether the run starts

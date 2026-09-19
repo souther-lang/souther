@@ -823,7 +823,7 @@ public final class LevelRealizer {
                 if (!quotient.isWhole()) {
                     return Reached.EXHAUSTED;
                 }
-                solved = new java.math.BigDecimal(quotient.numerator());
+                solved = new java.math.BigDecimal(quotient.truncated());
             } else {
                 solved = quotient.asWrittenDecimal();
                 if (solved == null) {

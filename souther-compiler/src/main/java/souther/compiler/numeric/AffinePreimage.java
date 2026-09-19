@@ -125,9 +125,11 @@ public sealed interface AffinePreimage {
                         "a member of a coset of the finite decimals is one, and a coset written from"
                                 + " a value that is not has no member that is: " + from);
             }
-            from = ExactRatio.of(from.numerator()
-                    .multiply(from.denominator().modInverse(by.numerator()))
-                    .mod(by.numerator()));
+            ExactRatio.Fraction member = from.asFraction();
+            java.math.BigInteger modulus = by.asFraction().numerator();
+            from = ExactRatio.of(member.numerator()
+                    .multiply(member.denominator().modInverse(modulus))
+                    .mod(modulus));
         }
     }
 }
