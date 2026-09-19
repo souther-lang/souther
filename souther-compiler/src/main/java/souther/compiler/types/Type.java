@@ -82,6 +82,20 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
             return null;
         }
 
+        /**
+         * Whether writing this spelling as a type denotes the primitive.
+         *
+         * <p>{@code Raw} is the one that does not. It is spelled like a primitive and a written
+         * {@code Raw} denotes a reference, which is what refuses it in a compiled module; the
+         * primitive is the same type and is reached another way.
+         */
+        public boolean denotedByItsSpelling() {
+            return switch (this) {
+                case INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT -> true;
+                case RAW -> false;
+            };
+        }
+
         /** Whether this is one of the temporals — the primitives a written form spells as ISO 8601
          *  text and a boundary carries as that text. Asked here so that adding a primitive is where
          *  the question gets answered, rather than at each reader that compares against a few names. */

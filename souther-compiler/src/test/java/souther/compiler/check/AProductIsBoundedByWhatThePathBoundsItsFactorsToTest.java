@@ -45,6 +45,11 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
             data Pct = Int
                 invariant value >= 0 && value <= 100
             data Bad
+
+            let 商 (a: Int, b: Int): Int =
+                match Int.truncatingDivide(a, b) with
+                    | Int as n -> n
+                    | DivisionByZero -> unreachable "除数は0から離されている"
             """;
 
     private static List<String> warningsOf(String module) {
@@ -153,7 +158,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                 let part (x) = {
                     guard x >= 0
                         else Bad
-                    NonNeg(x * 30 / 100)
+                    NonNeg(商(x * 30, 100))
                 }
                 """));
     }
@@ -168,7 +173,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                         else Bad
                     guard x <= 1000
                         else Bad
-                    Pct(x / 10)
+                    Pct(商(x, 10))
                 }
                 """));
     }
@@ -188,7 +193,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                         else Bad
                     guard b <= 1000
                         else Bad
-                    Pct(a * b / 100)
+                    Pct(商(a * b, 100))
                 }
                 """));
     }
@@ -211,7 +216,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                         else Bad
                     guard k > 0
                         else Bad
-                    NonNeg(x / k)
+                    NonNeg(商(x, k))
                 }
                 """));
     }
@@ -231,7 +236,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                 data Days = Int
                     invariant value >= 1 && value <= 31
                 behavior perDay : (total: NonNeg, days: Days) -> NonNeg constructs NonNeg
-                let perDay (total, days) = NonNeg(total.value / days.value)
+                let perDay (total, days) = NonNeg(商(total.value, days.value))
                 """));
     }
 
@@ -251,7 +256,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                 data AtMost10 = Int
                     invariant value >= 0 && value <= 10
                 behavior each : (bill: Pct, party: Party) -> AtMost10 constructs AtMost10
-                let each (bill, party) = AtMost10(bill.value / party.value)
+                let each (bill, party) = AtMost10(商(bill.value, party.value))
                 """));
     }
 
@@ -268,30 +273,53 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                         else Bad
                     guard c > 0
                         else Bad
-                    NonNeg(a * b / c)
+                    NonNeg(商(a * b, c))
                 }
                 """));
     }
 
     /**
-     * A divisor nothing holds away from zero is one this rule says nothing about, and the clause
-     * stands.
+     * A divisor whose side of zero nothing settles is one this rule says nothing about, and the
+     * clause stands.
      *
-     * <p>Holding every admitted divisor off zero is what the rule asks for before it states
-     * anything, and what is written here does not. That is not a claim that the divides which do
-     * answer are unbounded — over the whole numbers this one divides by at least one — it is that a
-     * rule stated over the ends of a range is not one that can answer for a range through zero.
+     * <p>The rule is stated over the ends of a range, so it needs the divisor on one side of zero
+     * and not merely off it. Taking the value arm establishes that the divisor was not nought — which
+     * over a range with a floor at nought is enough to put it above, and is what the row above
+     * reads — and here nothing floors it, so both signs remain and the ends pair with neither.
      */
     @Test
-    void aQuotientByAValueNothingHoldsAwayFromZeroIsStillOwed() {
+    void aQuotientByAValueOnNeitherSideOfZeroIsStillOwed() {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg
+                let part (x, k) = {
+                    guard x >= 0
+                        else Bad
+                    match Int.truncatingDivide(x, k) with
+                        | Int as q -> NonNeg(q)
+                        | DivisionByZero -> Bad
+                }
+                """));
+    }
+
+    /**
+     * And the value arm's own fact is what the row above rests on: with a floor at nought, taking it
+     * puts the divisor above nought and the quotient is bounded.
+     *
+     * <p>The control for that row. Without it, a reader could not tell a rule that read the arm's
+     * fact from one that refused every divisor a guard had not bounded itself.
+     */
+    @Test
+    void aFlooredDivisorTheValueArmHoldsOffZeroIsBounded() {
+        assertEquals(List.of(), warningsOf(TYPES + """
                 behavior part : (x: Int, k: Int) -> NonNeg | Bad constructs NonNeg
                 let part (x, k) = {
                     guard x >= 0
                         else Bad
                     guard k >= 0
                         else Bad
-                    NonNeg(x / k)
+                    match Int.truncatingDivide(x, k) with
+                        | Int as q -> NonNeg(q)
+                        | DivisionByZero -> Bad
                 }
                 """));
     }
@@ -313,7 +341,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                 let part (x, k) = {
                     guard x >= 100
                         else Bad
-                    NonNeg(x / k.value)
+                    NonNeg(商(x, k.value))
                 }
                 """).code());
     }
@@ -347,7 +375,7 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
                     let part (x) = {
                         guard x >= 0
                             else Bad
-                        NonNeg(x / (9223372036854775807 + 1))
+                        NonNeg(商(x, 9223372036854775807 + 1))
                     }
                     """));
         } finally {

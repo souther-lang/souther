@@ -40,6 +40,7 @@ public final class Reserved {
             new StdlibModule("souther.instant", "Instant"),
             new StdlibModule("souther.int", "Int"),
             new StdlibModule("souther.decimal", "Decimal"),
+            new StdlibModule("souther.rational", "Rational"),
             new StdlibModule("souther.option", "Option"));
 
     /** Every qualifier a call may carry (spec §stdlib), in {@link #MODULES} order. */

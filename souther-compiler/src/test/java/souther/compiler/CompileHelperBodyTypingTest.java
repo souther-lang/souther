@@ -578,10 +578,16 @@ class CompileHelperBodyTypingTest {
                 "a scalar multiplies from either side");
     }
 
+    /**
+     * A divisor beside a newtype settles nothing, the operator admitting no such pair at all: a
+     * newtype's quotient leaves the type it wraps, so neither direction of {@code /} is inherited
+     * (spec §newtype-arithmetic).
+     */
     @Test
-    void aDivisorOfANumericNewtypeTakesTheBaseType() {
-        assertTrue(scales("let split (factor, n: N) = n / factor"),
-                "dividing a newtype by a scalar stays in the newtype");
+    void aDivisorOfANumericNewtypeDeterminesNothing() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> scales("let split (factor, n: N) = n / factor"));
+        assertTrue(e.getMessage().contains("E1811"), e.getMessage());
     }
 
     @Test

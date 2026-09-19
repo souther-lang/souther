@@ -764,12 +764,12 @@ public final class CallElaborator {
      * the position already carries.
      */
     private static Type numericFold(Hir.Apply call, Type element, Type expected) {
-        if (element == Type.INT || element == Type.DECIMAL) {
+        if (foldsANumber(element)) {
             return element;
         }
         if (BottomInfer.isBottom(element)) {
             Type position = expected instanceof Type.OptionOf o ? o.element() : expected;
-            if (position == Type.INT || position == Type.DECIMAL) {
+            if (foldsANumber(position)) {
                 return position;
             }
             if (position == null || BottomInfer.isBottom(position)) {
@@ -786,6 +786,14 @@ public final class CallElaborator {
                         .at(call.appliedAt())
                         
                         .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
+    }
+
+    /** Whether a numeric fold takes this as its element: the types {@code +} and {@code *} are
+     *  defined for, each closed under both and each with an exact nought and one the primitives
+     *  construct. Rational is the third (ADR-0116, amending ADR-0082). Asked in the one place, so the
+     *  element and the position a call over the empty list reads cannot come to differ. */
+    private static boolean foldsANumber(Type t) {
+        return t == Type.INT || t == Type.DECIMAL || t == Type.RATIONAL;
     }
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */

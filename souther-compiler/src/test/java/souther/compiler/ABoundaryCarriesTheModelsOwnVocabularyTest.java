@@ -64,7 +64,7 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
     void anOutputUnionMemberIsAskedToo() {
         // Before, this reached the backend's question of how a member is discriminated, which had no
         // arm for a name no module declares and raised an `IllegalStateException`.
-        refuses("behavior f : (n: Int) -> Int | DivisionByZero", "let f (n) = Int.divide(10, n)",
+        refuses("behavior f : (n: Int) -> Int | DivisionByZero", "let f (n) = Int.truncatingDivide(10, n)",
                 "DivisionByZero");
     }
 
@@ -123,7 +123,7 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
 
     @Test
     void aModelMayStillReadTheLanguagesCaseInsideItsBody() {
-        // The rule is about what crosses. Inside a body the language's own case is what `Int.divide`
+        // The rule is about what crosses. Inside a body the language's own case is what `Int.truncatingDivide`
         // answers, and a `match` arm names it as it always has.
         assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
@@ -131,7 +131,7 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
                 data Undivided
 
                 behavior divide : (a: Int, b: Int) -> Int | Undivided
-                let divide (a, b) = match Int.divide(a, b) with
+                let divide (a, b) = match Int.truncatingDivide(a, b) with
                     | Int as n -> n
                     | DivisionByZero -> Undivided
                 """));

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
@@ -150,6 +151,15 @@ public final class ConstEval {
      * taken and answered in the one place, and there is nothing to call for the sign alone.
      */
     static Boolean stands(Rel rel, Object a, Object b) {
+        // A comparison one side of which holds a ratio is decided on the exact values, which is the
+        // same rule the operator states (ADR-0116). Asked before the two same-kind arms below and
+        // only where a ratio is in hand, so that an `Int` beside a `Decimal` is still two kinds with
+        // nothing between them.
+        if (eitherIsExact(a, b)) {
+            ExactRatio x = exactly(a);
+            ExactRatio y = exactly(b);
+            return x == null || y == null ? null : rel.holds(x.compareTo(y));
+        }
         if (a instanceof Long x && b instanceof Long y) {
             return rel.holds(Long.compare(x, y));
         }
@@ -167,23 +177,66 @@ public final class ConstEval {
     }
 
     /**
-     * The quotient of two written whole numbers, or empty where this is not the one to answer it.
+     * The quotient of two written numbers, or empty where this is not the one to answer it.
      *
-     * <p>A whole-number divide by a divisor written down and not nought is the truncating quotient
-     * the language defines, computed here as a sum or a product is. What it declines is what a
-     * value handed back would be wrong about: a divisor of nought, which the run time aborts on; the
-     * quotient whose value is outside the range an {@code Int} holds, which aborts there too while
-     * {@code long} division quietly answers the dividend; and a {@code Decimal} divide, whose answer
-     * is rounded at a scale this does not hold.
+     * <p>The quotient is exact, so what it folds to is a ratio and not a number of either operand's
+     * type (ADR-0116). There is no pair of whole numbers whose exact quotient is out of range and
+     * none whose fraction is dropped, so the two refusals the truncating quotient needed are gone
+     * with it; what is left is the divisor of nought, which the run time aborts on and which no value
+     * handed back would be about.
+     *
+     * <p>A {@code Decimal} divide still answers nothing here: its operator rounds at a scale this
+     * does not hold, and the exactness of that one is the other half of ADR-0116.
      */
     private static Optional<Object> quotient(Object a, Object b) {
-        if (!(a instanceof Long x) || !(b instanceof Long y) || y == 0) {
+        ExactRatio x = exactly(a);
+        ExactRatio y = exactly(b);
+        if (x == null || y == null || y.isZero()
+                || (a instanceof BigDecimal && b instanceof BigDecimal)) {
             return Optional.empty();
         }
-        return x == Long.MIN_VALUE && y == -1 ? Optional.empty() : Optional.of(x / y);
+        return Optional.of(x.dividedBy(y));
+    }
+
+    /**
+     * The exact value of a folded number, or null where the constant is not one.
+     *
+     * <p>What it is for is the arithmetic a Rational operand makes exact: the operand beside it is
+     * read at its exact mathematical value because that is what the operator means, and the fold has
+     * to read it the same way or a constant expression and the same expression at run time would
+     * answer differently. It is no conversion between the two numeric types — nothing here brings a
+     * {@code Decimal} and an {@code Int} together, and the callers ask only where one side already
+     * holds a ratio.
+     */
+    private static ExactRatio exactly(Object constant) {
+        return switch (constant) {
+            case ExactRatio r -> r;
+            case Long whole -> ExactRatio.of(whole);
+            case BigDecimal written -> ExactRatio.of(written);
+            default -> null;
+        };
+    }
+
+    /** Whether either side of an operator already holds an exact ratio, which is what makes that
+     *  operation exact arithmetic (ADR-0116). */
+    private static boolean eitherIsExact(Object a, Object b) {
+        return a instanceof ExactRatio || b instanceof ExactRatio;
     }
 
     private static Optional<Object> arith(BinOp op, Object a, Object b) {
+        if (eitherIsExact(a, b)) {
+            ExactRatio x = exactly(a);
+            ExactRatio y = exactly(b);
+            if (x == null || y == null) {
+                return Optional.empty();
+            }
+            return Optional.of(switch (op) {
+                case ADD -> x.plus(y);
+                case SUB -> x.minus(y);
+                case MUL -> x.times(y);
+                default -> throw new IllegalStateException();
+            });
+        }
         if (a instanceof Long x && b instanceof Long y) {
             // The same kernels the operators emit: an Int that overflows aborts rather than wrapping,
             // so a fold that wrapped would answer what the run time refuses to compute.

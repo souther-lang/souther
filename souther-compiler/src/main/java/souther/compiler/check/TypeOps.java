@@ -1948,15 +1948,15 @@ public final class TypeOps {
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
+        // The primitives, from the table that closes them and not from a list of their spellings. A
+        // list here was the fourth copy of that set, and a primitive added to the language was a type
+        // name that resolved to no type at all — which is not an error a reader of the resolved
+        // signature can tell from a name a module never declared.
+        Type.Prim primitive = Type.Prim.named(ref.name());
+        if (primitive != null && primitive.denotedByItsSpelling()) {
+            return primitive;
+        }
         return switch (ref.name()) {
-            case "Int" -> Type.INT;
-            case "String" -> Type.STRING;
-            case "Bool" -> Type.BOOL;
-            case "Decimal" -> Type.DECIMAL;
-            case "Date" -> Type.DATE;
-            case "Time" -> Type.TIME;
-            case "DateTime" -> Type.DATETIME;
-            case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
             case "List" -> Type.list(typeArg(ref, "list", 4));

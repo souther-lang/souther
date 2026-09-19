@@ -11,6 +11,7 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.FieldLayout;
 import souther.compiler.check.ReqSig;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -740,9 +741,12 @@ final class BodyGen {
                 // would be sound — what it would cost is the next reader having to work out which
                 // of these are (BodyGen.java:1725).
                 case Core.Neg n -> {
-                    if (genExpr(n.operand()) == Type.DECIMAL) {
+                    Type negated = genExpr(n.operand());
+                    if (negated == Type.DECIMAL) {
                         code.invokestatic(CD_DecimalMath, "negate",
                                 MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal));
+                    } else if (negated == Type.RATIONAL) {
+                        code.invokestatic(CD_RationalMath, "negate", MTD_ratNegate);
                     } else {
                         code.lneg();               // Int is carried as a long
                     }
@@ -1209,7 +1213,7 @@ final class BodyGen {
                 }
             }
             switch (kernel) {
-                case INT_DIVIDE -> {
+                case INT_TRUNCATING_DIVIDE -> {
                     intDivide(call, true);
                     return;
                 }
@@ -1247,7 +1251,7 @@ final class BodyGen {
          *  apart: a kernel emitted here and held there too would be one operation with two answers,
          *  and the one that ran would be whichever the arm above happened to reach first. */
         static final Set<Kernel> WRITTEN_OUT =
-                Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
+                Set.of(Kernel.INT_TRUNCATING_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
 
         private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
@@ -1529,15 +1533,13 @@ final class BodyGen {
         }
 
         /**
-         * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
-         * otherwise the quotient/remainder is boxed (spec §stdlib-int).
+         * {@code truncatingDivide}/{@code truncatingRemainder} on Int: a zero divisor takes the
+         * DivisionByZero case, otherwise the quotient/remainder is boxed (spec §stdlib-int).
          *
-         * <p>The quotient is the operator's own. {@code Int.divide} answers a case where {@code /}
-         * aborts on a zero divisor and answers the same number everywhere else, which is what the
-         * check reads it as — so the one pair no {@code Int} holds a quotient of has to abort here
-         * as it does there. A raw {@code ldiv} stood here and wrapped {@code Long.MIN_VALUE / -1}
-         * back to {@code Long.MIN_VALUE}, which is the overflow §stdlib-int says aborts, answered as
-         * a quotient.
+         * <p>The quotient is truncated toward zero, which is the policy that operation's name states.
+         * The one pair no {@code Int} holds a quotient of aborts: a raw {@code ldiv} stood here and
+         * wrapped {@code Long.MIN_VALUE / -1} back to {@code Long.MIN_VALUE}, which is the overflow
+         * §stdlib-int says aborts, answered as a quotient.
          *
          * <p>The remainder is a raw {@code lrem}: it is exact for every pair, {@code MIN_VALUE}
          * against {@code -1} included, so there is no overflow for it to abort on.
@@ -1776,7 +1778,10 @@ final class BodyGen {
                 case ADD -> { arithmetic(bin, "add", "addExact"); yield null; }
                 case SUB -> { arithmetic(bin, "subtract", "subtractExact"); yield null; }
                 case MUL -> { arithmetic(bin, "multiply", "multiplyExact"); yield null; }
-                case DIV -> { arithmetic(bin, "divide", "divideExact"); yield null; }
+                // `/` answers an exact quotient over two whole numbers and rounds over two Decimals
+                // (spec §stdlib-rational, §stdlib-decimal), so there is no Int kernel for it to name:
+                // the Int pair goes to the exact arm above and nothing else reaches the other one.
+                case DIV -> { arithmetic(bin, "divide", null); yield null; }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
@@ -1825,13 +1830,73 @@ final class BodyGen {
          *  and it was written as one where the tree was built (spec §newtype-arithmetic), so
          *  nothing is opened or re-wrapped at the operator. */
         private void arithmetic(Core.Binary bin, String onDecimal, String onInt) {
+            // Exact arithmetic is what the operator answers with rather than what either operand was
+            // written as: a quotient of two whole numbers leaves them, and an operation beside a
+            // Rational reads the other side at its exact value (ADR-0116). Both are the one question
+            // "is this exact", asked of the operator's own type, and each operand is pushed as the
+            // Rational the operation sees — which is what leaves one kind of value on the stack for
+            // the kernel and for every reader of the result.
+            if (bin.type() == Type.RATIONAL) {
+                if (bin.left().type() == Type.INT && bin.right().type() == Type.INT) {
+                    genExpr(bin.left());
+                    genExpr(bin.right());
+                    code.invokestatic(CD_RationalMath, "divideWholeNumbers", MTD_ratOfWholeNumbers);
+                    return;
+                }
+                pushExact(bin.left());
+                pushExact(bin.right());
+                code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                return;
+            }
             Type t = genExpr(bin.left());
             genExpr(bin.right());
             if (t == Type.DECIMAL) {
                 code.invokestatic(CD_DecimalMath, onDecimal, MTD_bdArith);
+            } else if (onInt == null) {
+                // An operator with no Int kernel reached two whole numbers, which the arm above was
+                // to have taken. Said rather than emitted against: what the null stands for is that
+                // nothing comes here, and a call built from it would answer a number of its own.
+                throw new IllegalStateException(
+                        "no Int kernel for " + bin.op() + " over " + Type.show(t));
             } else {
                 code.invokestatic(CD_IntMath, onInt, MTD_intExact);
             }
+        }
+
+        /** What the exact kernel for {@code op} is called. Named from the operator rather than handed
+         *  in beside the other two, so an operator that answers a Rational and has no exact kernel
+         *  says so here instead of being emitted as whichever name was passed. */
+        private static String exactly(BinOp op) {
+            return switch (op) {
+                case ADD -> "add";
+                case SUB -> "subtract";
+                case MUL -> "multiply";
+                case DIV -> "divide";
+                default -> throw new IllegalStateException("no exact arithmetic for " + op);
+            };
+        }
+
+        /**
+         * An operand of an exact operation, pushed as the Rational that operation reads it as.
+         *
+         * <p>The conversion is the operator's semantics and belongs where the carrier is known, which
+         * is here: an {@code Int} in a Rational position is refused where it is written, and the same
+         * {@code Int} beside a Rational operand is read at its exact value because that is what the
+         * operator means (ADR-0116).
+         */
+        private void pushExact(Core operand) {
+            Type t = genExpr(operand);
+            if (t == Type.INT) {
+                code.invokestatic(CD_RationalMath, "fromInt", MTD_ratFromInt);
+            } else if (t == Type.DECIMAL) {
+                code.invokestatic(CD_RationalMath, "fromDecimal", MTD_ratFromDecimal);
+            }
+        }
+
+        /** Whether a comparison of these two is a comparison of exact values, which is what one
+         *  operand already being a Rational makes it (ADR-0116). */
+        private static boolean exactPair(Core left, Core right) {
+            return left.type() == Type.RATIONAL || right.type() == Type.RATIONAL;
         }
 
         /**
@@ -1879,12 +1944,18 @@ final class BodyGen {
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Natural _ -> {
-                    // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
-                    // LocalDateTime, Instant — so one compareTo reduces the order to its sign
-                    // against 0. BigDecimal.compareTo ignores scale, which matches Decimal equality
-                    // (spec §equality); the others order lexicographically / in time.
-                    unwrapNewtypeValue(genExpr(comparison.left()));
-                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    // These all carry as Comparable — String, BigDecimal, Rational, LocalDate,
+                    // LocalTime, LocalDateTime, Instant — so one compareTo reduces the order to its
+                    // sign against 0. BigDecimal.compareTo ignores scale, which matches Decimal
+                    // equality (spec §equality); a Rational compares by exact value; the others
+                    // order lexicographically / in time.
+                    if (exactPair(comparison.left(), comparison.right())) {
+                        pushExact(comparison.left());
+                        pushExact(comparison.right());
+                    } else {
+                        unwrapNewtypeValue(genExpr(comparison.left()));
+                        unwrapNewtypeValue(genExpr(comparison.right()));
+                    }
                     code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
@@ -1914,6 +1985,15 @@ final class BodyGen {
          * inverted.
          */
         private void same(Comparison comparison, ComparisonClaim.Singled singled) {
+            if (exactPair(comparison.left(), comparison.right())) {
+                // Equal by exact mathematical value, which is what the runtime value's own equality
+                // is: one representation per value, so `Values.equal` asking it is asking this.
+                pushExact(comparison.left());
+                pushExact(comparison.right());
+                emitValueEquals(code, false);
+                selecting(singled);
+                return;
+            }
             Type lt = unwrapNewtypeValue(genExpr(comparison.left()));
             unwrapNewtypeValue(genExpr(comparison.right()));
             if (lt == Type.STRING) {

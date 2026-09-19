@@ -365,6 +365,33 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
     }
 
     /**
+     * This as a decimal of {@code scale} places, rounded by {@code towards}.
+     *
+     * <p>Where a caller must have a decimal whatever the value is. The exponents are built here
+     * because a decimal of a scale is what is being asked for, and what it costs is the size of that
+     * decimal — which is the rule the rest of this type keeps and not an exception to it.
+     */
+    public BigDecimal asDecimal(int scale, java.math.RoundingMode towards) {
+        return new BigDecimal(numeratorWithItsPowers())
+                .divide(new BigDecimal(denominatorWithItsPowers()), scale, towards);
+    }
+
+    /** The numerator with the powers that multiply it built in. */
+    private BigInteger numeratorWithItsPowers() {
+        return numerator.multiply(raised(atLeastNought(twos), atLeastNought(fives)));
+    }
+
+    /** The denominator with the powers that divide it built in. */
+    private BigInteger denominatorWithItsPowers() {
+        return denominator.multiply(raised(atLeastNought(-(long) twos), atLeastNought(-(long) fives)));
+    }
+
+    /** {@code e} where it is above nought, and nought where it is not. */
+    private static int atLeastNought(long e) {
+        return e <= 0 ? 0 : exponent(e);
+    }
+
+    /**
      * The value, spelled as one fraction where it is small enough to read and as the factored form
      * where it is not.
      */
@@ -375,8 +402,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, int twos, i
         if (bits > SPELLED_BITS) {
             return numerator + "/" + denominator + "×2^" + twos + "×5^" + fives;
         }
-        BigInteger up = numerator.multiply(raised(Math.max(twos, 0), Math.max(fives, 0)));
-        BigInteger down = denominator.multiply(raised(Math.max(-twos, 0), Math.max(-fives, 0)));
+        BigInteger up = numeratorWithItsPowers();
+        BigInteger down = denominatorWithItsPowers();
         BigInteger common = up.gcd(down);
         if (common.signum() != 0 && !common.equals(BigInteger.ONE)) {
             up = up.divide(common);

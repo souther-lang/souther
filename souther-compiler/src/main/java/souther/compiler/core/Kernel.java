@@ -116,7 +116,7 @@ public enum Kernel {
     DATETIME_TO_TIME("datetime.toTime"),
     DATETIME_FROM_DATE_AND_TIME("datetime.fromDateAndTime"),
     // int
-    INT_DIVIDE("int.divide"),
+    INT_TRUNCATING_DIVIDE("int.truncatingDivide"),
     INT_TRUNCATING_REMAINDER("int.truncatingRemainder"),
     INT_ADD("int.add"),
     INT_SUBTRACT("int.subtract"),
@@ -132,6 +132,18 @@ public enum Kernel {
     DECIMAL_MULTIPLY("decimal.multiply"),
     DECIMAL_COMPARE("decimal.compare"),
     DECIMAL_FROM_INT("decimal.fromInt"),
+    // rational
+    RATIONAL_FROM_INT("rational.fromInt"),
+    RATIONAL_FROM_DECIMAL("rational.fromDecimal"),
+    RATIONAL_TO_WHOLE_NUMBER("rational.toWholeNumber"),
+    RATIONAL_TO_FINITE_DECIMAL("rational.toFiniteDecimal"),
+    RATIONAL_TO_INT("rational.toInt"),
+    RATIONAL_TO_DECIMAL("rational.toDecimal"),
+    RATIONAL_ADD("rational.add"),
+    RATIONAL_SUBTRACT("rational.subtract"),
+    RATIONAL_MULTIPLY("rational.multiply"),
+    RATIONAL_DIVIDE("rational.divide"),
+    RATIONAL_COMPARE("rational.compare"),
     // option
     OPTION_MAP("option.map");
 

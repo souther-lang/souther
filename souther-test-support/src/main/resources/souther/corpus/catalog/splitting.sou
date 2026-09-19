@@ -1,0 +1,60 @@
+// A value divided among several, which is where a model meets the exact quotient.
+//
+// `/` answers the quotient exactly, so a share of an amount is a Rational and what each one gets is
+// whatever the model says to do with the fraction. Both narrowings are written: the rounded one, which
+// states the rule it rounds by, and the exact one, which answers a case where the carrier holds no such
+// value. That pair is the whole of what this file is for.
+module conformance.splitting exposing
+    ( Amount, Share, Split, Uneven, apportion, apportionExactly )
+
+data Amount = Int
+    invariant value >= 0
+
+data Share = Int
+    invariant value >= 0
+
+data Split = { each: Share }
+
+data Uneven = { remainder: Amount }
+
+// The rounded narrowing. What is dropped is dropped by a rule stated here, and the first guard is what
+// keeps the divisor off nought — a divide by nought aborts, and an amount shared among nobody is not a
+// business outcome. The second guard is what the share owes its own type: nothing about a Rational is
+// counted, so the value a rounding makes of one carries no bound of its own.
+behavior apportion : (amount: Amount, among: Amount) -> Split | Uneven
+    constructs Split, Share, Uneven
+let apportion (amount, among) = {
+    guard among >= 1 else Uneven { remainder = amount }
+    let each = Rational.toInt(DOWN, amount.value / among.value)
+    guard each >= 0 else Uneven { remainder = amount }
+    Split { each = Share(each) }
+}
+
+example apportion
+    | "ten among four rounds down to two each" :
+        (Amount(10), Amount(4)) -> Split { each = Share(2) }
+    | "ten among five is two each" :
+        (Amount(10), Amount(5)) -> Split { each = Share(2) }
+    | "an amount shared among nobody is uneven" :
+        (Amount(10), Amount(0)) -> Uneven { remainder = Amount(10) }
+
+// And the exact one, which answers a case rather than a value where the share is not whole. The two
+// behaviors divide the same two numbers and differ in what they do about the fraction, which is the
+// decision the operator states none of.
+behavior apportionExactly : (amount: Amount, among: Amount) -> Split | Uneven
+    constructs Split, Share, Uneven
+let apportionExactly (amount, among) = {
+    guard among >= 1 else Uneven { remainder = amount }
+    match Rational.toWholeNumber(amount.value / among.value) with
+        | Int as each -> {
+            guard each >= 0 else Uneven { remainder = amount }
+            Split { each = Share(each) }
+        }
+        | NotWhole -> Uneven { remainder = amount }
+}
+
+example apportionExactly
+    | "ten among five divides evenly" :
+        (Amount(10), Amount(5)) -> Split { each = Share(2) }
+    | "ten among four does not" :
+        (Amount(10), Amount(4)) -> Uneven { remainder = Amount(10) }

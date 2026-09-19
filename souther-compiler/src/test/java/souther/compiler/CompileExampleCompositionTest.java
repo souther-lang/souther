@@ -41,7 +41,10 @@ class CompileExampleCompositionTest {
 
             let price (draft) = {
                 guard draft.amount.value >= 100 else TooSmall { amount = draft.amount }
-                Priced { amount = draft.amount, fee = Amount(draft.amount.value / 10) }
+                Priced {
+                        amount = draft.amount,
+                        fee = Amount(Rational.toInt(DOWN, draft.amount.value / 10))
+                    }
             }
 
             behavior settle : (priced: Priced) -> Receipt

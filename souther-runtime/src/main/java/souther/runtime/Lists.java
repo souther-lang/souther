@@ -190,6 +190,26 @@ public final class Lists {
         return acc;
     }
 
+    /** The sum of a list of {@code Rational}; the empty list is nought. Exact throughout — the
+     *  identity is the exact nought the type constructs, so there is no seed for an author to write
+     *  and no rounding anywhere in the walk. */
+    public static Rational sumRational(List<?> xs) {
+        Rational acc = Rational.ZERO;
+        for (Object x : xs) {
+            acc = acc.plus((Rational) x);
+        }
+        return acc;
+    }
+
+    /** The product of a list of {@code Rational}; the empty list is one. */
+    public static Rational productRational(List<?> xs) {
+        Rational acc = Rational.ONE;
+        for (Object x : xs) {
+            acc = acc.times((Rational) x);
+        }
+        return acc;
+    }
+
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a
      *  {@link Comparable} — {@code String} and the {@code Int}/{@code Decimal} carriers all are —
      *  and the input is left untouched. */

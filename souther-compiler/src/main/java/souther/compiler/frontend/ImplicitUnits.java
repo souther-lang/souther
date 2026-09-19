@@ -3,6 +3,7 @@ package souther.compiler.frontend;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.LanguageCaseId;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -42,12 +43,11 @@ public final class ImplicitUnits {
     private static Set<String> builtIn() {
         Set<String> names = new HashSet<>(Reserved.QUALIFIERS);
         names.add("Raw");
-        names.add("DivisionByZero");
-        names.add("NotANumber");
-        names.add("NotADate");
-        names.add("NotATime");
-        names.add("Some");
-        names.add("None");
+        // From the table that closes them rather than spelled again: a case the language gives is one
+        // a module may not declare, and a list here would have been that set as it last stood.
+        for (LanguageCaseId given : LanguageCaseId.values()) {
+            names.add(given.spelling());
+        }
         return Set.copyOf(names);
     }
 

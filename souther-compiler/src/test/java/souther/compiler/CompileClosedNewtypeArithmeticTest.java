@@ -94,19 +94,36 @@ class CompileClosedNewtypeArithmeticTest {
     }
 
     @Test
-    void scalarOnTheLeftAndTruncatingDivide() throws Exception {
+    void scalarOnTheLeft() throws Exception {
         assertEquals(14L, run("""
                 module demo
                 data N = Int
                 behavior calc : (n: N) -> N
                 let calc (n) = 2 * n
                 """, "N", 7L));
-        assertEquals(3L, run("""
+    }
+
+    /**
+     * And a newtype is not divided by a value of its base: the dimension survives, the quotient is
+     * exact, and no {@code N} holds one (spec §newtype-arithmetic). What a model writes instead is the
+     * quantisation it means, on the value.
+     */
+    @Test
+    void scalarDivisionIsNotInherited() throws Exception {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data N = Int
                 behavior calc : (n: N) -> N
                 let calc (n) = n / 2
-                """, "N", 7L));   // Int division truncates
+                """));
+        assertTrue(refused.getMessage().contains("no Int is left to wrap as N"),
+                refused.getMessage());
+        assertEquals(3L, run("""
+                module demo
+                data N = Int
+                behavior calc : (n: N) -> N
+                let calc (n) = N(Rational.toInt(DOWN, n.value / 2))
+                """, "N", 7L));
     }
 
     @Test

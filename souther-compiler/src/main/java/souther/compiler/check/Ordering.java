@@ -113,6 +113,13 @@ public sealed interface Ordering {
         if (enumeration != null) {
             return new Places(enumeration);
         }
+        // A pair one side of which is exact opens to two types and is ordered all the same: the
+        // operands are read at their exact mathematical values, which is one order over one kind of
+        // value (ADR-0116). Read off the pair for the same reason the enumeration above is — neither
+        // operand alone says the operation is exact.
+        if (BinaryElaborator.exactlyComparable(lb, rb)) {
+            return ofTerminal(Type.RATIONAL, symbols, kinds, published);
+        }
         // Otherwise both operands open to one type, which the admissibility rule established and
         // this states rather than assumes: every route that admits a pair short of the enumeration
         // one leaves them with equal bases. Answering off the left alone would give an order for a

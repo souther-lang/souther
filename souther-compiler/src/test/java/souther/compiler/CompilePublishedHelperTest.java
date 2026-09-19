@@ -37,7 +37,8 @@ class CompilePublishedHelperTest {
             data Rate = Int
 
             let rate = Rate(10)
-            let taxed (a: Amount) = Amount(a.value + a.value * rate.value / 100)
+            let taxed (a: Amount) =
+                Amount(a.value + Rational.toInt(DOWN, a.value * rate.value / 100))
             """;
 
     /**

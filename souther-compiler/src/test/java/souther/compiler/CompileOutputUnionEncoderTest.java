@@ -35,7 +35,7 @@ class CompileOutputUnionEncoderTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                let half (n) = if n >= 0 then Rational.toInt(DOWN, n / 2) else NoAnswer
                 """), getClass().getClassLoader());
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
         assertEquals(Map.of("type", "Int", "value", 3L),

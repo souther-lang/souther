@@ -49,16 +49,20 @@ class AClassThisCompilerStoppedAtSaysWhichFigureStoppedItTest {
      * A class the rules leave nothing in, which no figure of this compiler's is why.
      *
      * <p>The control, and it has to be a class no row is written for as well — a model that simply
-     * composes would say nothing either way. Here the position is narrowed to one value and the
-     * class on the other side of the line has none, so the search looked everywhere there was and
-     * came back empty.
+     * composes would say nothing either way. Here the month is narrowed to February and the day is
+     * asked to be the thirtieth, which is a day February has none of: the calendar is walked whole,
+     * so the search looked everywhere there was and came back empty.
      */
     private static final String NOTHING_STANDS_THERE = """
             module example.stopped
 
-            behavior g : (x: Int) -> Bool
-            let g (x) = {
-                guard x / 2 < x / 3 else false
+            data Slot = { on: Date }
+
+            behavior g : (slot: Slot) -> Bool
+            let g (slot) = {
+                guard Date.month(slot.on) >= 2 else false
+                guard Date.month(slot.on) <= 2 else false
+                guard Date.day(slot.on) >= 30 else false
 
                 true
             }

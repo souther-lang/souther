@@ -63,7 +63,17 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     void aNewtypeScalesByABareNumberOfItsBase() {
         allows("(a: Amount, n: Int) : Amount", "a * n");
         allows("(n: Int, a: Amount) : Amount", "n * a");
-        allows("(a: Amount, n: Int) : Amount", "a / n");
+    }
+
+    /**
+     * And is not divided by one. The dimension survives, which is what made this scaling, and the
+     * quotient leaves the wrapped type — so the rule it breaks is the closure one and not the
+     * dimension one the other direction breaks.
+     */
+    @Test
+    void aNewtypeIsNotDividedByABareNumberOfItsBase() {
+        Diagnostic d = refusalOf("(a: Amount, n: Int) : Amount", "a / n");
+        assertInstanceOf(ArithmeticMessage.AQuotientLeavesTheWrappedType.class, d.said());
     }
 
     @Test

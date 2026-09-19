@@ -115,7 +115,7 @@ DateTime.minutesBetween(from: DateTime, to: DateTime) : Int
 DateTime.toDate(dt: DateTime) : Date
 DateTime.toTime(dt: DateTime) : Time
 DateTime.fromDateAndTime(d: Date, t: Time) : DateTime
-Int.divide(dividend: Int, divisor: Int) : Int | DivisionByZero
+Int.truncatingDivide(dividend: Int, divisor: Int) : Int | DivisionByZero
 Int.truncatingRemainder(dividend: Int, divisor: Int) : Int | DivisionByZero
 Int.add(a: Int, b: Int) : Int
 Int.subtract(a: Int, b: Int) : Int
@@ -138,5 +138,16 @@ Decimal.abs(d: Decimal) : Decimal
 Decimal.min(a: Decimal, b: Decimal) : Decimal
 Decimal.max(a: Decimal, b: Decimal) : Decimal
 Decimal.clamp(lo: Decimal, hi: Decimal, d: Decimal) : Decimal
+Rational.fromInt(n: Int) : Rational
+Rational.fromDecimal(d: Decimal) : Rational
+Rational.toWholeNumber(r: Rational) : Int | NotWhole
+Rational.toFiniteDecimal(r: Rational) : Decimal | NotAFiniteDecimal
+Rational.toInt(mode: RoundingMode, r: Rational) : Int
+Rational.toDecimal(scale: Int, mode: RoundingMode, r: Rational) : Decimal
+Rational.add(a: Rational, b: Rational) : Rational
+Rational.subtract(a: Rational, b: Rational) : Rational
+Rational.multiply(a: Rational, b: Rational) : Rational
+Rational.divide(a: Rational, b: Rational) : Rational
+Rational.compare(a: Rational, b: Rational) : Int
 Option.map(f: ('a) -> 'b, opt: 'a?) : 'b?
 Option.withDefault(default: 'a, opt: 'a?) : 'a

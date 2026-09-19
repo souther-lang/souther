@@ -1,0 +1,46 @@
+// The Rational stdlib. Declared here like every other core module (§intrinsics); every kernel lives
+// in souther-runtime's RationalMath, which owns the arithmetic of the exact quotient `/` answers
+// (ADR-0112, ADR-0116).
+//
+// A Rational is a value a computation holds. It has no external form, so no field carries one, no
+// behavior takes or answers one, and nothing here writes one at a boundary. What this module is for
+// is the two directions across that edge: reaching exact arithmetic from a number a boundary did
+// carry, and leaving it for one.
+//
+// The `Basics` arithmetic `Int` and `Decimal` carry — `abs`, `min`, `max`, `clamp` — is not here.
+// Nothing asks for it yet, and each of them is an ordinary helper a model writes over the operators
+// this module already has.
+module souther.rational
+
+// Widening. Every Int and every Decimal has one exact value, so neither conversion loses anything and
+// neither states a policy. There is no implicit widening: an operator with a Rational on one side
+// reads the other at its exact value because that is what the operator means, while a position that
+// asks for a Rational is written out — `Rational.fromInt(n)`.
+let fromInt (n: Int): Rational = intrinsic "rational.fromInt"
+let fromDecimal (d: Decimal): Rational = intrinsic "rational.fromDecimal"
+
+// Narrowing, exactly. What a carrier does not hold is a case and not a value chosen for it: three
+// halves is no Int and a third is no Decimal, and neither answer is a rounding this was not told
+// about. `4 / 2` and `1 / 2` go through these, requiring no rounding mode for a conversion that
+// changes nothing.
+let toWholeNumber (r: Rational): Int | NotWhole = intrinsic "rational.toWholeNumber"
+let toFiniteDecimal (r: Rational): Decimal | NotAFiniteDecimal =
+    intrinsic "rational.toFiniteDecimal"
+
+// Narrowing, by a rule the model states. These are the ones a value with a fraction goes through,
+// and they answer a value rather than a case because the caller said what to do with what is
+// dropped. The shape follows `Decimal.toInt` and `Decimal.round`: the policy leads and the subject
+// comes last, so `r |> Rational.toInt(DOWN)` reads as a pipe.
+let toInt (mode: RoundingMode, r: Rational): Int = intrinsic "rational.toInt"
+let toDecimal (scale: Int, mode: RoundingMode, r: Rational): Decimal =
+    intrinsic "rational.toDecimal"
+
+// The operators, as the functions behind them. `divide` aborts on a zero divisor the way the
+// operator does — a Rational quotient has no case for it, nothing being divided by nought.
+let add (a: Rational, b: Rational): Rational = intrinsic "rational.add"
+let subtract (a: Rational, b: Rational): Rational = intrinsic "rational.subtract"
+let multiply (a: Rational, b: Rational): Rational = intrinsic "rational.multiply"
+let divide (a: Rational, b: Rational): Rational = intrinsic "rational.divide"
+
+// compare returns -1, 0, or 1 by exact value.
+let compare (a: Rational, b: Rational): Int = intrinsic "rational.compare"

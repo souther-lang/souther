@@ -38,10 +38,13 @@ public final class IntMath {
     }
 
     /**
-     * The {@code /} operator on Int: truncating division that aborts on a zero divisor (and on the
-     * {@code Long.MIN_VALUE / -1} overflow), like the other arithmetic operators (spec §stdlib-int). Code
-     * that wants a zero divisor as a case uses the {@code Int.divide} function, which returns
-     * {@code Int | DivisionByZero} instead.
+     * The quotient {@code Int.truncatingDivide} answers, truncated toward zero: what its value case
+     * carries, once the zero divisor its other case is about has been ruled out (spec §stdlib-int).
+     *
+     * <p>Aborts on the one pair whose quotient no {@code Int} holds, as the overflow-checked
+     * operations above do — the case this operation has is about a divisor the model admits and not
+     * about a result that will not fit. The {@code /} operator does not come here: its quotient is
+     * exact and leaves {@code Int} (spec §stdlib-rational).
      */
     public static long divideExact(long a, long b) {
         if (b == 0) {

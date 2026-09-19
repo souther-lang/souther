@@ -168,6 +168,7 @@ public final class BinaryElaborator {
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.inners(), ctx.symbols())
+                        && !exactlyComparable(lt, rt)
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
@@ -214,12 +215,37 @@ public final class BinaryElaborator {
         if (TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published) != null) {
             return true;
         }
+        if (exactlyComparable(lt, rt)) {
+            return true;
+        }
         // A newtype and a source literal of what it wraps: 金額 <= 100, but not 金額 <= n for an
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
         // ordered, which the equality rule this shares does not.
         return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
                 && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols);
+    }
+
+    /**
+     * Whether the two are compared by exact mathematical value, which one operand already being a
+     * Rational makes them (ADR-0116).
+     *
+     * <p>Asked of the pair and of nothing else. It is not a conversion relation: an {@code Int} still
+     * does not satisfy a Rational position, and neither operand opens a nominal type — {@code yen <
+     * 1 / 2} stays refused, the quantisation of a domain value being the domain's to write. And
+     * {@code 1 < 1m} is untouched, neither side of it being exact.
+     *
+     * <p>One rule for the order and for the equality, so {@code <} and {@code ==} cannot come to
+     * answer the question differently (ADR-0066).
+     */
+    static boolean exactlyComparable(Type lt, Type rt) {
+        return (lt == Type.RATIONAL || rt == Type.RATIONAL)
+                && exactlyReadable(lt) && exactlyReadable(rt);
+    }
+
+    /** Whether a value of this type has an exact mathematical value an exact operator reads it at. */
+    private static boolean exactlyReadable(Type t) {
+        return t == Type.RATIONAL || t == Type.INT || t == Type.DECIMAL;
     }
 
     /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the

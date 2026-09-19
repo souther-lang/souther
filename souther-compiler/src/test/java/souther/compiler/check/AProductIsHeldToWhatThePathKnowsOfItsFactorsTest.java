@@ -121,67 +121,6 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         assertTrue(derived.boundsOf(atom).saysNothing());
     }
 
-    /**
-     * The issue's second example: a quotient of a scaled factor by a written constant, which is one
-     * derivation reading another.
-     *
-     * <p>{@code x * 30 / 100} names {@code x * 30} nothing of its own — a scalar multiply is
-     * linear — so the quotient's numerator is a form over {@code x}, and what the quotient lies
-     * between follows from what {@code x} does.
-     */
-    @Test
-    void aQuotientByAWrittenConstantFollowsTheBoundOnItsNumerator() {
-        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        BindingId x = binding(0);
-        Denotations at = Denotations.none().location(x, AsPlaces.of(x), AsPlaces.term(x));
-        Core scaled = arithmetic(BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
-        Core quotient = arithmetic(BinOp.DIV, scaled, new Core.Int(100, Type.INT, POS));
-
-        LinearForm<FactSubject> form = terms.affineOf(quotient, at);
-
-        assertNotNull(form);
-        FactSubject atom = form.coefs().keySet().iterator().next();
-        NumericDomain<FactSubject> guarded = atOrAboveZero(terms, FactSubject.of(terms.bodyKey(read("x", x), at)));
-
-        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(guarded, terms, Set.of(atom));
-
-        assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
-    }
-
-    /**
-     * A quotient whose numerator is itself a product: the two derivations are read in the order the
-     * expression puts them, whichever order they were recorded in.
-     */
-    @Test
-    void aQuotientOverAProductReadsWhatTheProductWasDerivedTo() {
-        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        BindingId a = binding(0);
-        BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
-        Core product = arithmetic(BinOp.MUL, read("a", a), read("b", b));
-        Core quotient = arithmetic(BinOp.DIV, product, new Core.Int(100, Type.INT, POS));
-
-        LinearForm<FactSubject> form = terms.affineOf(quotient, at);
-        FactSubject atom = form.coefs().keySet().iterator().next();
-        FactSubject factorA = FactSubject.of(terms.bodyKey(read("a", a), at));
-        FactSubject factorB = FactSubject.of(terms.bodyKey(read("b", b), at));
-        NumericDomain<FactSubject> guarded = NumericDomain.<FactSubject>top()
-                .assume(LinearForm.atom(factorA), Rel.GE,
-                        terms.kindsOf(LinearForm.atom(factorA)))
-                .assume(LinearForm.atom(factorA).minus(num(10)), Rel.LE,
-                        terms.kindsOf(LinearForm.atom(factorA)))
-                .assume(LinearForm.atom(factorB), Rel.GE,
-                        terms.kindsOf(LinearForm.atom(factorB)))
-                .assume(LinearForm.atom(factorB).minus(num(1000)), Rel.LE,
-                        terms.kindsOf(LinearForm.atom(factorB)));
-
-        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(guarded, terms, Set.of(atom));
-
-        assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
-        assertEquals(Endpoint.inclusive(Count.of(100)), derived.boundsOf(atom).max(),
-                "10 * 1000 / 100");
-    }
-
     /** What an atom was computed from is a fact about the expression, so one atom reached twice is
      * recorded once and the second reading agrees with the first. */
     @Test

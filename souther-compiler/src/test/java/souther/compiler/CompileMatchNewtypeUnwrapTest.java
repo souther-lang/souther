@@ -167,7 +167,7 @@ class CompileMatchNewtypeUnwrapTest {
                 data Out = { r: Int }
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
-                    let q = match Int.divide(i.a, i.b) with
+                    let q = match Int.truncatingDivide(i.a, i.b) with
                         | DivisionByZero -> 0
                         | Int(n) -> n
                     Out { r = q }
