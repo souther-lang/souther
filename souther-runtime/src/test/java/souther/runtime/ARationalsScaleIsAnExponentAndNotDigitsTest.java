@@ -224,6 +224,57 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
+     * Two fractions of the same powers, a part in their own size apart, are ordered.
+     *
+     * <p>Which no bracket settled ahead of them can do. Two fractions of some many bits stand as close as
+     * a part in that many bits twice over, and the width a bracket is taken at is chosen before the pair
+     * arrives — so a bracket is the wrong instrument for this shape however wide it is taken, and the
+     * assertion below says the one the comparison starts at does not reach it.
+     *
+     * <p>What answers is that the powers here are the same on both sides. They cancel, and what is left is
+     * a fraction against a fraction, which is answered exactly by the walk a common measure takes: whole
+     * parts compared, then the remainders the other way about. No width, and no product of any two of the
+     * four numbers either.
+     */
+    @Test
+    void twoFractionsOfOneSizeAndTheSamePowersAreOrdered() {
+        BigInteger base = BigInteger.TWO.pow(700);
+        Rational lower = Rational.of(base.add(BigInteger.ONE), base.add(BigInteger.valueOf(3)));
+        Rational higher = Rational.of(base.add(BigInteger.valueOf(11)), base.add(BigInteger.valueOf(13)));
+        assertEquals(0, lower.twos(), "the powers cancel, which is what the shape is about");
+        assertEquals(0, higher.fives());
+
+        assertNull(lower.magnitudeFromBrackets(higher, 128),
+                "no bracket of the width the comparison starts at separates these");
+        assertTrue(lower.compareTo(higher) < 0, "and the order is answered all the same");
+        assertTrue(higher.compareTo(lower) > 0);
+        assertEquals(0, lower.compareTo(
+                Rational.of(base.add(BigInteger.ONE), base.add(BigInteger.valueOf(3)))));
+    }
+
+    /**
+     * And a value a part in its own size below half of one rounds to whichever neighbour the policy says.
+     *
+     * <p>The same shape reaching the narrowing: which of two whole numbers a value rounds to is where it
+     * stands against half way, and a value this close to half way is past what a bracket reaches. Here too
+     * no power of five stands between, so twice the value is a fraction and its whole part is exact.
+     */
+    @Test
+    void aValueJustBelowHalfOfOneRoundsByThePolicyAndNotByAWidth() {
+        BigInteger base = BigInteger.TWO.pow(700);
+        Rational justBelowHalf = new Rational(
+                base.add(BigInteger.valueOf(3)), base.add(BigInteger.valueOf(7)), -1, 0);
+        Rational half = new Rational(BigInteger.ONE, BigInteger.ONE, -1, 0);
+        assertNull(justBelowHalf.magnitudeFromBrackets(half, 128),
+                "no bracket of that width tells this from half of one");
+
+        assertEquals(0L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowHalf));
+        assertEquals(0L, RationalMath.toInt(HALF_EVEN.INSTANCE, justBelowHalf));
+        assertEquals(1L, RationalMath.toInt(UP.INSTANCE, justBelowHalf));
+        assertEquals(0L, RationalMath.toInt(DOWN.INSTANCE, justBelowHalf));
+    }
+
+    /**
      * And the rounding the brackets answer is the rounding the digits do.
      *
      * <p>The narrowing reads the same bracket the order does, so it is held against a second reading the
