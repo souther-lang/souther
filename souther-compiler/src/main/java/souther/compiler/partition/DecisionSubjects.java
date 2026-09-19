@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationKinds;
@@ -19,7 +20,6 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 /**
  * What a body's expressions name that a row can control.
@@ -39,7 +39,7 @@ import java.util.Set;
 record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclarations published,
                         DeclarationKinds kinds, DeclarationNewtypes newtypes,
                         NewtypeInners inners,
-                        Set<ValueName.Behavior> dependencies) {
+                        Membership<ValueName.Behavior> dependencies) {
 
     DecisionSubjects {
         if (published == null || kinds == null || newtypes == null || inners == null) {
@@ -48,7 +48,6 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
                     + " and what each of those wraps, so it is handed somewhere to read every one"
                     + " of them");
         }
-        dependencies = Set.copyOf(dependencies);
     }
 
     /**
