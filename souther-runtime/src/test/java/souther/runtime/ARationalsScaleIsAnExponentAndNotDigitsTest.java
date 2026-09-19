@@ -1,9 +1,12 @@
 package souther.runtime;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -178,6 +181,58 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
 
         assertTrue(aPower.compareTo(oneAbove) < 0, "and the comparison reaches that width");
         assertTrue(oneAbove.compareTo(aPower) > 0);
+    }
+
+    /**
+     * And over values small enough to spell out, the order the brackets answer is the order the whole
+     * numbers do.
+     *
+     * <p>The brackets are where every comparison is decided, including the ordinary ones, and each of
+     * them is built by a division that rounds and a shift that drops bits. So the answer over values
+     * where a second reading is possible is held against that reading: the exact one, by multiplying the
+     * powers out and cross-multiplying, which these are small enough for and no value this type holds is
+     * in general. Every pair over a grid of numerators, denominators and both exponents, in both
+     * directions.
+     *
+     * <p>Held to a time as well. A bracket that did not hold the number it is about would leave pairs it
+     * never separates, and the width rising through every count of bits there is takes long enough to
+     * read as a run that stopped rather than one that failed.
+     */
+    @Test
+    @Timeout(60)
+    void theOrderTheBracketsAnswerIsTheOrderTheWholeNumbersDo() {
+        List<Rational> values = new ArrayList<>();
+        for (long n : new long[] {1, 3, 7, -1, -3}) {
+            for (long d : new long[] {1, 2, 3, 7}) {
+                for (long twos : new long[] {-2, 0, 3}) {
+                    for (long fives : new long[] {-2, 0, 3}) {
+                        values.add(new Rational(
+                                BigInteger.valueOf(n), BigInteger.valueOf(d), twos, fives));
+                    }
+                }
+            }
+        }
+
+        for (Rational a : values) {
+            for (Rational b : values) {
+                assertEquals(spelledOut(a).compareTo(spelledOut(b)), Integer.signum(a.compareTo(b)),
+                        a + " against " + b);
+            }
+        }
+    }
+
+    /** A value as a decimal of enough places to be exact, which only the small ones have. */
+    private static BigDecimal spelledOut(Rational r) {
+        BigInteger up = r.numerator().multiply(power(r.twos(), BigInteger.TWO))
+                .multiply(power(r.fives(), FIVE));
+        BigInteger down = r.denominator().multiply(power(-r.twos(), BigInteger.TWO))
+                .multiply(power(-r.fives(), FIVE));
+        return new BigDecimal(up).divide(new BigDecimal(down), 40, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** {@code of^exponent} where the exponent is above nought, and one where it is not. */
+    private static BigInteger power(long exponent, BigInteger of) {
+        return exponent <= 0 ? BigInteger.ONE : of.pow((int) exponent);
     }
 
     /** And a small close pair is answered too, where the numbers themselves are what the brackets are

@@ -338,21 +338,17 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * Where {@code |this|} stands against {@code |other|}, both being non-zero.
      *
-     * <p>The fractions are cross-multiplied, which is the size of what is stored, and what is left of
-     * the two values is one power of two and one power of five — the differences of the two pairs of
-     * exponents, each taken once and put on the side its sign belongs to.
+     * <p>Each side is bracketed whole — its fraction as much as its powers — so nothing larger than the
+     * working width is ever multiplied. Cross-multiplying the two fractions instead put one half of each
+     * value through a bracket and the other half through a product of two stored numbers, and a product
+     * of two numbers the host holds is not always one it holds. The answer is one of three and always
+     * has a representation, so a comparison that asked for that product refused pairs over a step.
      *
      * <p>The two magnitudes are unequal, which is what makes the refinement end. The caller has that:
      * one canonical representation per value means two values of one magnitude and one sign are the same
      * record, and the comparison above answered those before reaching here.
      */
     private int compareMagnitude(Rational other) {
-        if (fives == other.fives) {
-            // No power of five between them, so the count of bits is the whole of the difference.
-            return compareShifted(
-                    numerator.abs().multiply(other.denominator), apart(twos, other.twos),
-                    other.numerator.abs().multiply(denominator), BigInteger.ZERO);
-        }
         // The width stops rising where a count of bits does. Reaching that means the two values agree
         // over more bits than a bracket is addressed in, which takes stored fractions far larger than
         // the machine bracketing them — so this is where memory runs out rather than a value's range,
@@ -376,26 +372,47 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * cannot tell either from a bracket that works.
      */
     @Nullable Integer magnitudeFromBrackets(Rational other, int width) {
-        BigInteger here = numerator.abs().multiply(other.denominator);
-        BigInteger there = other.numerator.abs().multiply(denominator);
-        BigInteger byFives = apart(fives, other.fives);
-        Bracketed five = fiveTo(byFives.abs(), width);
-        boolean fivesAreHere = byFives.signum() > 0;
-        Bracketed left = (fivesAreHere ? five.times(here) : Bracketed.exactly(here))
-                .shiftedBy(apart(twos, other.twos));
-        Bracketed right = fivesAreHere ? Bracketed.exactly(there) : five.times(there);
-        if (compareShifted(left.low(), left.shift(), right.high(), right.shift()) > 0) {
+        Bracketed here = bracketedMagnitude(width);
+        Bracketed there = other.bracketedMagnitude(width);
+        if (compareShifted(here.low(), here.shift(), there.high(), there.shift()) > 0) {
             return 1;
         }
-        if (compareShifted(left.high(), left.shift(), right.low(), right.shift()) < 0) {
+        if (compareShifted(here.high(), here.shift(), there.low(), there.shift()) < 0) {
             return -1;
         }
         return null;
     }
 
-    /** How far one exponent stands from another, which no exponent's own width holds. */
-    private static BigInteger apart(long exponent, long from) {
-        return BigInteger.valueOf(exponent).subtract(BigInteger.valueOf(from));
+    /**
+     * This value's magnitude, held between two whole numbers of {@code width} bits.
+     *
+     * <p>The fraction is bracketed by one division rather than kept whole, which is what keeps every
+     * number here to the working width: a numerator shifted to meet a denominator is the size of the
+     * larger of the two, where a numerator multiplied by another value's denominator is the size of
+     * both together — and two numbers the host holds can have a product it does not.
+     */
+    private Bracketed bracketedMagnitude(int width) {
+        Bracketed of = quotientBracketed(numerator.abs(), denominator, width);
+        if (fives != 0) {
+            Bracketed five = fiveTo(BigInteger.valueOf(fives).abs(), width);
+            of = of.times(fives > 0 ? five : five.reciprocal(width), width);
+        }
+        return of.shiftedBy(BigInteger.valueOf(twos));
+    }
+
+    /**
+     * {@code x / y} held between two whole numbers of {@code width} bits, {@code x} being at least
+     * nought and {@code y} above it.
+     *
+     * <p>One division of numbers no larger than the wider of the two, and never a product of them. The
+     * shift is where the width comes from: the numerator is moved until the quotient has the bits asked
+     * for, and the quotient a whole division answers stands between that and one more.
+     */
+    private static Bracketed quotientBracketed(BigInteger x, BigInteger y, int width) {
+        long by = (long) x.bitLength() - y.bitLength() - width;
+        BigInteger lifted = by >= 0 ? x.shiftRight((int) by) : x.shiftLeft((int) -by);
+        BigInteger low = lifted.divide(y);
+        return new Bracketed(low, low.add(BigInteger.ONE), BigInteger.valueOf(by));
     }
 
     /**
@@ -455,6 +472,28 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
         Bracketed times(BigInteger by) {
             return new Bracketed(low.multiply(by), high.multiply(by), shift);
+        }
+
+        /** The product of two brackets, which holds the product of any two numbers they hold — both
+         *  standing above nought, so the ends multiply in the order they are in. */
+        Bracketed times(Bracketed other, int width) {
+            return new Bracketed(low.multiply(other.low), high.multiply(other.high),
+                    shift.add(other.shift)).keptTo(width);
+        }
+
+        /**
+         * One over this, bracketed to {@code width} bits.
+         *
+         * <p>The ends change places, the lower of the two coming from the upper of these. Nothing here is
+         * larger than the width either: a one shifted up to meet an end and divided by it answers the
+         * bits asked for, and the shift is the end's own size rather than anything's product.
+         */
+        Bracketed reciprocal(int width) {
+            int by = width + high.bitLength();
+            BigInteger over = BigInteger.ONE.shiftLeft(by);
+            return new Bracketed(
+                    over.divide(high), over.divide(low).add(BigInteger.ONE),
+                    BigInteger.valueOf(-by).subtract(shift));
         }
 
         Bracketed shiftedBy(BigInteger bits) {
@@ -571,12 +610,11 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * This as a decimal where it has one exactly, and null where it has none. A caller that must
      * answer with a decimal whatever the value states its rounding at the point it asks.
      *
-     * <p>What the two exponents have in common is a power of ten and goes to the scale, whichever way
-     * it points — a decimal's scale is signed, and a value made of powers above nought is as compact a
-     * decimal as one made of powers below it. Held to a non-negative scale instead, the way out was
-     * narrower than the way in: a decimal that became one of these came back only by building the power
-     * of ten it had arrived carrying as its scale, which is the work this representation exists to
-     * avoid, and past what a machine holds it did not come back at all.
+     * <p>The scale is where what the two exponents have in common goes, as far as a scale holds it — and
+     * a scale is signed, so a value made of powers above nought is as compact a decimal as one made of
+     * powers below it. What a scale does not reach stays among the digits, which is why the scale taken
+     * is one that writes the value rather than the one that writes it most compactly: the compact one is
+     * a choice, and past the end a scale counts it is a choice that refused values this type holds.
      */
     public @Nullable BigDecimal asDecimal() {
         if (!hasFiniteDecimal()) {
