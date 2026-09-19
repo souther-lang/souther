@@ -646,6 +646,67 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
+     * This value named the one way it is named, for somewhere that has to tell two of them apart.
+     *
+     * <p>Not a number anybody reads — {@link #spelled} is that — and so not the digits. One
+     * canonical form per value makes the four parts a name already: two values with the same name
+     * are the same value, and the same value has the same name however it arrived. Written as a
+     * fraction instead, a name is as long as the powers, and naming a line on a quantity is not a
+     * reason to spell a millionth out.
+     */
+    public String key() {
+        return numeratorWithoutUnits + "/" + denominatorWithoutUnits + ";" + twos + ";" + fives;
+    }
+
+    /**
+     * The fewest places a decimal needs before the last of them lands inside this value: the least
+     * count above nought with this value standing above ten to the minus that.
+     *
+     * <p>For a search that has to name a number inside a distance and wants to know how far in to
+     * look. The count is what the value's size says, so it is read off the order rather than by
+     * forming one over the value and counting its digits — a distance of a millionth has an answer
+     * of about a million, and a number of that many digits built to be measured is the work this
+     * type is held the way it is to avoid.
+     *
+     * @throws ArithmeticException where this value is at or below nought, which has no such count,
+     *         or where the count is past what one here holds
+     */
+    public int placesItStandsAbove() {
+        if (signum() <= 0) {
+            throw new ArithmeticException("no count of places stands below " + this);
+        }
+        if (standsAbove(1)) {
+            return 1;
+        }
+        int under = 1;
+        int over = 2;
+        while (!standsAbove(over)) {
+            under = over;
+            if (over > Integer.MAX_VALUE / 2) {
+                throw new ArithmeticException(
+                        "no decimal here names a number inside a distance this small");
+            }
+            over += over;
+        }
+        // The answer is above `under` and at or below `over`, and halving that keeps it so.
+        while (over - under > 1) {
+            int between = under + (over - under) / 2;
+            if (standsAbove(between)) {
+                over = between;
+            } else {
+                under = between;
+            }
+        }
+        return over;
+    }
+
+    /** Whether this value stands above ten to the minus {@code places}, which is a comparison and
+     *  builds neither side. */
+    private boolean standsAbove(int places) {
+        return compareTo(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -places, -places)) > 0;
+    }
+
+    /**
      * This as a reader is shown it: the decimal where one is this exactly, and the quotient of two
      * whole numbers where none is.
      *
