@@ -354,8 +354,8 @@ public record Band(BandEnd lower, BandEnd upper) {
         if (below == null || above == null) {
             return null;
         }
-        java.math.BigInteger much = below.asFraction().denominator();
-        return much.equals(above.asFraction().denominator()) ? ExactRatio.of(much) : null;
+        ExactRatio much = below.denominatorAsRatio();
+        return much.equals(above.denominatorAsRatio()) ? much : null;
     }
 
     /** Whether the line below this run keeps its own value, which decides whether the run starts

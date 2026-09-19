@@ -81,9 +81,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (at == null) {
             return new CutPosition(written.canonical(), per);
         }
-        ExactRatio.Fraction fraction = at.asFraction();
-        return new CutPosition(reduced(written, ExactRatio.of(fraction.numerator())),
-                ExactRatio.of(fraction.denominator()));
+        return new CutPosition(reduced(written, at.numeratorAsRatio()), at.denominatorAsRatio());
     }
 
     /**

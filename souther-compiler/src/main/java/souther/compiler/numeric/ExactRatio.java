@@ -61,14 +61,6 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     public static final ExactRatio ZERO = new ExactRatio(BigInteger.ZERO, BigInteger.ONE, 0, 0);
     public static final ExactRatio ONE = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 0, 0);
 
-    /** How close in bits two magnitudes have to stand before the order is decided by writing both
-     *  of them out. Past this the bit lengths of the stored fractions and the exponents separate the
-     *  pair on their own, which is the case the exponents exist for. */
-    private static final double APART = 4.0;
-
-    /** {@code log2(5)} rounded down, with {@link #APART} covering what the rounding leaves. */
-    private static final double LOG2_OF_FIVE = 2.321928094887362;
-
     public ExactRatio {
         if (numeratorWithoutUnits == null || denominatorWithoutUnits == null) {
             throw new IllegalArgumentException("a ratio is two whole numbers");
@@ -107,6 +99,26 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                     fives = added(fives, moved);
                 }
             }
+            within(twos);
+            within(fives);
+        }
+    }
+
+    /**
+     * An exponent this type holds, which is one whose negation it holds too.
+     *
+     * <p>Asked here because here is where every ratio is made, and because the rule it keeps is the
+     * one every other method would otherwise have to ask for itself. Taking a reciprocal negates
+     * both exponents, reading the scale of the decimal this is negates them, and writing the powers
+     * out puts whichever of them is below the line on the other side of it — so a value at an
+     * exponent whose negation is not held is a value no operation here can act on. The least number
+     * a long holds is its own negation, and so it is the one exponent that is not one of these: a
+     * value that reached it has left what this can represent, which is said where it happens rather
+     * than at whichever method next tries to turn it round.
+     */
+    private static void within(long exponent) {
+        if (exponent == Long.MIN_VALUE) {
+            throw new ArithmeticException("no ratio here stands at an exponent of " + exponent);
         }
     }
 
@@ -144,9 +156,16 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /**
      * This as the one fraction it is, with the powers of two and five written into the two numbers.
      *
-     * <p>For a caller whose question is about those numbers themselves — a modular inverse, a
-     * remainder, a pair of numbers a reader is shown. It costs what the exponents say, which is why
-     * nothing here reaches for it to do arithmetic.
+     * <p><b>The digits, and only for somewhere that needs the digits</b> — a number printed in a
+     * sentence, a whole number handed to something that counts in whole numbers. It costs what the
+     * exponents say, which is the cost this type is held the way it is to avoid, so reaching for it
+     * is reaching past the representation.
+     *
+     * <p>Everything a reasoning step asks of the two numbers is asked of this type instead:
+     * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} and
+     * {@link #denominatorAsRatio} for either of them as a value to go on computing with,
+     * {@link #spread} for the part of the denominator no finite decimal divides. Each of those
+     * answers from the factors and builds nothing.
      */
     public Fraction asFraction() {
         return new Fraction(
@@ -159,6 +178,47 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /** A ratio with its powers of two and five spelled out: two whole numbers in lowest terms, the
      *  second of them positive. */
     public record Fraction(BigInteger numerator, BigInteger denominator) {}
+
+    /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
+     *  is handed the factors rather than the digits. */
+    public ExactRatio numeratorAsRatio() {
+        return new ExactRatio(numeratorWithoutUnits, BigInteger.ONE,
+                Math.max(twos, 0), Math.max(fives, 0));
+    }
+
+    /** What this ratio stands over, as a ratio. */
+    public ExactRatio denominatorAsRatio() {
+        return new ExactRatio(denominatorWithoutUnits, BigInteger.ONE,
+                Math.max(-twos, 0), Math.max(-fives, 0));
+    }
+
+    /**
+     * This ratio's numerator modulo {@code modulus}, which is what a congruence asks of it.
+     *
+     * <p>A residue is all such a caller wants, and a residue of a power is reached by the bits of
+     * its exponent — so the number the residue is of is never formed. A step that asked for the
+     * fraction first would have spent the whole of what the representation saves to throw away all
+     * but a few digits of it.
+     *
+     * @param modulus a positive whole number
+     */
+    public BigInteger numeratorMod(BigInteger modulus) {
+        return residue(numeratorWithoutUnits, Math.max(twos, 0), Math.max(fives, 0), modulus);
+    }
+
+    /** What this ratio stands over, modulo {@code modulus}.
+     *
+     *  @param modulus a positive whole number */
+    public BigInteger denominatorMod(BigInteger modulus) {
+        return residue(denominatorWithoutUnits, Math.max(-twos, 0), Math.max(-fives, 0), modulus);
+    }
+
+    private static BigInteger residue(BigInteger of, long twos, long fives, BigInteger modulus) {
+        return of.mod(modulus)
+                .multiply(BigInteger.TWO.modPow(BigInteger.valueOf(twos), modulus))
+                .multiply(FIVE.modPow(BigInteger.valueOf(fives), modulus))
+                .mod(modulus);
+    }
 
     public ExactRatio plus(ExactRatio other) {
         if (isZero()) {
@@ -252,6 +312,31 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         return denominatorWithoutUnits;
     }
 
+    /**
+     * Where this stands against {@code other}, by writing both sides over one denominator.
+     *
+     * <p>No reading short of that, and the reason is what this type is. A power of five is not a
+     * count of bits, so anything cheaper rests on how well a whole number stands against the log of
+     * five — and the exponents here run to the width of a long, so the error in such a reading grows
+     * with the exponent and no margin settled on beforehand bounds it. A reading that is not a proof
+     * can put two values in the wrong order, and an order this type got wrong is a bound the algebra
+     * then reasons from.
+     *
+     * <p>So the cost of this is the cost of the difference between the two sides' powers, which is
+     * what the difference between the two values is. A cheaper order exists and is a real thing to
+     * want — a pair set far apart by its exponents is settled by brackets taken again wider until
+     * they come apart, which is what {@code Rational} does at run time. A second copy of that
+     * mechanism is the thing not to have: one of the two would be the one that drifts. Shared or not
+     * at all.
+     *
+     * <p>Which leaves a pair whose powers stand further apart than a whole number this host builds:
+     * the order between those two exists and this cannot reach it, and that is said rather than
+     * guessed at. A reading that answered such a pair from a machine's fractions would be answering
+     * exactly where it has no proof.
+     *
+     * @throws ArithmeticException where the difference between the two sides' powers is past what a
+     *         whole number here holds
+     */
     @Override
     public int compareTo(ExactRatio other) {
         if (signum() != other.signum()) {
@@ -260,39 +345,11 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         if (isZero()) {
             return 0;
         }
-        int bracketed = bracket(other);
-        if (bracketed != 0) {
-            return signum() < 0 ? -bracketed : bracketed;
-        }
-        // The bracket did not separate them, so the exponents stand within a few bits of each other
-        // and writing the difference down costs about what the two fractions cost.
         long sharedTwos = Math.min(twos, other.twos);
         long sharedFives = Math.min(fives, other.fives);
         return numeratorOver(sharedTwos, sharedFives).multiply(other.denominatorWithoutUnits)
                 .compareTo(other.numeratorOver(sharedTwos, sharedFives)
                         .multiply(denominatorWithoutUnits));
-    }
-
-    /**
-     * Which of two magnitudes is the larger where their bit lengths say so, and zero where they
-     * stand too close for that to settle it.
-     *
-     * <p>Exact in what it answers: the fraction each side holds is bracketed by its bit lengths to
-     * within a bit, and the powers are exact counts of bits, so a gap wider than that bracket is a
-     * gap. It says nothing about the pairs it leaves at zero, which are the ones written out.
-     */
-    private int bracket(ExactRatio other) {
-        double fractions = numeratorWithoutUnits.abs().bitLength()
-                - denominatorWithoutUnits.bitLength()
-                - (other.numeratorWithoutUnits.abs().bitLength()
-                        - other.denominatorWithoutUnits.bitLength());
-        double powers = (double) lessened(twos, other.twos)
-                + (double) lessened(fives, other.fives) * LOG2_OF_FIVE;
-        double gap = fractions + powers;
-        if (gap > APART) {
-            return 1;
-        }
-        return gap < -APART ? -1 : 0;
     }
 
     /** The largest whole number no greater than this. */
@@ -341,6 +398,20 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
+     * Whether a decimal is this exactly, which is a question about the value and not about any
+     * decimal that would hold it.
+     *
+     * <p>Separate from {@link #asWrittenDecimal} because a step asking only this is asking something
+     * the denominator answers on its own, and going through the number would make the answer depend
+     * on whether a {@link BigDecimal} has room for it — so a value that is a decimal, written at a
+     * scale past what a scale holds, would come back as one that is not. Which of those two a caller
+     * wants is not a distinction to leave to a null.
+     */
+    public boolean terminates() {
+        return isZero() || denominatorWithoutUnits.equals(BigInteger.ONE);
+    }
+
+    /**
      * This as a decimal a model could write, or {@code null} where no such decimal is this.
      *
      * <p>A ratio terminates exactly where its denominator is made of the factors ten is made of,
@@ -366,8 +437,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
             throw new ArithmeticException("no decimal holds a scale of " + scale);
         }
         return new BigDecimal(
-                numeratorWithoutUnits.multiply(power(BigInteger.TWO, twos + scale))
-                        .multiply(power(FIVE, fives + scale)),
+                numeratorWithoutUnits.multiply(power(BigInteger.TWO, added(twos, scale)))
+                        .multiply(power(FIVE, added(fives, scale))),
                 (int) scale);
     }
 

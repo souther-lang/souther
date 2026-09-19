@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,15 +81,6 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         isCompact(wide.times(wide));
         isCompact(wide.negated());
         isCompact(wide.abs());
-    }
-
-    @Test
-    void theOrderOverACompactDecimalIsDecidedWithoutWritingItOut() {
-        ExactRatio wide = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
-        assertTrue(wide.compareTo(ExactRatio.ONE) < 0);
-        assertTrue(wide.compareTo(ExactRatio.ZERO) > 0);
-        assertTrue(wide.negated().compareTo(wide) < 0);
-        assertEquals(0, wide.compareTo(ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH)));
     }
 
     /**
@@ -187,6 +179,85 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertEquals(0, A_MILLIONTH_OF_A_MILLIONTH.compareTo(at));
         assertTrue(at.unscaledValue().bitLength() < FEW,
                 () -> "the bound came back over " + at.unscaledValue().bitLength() + " bits");
+    }
+
+    /**
+     * A wide decimal through the preimage, which is where a reasoning step asks a ratio for its two
+     * numbers and would spell them out to get an answer it takes a residue of.
+     *
+     * <p>The subject is the image and not the ratio: the type can hold a value compactly and still
+     * lose it at the first step that asks the wrong question of it, and this is the step that asks.
+     */
+    @Test
+    void aWideDecimalThroughAnImagesPreimageNeverSpellsItsPowersOut() {
+        // A value whose powers cannot be written down at all, which is what makes this a question
+        // about the step and not about how long a machine takes: a step that reaches for the two
+        // numbers does not run slowly here, it has no answer. The residues it actually wants are a
+        // few multiplications whatever the exponents are.
+        ExactRatio past = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -3_000_000_000L, -3_000_000_000L);
+        BigInteger prime = BigInteger.valueOf(97);
+        assertThrows(ArithmeticException.class, past::asFraction);
+        assertEquals(BigInteger.ONE, past.numeratorMod(prime));
+        assertEquals(BigInteger.TEN.modPow(BigInteger.valueOf(3_000_000_000L), prime),
+                past.denominatorMod(prime));
+
+        ExactRatio aThird = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+        AdditiveImage overDecimals = new AdditiveImage.OverFiniteDecimals(past);
+        assertNotNull(overDecimals.affinePreimage(past, past, Granularity.DENSE));
+        assertNotNull(overDecimals.affinePreimage(past, past, Granularity.DISCRETE));
+        assertNotNull(overDecimals.affinePreimage(aThird, past, Granularity.DENSE));
+        assertNotNull(overDecimals.affinePreimage(aThird, past, Granularity.DISCRETE));
+
+        AdditiveImage overWhole = new AdditiveImage.OverWholeNumbers(past);
+        assertNotNull(overWhole.affinePreimage(past, past, Granularity.DENSE));
+        assertNotNull(overWhole.affinePreimage(aThird, past, Granularity.DENSE));
+    }
+
+    /**
+     * The order over a pair the powers put far apart.
+     *
+     * <p>Two values stand where they stand, and a reading that decided it from a machine's fractions
+     * would be deciding where the error in that reading grows with the exponent. So either the
+     * answer is the one writing both sides out gives, or this says it could not reach it — and never
+     * the other order.
+     */
+    @Test
+    void theOrderIsTheTrueOneOrNoneAtAll() {
+        ExactRatio justOverOne = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -69_657_842_846_620_870L, 30_000_000_000_000_000L);
+        assertThrows(ArithmeticException.class, () -> justOverOne.compareTo(ExactRatio.ONE));
+
+        ExactRatio wide = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
+        assertTrue(wide.compareTo(ExactRatio.ONE) < 0);
+        assertTrue(wide.compareTo(ExactRatio.ZERO) > 0);
+        assertTrue(wide.negated().compareTo(wide) < 0);
+        assertEquals(0, wide.compareTo(ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH)));
+    }
+
+    /**
+     * The exponents are a range closed under negation, and that is asked where a ratio is made.
+     *
+     * <p>Every operation here turns an exponent round: a reciprocal negates both, reading the scale
+     * of the decimal this is negates them, writing the powers out puts whichever is below the line
+     * on the other side. The least number a long holds is its own negation, so a ratio standing at
+     * it is one no operation could act on — and squaring a half reaches it, which is why this is a
+     * rule and not a remark.
+     */
+    @Test
+    void anExponentWhoseNegationIsNotHeldIsNotHeldEither() {
+        assertThrows(ArithmeticException.class,
+                () -> new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MIN_VALUE, 0));
+        assertThrows(ArithmeticException.class,
+                () -> new ExactRatio(BigInteger.ONE, BigInteger.ONE, 0, Long.MIN_VALUE));
+
+        ExactRatio at = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
+        for (int i = 0; i < 62; i++) {
+            at = at.times(at);
+        }
+        assertEquals(-(1L << 62), at.twos());
+        ExactRatio reached = at;
+        assertThrows(ArithmeticException.class, () -> reached.times(reached));
     }
 
     /** The fraction is still there for a caller whose question is about those two numbers, and it is
