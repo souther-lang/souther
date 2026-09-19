@@ -52,14 +52,20 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     /**
      * What makes two positions one position: where the line falls, and not the units it was said in.
      *
-     * <p>A third and two sixths are one place, which an exact ratio in lowest terms already says.
+     * <p>A third and two sixths are one place, which an exact ratio in lowest terms already says —
+     * so the ratio names itself here, by its own canonical parts and not by its digits. A line on a
+     * quantity written at a millionth is one this tells from every other; that is what a name is
+     * for, and spelling the millionth out is not part of it.
      *
      * <p>An order with no numbers answers with its own value. Nothing scales such a quantity — a
      * rule holding two strings apart writes the whole of it — so there is no fraction to reduce.
      */
     public String key() {
         ExactRatio at = exactly();
-        return at == null ? written.key() : at.numerator() + "/" + at.denominator();
+        if (at == null) {
+            return written.key();
+        }
+        return at.key();
     }
 
     /**
@@ -77,8 +83,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (at == null) {
             return new CutPosition(written.canonical(), per);
         }
-        return new CutPosition(reduced(written, ExactRatio.of(at.numerator())),
-                ExactRatio.of(at.denominator()));
+        return new CutPosition(reduced(written, at.numeratorAsRatio()), at.denominatorAsRatio());
     }
 
     /**
@@ -282,6 +287,10 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      *
      * <p>Exact, because both lines are: the digits needed are what it takes for a tenth of that many
      * to fit inside the distance. Zero where the two are the same place, which no run has.
+     *
+     * <p>Read off the distance's size rather than by forming one over it and counting the digits of
+     * what came back. A distance of a millionth has an answer of about a million, and the number
+     * built to be measured had as many digits as the answer counts.
      */
     public int digitsToTellApartFrom(CutPosition other) {
         ExactRatio mine = exactly();
@@ -293,7 +302,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (apart.isZero()) {
             return 0;
         }
-        return ExactRatio.ONE.dividedBy(apart).floor().toString().length() + 1;
+        return apart.placesItStandsAbove() + 1;
     }
 
     private static ExactRatio numberOf(Level level) {

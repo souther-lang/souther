@@ -23,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -131,6 +132,34 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
 
         assertEquals(third.key(), twoSixths.key(), "which is what the key already said");
         assertEquals(third.canonical(), twoSixths.canonical(), "and now what the value says");
+    }
+
+    /**
+     * A line a compact decimal puts at a third of a millionth is named and measured without either
+     * being written out.
+     *
+     * <p>Both are questions the size answers and neither is about digits: a name tells two lines
+     * apart, and a count of places says how far into a decimal a search has to look. Worked out by
+     * forming the number instead, naming such a line spelled a millionth and measuring the distance
+     * to another built a whole number of about as many digits as the count it was measured for —
+     * which is the work a compact decimal was held compactly to avoid.
+     */
+    @Test
+    void aLineAtAThirdOfAMillionthIsNamedAndMeasuredWithoutBeingWrittenOut() {
+        ExactRatio aMillionth = ExactRatio.of(new java.math.BigDecimal(
+                java.math.BigInteger.ONE, 1_000_000));
+        CutPosition line = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(3));
+        CutPosition beside = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(6));
+
+        assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+            assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
+            assertNotEquals(line.key(), beside.key(), "two lines, two names");
+            assertEquals(line.key(), new CutPosition(
+                            new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
+                    "and one line, one name");
+            assertTrue(line.digitsToTellApartFrom(beside) > 1_000_000,
+                    "a sixth of a millionth apart takes about that many places to name");
+        });
     }
 
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */

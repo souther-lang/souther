@@ -32,8 +32,8 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void aNegativeDenominatorMovesToTheNumerator() {
-        assertEquals(BigInteger.valueOf(-1), ratio(1, -3).numerator());
-        assertEquals(BigInteger.valueOf(3), ratio(1, -3).denominator());
+        assertEquals(BigInteger.valueOf(-1), ratio(1, -3).asFraction().numerator());
+        assertEquals(BigInteger.valueOf(3), ratio(1, -3).asFraction().denominator());
     }
 
     @Test

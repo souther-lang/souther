@@ -921,6 +921,6 @@ public final class NumericDomain<A> {
     }
 
     private static boolean writtenExactly(ExactCut cut) {
-        return cut == null || cut.at().asWrittenDecimal() != null;
+        return cut == null || cut.at().fitsWrittenDecimal();
     }
 }
