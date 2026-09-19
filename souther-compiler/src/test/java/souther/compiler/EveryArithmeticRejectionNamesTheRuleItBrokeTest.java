@@ -94,16 +94,21 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
                 "the rule is the same whether or not the two newtypes agree");
     }
 
+    /**
+     * One newtype over itself is the exact number its cancelled units leave, and over an unlike one
+     * there is nothing to say what the quotient is of.
+     *
+     * <p>Both rows, because the two are told apart by the names and not by the bases: {@code Amount}
+     * and {@code Quantity} both wrap an {@code Int} and divide into nothing.
+     */
     @Test
-    void aQuotientOfTwoNewtypesIsAValueInNeitherOfThem() {
-        Diagnostic alike = refusalOf("(a: Amount, b: Amount) : Amount", "a / b");
-        assertInstanceOf(ArithmeticMessage.AQuotientChangesDimension.class, alike.said(),
-                "a quotient leaves the dimension the way a product does, but not for the same reason");
-        assertEquals(2, alike.secondary().size(), "each operand is named with the newtype it is");
+    void oneNewtypeOverItselfIsTheNumberTheUnitsLeave() {
+        allows("(a: Amount, b: Amount) : Rational", "a / b");
 
-        Diagnostic unlike = refusalOf("(a: Amount, q: Quantity) : Amount", "a / q");
+        Diagnostic unlike = refusalOf("(a: Amount, q: Quantity) : Rational", "a / q");
         assertInstanceOf(ArithmeticMessage.AQuotientChangesDimension.class, unlike.said(),
-                "unlike newtypes divide into a dimension of their own, which is refused the same way");
+                "two quantities of different kinds divide into a dimension nothing declared");
+        assertEquals(2, unlike.secondary().size(), "each operand is named with the newtype it is");
     }
 
     @Test
@@ -173,7 +178,8 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
         List<Diagnostic> refusals = List.of(
                 refusalOf("(a: Amount, q: Quantity) : Amount", "a + q"),
                 refusalOf("(a: Amount, b: Amount) : Amount", "a * b"),
-                refusalOf("(a: Amount, b: Amount) : Amount", "a / b"),
+                refusalOf("(a: Amount, q: Quantity) : Rational", "a / q"),
+                refusalOf("(a: Amount, n: Int) : Amount", "a / n"),
                 refusalOf("(n: Int, a: Amount) : Amount", "n / a"),
                 refusalOf("(a: Amount, n: Int) : Amount", "a + n"),
                 refusalOf("(r: Rate, n: Int) : Rate", "r * n"),

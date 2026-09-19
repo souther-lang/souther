@@ -128,6 +128,43 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
                 """);
     }
 
+    /**
+     * One newtype over itself is the exact number its cancelled units leave, and a model writing it
+     * reaches for {@code .value} on neither side.
+     *
+     * <p>Three hundred yen over two hundred is three halves — a ratio of two amounts of money, which
+     * is a number and not an amount. The row narrows it at the position, since no field holds one.
+     */
+    @Test
+    void oneNewtypeOverItselfIsTheNumberTheUnitsLeave() throws Exception {
+        String model = """
+                module demo
+                data Yen = Int
+                data N = Int
+                behavior calc : (n: N) -> N constructs N, Yen
+                let calc (n) = N(Rational.toInt(DOWN, Yen(300) / Yen(200) * 100))
+                """;
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(model), getClass().getClassLoader());
+        Object in = Codecs.decoded(loader, "demo.N", 0L);
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
+        assertEquals(150L, Codecs.encode(loader, "demo.N", Codecs.apply(b, in)));
+    }
+
+    /** And two quantities of different kinds do not divide: nothing says what their quotient is of. */
+    @Test
+    void twoUnlikeNewtypesDoNotDivide() {
+        CompileException e = refused("""
+                module demo
+                data Yen = Int
+                data Count = Int
+                data N = Int
+                behavior calc : (n: N) -> N constructs N, Yen, Count
+                let calc (n) = N(Rational.toInt(DOWN, Yen(300) / Count(2)))
+                """);
+        assertTrue(e.getMessage().contains("different kinds"), e.getMessage());
+    }
+
     /** A newtype's scalar division is not inherited: the dimension survives and the type does not, so
      *  there is no value of the base to wrap again. */
     @Test

@@ -322,6 +322,15 @@ public final class BinaryElaborator {
     private static Core arithmetic(Hir.Binary bin, Core left, Core right, Type result,
                                    CheckContext ctx) {
         Type base = TypeOps.directNumericNewtypeBase(result, ctx.symbols());
+        // Where the operator answers an exact value, the newtype's name is what cancelled: one
+        // quantity over another of the same kind is a number and not a quantity (ADR-0116), so the
+        // operands are opened and nothing is constructed again. Opened here for the reason every
+        // other newtype arithmetic is: what the tree carries is the arithmetic over the numbers, and
+        // no reader below has to recognise a wrapper to find them.
+        if (result == Type.RATIONAL) {
+            return new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx),
+                    ctx.occurrenceOf(bin.origin()), result, bin.pos());
+        }
         // A newtype is a declaration a module wrote, which is what having a base says of it; the
         // pattern is what used to be an unchecked cast below.
         if (base == null || !(result instanceof Type.Ref(TypeSymbol.AtModule wrapper))) {

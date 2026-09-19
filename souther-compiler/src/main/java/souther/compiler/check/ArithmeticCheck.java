@@ -122,9 +122,9 @@ sealed interface ArithmeticCheck {
         }
     }
 
-    /** A quotient of two newtypes is a value in neither of them: a bare ratio where they are the
-     * same newtype, a quantity per quantity where they are not, and the language expresses
-     * neither. */
+    /** A quotient of two unlike newtypes is a quantity per quantity, and nothing says what the
+     * quotient is of. One newtype over itself is not this: there the dimension cancels and the
+     * language has a type for what is left (ADR-0116). */
     record QuotientChangesDimension(Type left, Type right) implements Refusal {
                 @Override public Diagnostic.Builder saying() {
             return Diagnostic.say(new ArithmeticMessage.AQuotientChangesDimension(Type.show(left, right),
@@ -218,7 +218,14 @@ sealed interface ArithmeticCheck {
         if (ln != null && rn != null) {
             return switch (op) {
                 case MUL -> new Refused(new ProductChangesDimension(lt, rt));
-                case DIV -> new Refused(new QuotientChangesDimension(lt, rt));
+                // One quantity over another of the same kind: the dimension cancels and what is left
+                // is the exact number the cancelled quotient is (ADR-0116). Over two unlike newtypes
+                // nothing says what the quotient would be of, which is another rule and another
+                // sentence. Asked of the names and not of their bases, as the product above is: two
+                // newtypes over one base are still two kinds.
+                case DIV -> lt.equals(rt)
+                        ? new Allowed(Type.RATIONAL)
+                        : new Refused(new QuotientChangesDimension(lt, rt));
                 default -> lt.equals(rt)
                         ? new Allowed(lt)
                         : new Refused(new DifferentNewtypes(lt, rt));
