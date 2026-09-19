@@ -334,10 +334,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " for an arithmetic it writes no operator for"),
             new Held("souther.compiler.semantics.Arithmetic.TheOperator.writtenAs",
                     "hands back the operator such an arithmetic is: it is the one it computes"),
-            new Held("souther.compiler.semantics.Arithmetic.ATruncatingQuotient.writtenAs",
-                    "names the operator a truncating quotient is written as, which is what makes"
-                            + " the quotient an author writes and the one the library answers one"
-                            + " number"),
             new Held("souther.compiler.check.BoundOperationFacts.writtenAs",
                     "indexes the operations by the operator each of their arithmetics is written"
                             + " as, once, where the facts are gathered"),

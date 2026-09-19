@@ -1471,9 +1471,11 @@ final class Terms {
      * The quotient {@code b} is, or null where there is no rule about it.
      *
      * <p>Only over whole numbers, which is what having a {@link NumericMeaning.TruncatingQuotient}
-     * at all says: {@code /} on {@code Int} truncates toward zero, and on {@code Decimal} it rounds
-     * to a precision the run time sets (spec §stdlib-decimal), which is other arithmetic and not a
-     * quotient this reads. That choice is the operation's and not the path's.
+     * at all says: what {@code Int.truncatingDivide} answers is the whole number left by truncating
+     * toward zero, and a quotient rounded to a scale ({@code Decimal.divide}) is other arithmetic
+     * and not a quotient this reads. That choice is the operation's and not the path's — the
+     * operator's own quotient is exact and has no fraction to place, so it is not among these at
+     * all.
      *
      * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
      * zero, and whether it is the kind of value the operator's divisor could be at all, are asked

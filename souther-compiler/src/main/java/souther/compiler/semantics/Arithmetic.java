@@ -32,15 +32,17 @@ public sealed interface Arithmetic {
      * The operator the language writes this arithmetic as, or null where it writes none.
      *
      * <p>Declared with the arithmetic because it is a fact about which arithmetic it is: what
-     * {@code /} computes over whole numbers is the truncating quotient, and a reader holding the
-     * operator and wanting the operation that owns the account is asking exactly this. Kept
+     * {@code +} computes over whole numbers is what {@code Int.add} answers, and a reader holding
+     * the operator and wanting the operation that owns the account is asking exactly this. Kept
      * anywhere else, which operation an operator reaches would be a second list beside the one the
      * declarations already are.
      *
-     * <p>Not every arithmetic has one. A remainder is written as a call only, and a quotient
-     * rounded to a scale is not what {@code /} over decimals computes. What an operator names is
-     * the arithmetic and not the operation: two operations computing one arithmetic are two the
-     * operator reaches, and a reader that needs one of them has nothing here to pick with.
+     * <p>Not every arithmetic has one. A remainder is written as a call only, and so are the two
+     * quotients that name how their fraction goes — what {@code /} answers is exact, and an
+     * operation that truncates or rounds is a different number from the one the operator computes.
+     * What an operator names is the arithmetic and not the operation: two operations computing one
+     * arithmetic are two the operator reaches, and a reader that needs one of them has nothing here
+     * to pick with.
      */
     default BinOp writtenAs() {
         return null;
@@ -86,8 +88,10 @@ public sealed interface Arithmetic {
         }
     }
 
-    /** A division of whole numbers truncated toward zero — the quotient {@code /} answers, reached
-     *  where the divisor is one the model admits as zero. */
+    /** A division of whole numbers truncated toward zero, answered in the case carrying a number
+     *  and not where the divisor is one the model admits as zero. Written as a call: the operator's
+     *  quotient is exact, and this is the number a model asks for when it says where the fraction
+     *  goes. */
     record ATruncatingQuotient() implements Arithmetic {
 
         @Override
@@ -106,11 +110,6 @@ public sealed interface Arithmetic {
          */
         public int divisor() {
             return 1;
-        }
-
-        @Override
-        public BinOp writtenAs() {
-            return BinOp.DIV;
         }
 
         /**

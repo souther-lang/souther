@@ -130,13 +130,17 @@ public sealed interface TakenAs {
      * The whole-number quotient of the value by what the divisor argument reads as, truncated
      * toward zero.
      *
-     * <p><b>An observation and not a composition.</b> The quotient of a position by a constant is
+     * <p><b>An observation and not a composition.</b> This quotient of a position by a constant is
      * not an affine form of that position — a truncating divide is a step and not a line — and
      * nothing here says it is. What it is is a number taken of one place, exactly as the hour is a
      * number taken of a time: read off the value that stands there, and answered for by a value
      * that can be built. So a rule written over it is a rule over two numbers — the position's own
      * and this one — and the arithmetic between them stays affine without anything approximating
      * the divide.
+     *
+     * <p>Which is what tells it from the operator's quotient beside it. That one is exact, so it
+     * weighs the position by a ratio and is a line drawn through it; this one keeps only the whole
+     * number, and what it left behind is what no form can say.
      *
      * <p>Which is what makes it realizable rather than invertible. There is no inverse: every
      * dividend in a run of them answers one quotient. What a search needs is a value that reads
@@ -153,8 +157,9 @@ public sealed interface TakenAs {
      *
      * <p>A call whose divisor the reading cannot resolve to a number has no account here and is a
      * rule nothing draws a line for, and so has one dividing by nought. How the divisor was spelled
-     * is not what settles it: a name given a number is that number, so {@code x / TWO} over a
-     * {@code TWO} that is one is the account {@code x / 2} is.
+     * is not what settles it: a name given a number is that number, so
+     * {@code Int.truncatingDivide(x, TWO)} over a {@code TWO} that is one is the account
+     * {@code Int.truncatingDivide(x, 2)} is.
      *
      * <p>Which argument the divisor is, is the arithmetic's own answer
      * ({@link Arithmetic.ATruncatingQuotient#divisor}) and is carried here as a position. A word
