@@ -6233,7 +6233,7 @@ Reported at the call (<<what-is-ordered-by-is-an-ordered-value>>). Not a type mi
 
 [,text]
 ----
-`sum` needs an Int or a Decimal element, but the element is String.
+`sum` needs a list of Int, Decimal or Rational, but the element is String.
 ----
 
 Reported at the call (<<what-is-summed-is-a-number>>). The same shape as <<e1816>> and a different obligation: `+sum+` and `+product+` declare `+List<'a>+`, and what `+'a+` has to be is one of the types arithmetic is defined for.

@@ -757,7 +757,7 @@ public final class CallElaborator {
      * peeled before the position is read, exactly as a written literal has it peeled.
      *
      * <p>Three things the position can be, and they are three different reports. It states one of
-     * the two: that is the answer. It states nothing: the answer is asked for rather than defaulted,
+     * the numbers arithmetic is defined for: that is the answer. It states nothing: the answer is asked for rather than defaulted,
      * since defaulting to {@code Int} would make a numeric-literal default rule out of one library
      * function. It states something else: nothing about the element is unknown, and what is wrong is
      * that a sum does not go here — asking for an annotation would send the reader after something
