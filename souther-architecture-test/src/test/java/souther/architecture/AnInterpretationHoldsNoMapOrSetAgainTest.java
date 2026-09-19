@@ -34,8 +34,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * hand as more are moved, is the same defect one level up — a class moved and never added is a class
  * this stops watching without saying so. So this is about {@link souther.compiler.partition
  * .Interpretation} alone, the way a rule about a form's own coefficients is about {@code
- * CanonicalForm} alone ({@link AFormIsWalkedThroughTheOrderItsPositionsDecideTest}); the next
- * carrier this repository moves gets a test of its own next to this one, not an entry added here.
+ * CanonicalForm} alone ({@link AFormIsWalkedThroughTheOrderItsPositionsDecideTest}).
+ *
+ * <p><b>Transitional, and named as such.</b> This is the shape a guard takes while only some of a
+ * package has been moved — a rule over every field {@code souther.compiler.partition} declares
+ * would answer about the ones still to move as much as about this one, and would be red from the
+ * day it was written for reasons that have nothing to do with a regression. Once the whole package
+ * is moved, the population becomes something the compiled output can be asked for directly —
+ * every field {@code souther.compiler.partition} declares, read by {@link CompiledOutputs
+ * #inTheClassesOf} — and a rule built that way replaces this file rather than standing beside it.
+ * Until then, a carrier moved on its own gets a guard of its own; nothing here is meant to answer
+ * for more than {@code Interpretation} in the meantime.
  *
  * <p><b>Asked of the type and not of a list of names.</b> A field typed through the {@code Map} or
  * {@code Set} interface is not the only way this defect returns — a field typed as a platform
@@ -102,15 +111,23 @@ class AnInterpretationHoldsNoMapOrSetAgainTest {
 
     /** Whether the type {@code internalName} names is a kind of {@code java.util.Map} or
      *  {@code java.util.Set}, answered by loading the class rather than by a list of names —
-     *  every platform implementation and every custom one alike. */
+     *  every platform implementation and every custom one alike.
+     *
+     *  <p>A type this cannot load is not a type proved to be neither: it is a question this
+     *  cannot answer, and it fails rather than passing while silent about it — the same way
+     *  {@link CompiledOutputs#read} does for a class it was asked for and never built. Reading
+     *  every module of the reactor, a field's own type failing to load here is a hole in this
+     *  test rather than a fact about the field. */
     private static boolean isAMapOrASet(String internalName) {
+        String named = internalName.replace('/', '.');
         try {
-            Class<?> loaded = Class.forName(internalName.replace('/', '.'), false,
+            Class<?> loaded = Class.forName(named, false,
                     AnInterpretationHoldsNoMapOrSetAgainTest.class.getClassLoader());
             return Map.class.isAssignableFrom(loaded) || Set.class.isAssignableFrom(loaded);
-        } catch (ClassNotFoundException | LinkageError unreachable) {
-            // A type nothing here can load answers this the way anything unproven does: no.
-            return false;
+        } catch (ClassNotFoundException | LinkageError unresolved) {
+            throw new AssertionError(
+                    "whether " + named + " is a kind of Map or Set could not be settled, so this"
+                            + " rule cannot say the field it types is neither", unresolved);
         }
     }
 
@@ -122,8 +139,14 @@ class AnInterpretationHoldsNoMapOrSetAgainTest {
      */
     static final class AClassStillCarryingAMap {
 
+        /** Read by the rule above and by nothing here: a field this rule finds is the whole of
+         *  what this stands for. */
+        @SuppressWarnings("UnusedVariable")
         private final Map<String, Integer> throughTheInterface = Map.of();
 
+        /** Read by the rule above and by nothing here: a field this rule finds is the whole of
+         *  what this stands for. */
+        @SuppressWarnings("UnusedVariable")
         private final ConcurrentHashMap<String, Integer> throughAnImplementation =
                 new ConcurrentHashMap<>();
 
