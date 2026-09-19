@@ -87,11 +87,17 @@ class AConstantAFoldReachesIsTheNumberItIsWrittenInPlaceOfTest {
         assertEquals(List.of(), measured.lines());
     }
 
-    /** A {@code Decimal} divide is answered by the run time at a scale this does not hold, and the
-     *  rule states what it always stated. */
+    /**
+     * An operation over written numbers that the fold does not compute leaves the rule unread, and
+     * the rule states what it always stated.
+     *
+     * <p>Beside the same number written out, so the two differ in the operation alone: a rounding to
+     * the place a number already sits at is that number, and what leaves the rule unread is that
+     * nothing here computes the rounding.
+     */
     @Test
-    void aDecimalDivideLeavesTheRuleUnread() {
-        unread(overOne("Decimal", "x < 7.0m / 2.0m"));
+    void anOperationTheFoldDoesNotComputeLeavesTheRuleUnread() {
+        unread(overOne("Decimal", "x < Decimal.round(1, HALF_UP, 3.5m)"));
         assertEquals(List.of("3.5"), lines(overOne("Decimal", "x < 3.5m")));
     }
 

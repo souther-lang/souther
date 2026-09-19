@@ -1145,8 +1145,8 @@ final class Terms {
      *
      * <p>Two questions and not one. What was computed is {@link NumericMeaning} and is the
      * operation's own semantics; what of it this can prove in is a recipe, and it is less — a
-     * meaning with no recipe is arithmetic this reads and derives nothing from, which is what
-     * {@code /} over {@code Decimal} has always been.
+     * meaning with no recipe is arithmetic this reads and derives nothing from, which the exact
+     * quotient {@code /} answers is.
      */
     private Derivation recipeFor(NumericMeaning meaning, Denotations at) {
         if (meaning == null) {

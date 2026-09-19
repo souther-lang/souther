@@ -3,10 +3,12 @@
 // a Decimal operation.
 //
 // The `+ - * /` operators stay compiler-integrated as syntax (they carry the closed-newtype rules),
-// but what they mean is these kernels: the backend emits a call to DecimalMath rather than to a
-// BigDecimal method, as Int's operators already call IntMath (ADR-0112). Every function below is an
-// ordinary kernel described by its declaration, `divide` included — the primitive-headed union it
-// answers is one a declaration may name (ADR-0081).
+// and what the first three mean is these kernels: the backend emits a call to DecimalMath rather than
+// to a BigDecimal method, as Int's operators already call IntMath (ADR-0112). `/` is not among them —
+// its quotient is exact and answers a Rational (ADR-0116), so `divide` here is the operation for a
+// model that wants a Decimal quotient and names the scale and the mode it wants one at. Every
+// function below is an ordinary kernel described by its declaration, `divide` included — the
+// primitive-headed union it answers is one a declaration may name (ADR-0081).
 module souther.decimal
 
 // An ordinary data: a mode is evaluated at the call like any other argument. The implementation is

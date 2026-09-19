@@ -1141,7 +1141,8 @@ public interface Ast {
 
     record DecimalLit(java.math.BigDecimal value, SourcePos pos, Region region) implements Expr {}
 
-    /** Unary minus {@code -operand} on an Int or Decimal (spec §an-operator-takes-the-types-it-is-defined-for). */
+    /** Unary minus {@code -operand} on a number, answering the type it was given (spec
+     *  §an-operator-takes-the-types-it-is-defined-for). */
     record Neg(Expr operand, SourcePos pos, Region region) implements Expr {}
 
     record StringLit(String value, SourcePos pos, Region region) implements Expr {}

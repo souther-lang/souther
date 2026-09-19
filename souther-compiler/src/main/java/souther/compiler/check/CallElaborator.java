@@ -745,19 +745,19 @@ public final class CallElaborator {
     }
 
     /**
-     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int} or
-     * {@code Decimal} — the two types {@code +} and {@code *} are defined for — and nothing else:
-     * a newtype over one of them declares neither an addition nor a zero, so it is rejected here
-     * rather than folded as the value it wraps.
+     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int},
+     * {@code Decimal} or {@code Rational} — the types {@code +} and {@code *} are defined for
+     * (ADR-0116) — and nothing else: a newtype over one of them declares neither an addition nor a
+     * zero, so it is rejected here rather than folded as the value it wraps.
      *
      * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
-     * is {@code 0} or {@code 0.0m} by which of the two this is. That comes from the position the call
+     * is the nought or the one of whichever of them this is. That comes from the position the call
      * is written in — the field, the annotated binding, the declared output it feeds. A {@code ?}
      * field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is
      * peeled before the position is read, exactly as a written literal has it peeled.
      *
      * <p>Three things the position can be, and they are three different reports. It states one of
-     * the two: that is the answer. It states nothing: the answer is asked for rather than defaulted,
+     * the numbers arithmetic is defined for: that is the answer. It states nothing: the answer is asked for rather than defaulted,
      * since defaulting to {@code Int} would make a numeric-literal default rule out of one library
      * function. It states something else: nothing about the element is unknown, and what is wrong is
      * that a sum does not go here — asking for an annotation would send the reader after something

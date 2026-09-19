@@ -74,6 +74,12 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     void aNewtypeIsNotDividedByABareNumberOfItsBase() {
         Diagnostic d = refusalOf("(a: Amount, n: Int) : Amount", "a / n");
         assertInstanceOf(ArithmeticMessage.AQuotientLeavesTheWrappedType.class, d.said());
+
+        // And over a newtype whose base is the other number, because this rule is the one that
+        // reads the base: what refuses it is the base operation answering something no wrapper
+        // holds, which is a fact about `Int / Int` and about `Decimal / Decimal` separately.
+        Diagnostic overADecimal = refusalOf("(r: Rate, d: Decimal) : Rate", "r / d");
+        assertInstanceOf(ArithmeticMessage.AQuotientLeavesTheWrappedType.class, overADecimal.said());
     }
 
     @Test
@@ -104,6 +110,9 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     @Test
     void oneNewtypeOverItselfIsTheNumberTheUnitsLeave() {
         allows("(a: Amount, b: Amount) : Rational", "a / b");
+        // Over either base, this being where the cancellation and the exact quotient cross: the
+        // dimension goes whichever number was underneath, and what is left is the one type.
+        allows("(r: Rate, s: Rate) : Rational", "r / s");
 
         Diagnostic unlike = refusalOf("(a: Amount, q: Quantity) : Rational", "a / q");
         assertInstanceOf(ArithmeticMessage.AQuotientChangesDimension.class, unlike.said(),
@@ -116,6 +125,11 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
         Diagnostic d = refusalOf("(n: Int, a: Amount) : Amount", "n / a");
         assertInstanceOf(ArithmeticMessage.AReciprocalChangesDimension.class, d.said());
         assertEquals(2, d.secondary().size(), "each operand is named with the newtype it is");
+
+        // Beside the same shape over the other base. A value of another base is refused by a nearer
+        // rule (below), so the inverse is the rule only where the two agree on what they wrap.
+        Diagnostic overADecimal = refusalOf("(d: Decimal, r: Rate) : Rate", "d / r");
+        assertInstanceOf(ArithmeticMessage.AReciprocalChangesDimension.class, overADecimal.said());
     }
 
     @Test

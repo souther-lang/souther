@@ -196,14 +196,14 @@ public final class ConstEval {
      * with it; what is left is the divisor of nought, which the run time aborts on and which no value
      * handed back would be about.
      *
-     * <p>A {@code Decimal} divide still answers nothing here: its operator rounds at a scale this
-     * does not hold, and the exactness of that one is the other half of ADR-0116.
+     * <p>Two decimals go through the same reading, their quotient being exact as well. What the fold
+     * answers is the ratio, so a written {@code 1.0m / 3.0m} comes to a third here and not to the
+     * number of places somebody would have had to choose for it.
      */
     private static Optional<Object> quotient(Object a, Object b) {
         ExactRatio x = exactly(a);
         ExactRatio y = exactly(b);
-        if (x == null || y == null || y.isZero()
-                || (a instanceof BigDecimal && b instanceof BigDecimal)) {
+        if (x == null || y == null || y.isZero()) {
             return Optional.empty();
         }
         return Optional.of(x.dividedBy(y));
