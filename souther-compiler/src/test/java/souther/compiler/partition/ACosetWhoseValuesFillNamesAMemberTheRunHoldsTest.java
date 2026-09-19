@@ -69,7 +69,7 @@ class ACosetWhoseValuesFillNamesAMemberTheRunHoldsTest {
 
     /** Whether {@code at} is one of {@code from + by·d} for a decimal {@code d} a model writes. */
     private static boolean onTheCoset(Count at, ExactRatio from, ExactRatio by) {
-        return ExactRatio.of(at.at()).minus(from).dividedBy(by).asWrittenDecimal() != null;
+        return ExactRatio.of(at.at()).minus(from).dividedBy(by).terminates();
     }
 
     private static Count named(CandidateDomain of) {

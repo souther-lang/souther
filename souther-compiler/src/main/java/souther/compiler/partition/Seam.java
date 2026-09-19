@@ -292,10 +292,10 @@ public record Seam(CutPosition at, Level below, Level above) {
         // The denominator is how much of the quantity and the numerator is what it comes to, which
         // is what a ratio in lowest terms holds: `3 * x <= 1` is the line at a third written as a
         // rule, and the two numbers are the ones an author would write.
-        String much = muchOf.apply(
-                ExactRatio.of(rule.denominator()));
-        return side == Towards.ABOVE ? rule.numerator() + " < " + much
-                : much + " <= " + rule.numerator();
+        ExactRatio.Fraction both = rule.asFraction();
+        String much = muchOf.apply(ExactRatio.of(both.denominator()));
+        return side == Towards.ABOVE ? both.numerator() + " < " + much
+                : much + " <= " + both.numerator();
     }
 
     /**

@@ -72,8 +72,7 @@ public sealed interface AffinePreimage {
                         "a position whose values step takes whole numbers, so a progression of them"
                                 + " is written in whole numbers: " + from + " by " + by);
             }
-            if (spacing == Granularity.DENSE
-                    && (from.asWrittenDecimal() == null || by.asWrittenDecimal() == null)) {
+            if (spacing == Granularity.DENSE && !(from.terminates() && by.terminates())) {
                 throw new IllegalArgumentException(
                         "a progression names values of its position, and a position holds what a"
                                 + " model can write: " + from + " by " + by);
@@ -120,14 +119,15 @@ public sealed interface AffinePreimage {
                                 + " units are out of it, which is what every generator this is asked"
                                 + " about is: " + by);
             }
-            if (from.asWrittenDecimal() == null) {
+            if (!from.terminates()) {
                 throw new IllegalArgumentException(
                         "a member of a coset of the finite decimals is one, and a coset written from"
                                 + " a value that is not has no member that is: " + from);
             }
-            from = ExactRatio.of(from.numerator()
-                    .multiply(from.denominator().modInverse(by.numerator()))
-                    .mod(by.numerator()));
+            java.math.BigInteger modulus = by.asFraction().numerator();
+            from = ExactRatio.of(from.numeratorMod(modulus)
+                    .multiply(from.denominatorMod(modulus).modInverse(modulus))
+                    .mod(modulus));
         }
     }
 }

@@ -81,7 +81,7 @@ sealed interface CandidateDomain {
      */
     static CandidateDomain of(AffinePreimage on, NumericDomain.Bounds within) {
         return switch (on) {
-            case AffinePreimage.None ignored -> new None();
+            case AffinePreimage.None _ -> new None();
             case AffinePreimage.Stepping stepping -> stepping(stepping, within);
             case AffinePreimage.Filling filling -> filling(filling, within);
         };
@@ -176,7 +176,7 @@ sealed interface CandidateDomain {
         }
         if (order == 0) {
             // One point, and whether it is a member is decided rather than looked for.
-            return least.asWrittenDecimal() == null ? new None() : new One(at(from, by, least));
+            return least.terminates() ? new One(at(from, by, least)) : new None();
         }
         return new Somewhere(at(from, by, between(least, leastIsItsOwn, most)));
     }

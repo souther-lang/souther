@@ -555,8 +555,7 @@ public sealed interface AnotherLineTheRowsAllow {
         ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
         ExactRatio crossing = cut.minus(at).dividedBy(moves);
         // Truncated towards nought, which is what a whole number of steps short of the crossing is.
-        for (ExactRatio steps
-                : stepsAround(crossing.numerator().divide(crossing.denominator()))) {
+        for (ExactRatio steps : stepsAround(crossing.truncated())) {
             // Asked by standing at the input rather than by reasoning about which way the
             // arithmetic came out. Which side of its own threshold a value falls on is the same
             // question here as everywhere, and a number of steps worked out from the signs would be
