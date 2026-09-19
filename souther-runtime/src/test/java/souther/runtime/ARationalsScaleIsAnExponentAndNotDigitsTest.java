@@ -137,7 +137,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
 
         assertTrue(twos.compareTo(fives) > 0, "the power of two is the greater of the two");
         assertTrue(fives.compareTo(twos) < 0);
-        assertEquals(0, twos.compareTo(twos));
+        assertEquals(0, twos.compareTo(aPowerOfTwo()));
         assertTrue(twos.negated().compareTo(fives.negated()) < 0);
     }
 

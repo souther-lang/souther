@@ -90,6 +90,26 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
     }
 
     /**
+     * A value exactly half of what the scale counts goes to whichever neighbour the policy names.
+     *
+     * <p>The boundary between the two answers the rounding below one place can give, and the one where
+     * it stands equal to what it is compared against rather than inside or outside it. Nought and one
+     * place are the neighbours, and nought is the even one, so the policy that takes the even
+     * neighbour and the one that takes the nearer nought agree here and only the two above them do not.
+     */
+    @Test
+    void aValueAtHalfAPlaceGoesWhereThePolicySays() {
+        Rational half = new Rational(BigInteger.ONE, BigInteger.ONE, -1, 0);
+
+        assertEquals(1L, RationalMath.toInt(HALF_UP.INSTANCE, half));
+        assertEquals(1L, RationalMath.toInt(UP.INSTANCE, half));
+        assertEquals(0L, RationalMath.toInt(HALF_EVEN.INSTANCE, half));
+        assertEquals(0L, RationalMath.toInt(HALF_DOWN.INSTANCE, half));
+        assertEquals(0L, RationalMath.toInt(DOWN.INSTANCE, half));
+        assertEquals(-1L, RationalMath.toInt(HALF_UP.INSTANCE, half.negated()));
+    }
+
+    /**
      * A very small value is below one, and the order says so.
      *
      * <p>Ordering is a capability this type states (spec §stdlib-rational), so it is answered over
