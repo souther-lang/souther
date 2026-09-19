@@ -377,6 +377,26 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
+     * And asking for a decimal the value does not reach while naming no rounding is the caller's mistake,
+     * not the host running out of room.
+     *
+     * <p>Which of the two it is said to be is the point. The abort a whole number too large leaves by is an
+     * exception of the host's arithmetic, translated at the operation into this language's own — so a policy
+     * refused the same way came back saying no Rational held a whole number that size, which is untrue of
+     * the value, of the answer, and of the machine.
+     */
+    @Test
+    void namingNoRoundingWhereRoundingIsNeededIsTheCallersMistake() {
+        Rational aThird = Rational.of(BigInteger.ONE, BigInteger.valueOf(3));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> aThird.asDecimal(3, java.math.RoundingMode.UNNECESSARY));
+        // and a value that is the decimal asked for is answered without a policy being read at all
+        assertEquals(new BigDecimal("0.25"), Rational.of(BigInteger.ONE, BigInteger.valueOf(4))
+                .asDecimal(2, java.math.RoundingMode.UNNECESSARY));
+    }
+
+    /**
      * And asking the order the other way about answers, and answers the other way.
      *
      * <p>Not only the sign but the answering. Writing a pair out to compare it exactly is a different pair
@@ -405,6 +425,77 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
                 int forward = Integer.signum(a.compareTo(b));
                 int backward = Integer.signum(b.compareTo(a));
                 assertEquals(forward, -backward, a + " against " + b + " both ways about");
+            }
+        }
+    }
+
+    /**
+     * And the refinement on its own answers the pairs the readings above it answer.
+     *
+     * <p>It is the reading the order's promise is made of: the three above it are cheap and each is allowed
+     * to decline, and this one asks for no width in advance and so has nothing to decline for. Asked
+     * through a comparison it is unreachable to a fixture — the pairs that reach it are the ones whose
+     * fractions the host has no room to write out, which is a pair no test builds — so it is asked here
+     * directly, on the pairs the readings above it would have taken.
+     *
+     * <p>Each of these is undecided at the width the comparison starts at, which is the control: the answer
+     * below is one the width rising reached and not one the first bracket had. Take the rising away and this
+     * is what says so.
+     */
+    @Test
+    @Timeout(60)
+    void theRefinementAnswersAPairTheStartingWidthLeavesOpen() {
+        BigInteger base = BigInteger.TWO.pow(700);
+        Rational lower = Rational.of(base.add(BigInteger.ONE), base.add(BigInteger.valueOf(3)));
+        Rational higher = Rational.of(base.add(BigInteger.valueOf(11)), base.add(BigInteger.valueOf(13)));
+        assertNull(lower.magnitudeFromBrackets(higher, 128),
+                "the width the comparison starts at does not separate these");
+        assertEquals(-1, lower.magnitudeByRefining(higher));
+        assertEquals(1, higher.magnitudeByRefining(lower));
+
+        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 100);
+        Rational oneAbove = new Rational(FIVE.pow(100).add(BigInteger.ONE), BigInteger.ONE, 0, 0);
+        assertNull(aPower.magnitudeFromBrackets(oneAbove, 128));
+        assertEquals(-1, aPower.magnitudeByRefining(oneAbove));
+    }
+
+    /**
+     * And over values small enough to spell out, the order the refinement answers is the order the whole
+     * numbers do.
+     *
+     * <p>The pairs it is reached for cannot be checked against a second reading, there being no second
+     * reading of a pair no machine writes out. So it is checked where both readings are possible and asked
+     * for directly: every pair over a grid of numerators, denominators and both exponents, against the
+     * exact order of the two spelled out, in both directions. What that holds is the refinement itself —
+     * that a bracket holds the number it was taken for however many times it has been cut, and that the
+     * rising ends where the pair comes apart rather than where the pair is equal.
+     */
+    @Test
+    @Timeout(60)
+    void theOrderTheRefinementAnswersIsTheOrderTheWholeNumbersDo() {
+        List<Rational> values = new ArrayList<>();
+        for (long n : new long[] {1, 3, 7, -3}) {
+            for (long d : new long[] {1, 2, 7}) {
+                for (long twos : new long[] {-2, 0, 3}) {
+                    for (long fives : new long[] {-2, 0, 3}) {
+                        values.add(new Rational(
+                                BigInteger.valueOf(n), BigInteger.valueOf(d), twos, fives));
+                    }
+                }
+            }
+        }
+
+        for (Rational a : values) {
+            for (Rational b : values) {
+                // the exact order of the two magnitudes, by cross-multiplying them spelled out
+                int exactly = up(a).abs().multiply(down(b)).compareTo(up(b).abs().multiply(down(a)));
+                if (exactly == 0) {
+                    // Two of one magnitude are one record and one sign, which the comparison answers
+                    // before any reading is reached — and a bracket, holding both, never separates them.
+                    continue;
+                }
+                assertEquals(Integer.signum(exactly), a.magnitudeByRefining(b),
+                        a + " against " + b);
             }
         }
     }

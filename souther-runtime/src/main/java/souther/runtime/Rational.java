@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.function.Supplier;
 
 /**
  * An exact rational, which is what {@code /} answers (spec §primitives). Neither {@code Int} nor
@@ -118,9 +119,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * How many bits a power of five is first bracketed to when a comparison asks for one.
      *
      * <p>A starting point and not a limit: a bracket too wide to separate the pair it was taken for is
-     * taken again at twice this. Wide enough that the second turn is not reached by any pair a
-     * comparison is likely to be asked about — the exponents would have to put the two values within
-     * this many bits of one another — and small enough that the first turn is a few dozen
+     * taken again wider ({@link WorkingWidth}). Wide enough that the second turn is not reached by any
+     * pair a comparison is likely to be asked about — the exponents would have to put the two values
+     * within this many bits of one another — and small enough that the first turn is a few dozen
      * multiplications of numbers this size.
      */
     private static final int BRACKET_BITS = 128;
@@ -401,9 +402,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (bySign != 0) {
             return bySign;
         }
-        // Nothing here is translated, because nothing here reaches the host's largest whole number: every
-        // number a comparison forms is one of the working width, which is what bracketing each side
-        // whole rather than cross-multiplying the two fractions buys.
+        // Nothing here is translated. Every number a comparison forms is either one of the working width,
+        // which is what bracketing each side whole rather than cross-multiplying the two fractions buys,
+        // or one asked of the host by whoever forms it and answered for where it does not fit.
         int byMagnitude = compareMagnitude(other);
         return signum() > 0 ? byMagnitude : -byMagnitude;
     }
@@ -420,6 +421,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * <p>The two magnitudes are unequal, which is what makes the refinement end. The caller has that:
      * one canonical representation per value means two values of one magnitude and one sign are the same
      * record, and the comparison above answered those before reaching here.
+     *
+     * <p><b>Four readings, and only the last one always answers.</b> The three above it are there because
+     * they are cheap, and each is allowed to decline: a bracket of the starting width settles nearly every
+     * pair for a few dozen multiplications of small numbers; writing both values out as one fraction each
+     * settles a pair the host has room to write, which is every pair an ordinary model holds; and the same
+     * writing with the exponents' difference on one side settles a pair whose huge exponents cancel. What
+     * is left over goes to the refinement, which asks for no width in advance and so has nothing to
+     * decline for.
      */
     private int compareMagnitude(Rational other) {
         Integer quickly = magnitudeFromBrackets(other, BRACKET_BITS);
@@ -440,24 +449,97 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (theOtherWayAbout != null) {
             return -theOtherWayAbout;
         }
-        // Neither writing fits, and the first bracket left the pair undecided. So the width rises, and it
-        // rises until the machine says it cannot hold the next one — not until a number written here says
-        // to stop. Telling two values apart takes as many bits as they agree over, and a pair may agree
-        // over as many as its own fractions have; a width settled on in advance therefore leaves pairs
-        // undecided for a reason that is this code's rather than the machine's.
-        for (int width = BRACKET_BITS + BRACKET_BITS; width > 0; width += width) {
-            Integer decided;
-            try {
-                decided = magnitudeFromBrackets(other, width);
-            } catch (ConstraintViolation | ArithmeticException _) {
-                // The machine will not hold a bracket this wide, and holds no wider one either.
-                break;
-            }
+        return magnitudeByRefining(other);
+    }
+
+    /**
+     * Where {@code |this|} stands against {@code |other|}, from brackets taken again wider until they
+     * come apart, both magnitudes being unequal and above nought.
+     *
+     * <p>This is the reading the promise about the order is made of, and the three cheaper ones above it
+     * are what keep it from being reached. It holds nothing back: a bracket holds the value it was taken
+     * for by how it was built, so a pair the brackets separate is separated exactly, and two unequal
+     * magnitudes stand some distance apart for a bracket to get inside of. So the width that answers is
+     * the one the pair has, and the only way this does not answer is the host running out of room to hold
+     * the next width — which is the run failing and not a pair declined.
+     *
+     * <p>Apart from {@link #compareMagnitude} so that a test can ask this rung the pairs the ones above it
+     * would have answered, and see it answer them. Reached only through them, it would be the rung no
+     * fixture can put a question to: the pairs that reach it are the ones whose fractions the host has no
+     * room to write, which is a fixture no machine builds.
+     */
+    int magnitudeByRefining(Rational other) {
+        return asWideAsItTakes(
+                width -> magnitudeFromBrackets(other, width),
+                () -> "tell " + this + " from " + other);
+    }
+
+    /** A question a bracket of some width either settles or leaves open. */
+    private interface ReadFromABracket<T> {
+        @Nullable T atAWidthOf(int bits);
+    }
+
+    /**
+     * The first answer a reading gives as the width rises, and the run's failure where no width this run
+     * holds gives one.
+     *
+     * <p>One mechanism for the order and for the rounding, which ask the same thing of a bracket: both are
+     * a question with finitely many answers whose subject is an exact value, so both are settled by any
+     * bracket tight enough and by no width known before the value arrives. Here rather than in either, so
+     * that how fast a width rises is not a decision sitting in the middle of what an order means, and so
+     * that the next reading wanting a bracket gets the refinement rather than a third copy of it.
+     *
+     * <p>Nothing is caught. A reading that declines says so by answering nothing, and a reading that
+     * cannot be taken at a width the host has no room for says so where it reaches the host — a bracket
+     * being an instrument, the shortage is the run's ({@link OutOfRoom}) and is already that by the time it
+     * arrives here. An abort of this language, from a reading that found the answer itself has no
+     * representation, is a different thing and passes through untouched.
+     */
+    private static <T> T asWideAsItTakes(
+            ReadFromABracket<T> reading, Supplier<String> theQuestion) {
+        for (WorkingWidth width = WorkingWidth.startingAt(BRACKET_BITS).wider();
+                width != null; width = width.wider()) {
+            T decided = reading.atAWidthOf(width.bits());
             if (decided != null) {
                 return decided;
             }
         }
-        throw new OutOfRoom("this run has no room to tell " + this + " from " + other);
+        throw new OutOfRoom("this run has no room to " + theQuestion.get());
+    }
+
+    /**
+     * A width brackets are taken at, and what the next one up is.
+     *
+     * <p>Its own type so that the rate a width rises at is not written into the reading that rises it. A
+     * width written into a comparison is that comparison's limit rather than the machine's, which is the
+     * shape the order had to lose; a rate written there is the same mistake made about cost instead of
+     * about meaning.
+     *
+     * <p>Half again each turn rather than twice over. The number of turns is proportional to the log of how
+     * closely the pair stands either way, and the whole costs what its last turn costs either way — so what
+     * the gentler rise buys is asking the host for less past the width that would have done. Never by fewer
+     * than a few dozen bits, so that the rise is not slow while the width is small.
+     */
+    private record WorkingWidth(int bits) {
+
+        private static final int A_FEW_DOZEN_BITS = 64;
+
+        static WorkingWidth startingAt(int bits) {
+            return new WorkingWidth(bits);
+        }
+
+        /**
+         * The next width up, and null where there is none this run holds.
+         *
+         * <p>A host that counts the bits of a whole number in an {@code int} holds no number of more bits
+         * than one counts, so a bracket wider than that is one it has no room for whatever else is free.
+         * Short of that the host answers for itself, and running out of memory on the way is the run
+         * failing in the way every run does.
+         */
+        @Nullable WorkingWidth wider() {
+            long next = bits + Math.max(A_FEW_DOZEN_BITS, bits / 2L);
+            return next > Integer.MAX_VALUE ? null : new WorkingWidth((int) next);
+        }
     }
 
     /**
@@ -563,14 +645,27 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * so about exponents a scale has been added to. The rest is the same reading, and is one reading
      * rather than two because the shape it has to avoid is the same in both: a stored fraction multiplied
      * outside the bracket is a number as large as the fraction, whatever the bracket is kept to.
+     *
+     * <p>A width the host has no room for leaves as the run's shortage and not as a value refused, and
+     * leaves that way here, where the host is reached. A bracket is an instrument: the value it was taken
+     * for has a representation, the answer it was taken towards has one, and what was not to be had is a
+     * number this type never stores. So the reading above is left with two outcomes rather than three —
+     * settled, or not settled at this width — and a caller refining it is spared having to tell a shortage
+     * of room from an abort about the answer, which is a distinction no {@code catch} of the host's
+     * arithmetic can make.
      */
     private Bracketed bracketed(BigInteger byTwos, BigInteger byFives, int width) {
-        Bracketed of = quotientBracketed(numerator.abs(), denominator, width);
-        if (byFives.signum() != 0) {
-            Bracketed five = fiveTo(byFives.abs(), width);
-            of = of.times(byFives.signum() > 0 ? five : five.reciprocal(width), width);
+        try {
+            Bracketed of = quotientBracketed(numerator.abs(), denominator, width);
+            if (byFives.signum() != 0) {
+                Bracketed five = fiveTo(byFives.abs(), width);
+                of = of.times(byFives.signum() > 0 ? five : five.reciprocal(width), width);
+            }
+            return of.shiftedBy(byTwos);
+        } catch (ArithmeticException e) {
+            throw new OutOfRoom(
+                    "this run has no room for a bracket of " + width + " bits: " + e.getMessage());
         }
-        return of.shiftedBy(byTwos);
     }
 
     /**
@@ -972,20 +1067,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (exactly != null) {
             return exactly;
         }
-        // The value cannot be written out and the first bracket left it undecided, so the width rises —
-        // until the machine will not hold the next one, which is where the rising stops and why.
-        for (int width = BRACKET_BITS + BRACKET_BITS; width > 0; width += width) {
-            BigInteger decided;
-            try {
-                decided = roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, width);
-            } catch (ConstraintViolation | ArithmeticException _) {
-                break;
-            }
-            if (decided != null) {
-                return decided;
-            }
-        }
-        throw new OutOfRoom("this run has no room to round " + this);
+        // The value cannot be written out and the first bracket left it undecided, so the width rises. Which
+        // way a value rounds is where it stands against half of the way between two whole numbers, and that
+        // is an order — so it is refined by what refines the order, and for the same reason.
+        return asWideAsItTakes(
+                width -> roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, width),
+                () -> "round " + this);
     }
 
     /**
@@ -1033,8 +1120,16 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * <p>Every policy of the seven reads the sign and that standing and nothing else, which is what makes
      * the digits beside the point. At exactly half of the way the two neighbours are this whole number
      * and the next, and the policy that takes the even one takes whichever of those is even.
+     *
+     * <p>The eighth of the host's policies is not one of the seven and asks for no rounding at all, and it
+     * is reached only where rounding is what the value needs — a value exact at the scale asked for is
+     * answered above this, off its own exponents. So it refuses the way a caller's mistake is refused, and
+     * not by an exception of the arithmetic: the abort a number too large leaves by is that, so a refusal
+     * spelled the same way would be read as one, and a policy asking for something else would come back
+     * saying the host had no room.
      */
-    private BigInteger roundedFrom(BigInteger whole, int againstHalf, java.math.RoundingMode towards) {
+    private BigInteger roundedFrom(
+            BigInteger whole, int againstHalf, java.math.RoundingMode towards) {
         boolean awayFromNought = switch (towards) {
             case UP -> true;
             case DOWN -> false;
@@ -1043,7 +1138,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             case HALF_UP -> againstHalf >= 0;
             case HALF_DOWN -> againstHalf > 0;
             case HALF_EVEN -> againstHalf > 0 || (againstHalf == 0 && whole.testBit(0));
-            case UNNECESSARY -> throw new ArithmeticException("Rounding necessary");
+            case UNNECESSARY -> throw new IllegalArgumentException(
+                    "this value is not the decimal asked for, and no rounding was named: " + this);
         };
         return signedLike(awayFromNought ? whole.add(BigInteger.ONE) : whole);
     }
