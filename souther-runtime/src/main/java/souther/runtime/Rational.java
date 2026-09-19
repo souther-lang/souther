@@ -434,15 +434,19 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (quickly != null) {
             return quickly;
         }
-        // The bracket did not separate them, so they stand close. Where the powers between them can be
-        // written down, writing them down answers exactly — one fraction against another, by the walk a
-        // common measure takes, at whatever closeness the pair happens to have.
-        BigInteger byTwos = apart(twos, other.twos);
-        BigInteger byFives = apart(fives, other.fives);
-        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives);
-        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate());
-        if (up != null && down != null) {
-            return comparedAsFractions(up, down, other.numerator.abs(), other.denominator);
+        // The bracket did not separate them, so they stand close. Then the pair is written out as two
+        // fractions and compared exactly, at whatever closeness it happens to have.
+        Integer exactly = magnitudeWrittenOut(other);
+        if (exactly != null) {
+            return exactly;
+        }
+        // And asked the other way about, which is a different pair of fractions to write out and so a
+        // different question about room. Where one side's powers cancel the other's, only one of the two
+        // writings fits — and which of them that is has nothing to do with which value was asked about,
+        // so an order that took one writing and stopped answered one way round and refused the other.
+        Integer theOtherWayAbout = other.magnitudeWrittenOut(this);
+        if (theOtherWayAbout != null) {
+            return -theOtherWayAbout;
         }
         // Powers no machine writes down, and a pair the first bracket left undecided. Then what brings
         // them together is the exponents rather than the fractions, and how near two powers of two and
@@ -456,6 +460,36 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
         throw new ConstraintViolation(
                 "no whole number this machine holds tells " + this + " from " + other);
+    }
+
+    /**
+     * Where {@code |this|} stands against {@code |other|} by writing both out as one fraction each, and
+     * null where the host has no room for one of the four whole numbers that takes.
+     *
+     * <p>Each value is written out at its own exponents first, which is the writing the promise about this
+     * is made of and the only one that does not depend on which of the two was asked about. Where that has
+     * no room, the difference of the two exponents is put on this side instead and the other side is left
+     * as it stands — two values of huge but equal exponents cancel that way and are written out where
+     * their own forms could not be.
+     */
+    private @Nullable Integer magnitudeWrittenOut(Rational other) {
+        BigInteger up = writtenOut(numerator.abs(), BigInteger.valueOf(twos), BigInteger.valueOf(fives));
+        BigInteger down = writtenOut(
+                denominator, BigInteger.valueOf(twos).negate(), BigInteger.valueOf(fives).negate());
+        BigInteger thereUp = writtenOut(
+                other.numerator.abs(), BigInteger.valueOf(other.twos), BigInteger.valueOf(other.fives));
+        BigInteger thereDown = writtenOut(other.denominator,
+                BigInteger.valueOf(other.twos).negate(), BigInteger.valueOf(other.fives).negate());
+        if (up != null && down != null && thereUp != null && thereDown != null) {
+            return comparedAsFractions(up, down, thereUp, thereDown);
+        }
+        BigInteger byTwos = apart(twos, other.twos);
+        BigInteger byFives = apart(fives, other.fives);
+        BigInteger relativeUp = writtenOut(numerator.abs(), byTwos, byFives);
+        BigInteger relativeDown = writtenOut(denominator, byTwos.negate(), byFives.negate());
+        return relativeUp == null || relativeDown == null ? null
+                : comparedAsFractions(
+                        relativeUp, relativeDown, other.numerator.abs(), other.denominator);
     }
 
     /** How far one exponent stands from another, held wider than an exponent is — the difference of two

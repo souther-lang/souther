@@ -376,6 +376,39 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         }
     }
 
+    /**
+     * And asking the order the other way about answers, and answers the other way.
+     *
+     * <p>Not only the sign but the answering. Writing a pair out to compare it exactly is a different pair
+     * of whole numbers depending on which of the two the difference of the exponents is put on, so the room
+     * one writing needs is not the room the other does — and an order that took one writing and stopped
+     * would answer a pair one way round and refuse it the other. Which of the two values was asked about
+     * is not a fact about the pair, so it cannot decide whether the pair has an order.
+     */
+    @Test
+    @Timeout(60)
+    void askingTheOrderTheOtherWayAboutAnswersTheOtherWay() {
+        List<Rational> values = new ArrayList<>();
+        for (long n : new long[] {1, 3, 7, -1}) {
+            for (long d : new long[] {1, 3, 7}) {
+                for (long twos : new long[] {-30, -1, 0, 4000}) {
+                    for (long fives : new long[] {-2, 0, 1}) {
+                        values.add(new Rational(
+                                BigInteger.valueOf(n), BigInteger.valueOf(d), twos, fives));
+                    }
+                }
+            }
+        }
+
+        for (Rational a : values) {
+            for (Rational b : values) {
+                int forward = Integer.signum(a.compareTo(b));
+                int backward = Integer.signum(b.compareTo(a));
+                assertEquals(forward, -backward, a + " against " + b + " both ways about");
+            }
+        }
+    }
+
     /** The numerator of a value spelled out as one fraction, which only the small ones can be. */
     private static BigInteger up(Rational r) {
         return r.numerator().multiply(power(r.twos(), BigInteger.TWO))
