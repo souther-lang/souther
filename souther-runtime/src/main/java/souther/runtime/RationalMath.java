@@ -7,10 +7,12 @@ import java.util.Objects;
  * The {@code Rational} operators, as the runtime that owns them (ADR-0112).
  *
  * <p>Exact arithmetic has no overflow to check: the value is whatever the operands make. What is bounded
- * is what a representation holds — the width of an exponent, and how large a whole number it stores as a
- * numerator or a denominator — and {@link Rational} aborts on both for itself, at the point a value the
- * bound excludes is asked for rather than at a step on the way to one, and of the value rather than of the
- * spelling it arrived in. So what is here
+ * is what a representation holds — the width of an exponent, and a decimal's scale — and {@link Rational}
+ * aborts on both for itself, at the point a value the bound excludes is asked for rather than at a step on
+ * the way to one. What a numerator or a denominator may be is not among them: the operands these operators
+ * read into a Rational include every {@code Decimal}, whose unscaled value is a whole number of whatever
+ * size the platform holds, so a bound there would refuse a comparison over values the language says are
+ * comparable. So what is here
  * is the one thing an operator decides that the value does not — a zero divisor, which aborts the way the
  * other zero divisors of the language do (spec §stdlib-int, §jvm-abort) — and the two embeddings a
  * heterogeneous operator performs.

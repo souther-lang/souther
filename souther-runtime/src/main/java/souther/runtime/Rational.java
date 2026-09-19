@@ -82,14 +82,21 @@ import java.util.function.Supplier;
  * caught what it never called would have left the fold answering the other way.
  *
  * <p><b>Which bound each operation rests on.</b> Three bounds stand behind everything here, and they are
- * not the same kind of thing. The exponent's width, a decimal's scale and how large a part this stores
- * ({@link #STORED_BITS}) are <i>this representation's</i>: a value past them has none here, so an operation
- * reaching one refuses a value rather than a step — and refuses the value, which is why the last of them is
- * read off what is stored and not off the numbers a caller wrote. The platform's own largest whole number
- * is the <i>room this runs in</i>, and it bounds what is formed on the way to a value rather than which
- * values there are; the bound above is set so that nothing a comparison forms reaches it. A bracket's width
- * is neither: it is an <i>instrument</i>, and an instrument too coarse for a question is a reason to take a
- * finer one and never a reason to refuse.
+ * not the same kind of thing. The exponent's width and a decimal's scale are <i>this language's</i>, and
+ * a value past them has no representation, so an operation reaching one refuses a value rather than a
+ * step. The platform's largest whole number is the <i>room this runs in</i>, and it bounds what this type
+ * stores — a numerator and a denominator — and not every number formed on the way to one. A bracket's
+ * width is neither: it is an <i>instrument</i>, and an instrument too coarse for a question is a reason
+ * to take a finer one and never a reason to refuse.
+ *
+ * <p><b>What this type does not bound, and why not.</b> Not its own parts, past what the platform holds one
+ * of. Bounding them would put a ceiling on the working room a comparison can ask for, which is tempting
+ * because that room is set by the parts — but the parts a comparison reads are not always this type's. Every
+ * heterogeneous exact operation reads its other operand in here, and a {@code Decimal}'s unscaled value is a
+ * whole number of whatever size the platform holds: so the bound would not have bounded what a comparison
+ * asks for, while it would have refused a {@code Decimal} that every rule says has an exact value here
+ * (ADR-0116) and refused a comparison whose answer is a {@code Bool}. A bound on this type's parts is a
+ * bound on operations whose answer is not of this type, which is the one thing nothing here may be.
  *
  * <p>So: the product, the quotient and both narrowings build only the answer's own parts. The order and
  * the rounding take a bracket first, because one settles nearly every question for nothing; where it does
@@ -144,56 +151,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /** More bits than a factor of five takes, which is over two and a third of them. Counted over the truth
      *  so that the count of what a writing would cost is over it too. */
     private static final int MORE_BITS_THAN_A_FIVE_TAKES = 3;
-
-    /**
-     * How many bits a stored numerator or denominator holds. A value whose parts want more of them has no
-     * representation here and aborts, as one whose exponent wants more than sixty-four bits does.
-     *
-     * <p><b>Why this type bounds its parts at all,</b> when the platform's own largest whole number is far
-     * larger. Because the order has to be answered for every pair this type holds, and how much working
-     * room that takes is set by the parts: telling two values apart takes as many bits as they agree over.
-     * Left to the platform's own end, a pair of parts near it would want a bracket of several times that
-     * end — and a bracket is one whole number, which the platform counts the bits of in a thirty-two-bit
-     * count. So the width the question needed would have been past what the instrument can be, and that is
-     * not the platform running out of room: more of it would not help, and the same pair would go
-     * unanswered on any machine. It would be this implementation's own limit wearing the platform's name.
-     *
-     * <p>A bound on the parts is the other way to close that, and it is the one the language already has a
-     * shape for: a representation may bound what it holds, and a value past the bound aborts (spec
-     * §stdlib-rational). It is a bound on the value, in one place, said out loud — as against a limit on
-     * which pairs can be ordered, which is a bound on the operation and one the order may not carry.
-     *
-     * <p><b>What the number has to keep true.</b> Two things, and whoever changes it has to keep both:
-     *
-     * <pre>{@code
-     * the width a pair of parts of S bits can want    W ≤ k · S + C
-     * the largest number a bracket of width W forms   2 · W + C' ≤ what the platform builds
-     * }</pre>
-     *
-     * <p>The second is a fact about the code below: a bracket of some width squares its ends and shifts a
-     * numerator up by the width, so what it forms is about twice the width and nothing here is worse than
-     * that. The first is where the reasoning is. Two values the starting bracket leaves open are brought
-     * close either by their exponents or by their parts. By their exponents alone the closest they come is a
-     * power of two against a power of five, and whole numbers of sixty-four bits put those logarithms some
-     * sixty bits apart — which the starting width settles, so this is not the case that sets {@code k}.
-     * Closer than that is the parts' doing, and a fraction of so many bits closes on what it approximates
-     * to about twice that many, whence {@code k} of about four over the two parts.
-     *
-     * <p>That last step is an estimate and is said to be one. "About twice that many" is how well a
-     * fraction of a size <i>can</i> approximate, not a floor on how close any particular target lies: a
-     * partial quotient out of the ordinary in the right place puts a closer one there, and the exponents
-     * offer many targets to look through. So the number carries a factor of two over the estimate — a
-     * sixteenth where an eighth is what the two lines above ask for — and the estimate is only ever load
-     * bearing for how far the refinement climbs. Where it is wrong the outcome is a shortage reported as
-     * one, never a wrong answer: a bracket holds the value it was taken for however wide it was taken, so
-     * no reading here can be made to answer by having too little room, only to stop.
-     *
-     * <p>What it costs is values no operator here builds. An {@code Int} is sixty-four bits and a
-     * {@code Decimal}'s unscaled value is a whole number the platform holds; what reaches this is a sum
-     * across distant exponents, which builds the difference between them — so a fold of values whose scales
-     * are spread over a hundred million places aborts here, where before it aborted at the platform's end.
-     */
-    static final int STORED_BITS = Integer.MAX_VALUE / 16;
 
 
     /**
@@ -260,13 +217,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 fives = added(fives, -1);
             }
         }
-        // Last, and of what is stored rather than of what arrived. The bound is on the value, and the parts
-        // a caller wrote are one spelling of it: a numerator of a hundred and thirty-four million bits that
-        // is a power of two is the number one here, with the rest of it in an exponent. Asked of the spelling
-        // instead, this turned away values it holds — and turned them away for the size of a form it had
-        // chosen itself, which is the one reason nothing here may refuse for.
-        heldByTheRepresentation(numerator);
-        heldByTheRepresentation(denominator);
     }
 
     /** The rational a whole number is. */
@@ -1093,14 +1043,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     private static void heldByTheHost(long bits) {
         if (bits > Integer.MAX_VALUE) {
             throw new ConstraintViolation("no Rational holds a whole number of " + bits + " bits");
-        }
-    }
-
-    /** That a whole number is one this type stores, which {@link #STORED_BITS} says why it bounds. */
-    private static void heldByTheRepresentation(BigInteger part) {
-        if (part != null && part.bitLength() > STORED_BITS) {
-            throw new ConstraintViolation(
-                    "no Rational holds a numerator or a denominator of " + part.bitLength() + " bits");
         }
     }
 
