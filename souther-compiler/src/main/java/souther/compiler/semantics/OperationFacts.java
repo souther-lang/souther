@@ -151,6 +151,8 @@ public final class OperationFacts {
             about("Int", "compare", bounded(Rel.LE, 1)),
             about("Decimal", "compare", bounded(Rel.GE, -1)),
             about("Decimal", "compare", bounded(Rel.LE, 1)),
+            about("Rational", "compare", bounded(Rel.GE, -1)),
+            about("Rational", "compare", bounded(Rel.LE, 1)),
 
             // The parts a temporal is read out in, each within the range that part of a calendar
             // has. A month is one of twelve and a day one of at most thirty-one whatever the date
@@ -194,6 +196,9 @@ public final class OperationFacts {
                     new OperationFact.StatesTheOrderOfItsArguments(
                             PositiveOrder.FIRST_ARGUMENT_GREATER)),
             about("Decimal", "compare",
+                    new OperationFact.StatesTheOrderOfItsArguments(
+                            PositiveOrder.FIRST_ARGUMENT_GREATER)),
+            about("Rational", "compare",
                     new OperationFact.StatesTheOrderOfItsArguments(
                             PositiveOrder.FIRST_ARGUMENT_GREATER)),
             about("Date", "daysBetween",
@@ -327,7 +332,7 @@ public final class OperationFacts {
             about("Decimal", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
             about("Decimal", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
             about("Decimal", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
-            about("Int", "divide",
+            about("Int", "truncatingDivide",
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingQuotient())),
             about("Int", "truncatingRemainder",
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingRemainder())),
@@ -489,7 +494,23 @@ public final class OperationFacts {
         // its argument, because what it answers is a number at every call. The difference is the
         // union and nothing else.
         out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
-                op("String", "toDecimal")));
+                op("String", "toDecimal"), op("Rational", "toWholeNumber"),
+                op("Rational", "toFiniteDecimal")));
+
+        // And the narrowings of an exact value, for a reason of the value's own. What they are given
+        // is a Rational, which is on no carrier and has no counts for anything to be read in
+        // (ADR-0116) — so there is no representation relating what they answer to what they were
+        // handed, whether the answer arrives as a value or at one case of a union. A bound relating
+        // the two is the same statement and is silent for the same reason: `Decimal.toInt` states
+        // one because both sides of it are counted, and these have only one side that is.
+        out.addAll(saysNothing(OperationSubject.BOUNDS, op("Rational", "toInt"),
+                op("Rational", "toDecimal")));
+
+        // What `Rational.toDecimal` answers is a value at the scale it was asked for, which is none
+        // of its arguments and no arithmetic over them — the same two silences `Decimal.round` keeps,
+        // and for the same reason.
+        out.addAll(saysNothing(OperationSubject.CHOICE, op("Rational", "toDecimal")));
+        out.addAll(saysNothing(OperationSubject.FORM, op("Rational", "toDecimal")));
 
         // And the walk that multiplies what its container holds. It answers a number at every call
         // its elements are numbers at, and what reads a number is one account at a time: the

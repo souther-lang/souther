@@ -52,7 +52,7 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
             behavior halve : (a: Amount) -> Amount
                 ensures smaller = value.value < a.value
 
-            let halve (a) = Amount(a.value / 2)
+            let halve (a) = Amount(Rational.toInt(DOWN, a.value / 2))
 
             behavior name : (a: Amount) -> String
 

@@ -228,7 +228,8 @@ final class CardinalityTransfer {
                 // Spaced too finely to count between two ends, or not spaced at all. A string bounded
                 // in length and a date bounded at both ends are finite and are not counted here: what
                 // it would take is a reading of each carrier's own values, and nothing asks yet.
-                case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> Cardinality.UNKNOWN;
+                case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT, RAW ->
+                        Cardinality.UNKNOWN;
             };
             case Type.Ref ref -> ofRef(ref, path, counts, values, source, answers, granted, worn);
             // A `None` is a value of it whatever it wraps, so this is the one position that is never

@@ -1771,6 +1771,10 @@ public final class Partitions {
             // Bytes nobody wrote. What a row would carry is a value of somebody's making, and there
             // is none here to make it out of.
             case RAW -> List.of();
+            // A Rational reaches no position: it has no external form, so nothing declares one and no
+            // row is written at one (ADR-0116). Said here rather than left to the numeric arm above,
+            // which would offer a value of a type a fixture cannot carry.
+            case RATIONAL -> List.of();
         };
     }
 
@@ -2052,6 +2056,10 @@ public final class Partitions {
             // count of days and a string a count of characters, which is what a rule about them
             // counts rather than what the value is.
             case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> null;
+            // A Rational is a number and is counted on nothing: a carrier is what a position's values
+            // are placed on, and no position holds a Rational (ADR-0116). The same answer
+            // {@code Carrier} gives it, for the same reason.
+            case RATIONAL -> null;
         };
     }
 

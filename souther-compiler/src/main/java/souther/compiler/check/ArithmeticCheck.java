@@ -122,9 +122,9 @@ sealed interface ArithmeticCheck {
         }
     }
 
-    /** A quotient of two newtypes is a value in neither of them: a bare ratio where they are the
-     * same newtype, a quantity per quantity where they are not, and the language expresses
-     * neither. */
+    /** A quotient of two unlike newtypes is a quantity per quantity, and nothing says what the
+     * quotient is of. One newtype over itself is not this: there the dimension cancels and the
+     * language has a type for what is left (ADR-0116). */
     record QuotientChangesDimension(Type left, Type right) implements Refusal {
                 @Override public Diagnostic.Builder saying() {
             return Diagnostic.say(new ArithmeticMessage.AQuotientChangesDimension(Type.show(left, right),
@@ -156,6 +156,25 @@ sealed interface ArithmeticCheck {
                     Type.show(newtype, value), Type.show(value, newtype)))
                     .hint(new ArithmeticMessage.BuildItWhereTheValueComesFrom(
                             Type.show(newtype, value)));
+        }
+    }
+
+    /**
+     * A newtype divided by a value of its own base. The dimension survives, which is what once made
+     * this inherited scaling, and the quotient is exact — a Rational, and no value of the wrapped
+     * type — so there is nothing to wrap again (ADR-0116).
+     *
+     * <p>Beside {@link ReciprocalChangesDimension} and refusing the other direction, for a reason of
+     * its own. That one is about the dimension the operation leaves; this is about the type it leaves.
+     * Reported as one rule, an author told that a quantity per quantity is unmodelled would go looking
+     * for the dimension of {@code Yen / 2}, which is Yen.
+     */
+    record QuotientLeavesTheWrappedType(Type newtype, Type base, Side side) implements Refusal {
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AQuotientLeavesTheWrappedType(
+                    Type.show(newtype, base), Type.show(base, newtype)))
+                    .hint(new ArithmeticMessage.ComputeOnValueAndStateTheQuantisation(
+                            Type.show(base, newtype)));
         }
     }
 
@@ -199,7 +218,14 @@ sealed interface ArithmeticCheck {
         if (ln != null && rn != null) {
             return switch (op) {
                 case MUL -> new Refused(new ProductChangesDimension(lt, rt));
-                case DIV -> new Refused(new QuotientChangesDimension(lt, rt));
+                // One quantity over another of the same kind: the dimension cancels and what is left
+                // is the exact number the cancelled quotient is (ADR-0116). Over two unlike newtypes
+                // nothing says what the quotient would be of, which is another rule and another
+                // sentence. Asked of the names and not of their bases, as the product above is: two
+                // newtypes over one base are still two kinds.
+                case DIV -> lt.equals(rt)
+                        ? new Allowed(Type.RATIONAL)
+                        : new Refused(new QuotientChangesDimension(lt, rt));
                 default -> lt.equals(rt)
                         ? new Allowed(lt)
                         : new Refused(new DifferentNewtypes(lt, rt));
@@ -209,6 +235,15 @@ sealed interface ArithmeticCheck {
         Type rightBase = rn != null ? rn : rt;
         if (!leftBase.equals(rightBase)) {
             if (ln == null && rn == null) {
+                // Two plain numbers of unlike types, one of which is already exact: that operation is
+                // exact arithmetic, and the operand beside it is read at its exact mathematical value
+                // because that is what the operator means (ADR-0116). It is no conversion — an `Int`
+                // in a Rational position is still refused where it is written — and it is asked of
+                // the pair, so an `Int` beside a `Decimal` still has nothing between them and falls
+                // to the plain type check below.
+                if (lt == Type.RATIONAL || rt == Type.RATIONAL) {
+                    return new Allowed(Type.RATIONAL);
+                }
                 return new DeferToPlainTypeCheck(lt, rt);
             }
             return new Refused(ln != null
@@ -216,7 +251,10 @@ sealed interface ArithmeticCheck {
                     : new ValueOfAnotherBase(rt, rn, lt, Side.LEFT));
         }
         if (ln == null && rn == null) {
-            return new Allowed(lt);
+            // Two plain numbers of one type. Every operator answers that type, and `/` is the one
+            // that does not: its quotient is exact, so it leaves whichever of the two it was given
+            // and answers a Rational (ADR-0116). A Rational divided by a Rational is already one.
+            return new Allowed((op == BinOp.DIV && lt == Type.INT) ? Type.RATIONAL : lt);
         }
         // Exactly one operand wears a newtype; the other is a value of the base it wraps.
         boolean newtypeOnTheLeft = ln != null;
@@ -229,8 +267,14 @@ sealed interface ArithmeticCheck {
                     ? new Allowed(newtype)
                     : new Refused(new BareValueIsNotALiteral(newtype, value, valueSide));
         }
-        if (!newtypeOnTheLeft && op == BinOp.DIV) {
-            return new Refused(new ReciprocalChangesDimension(value, newtype));
+        if (op == BinOp.DIV) {
+            // Neither direction is inherited, and the two are refused for different reasons: a number
+            // over a newtype inverts the dimension, and a newtype over a number keeps the dimension
+            // and loses the type — the base operation answers a Rational, so no value of the wrapped
+            // type comes back to be wrapped again (ADR-0047 as ADR-0116 amends it).
+            return new Refused(newtypeOnTheLeft
+                    ? new QuotientLeavesTheWrappedType(newtype, value, valueSide)
+                    : new ReciprocalChangesDimension(value, newtype));
         }
         return new Allowed(newtype);
     }
@@ -243,6 +287,7 @@ sealed interface ArithmeticCheck {
                     ? new NoDirectNumericBase(t, TypeOps.wrapped(t, symbols), side)
                     : null;
         }
-        return t == Type.INT || t == Type.DECIMAL ? null : new OperandNotArithmetic(t, side);
+        return t == Type.INT || t == Type.DECIMAL || t == Type.RATIONAL
+                ? null : new OperandNotArithmetic(t, side);
     }
 }

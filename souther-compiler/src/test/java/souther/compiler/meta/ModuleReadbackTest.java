@@ -269,7 +269,7 @@ class ModuleReadbackTest {
         Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
-                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 110 / 100))
                 """);
         PublishedClasses older = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
                 m.compat() - 1, "0.0.1-older", m.header(), m.imports(), m.types(),
@@ -289,7 +289,7 @@ class ModuleReadbackTest {
         Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
-                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 110 / 100))
                 """);
         assertEquals(List.of("taxed"),
                 readBack("shared.money", classes).module().fns().stream()

@@ -106,10 +106,10 @@ final class Term {
          * apart because an optional's carrier is a case of a type this compiler declares and can
          * cancel against the {@code Some} that built it, and a union's case is neither.
          *
-         * <p>Not every case result takes this. Where the language has a second spelling for the same
-         * arithmetic, the value is named by that arithmetic — the {@code Int} of {@code Int.divide}
-         * is {@code a / b} and is one term with the written divide (spec
-         * §invariant-discharge-arithmetic).
+         * <p>Not every case result takes this. Where an operation's value case carries what some
+         * arithmetic computes, the value is named by that arithmetic rather than by the case it
+         * arrived at — the {@code Int} of {@code Int.truncatingDivide(a, b)} is the truncating
+         * quotient of the two and is filed as one (spec §invariant-discharge-arithmetic).
          */
         OPENED(Payload.of(souther.compiler.types.Type.class)),
         /**

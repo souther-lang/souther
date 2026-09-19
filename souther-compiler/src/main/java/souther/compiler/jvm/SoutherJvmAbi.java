@@ -65,7 +65,10 @@ public final class SoutherJvmAbi {
             LanguageCaseId.DIVISION_BY_ZERO, new JvmClassName("souther.runtime.DivisionByZero"),
             LanguageCaseId.NOT_A_NUMBER, new JvmClassName("souther.runtime.NotANumber"),
             LanguageCaseId.NOT_A_DATE, new JvmClassName("souther.runtime.NotADate"),
-            LanguageCaseId.NOT_A_TIME, new JvmClassName("souther.runtime.NotATime"));
+            LanguageCaseId.NOT_A_TIME, new JvmClassName("souther.runtime.NotATime"),
+            LanguageCaseId.NOT_WHOLE, new JvmClassName("souther.runtime.NotWhole"),
+            LanguageCaseId.NOT_A_FINITE_DECIMAL,
+            new JvmClassName("souther.runtime.NotAFiniteDecimal"));
 
     /** The same tables read backwards, for a class name arriving from outside. */
     private static final Map<String, TypeKey> DECLARED_BY_THE_RUNTIME_CLASS = inverse();
@@ -162,7 +165,8 @@ public final class SoutherJvmAbi {
             case TypeSymbol.Primitive p -> new RuntimeCaseToken("souther", p.name());
             case TypeSymbol.LanguageCase c -> switch (c.id()) {
                 case SOME, NONE -> new RuntimeCaseToken("souther", c.name());
-                case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME ->
+                case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME, NOT_WHOLE,
+                     NOT_A_FINITE_DECIMAL ->
                         new RuntimeCaseToken("souther.runtime", c.name());
             };
         };

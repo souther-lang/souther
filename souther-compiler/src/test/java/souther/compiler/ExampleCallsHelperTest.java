@@ -28,7 +28,7 @@ class ExampleCallsHelperTest {
 
             let bill (a) = Receipt { total = a }
 
-            let taxed (a: Amount) = Amount(a.value * 11 / 10)
+            let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 11 / 10))
             """;
 
     private static final String INJECTED = """
@@ -46,7 +46,7 @@ class ExampleCallsHelperTest {
 
             let bill (a, quote) = Receipt { total = quote(a) }
 
-            let taxed (a: Amount) = Amount(a.value * 11 / 10)
+            let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 11 / 10))
             """;
 
     private static CompileException err(String model) {
@@ -108,7 +108,7 @@ class ExampleCallsHelperTest {
 
                 let bill (c) = Receipt { cart = c }
 
-                let taxed (a: Amount) = Amount(a.value * 11 / 10)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 11 / 10))
 
                 let labelled (s: Sku) = Sku(s.value ++ "-x")
 
@@ -145,7 +145,7 @@ class ExampleCallsHelperTest {
 
                 let rate = 11
 
-                let scaled (a: Amount, by: Int) = Amount(a.value * by / 10)
+                let scaled (a: Amount, by: Int) = Amount(Rational.toInt(DOWN, a.value * by / 10))
 
                 let taxed (a: Amount) = scaled(a, rate)
 
@@ -200,7 +200,7 @@ class ExampleCallsHelperTest {
 
                 let bill (a) = Receipt { total = a }
 
-                let taxed (a: Amount) = Amount(a.value * 11 / 10)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 11 / 10))
 
                 example bill
                   | (taxed(Amount(0))) -> Receipt { total = Amount(0) }
@@ -352,20 +352,20 @@ class ExampleCallsHelperTest {
      */
     @Test
     void aRowAppliesAKernelTheBackendWritesOutInPlace() {
-        // Written as `/`: `Int.divide` answers `Int | DivisionByZero`, and an Int position takes a
-        // settled value there as it does in a body (E1812) — the operator's zero branch is the
-        // lowering's own, inside the emitted method.
-        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (7 / 2) -> 3\n"));
-        CompileException e = err(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n");
+        // Narrowed at the row: `/` answers an exact quotient, and the Int position takes the value a
+        // rounding mode makes of it. `Int.truncatingDivide` answers `Int | DivisionByZero`, and an Int
+        // position takes a settled value there as it does in a body (E1812).
+        assertDoesNotThrow(() ->
+                Compiler.compile(INT_ROW + "  | (Rational.toInt(DOWN, 7 / 2)) -> 3\n"));
+        CompileException e = err(INT_ROW + "  | (Int.truncatingDivide(7, 2)) -> 3\n");
         assertTrue(e.getMessage().contains("E1812"), e.getMessage());
     }
 
-    /** The other arm of that branch, which is the half that makes these three kernels different from
-     * the rest: the zero divisor answers a case, and the branch answering it is written inside the
-     * emitted method like any other lowering. */
+    /** And a divisor of nought aborts where the row runs it, which is what says the operand ran at all:
+     * the abort is the operator's and reaches the row from inside the emitted method. */
     @Test
-    void theZeroDivisorBranchIsWrittenInsideTheEmittedMethodToo() {
-        CompileException e = err(INT_ROW + "  | (7 / 0) -> 0\n");
+    void aZeroDivisorAbortsWhereTheRowRunsIt() {
+        CompileException e = err(INT_ROW + "  | (Rational.toInt(DOWN, 7 / 0)) -> 0\n");
         assertTrue(e.getMessage().contains("division by zero"), e.getMessage());
     }
 
@@ -646,7 +646,7 @@ class ExampleCallsHelperTest {
 
                 partial let looping (n: Int) = Amount(spin(n))
 
-                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 110 / 100))
 
                 example bill
                   | (looping(1)) -> Receipt { total = Amount(0) }

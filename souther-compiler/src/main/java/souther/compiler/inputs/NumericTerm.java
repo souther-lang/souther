@@ -111,7 +111,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      *
      * <p>Declared of the operation, or derived for this call from a representation the operation
      * already has. A length is the first: what {@code String.length} takes is declared of it and is
-     * the account of every call there is. A quotient is the second: what {@code Int.divide}
+     * the account of every call there is. A quotient is the second: what {@code Int.truncatingDivide}
      * computes is the arithmetic, and a call of it whose divisor the reading has as a number is a
      * number taken of what it divides, while the calls beside it are not. Which of the two it is
      * does not reach this far — the account is asked for with the arguments in hand

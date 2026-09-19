@@ -200,22 +200,38 @@ final class Intrinsics {
      * <p>The list argument alone cannot say which: over the empty-list literal its element is the
      * bottom, and the answer came from the position the call was written in.
      */
-    record NumericFold(String intMethod, String decimalMethod) implements Emit {
+    record NumericFold(String intMethod, String decimalMethod, String rationalMethod)
+            implements Emit {
         @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type result = call.type();
-            if (result != Type.INT && result != Type.DECIMAL) {
-                // the checker admits these two and nothing else; anything here is this compiler
-                // disagreeing with itself, and emitting the Int kernel for it would answer a wrong
-                // number rather than say so
-                throw new IllegalStateException("`" + call.fn() + "` reached the backend answering "
-                        + Type.show(result) + ", which is neither Int nor Decimal");
-            }
             KernelSignature declared = g.kernelSignature(kernel);
             g.genExpr(call.args().get(0));
-            String method = result == Type.DECIMAL ? decimalMethod : intMethod;
-            g.emitInvokeStatic(CD_Lists, method, MethodTypeDesc.of(boundaryDesc(result),
-                    boundaryDesc(declared.parameters().get(0))));
+            g.emitInvokeStatic(CD_Lists, methodFor(result, call), MethodTypeDesc.of(
+                    boundaryDesc(result), boundaryDesc(declared.parameters().get(0))));
+        }
+
+        /** Which implementation answers the fold, by the type the checker settled. Written out over
+         *  the primitives so that a numeric type admitted as an element says which runtime method
+         *  folds it; anything else here is this compiler disagreeing with itself, and emitting the
+         *  Int kernel for it would answer a wrong number rather than say so. */
+        private String methodFor(Type result, Core.Call call) {
+            if (result instanceof Type.Prim p) {
+                switch (p) {
+                    case INT -> {
+                        return intMethod;
+                    }
+                    case DECIMAL -> {
+                        return decimalMethod;
+                    }
+                    case RATIONAL -> {
+                        return rationalMethod;
+                    }
+                    default -> { }
+                }
+            }
+            throw new IllegalStateException("`" + call.fn() + "` reached the backend answering "
+                    + Type.show(result) + ", which is no number a fold takes");
         }
     }
 
@@ -316,6 +332,7 @@ final class Intrinsics {
                 case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
                 case INSTANT -> CD_Instant;
+                case RATIONAL -> CD_Rational;
                 case RAW -> CD_Object;
             };
         }
@@ -468,8 +485,9 @@ final class Intrinsics {
         t.put(Kernel.LIST_SORT, rt(CD_Lists, "sort", order(0)));
         t.put(Kernel.LIST_REVERSE, rt(CD_Lists, "reverse", order(0)));
         t.put(Kernel.LIST_RANGE_INCLUSIVE, rt(CD_Lists, "rangeInclusive", order(0, 1)));
-        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal"));
-        t.put(Kernel.LIST_PRODUCT, new NumericFold("productInt", "productDecimal"));
+        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal", "sumRational"));
+        t.put(Kernel.LIST_PRODUCT,
+                new NumericFold("productInt", "productDecimal", "productRational"));
 
         // Map
         t.put(Kernel.MAP_GET, rt(CD_Maps, "get", order(1, 0)));
@@ -550,6 +568,21 @@ final class Intrinsics {
         t.put(Kernel.DECIMAL_DIVIDE, rt(CD_DecimalMath, "divide", order(0, 1, 2, 3)));
         t.put(Kernel.DECIMAL_COMPARE, rt(CD_DecimalMath, "compare", order(0, 1)));
         t.put(Kernel.DECIMAL_FROM_INT, rt(CD_DecimalMath, "fromInt", order(0)));
+
+        // Rational — every one of them a RationalMath static, for the same reason: what the exact
+        // arithmetic of the language means is the runtime's, and the exponent range it aborts at is
+        // part of the operation rather than of whoever emitted the call.
+        t.put(Kernel.RATIONAL_ADD, rt(CD_RationalMath, "add", order(0, 1)));
+        t.put(Kernel.RATIONAL_SUBTRACT, rt(CD_RationalMath, "subtract", order(0, 1)));
+        t.put(Kernel.RATIONAL_MULTIPLY, rt(CD_RationalMath, "multiply", order(0, 1)));
+        t.put(Kernel.RATIONAL_DIVIDE, rt(CD_RationalMath, "divide", order(0, 1)));
+        t.put(Kernel.RATIONAL_COMPARE, rt(CD_RationalMath, "compare", order(0, 1)));
+        t.put(Kernel.RATIONAL_FROM_INT, rt(CD_RationalMath, "fromInt", order(0)));
+        t.put(Kernel.RATIONAL_FROM_DECIMAL, rt(CD_RationalMath, "fromDecimal", order(0)));
+        t.put(Kernel.RATIONAL_TO_WHOLE_NUMBER, rt(CD_RationalMath, "toWholeNumber", order(0)));
+        t.put(Kernel.RATIONAL_TO_FINITE_DECIMAL, rt(CD_RationalMath, "toFiniteDecimal", order(0)));
+        t.put(Kernel.RATIONAL_TO_INT, rt(CD_RationalMath, "toInt", order(0, 1)));
+        t.put(Kernel.RATIONAL_TO_DECIMAL, rt(CD_RationalMath, "toDecimal", order(0, 1, 2)));
 
         // Not a copy: the map is a local nothing else holds, and read back through an EnumMap it
         // answers in the order the kernels are declared in rather than in whatever order a copy

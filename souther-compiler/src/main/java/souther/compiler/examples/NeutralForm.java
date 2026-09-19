@@ -386,7 +386,7 @@ final class NeutralForm {
                 // a comparison nobody revisited.
                 return switch (prim) {
                     case DATE, TIME, DATETIME, INSTANT -> prim;
-                    case INT, STRING, BOOL, DECIMAL, RAW -> null;
+                    case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> null;
                 };
             }
             if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {

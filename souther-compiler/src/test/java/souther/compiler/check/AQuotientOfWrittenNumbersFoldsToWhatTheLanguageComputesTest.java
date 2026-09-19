@@ -7,12 +7,14 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
+import souther.compiler.numeric.ExactRatio;
 import souther.runtime.ConstraintViolation;
-import souther.runtime.IntMath;
+import souther.runtime.RationalMath;
 
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -44,26 +46,52 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
                         POS, null));
     }
 
+    /**
+     * The same number written two ways: the minus outside the quotient, and inside it on the
+     * dividend.
+     *
+     * <p>Asked because the second folds through the whole numbers and the first through the ratio, so
+     * a fold that read one and not the other would make a constant of a number for the way it was
+     * bracketed. What reads a form of these later is the affine walk, and it reads a name given
+     * either.
+     */
+    @Test
+    void theNegationOfAQuotientFoldsWhereverTheMinusWasWritten() {
+        Optional<Object> outside = ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(
+                new Hir.Neg(new Hir.Binary(BinOp.DIV, new Hir.IntLit(1, POS, null),
+                        new Hir.IntLit(2, POS, null),
+                        SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                                SourceConstruct.BINARY),
+                        POS, null), POS, null));
+
+        assertEquals(ratio(-1, 2), outside);
+        assertEquals(outside, whole(-1, 2), "one number, whichever side the minus was written on");
+    }
+
     private static Optional<Object> whole(long dividend, long divisor) {
         return fold(BinOp.DIV, new Hir.IntLit(dividend, POS, null),
                 new Hir.IntLit(divisor, POS, null));
     }
 
+    private static Optional<Object> ratio(long numerator, long denominator) {
+        return Optional.of(ExactRatio.of(BigInteger.valueOf(numerator),
+                BigInteger.valueOf(denominator)));
+    }
+
     @Test
-    void aWholeNumberQuotientIsTheOneTheLanguageComputes() {
-        assertEquals(Optional.of(3L), whole(7, 2));
-        assertEquals(Optional.of(4L), whole(8, 2));
+    void aWholeNumberQuotientIsTheExactOneTheLanguageComputes() {
+        assertEquals(ratio(7, 2), whole(7, 2));
+        assertEquals(ratio(4, 1), whole(8, 2));
     }
 
     /**
-     * Toward nought and not toward the lesser number, which is what the language says a whole-number
-     * divide does. The two answers differ by one here, so a fold that floored would be read off this
-     * and not off a case where the rounding makes no difference.
+     * Nothing is rounded either way, which is what the exact quotient is for. Two pairs whose
+     * truncating quotients agree and whose exact ones do not are what says so.
      */
     @Test
-    void aNegativeQuotientIsTruncatedTowardNought() {
-        assertEquals(Optional.of(-1L), whole(-3, 2));
-        assertEquals(Optional.of(-1L), whole(3, -2));
+    void aNegativeQuotientIsNeitherTruncatedNorFloored() {
+        assertEquals(ratio(-3, 2), whole(-3, 2));
+        assertEquals(ratio(-3, 2), whole(3, -2));
     }
 
     /** Nothing is divided by nought, and the fold says so by answering nothing rather than by
@@ -71,20 +99,19 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
     @Test
     void aDivisorOfNoughtIsDeclined() {
         assertEquals(Optional.empty(), whole(7, 0));
-        assertEquals(Optional.of(7L), whole(7, 1));
+        assertEquals(ratio(7, 1), whole(7, 1));
     }
 
     /**
-     * The one whole-number quotient whose value is outside the range an {@code Int} holds. An
-     * {@code Int} that overflows aborts rather than wrapping, and {@code long} division answers the
-     * dividend, so a fold that handed that back would be answering for an expression the run time
-     * refuses to compute.
+     * No pair is declined for the size of its quotient. The one whose truncating quotient no
+     * {@code Int} held is the pair that made this a rule, and its exact quotient is a whole number
+     * the ratio holds — so the refusal that stood here is gone with the operator's truncation.
      */
     @Test
-    void theQuotientOutsideTheRangeAnIntHoldsIsDeclined() {
-        assertEquals(Optional.empty(), whole(Long.MIN_VALUE, -1));
-        assertEquals(Optional.of(Long.MIN_VALUE), whole(Long.MIN_VALUE, 1));
-        assertEquals(Optional.of(-Long.MAX_VALUE), whole(Long.MAX_VALUE, -1));
+    void noPairIsDeclinedForTheSizeOfItsQuotient() {
+        assertEquals(ratio(Long.MIN_VALUE, -1), whole(Long.MIN_VALUE, -1));
+        assertEquals(ratio(Long.MIN_VALUE, 1), whole(Long.MIN_VALUE, 1));
+        assertEquals(ratio(Long.MAX_VALUE, -1), whole(Long.MAX_VALUE, -1));
     }
 
     /**
@@ -92,10 +119,12 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
      * the whole of what it is allowed to do.
      *
      * <p>Held against the run time itself rather than against a table written here a second time:
-     * what a whole-number divide comes to is {@code IntMath.divideExact}'s to say, and a fold that
-     * answered something else would be a compile-time value for an expression the program refuses
-     * to compute. Both sides of every pair are read before anything is asserted, so a disagreement
-     * names the pair it is about.
+     * what a whole-number divide comes to is {@code RationalMath.divideWholeNumbers}'s to say, and a
+     * fold that answered something else would be a compile-time value for an expression the program
+     * computes differently. The two hold the exact value in types of their own — one reasons in it and
+     * one carries it (ADR-0117) — and both spell a ratio the same way, which is what is compared.
+     * Both sides of every pair are read before anything is asserted, so a disagreement names the pair
+     * it is about.
      */
     @Test
     void theFoldAnswersWhereTheOperatorDoesAndDeclinesWhereItAborts() {
@@ -115,7 +144,7 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
     /** What the operator answers for these two, or the word for its aborting. */
     private static Object run(long dividend, long divisor) {
         try {
-            return IntMath.divideExact(dividend, divisor);
+            return RationalMath.divideWholeNumbers(dividend, divisor);
         } catch (ConstraintViolation _) {
             return "aborts";
         }

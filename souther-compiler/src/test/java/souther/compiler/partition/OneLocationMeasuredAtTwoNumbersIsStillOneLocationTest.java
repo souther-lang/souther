@@ -49,22 +49,6 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 if Time.hour(slot.at) >= 9 && Time.minute(slot.at) >= 30 then Late else Early
             """;
 
-    /** Two numbers of one location that nothing composes a value for together, which is what the
-     *  parts of a time are not. */
-    private static final String TWO_QUOTIENTS = """
-            module example.two
-
-            data Early
-            data Late
-            data When = Early | Late
-
-            data Slot = { n: Int }
-
-            behavior gate : (slot: Slot) -> When
-            let gate (slot) =
-                if slot.n / 2 >= 10 && slot.n / 3 >= 10 then Late else Early
-            """;
-
     /**
      * One position and two measures of it, which is what the rest of this is about.
      *
@@ -164,33 +148,6 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                         .anyMatch(written -> written.contains("00:30:00")),
                 () -> "and the class of the minute is answered by a time whose hour the row's own"
                         + " class of the hour also holds: " + filled.rows());
-    }
-
-    /**
-     * And where nothing here writes one value for both numbers, no row is written for either class.
-     *
-     * <p>Two quotients of one whole number are two numbers of one location, and a row writes one
-     * value where a location is — so the value is solved for out of both numbers rather than
-     * written twice. Each class of each quotient is a run of the place, and a row stands where the
-     * runs a pair of them leaves holds a number.
-     *
-     * <p>Every class of both quotients is answered, which is what the runs leaving a number means
-     * here: nineteen halves to nine and thirds to six, twenty halves to ten, thirty thirds to ten.
-     * Read off the classes each row names rather than counted, so a row standing somewhere else is
-     * a failure and not a different arrangement of the same answer.
-     */
-    @Test
-    void twoClassesOfOneLocationAreAnsweredByOneNumberSolvedOutOfBoth() {
-        FillResult filled = filled(TWO_QUOTIENTS);
-
-        assertEquals(List.of("slot.n=x < 10", "slot.n=10 <= x", "slot.n=x < 10", "slot.n=10 <= x"),
-                filled.rows().stream().flatMap(row -> row.purposes().stream())
-                        .flatMap(purpose -> purpose.labels().stream()).toList(),
-                () -> "a row for every class a number of the place answers: " + filled.rows());
-        assertEquals(List.of("Slot { n = 19 }", "Slot { n = 20 }", "Slot { n = 19 }",
-                        "Slot { n = 30 }"),
-                filled.rows().stream().map(row -> row.inputs().get(0).text()).toList(),
-                "and each row's number reads back into the class it was built for");
     }
 
     /** The rows a fill of that model's classes comes to. */

@@ -88,14 +88,37 @@ public final class TypeOps {
      */
     public static boolean answers(Type t, Requires required, Symbols symbols) {
         return switch (t) {
-            case Type.Prim _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            case Type.Prim p -> switch (required) {
+                case EQUALITY -> true;
+                // Written out rather than answered for every primitive at once, so that a primitive
+                // added here says whether a boundary can carry it. Rational is the one that cannot:
+                // it is a value computation produces and consumes, and no representation of it is
+                // selected for JSON, for a Java boundary or for a fixture (ADR-0116).
+                case EXTERNAL_FORM -> switch (p) {
+                    case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> true;
+                    case RATIONAL -> false;
+                };
             };
             case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
             };
-            case Type.Union _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            // A union's answer is its members', the way a collection's is its element's. Held as one
+            // unconditional yes while every primitive had an external form, it would say yes about
+            // `Rational | DivisionByZero` at a boundary that refuses it — a capability this states
+            // and `hasExternalForm` would not hold.
+            case Type.Union u -> switch (required) {
+                case EQUALITY -> true;
+                // Walked rather than streamed, as the tuple arm below is: this is asked of every field
+                // and every boundary position of every declaration, so the walk is the shape the rest
+                // of this table is in.
+                case EXTERNAL_FORM -> {
+                    for (TypeSymbol member : u.members()) {
+                        if (!memberAnswers(member, required, symbols)) {
+                            yield false;
+                        }
+                    }
+                    yield true;
+                }
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
@@ -127,6 +150,13 @@ public final class TypeOps {
                 case EQUALITY, EXTERNAL_FORM -> true;
             };
         };
+    }
+
+    /** What one of a union's members answers. A member that names a primitive is asked as that
+     *  primitive; one that names a declaration answers the way a {@link Type.Ref} does. */
+    private static boolean memberAnswers(TypeSymbol member, Requires required, Symbols symbols) {
+        Type.Prim named = member.primitiveKind();
+        return named == null || answers(named, required, symbols);
     }
 
     /**
@@ -182,6 +212,14 @@ public final class TypeOps {
                 Type inKey = withoutExternalForm(m.key(), symbols);
                 yield inKey != null ? inKey : withoutExternalForm(m.value(), symbols);
             }
+            // The member that cannot cross, and not the union it stands in: an author whose output is
+            // `Rational | DivisionByZero` is told which half of it the boundary refuses.
+            case Type.Union u -> u.members().stream()
+                    .map(TypeSymbol::primitiveKind)
+                    .filter(p -> p != null && !answers(p, Requires.EXTERNAL_FORM, symbols))
+                    .findFirst()
+                    .map(p -> (Type) p)
+                    .orElse(t);
             default -> t;
         };
     }
@@ -1550,7 +1588,7 @@ public final class TypeOps {
                 case INSTANT -> new MapKeyRepresentation.Instant();
                 // a key is addressed by the text it is written as, and a number, a flag and Raw have
                 // none a boundary could name one by
-                case INT, BOOL, DECIMAL, RAW -> null;
+                case INT, BOOL, DECIMAL, RATIONAL, RAW -> null;
             };
         }
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
@@ -1765,6 +1803,13 @@ public final class TypeOps {
      * than repeating it, and stops where a newtype's {@code value} is not declared.
      */
     public static NewtypeSpine newtypeSpine(Type t, NewtypeInners inners) {
+        // A type that is no name wears none, which is the answer most callers get: this walk is under
+        // `base`, and what asks for a base asks it of a primitive far more often than of a newtype.
+        // Reached through the loop below, those answers cost a list and a set to say that nothing was
+        // taken off.
+        if (!(t instanceof Type.Ref)) {
+            return new NewtypeSpine(List.of(), t);
+        }
         List<Layer> layers = new ArrayList<>();
         Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
@@ -1919,15 +1964,15 @@ public final class TypeOps {
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
+        // The primitives, from the table that closes them and not from a list of their spellings. A
+        // list here was the fourth copy of that set, and a primitive added to the language was a type
+        // name that resolved to no type at all — which is not an error a reader of the resolved
+        // signature can tell from a name a module never declared.
+        Type.Prim primitive = Type.Prim.named(ref.name());
+        if (primitive != null && primitive.denotedByItsSpelling()) {
+            return primitive;
+        }
         return switch (ref.name()) {
-            case "Int" -> Type.INT;
-            case "String" -> Type.STRING;
-            case "Bool" -> Type.BOOL;
-            case "Decimal" -> Type.DECIMAL;
-            case "Date" -> Type.DATE;
-            case "Time" -> Type.TIME;
-            case "DateTime" -> Type.DATETIME;
-            case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
             case "List" -> Type.list(typeArg(ref, "list", 4));

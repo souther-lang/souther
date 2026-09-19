@@ -16,8 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Closed newtype arithmetic (spec §newtype-arithmetic): {@code +}/{@code -} over a single-value
  * numeric newtype yield that newtype. The base op runs on the wrapped value and the result is
  * re-wrapped, re-checking the newtype's invariant at construction — so a subtraction that leaves the
- * invariant aborts, exactly as any other construction would. {@code *}/{@code /} and two different
- * newtypes stay rejected.
+ * invariant aborts, exactly as any other construction would. {@code *} stays rejected, and so do two
+ * different newtypes.
+ *
+ * <p>{@code /} is not among the closed ones. A newtype over a newtype's own units is the number its
+ * units leave, so dividing one by another of the same type answers a {@code Rational} and not the
+ * newtype — the operator that does not stay inside the wrapper is refused only where the two types
+ * differ, which is a dimension it would have had to invent.
  */
 class CompileClosedNewtypeArithmeticTest {
 
@@ -94,19 +99,36 @@ class CompileClosedNewtypeArithmeticTest {
     }
 
     @Test
-    void scalarOnTheLeftAndTruncatingDivide() throws Exception {
+    void scalarOnTheLeft() throws Exception {
         assertEquals(14L, run("""
                 module demo
                 data N = Int
                 behavior calc : (n: N) -> N
                 let calc (n) = 2 * n
                 """, "N", 7L));
-        assertEquals(3L, run("""
+    }
+
+    /**
+     * And a newtype is not divided by a value of its base: the dimension survives, the quotient is
+     * exact, and no {@code N} holds one (spec §newtype-arithmetic). What a model writes instead is the
+     * quantisation it means, on the value.
+     */
+    @Test
+    void scalarDivisionIsNotInherited() throws Exception {
+        CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data N = Int
                 behavior calc : (n: N) -> N
                 let calc (n) = n / 2
-                """, "N", 7L));   // Int division truncates
+                """));
+        assertTrue(refused.getMessage().contains("no Int is left to wrap as N"),
+                refused.getMessage());
+        assertEquals(3L, run("""
+                module demo
+                data N = Int
+                behavior calc : (n: N) -> N
+                let calc (n) = N(Rational.toInt(DOWN, n.value / 2))
+                """, "N", 7L));
     }
 
     @Test

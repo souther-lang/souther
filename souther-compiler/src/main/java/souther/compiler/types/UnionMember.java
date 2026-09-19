@@ -55,7 +55,7 @@ public sealed interface UnionMember {
         // nothing else.
         if (m instanceof Type.Prim p) {
             return switch (p) {
-                case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
+                case INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
                         new Named(TypeSymbol.primitive(p.shown()));
                 case RAW -> NOT_A_MEMBER;
             };

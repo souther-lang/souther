@@ -4,6 +4,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.LanguageCaseId;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -77,14 +78,20 @@ public final class TypeScope {
      * when it is none of those.
      */
     Denotation resolveCase(WrittenName written) {
-        return switch (written.canonical()) {
-            case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    new Denotation.Denotes(TypeSymbol.primitive(written.canonical()));
-            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" ->
-                    new Denotation.Denotes(new TypeSymbol.LanguageCase(
-                            LanguageCaseId.named(written.canonical())));
-            default -> resolve(written);
-        };
+        // Both sets are read from the tables that close them rather than spelled again here. Written
+        // out, each list was the set as it stood when somebody last looked: a primitive added to the
+        // language resolved nowhere as an arm's name, and a case the runtime declares would be a name
+        // this answered nothing for.
+        String spelling = written.canonical();
+        Type.Prim primitive = Type.Prim.named(spelling);
+        if (primitive != null) {
+            return new Denotation.Denotes(TypeSymbol.primitive(spelling));
+        }
+        LanguageCaseId given = LanguageCaseId.named(spelling);
+        if (given != null && given.isNamedAsALanguageCase()) {
+            return new Denotation.Denotes(new TypeSymbol.LanguageCase(given));
+        }
+        return resolve(written);
     }
 
     /** What the written name {@code written} denotes here. Accepts a bare name, a

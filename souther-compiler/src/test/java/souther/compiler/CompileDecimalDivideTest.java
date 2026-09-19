@@ -76,11 +76,11 @@ class CompileDecimalDivideTest {
                 data Pair = { a: Int, b: Int }
                 data Out = { n: Int }
                 behavior divv : (p: Pair) -> Out constructs Out
-                let divv (p) = match Int.divide(p.a, p.b, 2, HALF_UP) with
+                let divv (p) = match Int.truncatingDivide(p.a, p.b, 2, HALF_UP) with
                     | Decimal as q -> Out { n = 0 }
                     | DivisionByZero -> Out { n = 0 }
                 """));
-        assertTrue(four.getMessage().contains("`Int.divide` takes 2"), four.getMessage());
+        assertTrue(four.getMessage().contains("`Int.truncatingDivide` takes 2"), four.getMessage());
 
         CompileException two = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo

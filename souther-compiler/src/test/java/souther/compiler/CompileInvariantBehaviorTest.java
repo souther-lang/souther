@@ -128,19 +128,19 @@ class CompileInvariantBehaviorTest {
      * A construction over a quotient of written numbers is judged where a construction over a
      * written number is judged, which is at compile time (spec §invariant-discharge).
      *
-     * <p>What decides it is whether the argument is a constant, and a quotient of two written
-     * numbers is one. So the first is the error a written {@code -5} would be, and the second —
-     * whose divisor is nought, which nothing divides by — is a construction over a value only the
-     * run time has, left to abort there as any other computed argument is.
+     * <p>What decides it is whether the argument is a constant, and arithmetic over written numbers
+     * is one. So the first is the error a written {@code -5} would be, and the second — a divide by
+     * nought, which nothing divides by — is a construction over a value only the run time has, left
+     * to abort there as any other computed argument is.
      */
     @Test
-    void aConstructionOverAConstantQuotientIsDecidedAtCompileTime() throws Exception {
+    void aConstructionOverAConstantIsDecidedAtCompileTime() throws Exception {
         String breaks = """
                 module demo
                 data Amount = Int invariant value >= 0
                 behavior make : (x: Int) -> Amount constructs Amount
 
-                let make (x) = Amount(0 - 5 / 1)
+                let make (x) = Amount(0 - 5 * 1)
                 """;
         CompileException refused = assertThrows(CompileException.class, () -> Compiler.compile(breaks));
         assertEquals("E2010", refused.code());
@@ -152,7 +152,7 @@ class CompileInvariantBehaviorTest {
                 data Amount = Int invariant value >= 0
                 behavior make : (x: Int) -> Amount constructs Amount
 
-                let make (x) = Amount(0 - 5 / 0)
+                let make (x) = Amount(Rational.toInt(DOWN, 0 - 5 / 0))
                 """), getClass().getClassLoader());
         Object make = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
         assertThrows(ConstraintViolation.class, () -> Codecs.apply(make, 1L));

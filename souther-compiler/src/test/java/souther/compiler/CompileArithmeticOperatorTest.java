@@ -17,9 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The arithmetic operators {@code + - * /} over Int and Decimal (spec
  * §an-operator-takes-the-types-it-is-defined-for). A Decimal literal carries the {@code m} suffix (F# form).
- * {@code /} aborts on a zero divisor (like overflow), while the {@code divide} functions still return {@code
- * X | DivisionByZero} for case handling; Decimal {@code /} rounds to F#/.NET System.Decimal precision, half
- * away from zero.
+ * {@code /} aborts on a zero divisor (like overflow), while {@code Int.truncatingDivide} and
+ * {@code Decimal.divide} return {@code X | DivisionByZero} for case handling. Over two whole numbers
+ * {@code /} answers an exact quotient, so a whole-number answer is narrowed at the point the model
+ * wants one (spec §stdlib-rational); Decimal {@code /} rounds to F#/.NET System.Decimal precision,
+ * half away from zero.
  */
 class CompileArithmeticOperatorTest {
 
@@ -48,7 +50,10 @@ class CompileArithmeticOperatorTest {
     @Test
     void intOperators() throws Exception {
         assertEquals(14L, run(INT_CALC.formatted("n.value * 3 - 1"), "calc", "N", 5L));
-        assertEquals(3L, run(INT_CALC.formatted("n.value / 2"), "calc", "N", 7L));   // truncating
+        // `/` is exact, so the whole-number answer is the one a rounding mode makes of it
+        assertEquals(3L, run(INT_CALC.formatted("Rational.toInt(DOWN, n.value / 2)"), "calc", "N", 7L));
+        assertEquals(4L,
+                run(INT_CALC.formatted("Rational.toInt(HALF_UP, n.value / 2)"), "calc", "N", 7L));
     }
 
     @Test
@@ -72,9 +77,9 @@ class CompileArithmeticOperatorTest {
 
     @Test
     void divisionByZeroAborts() {
-        // the `/` operator aborts (like overflow); the `divide` function is the case-returning form
+        // the `/` operator aborts (like overflow); `Int.truncatingDivide` is the case-returning form
         assertThrows(ConstraintViolation.class,
-                () -> run(INT_CALC.formatted("n.value / 0"), "calc", "N", 5L));
+                () -> run(INT_CALC.formatted("Rational.toInt(DOWN, n.value / 0)"), "calc", "N", 5L));
         assertThrows(ConstraintViolation.class,
                 () -> run(DEC_CALC.formatted("m.value / 0m"), "calc", "Money", new BigDecimal("5")));
     }

@@ -12,25 +12,19 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A rule compared against a quotient of written numbers is the rule it states with that quotient
- * worked out.
+ * A rule compared against a constant a fold reaches is the rule it states with that constant worked
+ * out.
  *
  * <p>The walk that reads a comparison composes over the operators that are linear in the positions
- * they are written over, and a truncating divide is not one of them. What it does instead is ask
- * what an expression it composed nothing out of folds to, so a divide of two written numbers is
- * read without a divide being arithmetic over positions — which it is not, and which none of these
- * makes it.
+ * they are written over. What it does with the rest is ask what an expression it composed nothing out
+ * of folds to, so an operation over written values is read without that operation being arithmetic
+ * over positions — which it is not, and which none of these makes it.
  *
- * <p>Both ways a constant reaches a rule are here, because they are two ways to write one thing and
- * a model reaches the second by writing a fraction where a coefficient belongs. Each is held
- * against the rule it comes to: the quotient is read exactly where the line it draws is the line
- * the worked-out number draws.
- *
- * <p>And what the fold declines leaves the rule unread, each beside a control that differs from it
- * in the divisor alone. A reading that answered everything and a reading that answered nothing
- * would both pass a set with only the first half.
+ * <p>And what the fold declines leaves the rule unread, beside a control that differs from it in the
+ * operation alone. A reading that answered everything and a reading that answered nothing would both
+ * pass a set with only the first half.
  */
-class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
+class AConstantAFoldReachesIsTheNumberItIsWrittenInPlaceOfTest {
 
     private static String overOne(String type, String guard) {
         return """
@@ -44,20 +38,6 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
                     true
                 }
                 """.formatted(type, guard);
-    }
-
-    private static String overTwo(String guard) {
-        return """
-                module m
-
-                behavior f : (x: Int, y: Int) -> Bool
-
-                let f (x, y) = {
-                    guard %s else false
-
-                    true
-                }
-                """.formatted(guard);
     }
 
     /**
@@ -105,62 +85,6 @@ class AConstantQuotientIsTheNumberItIsWrittenInPlaceOfTest {
         Measured measured = measured(source);
         assertEquals(List.of("x: UNSUPPORTED_SYNTAX"), measured.notRead());
         assertEquals(List.of(), measured.lines());
-    }
-
-    /** A quotient standing where a bound belongs draws the line its value draws. */
-    @Test
-    void aQuotientWrittenAsABoundIsTheLineItsValueDraws() {
-        assertEquals(lines(overOne("Int", "x < 3")), lines(overOne("Int", "x < 7 / 2")));
-        assertEquals(List.of("3"), lines(overOne("Int", "x < 7 / 2")));
-    }
-
-    /**
-     * Toward nought, which is where a whole-number divide rounds. The line falls at {@code -1} and
-     * not at {@code -2}, so a reading that floored the quotient is told from this one.
-     */
-    @Test
-    void aNegativeQuotientDrawsTheLineTruncationLeaves() {
-        assertEquals(lines(overOne("Int", "x < -1")), lines(overOne("Int", "x < -3 / 2")));
-        assertEquals(List.of("-1"), lines(overOne("Int", "x < -3 / 2")));
-    }
-
-    /**
-     * The same constant reaching the rule as a coefficient, which is how a model writes a line of
-     * fractional slope.
-     *
-     * <p>Both quotients, because over whole numbers the second is nought: a coefficient that folds
-     * to nought is a coefficient that vanishes, and a line read from that alone says nothing about
-     * whether the quotient was read at all. The first carries it.
-     */
-    @Test
-    void aQuotientWrittenAsACoefficientIsTheNumberItMultipliesBy() {
-        Measured carried = measured(overTwo("y < 3 / 2 * x + 30"));
-        Measured vanished = measured(overTwo("y < -1 / 2 * x + 30"));
-
-        assertEquals(measured(overTwo("y < x + 30")), carried);
-        assertEquals(List.of("x + 30"), carried.lines());
-        assertEquals(measured(overTwo("y < 30")), vanished);
-        assertEquals(List.of("30"), vanished.lines());
-    }
-
-    /** Nothing is divided by nought, so the rule is left where a rule this cannot read is left. */
-    @Test
-    void aDivisorOfNoughtLeavesTheRuleUnread() {
-        unread(overOne("Int", "x < 7 / 0"));
-        assertEquals(List.of("7"), lines(overOne("Int", "x < 7 / 1")));
-    }
-
-    /**
-     * The quotient whose value is outside the range an {@code Int} holds. The control divides the
-     * same dividend by one, so what is read here is the quotient and not the size of the number
-     * written.
-     */
-    @Test
-    void theQuotientOutsideTheRangeAnIntHoldsLeavesTheRuleUnread() {
-        String least = "(0 - 9223372036854775807 - 1)";
-
-        unread(overOne("Int", "x < " + least + " / -1"));
-        assertEquals(List.of("-9223372036854775808"), lines(overOne("Int", "x < " + least + " / 1")));
     }
 
     /** A {@code Decimal} divide is answered by the run time at a scale this does not hold, and the

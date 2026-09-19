@@ -1214,9 +1214,9 @@ final class Terms {
     Chose chose(Choice.Decides decidedBy, Denotations at) {
         return switch (decidedBy) {
             // A condition binds nothing. What it settles is read where the arm is read.
-            case Choice.Decides.ACondition ignored -> new Chose(at, null);
+            case Choice.Decides.ACondition _ -> new Chose(at, null);
             // A departure is taken where nothing was built, so it has nothing to enter.
-            case Choice.Decides.ItDeparted ignored -> new Chose(at, null);
+            case Choice.Decides.ItDeparted _ -> new Chose(at, null);
             case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
                     new Chose(opening(arm, scrutinee, at), openedByArm(arm));
             case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) -> {
@@ -1225,7 +1225,7 @@ final class Terms {
             }
             // An operation defined by cases answers a value the call was already given, written
             // where the call is. It introduces no name, so there is nothing to enter.
-            case Choice.Decides.ByArgumentRelations ignored -> new Chose(at, null);
+            case Choice.Decides.ByArgumentRelations _ -> new Chose(at, null);
         };
     }
 
@@ -1307,8 +1307,8 @@ final class Terms {
         }
         return switch (arm.pattern().binding()) {
             case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
-            case Refinement.OptionPresent ignored -> new Opens(null, heldBy(of), null);
-            case Refinement.OptionAbsent ignored -> null;
+            case Refinement.OptionPresent _ -> new Opens(null, heldBy(of), null);
+            case Refinement.OptionAbsent _ -> null;
         };
     }
 
@@ -1323,7 +1323,7 @@ final class Terms {
      * would be a third.
      *
      * <p>Read through the names the call was given, as everything else about a scrutinee is: {@code
-     * let q = Int.divide(a, b)} and a {@code match} written straight over the call are the same
+     * let q = Int.truncatingDivide(a, b)} and a {@code match} written straight over the call are the same
      * program, and a binding between the two is a name for the call rather than a step away from it.
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
@@ -1536,7 +1536,7 @@ final class Terms {
      * read as, which is what it is here. */
     private static boolean sameComputation(AtomKnowledge.Computation a, AtomKnowledge.Computation b) {
         return switch (a) {
-            case AtomKnowledge.Computation.None ignored ->
+            case AtomKnowledge.Computation.None _ ->
                     b instanceof AtomKnowledge.Computation.None;
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
                     b instanceof AtomKnowledge.Computation.Derived it
@@ -1852,8 +1852,13 @@ final class Terms {
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
         }
-        if (e instanceof Core.Binary b && b.op().answersANumber()) {
-            return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
+        // An operator answers a number, and the domain carries the numbers on a carrier. Exact
+        // division answers one that is on none — a Rational is a number and no position holds one
+        // (ADR-0116) — so there is no atom for it to be about and no meaning to give. Asked of the
+        // carrier, which is what every other reader here asks, rather than of the operator: the rule
+        // is about what the operation answers with and not about which sign was written.
+        if (e instanceof Core.Binary b && b.op().answersANumber() && carriesANumber(b.type())) {
+            return new NumericMeaning.Operator(b.op(), b.left(), b.right());
         }
         return null;
     }
@@ -1879,33 +1884,20 @@ final class Terms {
      */
     NumericMeaning computedBy(NumericResult<DeclaredArgument> result, List<Core> args,
                               Type answered) {
-        return theOneOf(NumericMeanings.of(result.computes(), args), answered);
-    }
-
-    /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.
-     * A divide of whole numbers is a truncating quotient however it was spelled, so the operator and
-     * the value case of {@code Int.divide} are one meaning and one recipe; over {@code Decimal} the
-     * operator rounds at a precision the run time sets, which is arithmetic of its own. */
-    private NumericMeaning theOneOf(NumericMeaning meaning, Type answered) {
-        if (meaning instanceof NumericMeaning.Operator(BinOp op, Core left, Core right)
-                && op == BinOp.DIV && granularityOf(answered) == Granularity.DISCRETE) {
-            return new NumericMeaning.TruncatingQuotient(left, right);
-        }
-        return meaning;
+        return NumericMeanings.of(result.computes(), args);
     }
 
     /**
      * What the value {@code meaning} computes is about, where a case of {@code scrutinee} opened it.
      *
-     * <p>Named by the arithmetic where the language writes that arithmetic another way, and by the
-     * case otherwise. A truncating quotient is the first: {@code a / b} is a spelling of the very
-     * value the {@code Int} case of {@code Int.divide(a, b)} carries, so the two are one term and a
-     * guard about either is about both — which is the whole of what naming a value says. An
-     * operation whose value case carries what an operator computes is the same, whichever operator
-     * it is: where the operation answers a sum as one case of a union, that case carries the very
-     * value {@code a + b} is. A remainder and a quotient rounded to a scale are the other: no
-     * operator writes them, so what they are is the value that case opens out of that call, and
-     * naming them by the call itself would file the union and the number it carries under one key.
+     * <p>Named by the arithmetic it is, or by the case it arrived at. An operation whose value case
+     * carries what an operator computes is the first: where the operation answers a sum as one case
+     * of a union, that case carries the very value {@code a + b} is. So is the truncating quotient,
+     * which is named by the divide it is — the {@code /} operator answers an exact quotient, and an
+     * exact quotient is on no carrier and makes no term at all (ADR-0116), so that identity is this
+     * quotient's alone. A remainder and a quotient rounded to a scale are the other: no arithmetic
+     * names them, so what they are is the value that case opens out of that call, and naming them by
+     * the call itself would file the union and the number it carries under one key.
      */
     FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
                                 Denotations at) {
@@ -1930,6 +1922,10 @@ final class Terms {
      */
     private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at) {
         return switch (meaning) {
+            // The truncating quotient of two values, which is what the operation computes and what
+            // the arm's binding is. Spelled as a divide, and the exact quotient the `/` operator
+            // answers makes no term at all — a Rational is on no carrier, so nothing is named of one
+            // (ADR-0116) — so this identity is the truncating quotient's alone.
             case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
                     written(BinOp.DIV, dividend, divisor, at);
             case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
@@ -2272,7 +2268,7 @@ final class Terms {
                 case Core.Reached reached -> switch (answersOf(reached.denotes())) {
                     case Naming.OfAName.AnswersNothing none ->
                             ranOut(raw, leaf, new Naming.Opaque(none.reason()));
-                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth, leaf,
+                    case Naming.OfAName.Answers _ -> over(c.args(), at, bound, depth, leaf,
                             ps -> interned.called(reached.denotes(), ps));
                 };
                 // A walk this compiler minted for a shape the backend lowers as a whole. The reading

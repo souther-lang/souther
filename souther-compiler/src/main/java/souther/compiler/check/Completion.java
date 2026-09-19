@@ -8,7 +8,7 @@ import souther.compiler.core.Core;
  * <p>A question about a transition and not about a place. An evaluation the walk reaches is
  * reached — the values it was computed from have answered and the walk is standing at it — and what
  * this says is whether any run that got that far carries a value on to what comes next. The two are
- * different points of the same program: {@code Int.divide(a, 0 - 1)} where {@code a} is the smallest
+ * different points of the same program: {@code Int.truncatingDivide(a, 0 - 1)} where {@code a} is the smallest
  * {@code Int} is an evaluation every run arrives at and none leaves.
  *
  * <p>Which is why the answer is not a state. Read as one, "this evaluation cannot answer" becomes

@@ -578,26 +578,21 @@ class CompileHelperBodyTypingTest {
                 "a scalar multiplies from either side");
     }
 
+    /**
+     * A divisor beside a newtype takes that newtype, on either side of the operator.
+     *
+     * <p>What {@code /} admits beside one is the same newtype and nothing else: two quantities of one
+     * kind divide into the number their units leave, and a value of the base is refused for not being
+     * closed over that base (spec §newtype-arithmetic). So the pair the operator admits determines the
+     * open operand, as the product's does — and the quotient it answers is a Rational rather than the
+     * newtype, which is what tells this rule from the scaling one.
+     */
     @Test
-    void aDivisorOfANumericNewtypeTakesTheBaseType() {
+    void aDivisorOfANumericNewtypeTakesThatNewtype() {
         assertTrue(scales("let split (factor, n: N) = n / factor"),
-                "dividing a newtype by a scalar stays in the newtype");
-    }
-
-    @Test
-    void aScalarDividedByANewtypeDeterminesNothing() {
-        // `s / N` is an inverse — a dimension change — so nothing the operator admits stands there and
-        // the parameter is annotated rather than settled at a type the body would then refuse.
-        String src = """
-                module demo
-                data N = Int
-                data X = Int
-                behavior f : (x: X) -> X
-                let invert (factor, n: N) = factor / n
-                let f (x) = x
-                """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
+                "the divisor beside the newtype is one of the same newtype");
+        assertTrue(scales("let invert (factor, n: N) = factor / n"),
+                "and so is the dividend on the other side");
     }
 
     @Test

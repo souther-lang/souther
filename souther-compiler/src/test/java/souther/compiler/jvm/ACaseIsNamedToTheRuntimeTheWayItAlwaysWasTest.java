@@ -52,6 +52,7 @@ class ACaseIsNamedToTheRuntimeTheWayItAlwaysWasTest {
                         "STRING", "souther.String",
                         "BOOL", "souther.Bool",
                         "DECIMAL", "souther.Decimal",
+                        "RATIONAL", "souther.Rational",
                         "DATE", "souther.Date",
                         "TIME", "souther.Time",
                         "DATETIME", "souther.DateTime",
@@ -77,7 +78,9 @@ class ACaseIsNamedToTheRuntimeTheWayItAlwaysWasTest {
                         "DIVISION_BY_ZERO", "souther.runtime.DivisionByZero",
                         "NOT_A_NUMBER", "souther.runtime.NotANumber",
                         "NOT_A_DATE", "souther.runtime.NotADate",
-                        "NOT_A_TIME", "souther.runtime.NotATime"),
+                        "NOT_A_TIME", "souther.runtime.NotATime",
+                        "NOT_WHOLE", "souther.runtime.NotWhole",
+                        "NOT_A_FINITE_DECIMAL", "souther.runtime.NotAFiniteDecimal"),
                 tokens);
     }
 }

@@ -113,6 +113,13 @@ public sealed interface Ordering {
         if (enumeration != null) {
             return new Places(enumeration);
         }
+        // A pair one side of which is exact opens to two types and is ordered all the same: the
+        // operands are read at their exact mathematical values, which is one order over one kind of
+        // value (ADR-0116). Read off the pair for the same reason the enumeration above is — neither
+        // operand alone says the operation is exact.
+        if (BinaryElaborator.exactlyComparable(lb, rb)) {
+            return ofTerminal(Type.RATIONAL, symbols, kinds, published);
+        }
         // Otherwise both operands open to one type, which the admissibility rule established and
         // this states rather than assumes: every route that admits a pair short of the enumeration
         // one leaves them with equal bases. Answering off the left alone would give an order for a
@@ -144,6 +151,10 @@ public sealed interface Ordering {
                 // The JVM carries each of these as Comparable, which is why they are the ordered
                 // ones (spec §primitives).
                 case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
+                // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
+                // value that carries one compares by exactly that — one representation per value, so
+                // the order it carries and the equality it answers are the same reading of it.
+                case RATIONAL -> NATURAL;
                 case BOOL, RAW -> null;
             };
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.

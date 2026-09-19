@@ -18,7 +18,7 @@ import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
  *
  * <p>Whether one of these is represented by a class is a backend's question and is not asked here.
  * Two of them are not — an {@code Option} match dispatches on the runtime {@code Option} classes and
- * never on the arm's own name — and the JVM answers for the other four; both facts live in
+ * never on the arm's own name — and the JVM answers for the rest; both facts live in
  * {@code jvm.SoutherJvmAbi}.
  */
 public enum LanguageCaseId implements DelegatedEqualityIsTheCrossingAnswer {
@@ -39,7 +39,16 @@ public enum LanguageCaseId implements DelegatedEqualityIsTheCrossingAnswer {
     NOT_A_DATE("NotADate"),
 
     /** The same, for a time. */
-    NOT_A_TIME("NotATime");
+    NOT_A_TIME("NotATime"),
+
+    /** What narrowing an exact quotient to an {@code Int} answers where the quotient is not a whole
+     *  number. The narrowing is exact and states no rounding, so what it cannot answer is a case
+     *  rather than a value it chose (ADR-0116). */
+    NOT_WHOLE("NotWhole"),
+
+    /** The same, for a {@code Decimal}: the quotient's value is no finite decimal, a third being the
+     *  smallest example. */
+    NOT_A_FINITE_DECIMAL("NotAFiniteDecimal");
 
     private final String spelling;
 
@@ -51,6 +60,24 @@ public enum LanguageCaseId implements DelegatedEqualityIsTheCrossingAnswer {
      *  by {@link #named}, so a spelling can only be wrong here by being wrong in both directions. */
     public String spelling() {
         return spelling;
+    }
+
+    /**
+     * Whether an arm naming this case names it as a case of the language's own.
+     *
+     * <p>{@code Option}'s two are not: an arm over an {@code Option} dispatches on that type's own
+     * cases and never on a name of the language's, so the name resolves the way a declared case does.
+     * Every other one here is a name no module declares and nothing else answers for.
+     *
+     * <p>Asked of the case rather than listed at the reader, so a case added to this enum says which
+     * of the two it is instead of falling to whichever side a hand-kept list last had.
+     */
+    public boolean isNamedAsALanguageCase() {
+        return switch (this) {
+            case SOME, NONE -> false;
+            case DIVISION_BY_ZERO, NOT_A_NUMBER, NOT_A_DATE, NOT_A_TIME, NOT_WHOLE,
+                 NOT_A_FINITE_DECIMAL -> true;
+        };
     }
 
     /** The case written {@code spelling}, or null where none is. */

@@ -44,7 +44,8 @@ class WhatARowMayNameAsACaseIsWhatAValueCanBeReadAsTest {
                     constructs DivisionByZero
 
                 let divide (a, b) =
-                    if b == 0 then DivisionByZero { why = "zero" } else a / b
+                    if b == 0 then DivisionByZero { why = "zero" }
+                        else Rational.toInt(DOWN, a / b)
 
                 example divide
                     | "the whole case" : (6, 3) -> Int
@@ -67,7 +68,8 @@ class WhatARowMayNameAsACaseIsWhatAValueCanBeReadAsTest {
                     constructs DivisionByZero
 
                 let divide (a, b) =
-                    if b == 0 then DivisionByZero { why = "zero" } else a / b
+                    if b == 0 then DivisionByZero { why = "zero" }
+                        else Rational.toInt(DOWN, a / b)
 
                 example divide
                     | "a good one" : (6, 2) -> 3

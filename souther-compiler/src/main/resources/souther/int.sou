@@ -4,12 +4,17 @@
 // divisor.
 //
 // The `+ - * /` operators (and `< <= > >=`) stay compiler-integrated: they are syntax and carry the
-// closed-newtype arithmetic rules, which a plain function cannot. `divide`/`truncatingRemainder` also
-// stay compiler-integrated for now — they return `Int | DivisionByZero`, a primitive-headed union a
-// core declaration cannot yet express. See the stdlib implementation-location policy.
+// closed-newtype arithmetic rules, which a plain function cannot. `truncatingDivide`/
+// `truncatingRemainder` also stay compiler-integrated for now — they return `Int | DivisionByZero`, a
+// primitive-headed union a core declaration cannot yet express. See the stdlib implementation-location
+// policy.
 module souther.int
 
-let divide (dividend: Int, divisor: Int): Int | DivisionByZero = intrinsic "int.divide"
+// `truncatingDivide` is the quotient of a whole-number division truncated toward zero. The `/`
+// operator no longer computes it: its quotient is exact and answers a Rational (ADR-0116), so the
+// policy this one applies is its own and is named, as `truncatingRemainder`'s is.
+let truncatingDivide (dividend: Int, divisor: Int): Int | DivisionByZero =
+    intrinsic "int.truncatingDivide"
 
 // `truncatingRemainder` is the remainder of a division whose quotient is truncated toward zero, so
 // its result takes the sign of the dividend: `truncatingRemainder(-7, 3)` is `-1`. The name carries
@@ -26,7 +31,7 @@ let compare (a: Int, b: Int): Int = intrinsic "int.compare"
 
 // `floorMod` is the remainder of a division whose quotient is floored, so its result takes the sign
 // of the divisor: `floorMod(-7, 3)` is `2`, where `truncatingRemainder(-7, 3)` is `-1`. Both take the
-// dividend first and the divisor second, as `divide` does: a binary arithmetic operation keeps its
+// dividend first and the divisor second, as `truncatingDivide` does: a binary arithmetic operation keeps its
 // operands in the order the mathematics writes them, and the pipe's subject-last rule is for the
 // unary ones.
 //

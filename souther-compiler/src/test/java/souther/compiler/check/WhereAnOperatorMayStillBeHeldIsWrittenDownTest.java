@@ -211,7 +211,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " no comparison"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
-            new Held("souther.compiler.check.Terms.theOneOf", "the same, for the meaning it interns"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
             new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
             new Held("souther.compiler.check.NumericMeanings.of",
@@ -389,6 +388,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the constants it has rules for, against the operator it was handed"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "names the two that scale a newtype"),
+            new Held("souther.compiler.codegen.BodyGen.arithmetic",
+                    "names the operator whose quotient is exact, which is what decides between a"
+                            + " carrier's kernel and the exact arithmetic's"),
+            new Held("souther.compiler.codegen.BodyGen.exactly",
+                    "names which exact kernel each operator reaches, so an operator with none says"
+                            + " so rather than being emitted as whichever name a caller passed"),
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"

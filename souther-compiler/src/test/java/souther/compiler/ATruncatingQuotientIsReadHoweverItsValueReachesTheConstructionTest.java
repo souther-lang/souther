@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -7,22 +8,27 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A truncating division is read as a quotient through every spelling the language has for it.
+ * A truncating quotient is read as one however its value reaches the construction.
  *
- * <p>{@code /} aborts on a zero divisor and {@code Int.divide} answers one as a case, and they
- * compute one number (spec §stdlib-int). Which of the two an author writes is settled by whether
- * the model admits a zero divisor, so the second is what a domain writes wherever the divisor is not
- * a literal it can argue about — and what was known of the quotient turned on the spelling rather
- * than on the arithmetic (#959).
+ * <p>{@code Int.truncatingDivide} answers a union, so what a model does with the quotient is open:
+ * the arm may build from the binding, or hand it back from a helper, or give it a name first. What is
+ * known of the quotient is the arithmetic's and must not turn on which of those an author wrote
+ * (#959).
  *
- * <p>What discharges the construction here is one rule: a dividend at or above nought over a
+ * <p>The operator is not one of the ways. Its quotient is exact and answers a Rational, which is
+ * another number and no value of the newtype's base (spec §stdlib-rational), so a construction from
+ * it does not type-check — the last row here is what says so.
+ *
+ * <p>What discharges the construction is one rule: a dividend at or above nought over a
  * positive divisor answers at or above nought (spec §invariant-discharge-arithmetic). The guard,
- * the construction and the divisor are the same in every row, and only the way the division is
- * written changes.
+ * the construction and the divisor are the same in every row, and only the way the value is handed
+ * on changes.
  */
-class OneDivisionIsAQuotientHoweverItIsSpelledTest {
+class ATruncatingQuotientIsReadHoweverItsValueReachesTheConstructionTest {
 
     private static String model(String construction) {
         return """
@@ -32,7 +38,7 @@ class OneDivisionIsAQuotientHoweverItIsSpelledTest {
                     invariant value >= 0
 
                 let 商 (a: Int, b: Int): Int =
-                    match Int.divide(a, b) with
+                    match Int.truncatingDivide(a, b) with
                         | Int as n -> n
                         | DivisionByZero -> unreachable "額面は定数で、0にならない"
 
@@ -52,13 +58,7 @@ class OneDivisionIsAQuotientHoweverItIsSpelledTest {
                 .toList();
     }
 
-    /** The operator, which is the row the rule was written for. */
-    @Test
-    void theOperatorIsRead() {
-        assertEquals(List.of(), reported("硬貨枚数(額 / 10)"));
-    }
-
-    /** The same division inside a helper that opens the value case and answers what it bound. The
+    /** The division inside a helper that opens the value case and answers what it bound. The
      * helper is expanded into the body, so what reaches the construction is the arm's binding. */
     @Test
     void aHelperThatOpensTheValueCaseIsRead() {
@@ -69,7 +69,7 @@ class OneDivisionIsAQuotientHoweverItIsSpelledTest {
     @Test
     void theValueCaseOpenedAtTheConstructionIsRead() {
         assertEquals(List.of(), reported("""
-                match Int.divide(額, 10) with
+                match Int.truncatingDivide(額, 10) with
                         | Int as n -> 硬貨枚数(n)
                         | DivisionByZero -> 硬貨枚数(0)"""));
     }
@@ -79,7 +79,7 @@ class OneDivisionIsAQuotientHoweverItIsSpelledTest {
     void theValueCaseGivenANameIsRead() {
         assertEquals(List.of(), reported("""
                 {
-                        let q = match Int.divide(額, 10) with
+                        let q = match Int.truncatingDivide(額, 10) with
                             | Int as n -> n
                             | DivisionByZero -> 0
                         硬貨枚数(q)
@@ -88,11 +88,24 @@ class OneDivisionIsAQuotientHoweverItIsSpelledTest {
 
     /**
      * The control. Nothing puts the dividend at or above nought, so the quotient runs either way and
-     * the construction is owed its clause — through the value case as through the operator.
+     * the construction is owed its clause — which is what says the rows above are the rule being read
+     * and not a reader that discharges whatever it is handed.
      */
     @Test
-    void withNothingKnownOfTheDividendBothSpellingsAreStillReported() {
+    void withNothingKnownOfTheDividendTheClauseIsStillOwed() {
         assertEquals(List.of("E2011"),
                 reported("硬貨枚数(商(額 - 1000000, 10))").stream().distinct().toList());
+    }
+
+    /**
+     * And the operator is no spelling of this quotient. What it answers is exact, and the newtype
+     * wraps an {@code Int}, so the construction is refused where it is written rather than read as the
+     * truncating one (spec §stdlib-rational).
+     */
+    @Test
+    void theOperatorAnswersAnotherNumberAndDoesNotReachTheConstruction() {
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileWithWarnings(model("硬貨枚数(額 / 10)")));
+        assertTrue(refused.getMessage().contains("Rational"), refused.getMessage());
     }
 }

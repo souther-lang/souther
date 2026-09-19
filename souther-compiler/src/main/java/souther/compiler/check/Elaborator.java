@@ -148,7 +148,10 @@ public final class Elaborator {
             case Hir.Neg neg -> {
                 Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
-                if (t != Type.INT && t != Type.DECIMAL) {
+                // A Rational among them: the negation answers the type it is given, and a model able
+                // to write `0 - r` and not `-r` would have the negation of a number depend on which
+                // spelling reaches an operator table (ADR-0116).
+                if (t != Type.INT && t != Type.DECIMAL && t != Type.RATIONAL) {
                     throw CompileException.of(Diagnostic
                                     .at(neg.reportedAt())
                                     .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());

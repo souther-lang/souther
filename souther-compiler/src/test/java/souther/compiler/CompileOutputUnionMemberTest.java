@@ -32,7 +32,7 @@ class CompileOutputUnionMemberTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                let half (n) = if n >= 0 then Rational.toInt(DOWN, n / 2) else NoAnswer
                 """);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> union = loader.loadClass(Emitted.result("m", "half"));
@@ -232,7 +232,7 @@ class CompileOutputUnionMemberTest {
                 module m exposing ( NoAnswer, half )
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                let half (n) = if n >= 0 then Rational.toInt(DOWN, n / 2) else NoAnswer
                 example half
                     | "half of seven, rounded down" :
                         (7) -> 3
@@ -340,7 +340,7 @@ class CompileOutputUnionMemberTest {
                 data IntCase = String
                 data NoAnswer
                 behavior half : (n: Int) -> Int | NoAnswer
-                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                let half (n) = if n >= 0 then Rational.toInt(DOWN, n / 2) else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
     }
@@ -354,7 +354,7 @@ class CompileOutputUnionMemberTest {
                 behavior intCase : (n: Int) -> Int
                 let intCase (n) = n
                 behavior half : (n: Int) -> Int | NoAnswer
-                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                let half (n) = if n >= 0 then Rational.toInt(DOWN, n / 2) else NoAnswer
                 """));
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
     }

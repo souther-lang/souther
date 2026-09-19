@@ -177,6 +177,25 @@ final class Descriptors {
      *  thing — the operator picks the name, not the shape. */
     static final MethodTypeDesc MTD_bdArith =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, CD_BigDecimal);
+    /** The exact quotient a {@code /} answers, carried by a value of the runtime's own (ADR-0112,
+     *  ADR-0116). */
+    static final ClassDesc CD_Rational = ClassDesc.of("souther.runtime.Rational");
+    static final ClassDesc CD_RationalMath = ClassDesc.of("souther.runtime.RationalMath");
+    /** {@code RationalMath add/subtract/multiply/divide(Rational, Rational) -> Rational}: the four
+     *  Rational operators, which take and answer the same thing. */
+    static final MethodTypeDesc MTD_ratArith =
+            MethodTypeDesc.of(CD_Rational, CD_Rational, CD_Rational);
+    /** {@code (long, long) -> Rational}: the quotient of two whole numbers, which is exact and so
+     *  leaves the operand type (ADR-0116). */
+    static final MethodTypeDesc MTD_ratOfWholeNumbers =
+            MethodTypeDesc.of(CD_Rational, ConstantDescs.CD_long, ConstantDescs.CD_long);
+    /** {@code (long) -> Rational} and {@code (BigDecimal) -> Rational}: an operand read at its exact
+     *  value where the operator has a Rational on the other side. */
+    static final MethodTypeDesc MTD_ratFromInt =
+            MethodTypeDesc.of(CD_Rational, ConstantDescs.CD_long);
+    static final MethodTypeDesc MTD_ratFromDecimal = MethodTypeDesc.of(CD_Rational, CD_BigDecimal);
+    /** {@code (Rational) -> Rational}: the negation, which answers the type it is given. */
+    static final MethodTypeDesc MTD_ratNegate = MethodTypeDesc.of(CD_Rational, CD_Rational);
     /** The Souther value ([#stdlib-decimal]); the runtime maps it to {@code java.math.RoundingMode}. */
     static final ClassDesc CD_RoundingMode = ClassDesc.of("souther.runtime.RoundingMode");
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");

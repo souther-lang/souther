@@ -37,7 +37,8 @@ class CompilePublishedHelperTest {
             data Rate = Int
 
             let rate = Rate(10)
-            let taxed (a: Amount) = Amount(a.value + a.value * rate.value / 100)
+            let taxed (a: Amount) =
+                Amount(a.value + Rational.toInt(DOWN, a.value * rate.value / 100))
             """;
 
     /**
@@ -430,6 +431,44 @@ class CompilePublishedHelperTest {
                 behavior bill : (a: Amount) -> Receipt constructs Receipt
                 let bill (a) = Receipt { total = taxed(a) }
                 """), path));
+    }
+
+    /**
+     * And a helper whose signature says {@code Rational} crosses it, which is what moved the boundary
+     * version.
+     *
+     * <p>An exact quotient is a value a computation holds and no boundary carries, so no field and no
+     * behavior writes one — but a helper is neither, and a module that works out a ratio for another to
+     * narrow writes it in the signature. That spelling has to survive the crossing: written into a class
+     * file by one compilation and read back by the next, which is a published signature naming a
+     * primitive rather than a declaration of the module it came from.
+     */
+    @Test
+    void aHelperWhoseSignatureSaysRationalCrossesAProjectBoundary() throws Exception {
+        Map<String, ClassFileImage> shares = Compiler.compile("""
+                module ratio exposing ( share )
+
+                let share (of: Int, among: Int): Rational = of / among
+                """);
+
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module app.split exposing ( In, Split, apportion )
+
+                import ratio ( share )
+
+                data In = { of: Int, among: Int }
+                data Split = { each: Int }
+
+                behavior apportion : (i: In) -> Split constructs Split
+                let apportion (i) =
+                    Split { each = Rational.toInt(DOWN, share(i.of, i.among)) }
+                """), ModulePath.of(shares)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "app.split.In", Map.of("of", 7L, "among", 2L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "app.split.Split",
+                Codecs.apply(Emitted.behavior(loader, "app.split", "apportion")
+                        .getConstructor().newInstance(), in));
+        assertEquals(3L, out.get("each"), "seven halves, taken toward nought");
     }
 
     /** A reader has to write the arguments, so it has to be able to name their types. */

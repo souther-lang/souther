@@ -142,7 +142,7 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
         A_ROW_WRITTEN_BESIDE("""
 
                 behavior half : (x: Int) -> Int
-                let half (x) = x / 2
+                let half (x) = Rational.toInt(DOWN, x / 2)
 
                 example half
                     | "two" : (2) -> 1

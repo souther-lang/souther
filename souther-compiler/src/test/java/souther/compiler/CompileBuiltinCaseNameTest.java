@@ -21,7 +21,7 @@ class CompileBuiltinCaseNameTest {
         Compiler.compile("""
                 module demo
 
-                import Int ( divide )
+                import Int ( truncatingDivide )
 
                 data Amount = Int
                     invariant value >= 0
@@ -29,7 +29,7 @@ class CompileBuiltinCaseNameTest {
                 behavior half : (a: Int) -> Amount constructs Amount
 
                 let half (a) =
-                    match divide(a, 2) with
+                    match truncatingDivide(a, 2) with
                         | Int as q -> Amount(q)
                         | DivisionByZero -> Amount(0)
                 """);

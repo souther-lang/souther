@@ -50,7 +50,7 @@ public record TemporalRule(String factory, boolean guardsText, boolean guardsVal
             case TIME -> new TemporalRule("time", false, true);
             case DATETIME -> new TemporalRule("dateTime", false, true);
             case INSTANT -> new TemporalRule("iso8601", true, false);
-            case INT, STRING, BOOL, DECIMAL, RAW -> null;
+            case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> null;
         };
     }
 

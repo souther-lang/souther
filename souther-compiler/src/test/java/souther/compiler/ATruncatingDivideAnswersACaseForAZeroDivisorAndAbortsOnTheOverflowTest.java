@@ -10,37 +10,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * {@code Int.divide(a, b)} and {@code a / b} are one division, and they part company over a zero
- * divisor and nowhere else.
+ * {@code Int.truncatingDivide} has two ways of not answering a quotient, and they are not one.
  *
- * <p>Which is what §stdlib-int states: the operator is the casual one and aborts, the function
- * answers the zero divisor as a case, and both are truncating division of the same two numbers.
- * The invariant-discharge check reads the value case of {@code Int.divide} as the quotient the
- * operator answers, so a pair where the two produce different numbers is a pair where that reading
- * is wrong.
+ * <p>A zero divisor is a possible input on the business flow, so it comes back as a case. An overflow
+ * is a model bug, so it aborts — and there is one pair it happens to: the quotient of
+ * {@code Long.MIN_VALUE} by {@code -1} is one past what an {@code Int} holds. A raw {@code ldiv}
+ * wraps that back to {@code Long.MIN_VALUE} and answers it as a quotient, which is what stood in the
+ * value path (spec §stdlib-int).
  *
- * <p>{@code Long.MIN_VALUE / -1} is the pair. Its quotient is one past what an {@code Int} holds,
- * so §stdlib-int aborts on it as it does on any other overflow — and a raw {@code ldiv} wraps it
- * back to {@code Long.MIN_VALUE} instead, which is what stood in the function's success path.
+ * <p>The remainder is the companion and answers on that very pair, which is why it stays a raw
+ * {@code lrem}.
  */
-class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
+class ATruncatingDivideAnswersACaseForAZeroDivisorAndAbortsOnTheOverflowTest {
 
     private static final String MODULE = """
             module demo
 
-            import Int ( divide )
+            import Int ( truncatingDivide )
 
             data Pair = { a: Int, b: Int }
             data Outcome = { q: Int, ok: Bool }
 
             behavior byTheFunction : (p: Pair) -> Outcome constructs Outcome
             let byTheFunction (p) =
-                match divide(p.a, p.b) with
+                match truncatingDivide(p.a, p.b) with
                     | Int as q -> Outcome { q = q, ok = true }
                     | DivisionByZero -> Outcome { q = 0, ok = false }
-
-            behavior byTheOperator : (p: Pair) -> Outcome constructs Outcome
-            let byTheOperator (p) = Outcome { q = p.a / p.b, ok = true }
 
             behavior whatIsLeft : (p: Pair) -> Outcome constructs Outcome
             let whatIsLeft (p) =
@@ -60,21 +55,16 @@ class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
     }
 
     @Test
-    void bothAnswerTheSameQuotientWhereTheOperatorAnswersOne() throws Exception {
-        assertEquals(-3L, answered("byTheFunction", -7, 2).get("q"),
-                "truncating toward zero");
-        assertEquals(answered("byTheOperator", -7, 2).get("q"),
-                answered("byTheFunction", -7, 2).get("q"),
-                "and -7 / 2 is -3 by either spelling");
+    void theQuotientIsTruncatedTowardNought() throws Exception {
+        assertEquals(-3L, answered("byTheFunction", -7, 2).get("q"));
+        assertEquals(3L, answered("byTheFunction", 7, 2).get("q"));
     }
 
     @Test
-    void bothAbortOnTheOnePairNoIntHoldsTheQuotientOf() {
-        assertThrows(ConstraintViolation.class,
-                () -> answered("byTheOperator", Long.MIN_VALUE, -1));
+    void itAbortsOnTheOnePairNoIntHoldsTheQuotientOf() {
         assertThrows(ConstraintViolation.class,
                 () -> answered("byTheFunction", Long.MIN_VALUE, -1),
-                "the function answers a case for a zero divisor, not for an overflow");
+                "the case is for a zero divisor, not for an overflow");
     }
 
     /**
@@ -93,9 +83,9 @@ class AnIntDivideAndTheOperatorAnswerOneQuotientTest {
     }
 
     @Test
-    void onlyTheFunctionAnswersAZeroDivisor() throws Exception {
+    void aZeroDivisorComesBackAsACase() throws Exception {
         Map<?, ?> out = answered("byTheFunction", 10, 0);
         assertEquals(false, out.get("ok"));
-        assertThrows(ConstraintViolation.class, () -> answered("byTheOperator", 10, 0));
+        assertEquals(0L, out.get("q"));
     }
 }
