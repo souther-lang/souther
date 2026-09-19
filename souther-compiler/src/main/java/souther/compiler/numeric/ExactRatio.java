@@ -172,17 +172,26 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         // million digits whatever holds it.
         long sharedTwos = Math.min(twos, other.twos);
         long sharedFives = Math.min(fives, other.fives);
-        BigInteger mine = numeratorWithoutUnits
-                .multiply(power(BigInteger.TWO, twos - sharedTwos))
-                .multiply(power(FIVE, fives - sharedFives));
-        BigInteger theirs = other.numeratorWithoutUnits
-                .multiply(power(BigInteger.TWO, other.twos - sharedTwos))
-                .multiply(power(FIVE, other.fives - sharedFives));
         return new ExactRatio(
-                mine.multiply(other.denominatorWithoutUnits)
-                        .add(theirs.multiply(denominatorWithoutUnits)),
+                numeratorOver(sharedTwos, sharedFives).multiply(other.denominatorWithoutUnits)
+                        .add(other.numeratorOver(sharedTwos, sharedFives)
+                                .multiply(denominatorWithoutUnits)),
                 denominatorWithoutUnits.multiply(other.denominatorWithoutUnits),
                 sharedTwos, sharedFives);
+    }
+
+    /**
+     * This ratio's numerator once the powers it stands above {@code sharedTwos} and
+     * {@code sharedFives} are written into it, which is what a sum and an order both need of both
+     * sides before either can be formed over one denominator.
+     *
+     * <p>The two exponents are no lower than this ratio's own, because what they are is the lower of
+     * two ratios' — so nothing here is a power below the line.
+     */
+    private BigInteger numeratorOver(long sharedTwos, long sharedFives) {
+        return numeratorWithoutUnits
+                .multiply(power(BigInteger.TWO, lessened(twos, sharedTwos)))
+                .multiply(power(FIVE, lessened(fives, sharedFives)));
     }
 
     public ExactRatio minus(ExactRatio other) {
@@ -205,7 +214,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         }
         return new ExactRatio(numeratorWithoutUnits.multiply(other.denominatorWithoutUnits),
                 denominatorWithoutUnits.multiply(other.numeratorWithoutUnits),
-                added(twos, -other.twos), added(fives, -other.fives));
+                lessened(twos, other.twos), lessened(fives, other.fives));
     }
 
     public ExactRatio negated() {
@@ -227,7 +236,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /** Whether this is a whole number, which is a fraction of one with no power below the line. */
     public boolean isWhole() {
         return isZero()
-                || denominatorWithoutUnits.equals(BigInteger.ONE) && twos >= 0 && fives >= 0;
+                || (denominatorWithoutUnits.equals(BigInteger.ONE) && twos >= 0 && fives >= 0);
     }
 
     /**
@@ -259,15 +268,9 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         // and writing the difference down costs about what the two fractions cost.
         long sharedTwos = Math.min(twos, other.twos);
         long sharedFives = Math.min(fives, other.fives);
-        BigInteger mine = numeratorWithoutUnits
-                .multiply(power(BigInteger.TWO, twos - sharedTwos))
-                .multiply(power(FIVE, fives - sharedFives))
-                .multiply(other.denominatorWithoutUnits);
-        BigInteger theirs = other.numeratorWithoutUnits
-                .multiply(power(BigInteger.TWO, other.twos - sharedTwos))
-                .multiply(power(FIVE, other.fives - sharedFives))
-                .multiply(denominatorWithoutUnits);
-        return mine.compareTo(theirs);
+        return numeratorOver(sharedTwos, sharedFives).multiply(other.denominatorWithoutUnits)
+                .compareTo(other.numeratorOver(sharedTwos, sharedFives)
+                        .multiply(denominatorWithoutUnits));
     }
 
     /**
@@ -283,8 +286,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 - denominatorWithoutUnits.bitLength()
                 - (other.numeratorWithoutUnits.abs().bitLength()
                         - other.denominatorWithoutUnits.bitLength());
-        double powers = (double) (twos - other.twos)
-                + (double) (fives - other.fives) * LOG2_OF_FIVE;
+        double powers = (double) lessened(twos, other.twos)
+                + (double) lessened(fives, other.fives) * LOG2_OF_FIVE;
         double gap = fractions + powers;
         if (gap > APART) {
             return 1;
@@ -424,13 +427,18 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         return fraction.numerator() + "/" + fraction.denominator();
     }
 
+    /**
+     * The plain shape of the number, for a message about this compiler.
+     *
+     * <p>The fraction and not what is held, because the number is what a reader of such a message
+     * needs. Writing it is what writing a number costs, which for a value held compactly is more
+     * than holding it — so this is not somewhere to reach for on a path that has to stay cheap.
+     */
     @Override
     public String toString() {
-        if (isWhole()) {
-            return asFraction().numerator().toString();
-        }
         Fraction fraction = asFraction();
-        return fraction.numerator() + "/" + fraction.denominator();
+        return isWhole() ? fraction.numerator().toString()
+                : fraction.numerator() + "/" + fraction.denominator();
     }
 
     /** {@code base^exponent}, where the exponent is one this type holds and the power is one the
@@ -450,8 +458,23 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         try {
             return Math.addExact(one, other);
         } catch (ArithmeticException _) {
-            throw new ArithmeticException(
-                    "no ratio here stands at two to the " + one + " times two to the " + other);
+            throw beyond(one, other);
         }
+    }
+
+    /** One exponent less another, which every pair of these is asked for somewhere: a quotient
+     *  subtracts them, and what an operand stands above the lower of the two is what a sum and an
+     *  order write down. */
+    private static long lessened(long one, long other) {
+        try {
+            return Math.subtractExact(one, other);
+        } catch (ArithmeticException _) {
+            throw beyond(one, other);
+        }
+    }
+
+    private static ArithmeticException beyond(long one, long other) {
+        return new ArithmeticException(
+                "no ratio here stands between an exponent of " + one + " and one of " + other);
     }
 }

@@ -162,7 +162,8 @@ public sealed interface AdditiveImage {
             ExactRatio by = generator.dividedBy(coefficient);
             java.math.BigInteger over = from.asFraction().denominator()
                     .multiply(by.asFraction().denominator());
-            java.math.BigInteger modulus = from.spread().multiply(by.spread());
+            java.math.BigInteger modulus =
+                    ExactRatio.of(over).unitsRemoved().asFraction().numerator();
             if (modulus.equals(java.math.BigInteger.ONE)) {
                 return new AffinePreimage.Stepping(from, by.abs(), Granularity.DENSE);
             }
