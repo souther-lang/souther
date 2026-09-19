@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Timeout;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -263,6 +264,62 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     }
 
     /**
+     * A decimal written at the least scale one has comes back as a decimal.
+     *
+     * <p>The value is a whole number of some hundreds of millions of digits, and the decimal it
+     * arrived as held it in one — so the plain shape, which writes those digits, is not on offer,
+     * and the scale goes below nought instead. What this holds is that the question and the writing
+     * agree there: a value the one calls written is one the other writes.
+     */
+    @Test
+    void theLeastScaleADecimalHasStillComesBackAsADecimal() {
+        BigDecimal written = new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE);
+        ExactRatio ratio = ExactRatio.of(written);
+
+        assertTrue(ratio.fitsWrittenDecimal());
+        BigDecimal back = ratio.asWrittenDecimal();
+        assertNotNull(back);
+        assertEquals(0, written.compareTo(back));
+        assertEquals(Integer.MIN_VALUE, back.scale());
+        assertEquals(BigInteger.ONE, back.unscaledValue());
+    }
+
+    /**
+     * And the same agreement either side of it, at both ends of what a scale holds and for a value
+     * past them.
+     */
+    @Test
+    void theQuestionAndTheWritingAgreeAtEveryScale() {
+        List<BigDecimal> written = List.of(
+                new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE),
+                new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE + 1),
+                new BigDecimal(BigInteger.valueOf(7), Integer.MIN_VALUE),
+                new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE),
+                new BigDecimal(BigInteger.valueOf(-3), Integer.MAX_VALUE),
+                new BigDecimal(BigInteger.ONE, 0),
+                new BigDecimal(BigInteger.TEN, -1));
+        for (BigDecimal each : written) {
+            ExactRatio ratio = ExactRatio.of(each);
+            assertTrue(ratio.fitsWrittenDecimal(), () -> "a decimal is this value: " + each.scale());
+            BigDecimal back = ratio.asWrittenDecimal();
+            assertNotNull(back, () -> "and one comes back for it: " + each.scale());
+            assertEquals(0, each.compareTo(back), () -> "the same value at scale " + each.scale());
+        }
+
+        // Past what a scale holds, both say so and neither of them by an exception.
+        ExactRatio past = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -3_000_000_000L, -3_000_000_000L);
+        assertFalse(past.fitsWrittenDecimal());
+        assertNull(past.asWrittenDecimal());
+
+        // And a whole number no scale brings within reach, which is the other way it happens.
+        ExactRatio tall = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 3_000_000_000L, 0);
+        assertTrue(tall.terminates());
+        assertFalse(tall.fitsWrittenDecimal());
+        assertNull(tall.asWrittenDecimal());
+    }
+
+    /**
      * Whether some decimal is this value, and whether one a carrier holds is, are two questions.
      *
      * <p>A scale is thirty-two bits, so a value that is a finite decimal can still be one nothing
@@ -275,7 +332,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
                 -3_000_000_000L, -3_000_000_000L);
         assertTrue(past.terminates(), "a millionth of a millionth of a millionth is a decimal");
         assertFalse(past.fitsWrittenDecimal(), "and no decimal here is written at that scale");
-        assertThrows(ArithmeticException.class, past::asWrittenDecimal);
+        assertNull(past.asWrittenDecimal());
 
         assertTrue(TOO_WIDE_TO_SPELL.terminates());
         assertTrue(TOO_WIDE_TO_SPELL.fitsWrittenDecimal());

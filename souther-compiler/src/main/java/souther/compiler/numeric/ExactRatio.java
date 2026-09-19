@@ -436,17 +436,73 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * is the answer building it would have given.
      */
     public boolean fitsWrittenDecimal() {
-        return terminates() && (isZero() || scaleOfTheDecimal() <= Integer.MAX_VALUE);
+        return terminates() && (isZero() || scaleOfTheDecimal() != NO_SCALE);
     }
 
-    /** The scale a {@link BigDecimal} of this value is written at: the tens it takes to leave
-     *  neither exponent below the line. */
+    /** That no scale writes this value, which is what {@link #scaleOfTheDecimal} answers where the
+     *  value is a decimal and none of the scales a decimal has holds it. */
+    private static final long NO_SCALE = Long.MIN_VALUE;
+
+    /**
+     * The scale a {@link BigDecimal} of this value is written at, or {@link #NO_SCALE} where none
+     * writes it.
+     *
+     * <p>More than one scale can: any of them leaving neither exponent above what a power here
+     * builds. The one taken is the plain one — nothing below the line, and a value standing above it
+     * on both written out as the whole number it is — because that is the shape a reader of a count
+     * expects and the one the rest of this compiler was written against.
+     *
+     * <p>Where those digits are past what a whole number here holds, the plain shape is not on offer
+     * and the scale goes below nought instead, which leaves the unscaled value only what the two
+     * exponents differ by. A decimal written at the least scale one has is the case: its value is a
+     * whole number of some six hundred million digits, and the decimal it came from held it in one.
+     *
+     * <p>One answer, read by the question and by the writing alike. Asked separately they went apart
+     * at exactly this value: the scale a decimal has, and the digits a scale leaves to be built, are
+     * two conditions, and a predicate that weighed one of them said yes where the writing then could
+     * not.
+     */
     private long scaleOfTheDecimal() {
-        return Math.max(0, Math.max(-twos, -fives));
+        long least = Math.max(-twos, -fives);
+        long plain = Math.max(0, least);
+        if (writableAt(plain)) {
+            return plain;
+        }
+        return writableAt(least) ? least : NO_SCALE;
     }
 
     /**
-     * This as a decimal a model could write, or {@code null} where no such decimal is this.
+     * Whether this value is written at {@code scale}: a scale a decimal has, and an unscaled value
+     * this host holds.
+     *
+     * <p>Asked of how many bits that value takes rather than of the exponents alone. An exponent
+     * within a count of bits is not the same as a number within one — a whole number is addressed by
+     * its bits, and a power of five whose exponent fits is past the end long before. The count is
+     * under the truth, a factor of five counted as two bits where it is nearer two and a third, so
+     * this refuses nothing the host would have held and what the under-count lets through the host
+     * refuses itself.
+     */
+    private boolean writableAt(long scale) {
+        if (scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE) {
+            return false;
+        }
+        long byTwos;
+        long byFives;
+        try {
+            byTwos = Math.addExact(twos, scale);
+            byFives = Math.addExact(fives, scale);
+        } catch (ArithmeticException _) {
+            return false;   // an exponent that far out is nothing a count of bits reaches either
+        }
+        if (byTwos < 0 || byFives < 0) {
+            return false;
+        }
+        return byTwos + 2 * byFives + numeratorWithoutUnits.abs().bitLength()
+                <= Integer.MAX_VALUE;
+    }
+
+    /**
+     * This as a decimal a model could write, or {@code null} where the caller cannot have one.
      *
      * <p>A ratio terminates exactly where its denominator is made of the factors ten is made of,
      * which here is where nothing is left below the line once both of them are held as exponents. A
@@ -454,8 +510,12 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * caller asking has to know whether it was handed the value or an approximation of it, and a
      * number that came back cannot be asked which it was.
      *
-     * @throws ArithmeticException where the decimal this is has a scale no {@link BigDecimal} holds,
-     *         which is a value with no written form rather than a value that is not one
+     * <p><b>And {@code null} for a decimal no scale writes.</b> That is a second reason and the same
+     * answer, because what every caller does next is the same: there is no written decimal to be
+     * had, so round, or say the run got no further. Left as a refusal instead it would have gone
+     * past readers that branch on the one reason there used to be — the third case has a place in
+     * the answer rather than a way out of it. Which of the two reasons holds is
+     * {@link #terminates} against {@link #fitsWrittenDecimal}, for a caller that needs to know.
      */
     public BigDecimal asWrittenDecimal() {
         if (isZero()) {
@@ -464,17 +524,13 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         if (!denominatorWithoutUnits.equals(BigInteger.ONE)) {
             return null;
         }
-        // Ten carries one two and one five, so the tens it takes is however many of the more
-        // negative of them this stands on, and neither exponent is below the line after that. A
-        // value standing above the line on both is a whole number and is written as one: the digits
-        // are the value's own, which is the half of this the compactness was never about.
         long scale = scaleOfTheDecimal();
-        if (!fitsWrittenDecimal()) {
-            throw new ArithmeticException("no decimal holds this value at a scale of " + scale);
+        if (scale == NO_SCALE) {
+            return null;
         }
         return new BigDecimal(
-                numeratorWithoutUnits.multiply(power(BigInteger.TWO, added(twos, scale)))
-                        .multiply(power(FIVE, added(fives, scale))),
+                numeratorWithoutUnits.multiply(power(BigInteger.TWO, twos + scale))
+                        .multiply(power(FIVE, fives + scale)),
                 (int) scale);
     }
 
@@ -548,6 +604,9 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      *
      * <p>Apart from {@link #toString}, which is for a message about this compiler and says the plain
      * shape of the number. This is for a sentence somebody reads about their own model.
+     *
+     * @throws ArithmeticException where neither form is one this host writes, which is a number
+     *         standing where no decimal and no pair of whole numbers reaches it
      */
     public String spelled() {
         BigDecimal written = asWrittenDecimal();
@@ -572,14 +631,24 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 : fraction.numerator() + "/" + fraction.denominator();
     }
 
-    /** {@code base^exponent}, where the exponent is one this type holds and the power is one the
-     *  host builds. */
+    /**
+     * {@code base^exponent}, where the exponent is one this type holds and the power is one the
+     * host builds.
+     *
+     * <p>Refused on sight where it is not, and by how many bits the power takes rather than by
+     * whether the exponent is a count the host addresses — those are two conditions, and an exponent
+     * within one is past the other long before. Reached by building the number instead, a power the
+     * host has no room for is not refused until it does not fit, which is minutes and hundreds of
+     * megabytes for an answer that was never going to come. The count is under the truth, a factor
+     * of five counted as two bits where it is nearer two and a third, so nothing the host would have
+     * held is refused here.
+     */
     private static BigInteger power(BigInteger base, long exponent) {
         if (exponent == 0) {
             return BigInteger.ONE;
         }
-        if (exponent > Integer.MAX_VALUE) {
-            throw new ArithmeticException("no whole number is " + base + " to the " + exponent);
+        if (exponent > Integer.MAX_VALUE || exponent * base.bitLength() > Integer.MAX_VALUE) {
+            throw new ArithmeticException("no whole number here is " + base + " to the " + exponent);
         }
         return base.pow((int) exponent);
     }
