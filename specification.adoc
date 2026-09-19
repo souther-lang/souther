@@ -4745,7 +4745,9 @@ Souther code cannot catch this. There is no catching syntax, so it cannot contro
 
 A decode violation is not this; it returns as a Raoh `+Result+` failure (<<decoder-error>>).
 
-Running out of room is not this either. Where an operation is defined for a value and the run cannot obtain the resources to compute the answer — the case the exact order over `+Rational+` states (<<stdlib-rational>>) — that arrives as `+souther.runtime.OutOfRoom+` and not as a `+ConstraintViolation+`, because it says nothing about the model or about any value: the same operands answer in a run with more room. Souther code cannot catch it, as it cannot catch the other aborts; the boundary can, and handles it as the platform failing rather than as anything the request asked for.
+Running out of room is not this either. Where an operation is defined for a value and the runtime finds it cannot obtain what computing the answer takes — the case the exact order over `+Rational+` states (<<stdlib-rational>>) — that arrives as `+souther.runtime.OutOfRoom+` and not as a `+ConstraintViolation+`, because it says nothing about the model or about any value: what the operands are owed is an answer, and a platform that supplies what the decision wanted gives them one. What it takes is not memory alone — how large a whole number the platform's arithmetic builds is a thing a computation can want more of, and more memory does not answer that. Souther code cannot catch it, as it cannot catch the other aborts; the boundary can, and handles it as the platform failing rather than as anything the request asked for.
+
+A failure of the virtual machine itself is not renamed to this. Running out of memory is already the platform failing, in the platform's own terms, and a runtime MUST NOT catch it to report it as something of its own: what `+OutOfRoom+` carries is a shortage the runtime itself detected and can say what was being computed when it did.
 
 [#jvm-anonymous-union]
 === A behavior output's anonymous union

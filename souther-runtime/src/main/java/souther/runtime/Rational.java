@@ -69,8 +69,10 @@ import java.util.function.Supplier;
  * stand for, the pairs whose logs sit closest together being the ones whose powers are largest. Telling
  * two values apart takes as many bits as they agree over, and a pair may agree over as many as its own
  * fractions have — so a comparison may want working room in proportion to what it was handed. That is what
- * it costs, and not a pair it declines: where the room runs out the run has failed and says so
- * ({@link OutOfRoom}), and the same pair compares where there is more of it. Being ordered is a fact about
+ * it costs, and not a pair it declines: where that room is not to be had the run has failed and says so
+ * ({@link OutOfRoom}), and a platform that supplies what the decision wanted answers the same pair. Room
+ * there is what the platform supplies and not memory alone — how large a whole number its arithmetic builds
+ * is one of the things a width can want more of. Being ordered is a fact about
  * this type, so what a heap's size may not decide is whether a {@code sort} over these is admitted and what
  * it means — as against whether one run of it finishes, which is what any operation is subject to.
  *
