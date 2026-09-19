@@ -45,10 +45,11 @@ import java.math.BigInteger;
  * <p><b>What the exponents cost.</b> Multiplying and dividing add and subtract them and never build
  * them, so scale stays free across both. Adding does build the difference between two exponents,
  * because that is what the exact sum is: {@code 1 + 1E-1000000} has a million digits whatever holds
- * it. Comparing builds nothing at all: a power of two is a count of bits and a power of five is
- * bracketed by squaring, so what a comparison costs is the bits of an exponent and not its size —
- * which is what keeps {@code r < 1} from spelling out a millionth, and what makes the order answered
- * for every pair rather than for the pairs whose digits happen to fit.
+ * it. Comparing builds nothing for the pairs a bracket separates, which is nearly all of them: a power
+ * of two is a count of bits there and a power of five is bracketed by squaring, so {@code r < 1} does
+ * not spell out a millionth. Where a bracket does not separate the pair, the two values are written out
+ * as one fraction each and compared exactly — which costs what those fractions cost and is the only
+ * thing that answers a pair standing closer together than any width settled on beforehand.
  *
  * <p><b>What a step is allowed to refuse.</b> An operation aborts where the answer has no
  * representation here, and not where a step on the way to it has none. The two are easy to confuse
@@ -60,9 +61,13 @@ import java.math.BigInteger;
  * comes back, so reading it off the digits refused values it was named to answer. Each of those is a
  * middle step narrower than the value it was handed.
  *
- * <p>The order is the case where that rule bites hardest, because an order always exists: the pairs
- * whose logs sit closest together are the ones whose digits are largest, so a comparison that fell
- * back to the digits would refuse exactly the pairs it was reached for. None of it is built.
+ * <p>The order is the case where that rule bites hardest, because an order always exists. So it rests on
+ * neither of the two things that would refuse it: not on a precision settled before the pair arrived, two
+ * fractions being able to stand closer than any such precision; and not on the powers the two values
+ * stand for, the pairs whose logs sit closest together being the ones whose powers are largest. What it
+ * does rest on is the room a whole number takes, because telling two values apart takes as many bits as
+ * they agree over — so the pair it cannot answer is one whose stored fractions are already within a
+ * factor of the largest whole number there is room for, and nothing it does makes that pair smaller.
  *
  * <p><b>The host's own limits leave by this type's abort.</b> A whole number is held by a host that has
  * a largest one, and a number past it is one no value here is made of — so no method of this type
@@ -103,11 +108,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /** The denominator of half of one, which is what a remainder is compared against to say which side
      *  of half way between two whole numbers a value stands. */
     private static final BigInteger HALVES = BigInteger.valueOf(2);
-
-    /** How many bits a factor of five is worth, in thousandths and rounded up, for counting the size of a
-     *  number before it is written out. */
-    private static final BigInteger BITS_PER_FIVE_ABOVE = BigInteger.valueOf(2322);
-    private static final BigInteger A_THOUSAND = BigInteger.valueOf(1000);
 
     public static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE, 0, 0);
     public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 0);
@@ -439,12 +439,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         // common measure takes, at whatever closeness the pair happens to have.
         BigInteger byTwos = apart(twos, other.twos);
         BigInteger byFives = apart(fives, other.fives);
-        if (writableWith(numerator.abs(), byTwos, byFives)
-                && writableWith(denominator, byTwos.negate(), byFives.negate())) {
-            return comparedAsFractions(
-                    withPowers(numerator.abs(), byTwos, byFives),
-                    withPowers(denominator, byTwos.negate(), byFives.negate()),
-                    other.numerator.abs(), other.denominator);
+        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives);
+        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate());
+        if (up != null && down != null) {
+            return comparedAsFractions(up, down, other.numerator.abs(), other.denominator);
         }
         // Powers no machine writes down, and a pair the first bracket left undecided. Then what brings
         // them together is the exponents rather than the fractions, and how near two powers of two and
@@ -456,7 +454,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 return decided;
             }
         }
-        throw new ConstraintViolation("no bracket this machine holds separates " + this + " from " + other);
+        throw new ConstraintViolation(
+                "no whole number this machine holds tells " + this + " from " + other);
     }
 
     /** How far one exponent stands from another, held wider than an exponent is — the difference of two
@@ -466,29 +465,29 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     }
 
     /**
-     * Whether a whole number written out with those powers in it is one the host holds.
+     * A whole number written out with those powers in it, or null where the host has no room for it.
      *
-     * <p>The powers alone are the wrong question. A power the host has room for, multiplied into a stored
-     * number that already fills it, is a number it has no room for — so what is asked about is the product
-     * that would be formed and not one of its two parts. Asking about the parts sent pairs to a path that
-     * then refused them, which is a refusal over an intermediate by a longer road.
+     * <p>The room is asked of the host and not worked out here. A count of bits made before the number is
+     * a guess about the answer to a question the host itself settles, and a guess is two-valued where the
+     * question has three sides to it: room, no room, and not known without asking. Read as the second of
+     * those, a guess that leans to safety turns away numbers the host would have held — and every one it
+     * turns away is a pair sent to a bracket, which is the instrument that cannot be made fine enough. So
+     * the guess is kept only for the side it is sound on, which is refusing what is certainly too large,
+     * and everything else is written out and let stand or not by whoever holds it.
      *
-     * <p>Counted above the truth rather than below it, a factor of five being nearer two and a third bits
-     * than the two and a third and a bit counted here — so this never sends to the exact reading a number
-     * the host would have turned away, which is the one thing the decision must not do.
+     * <p>What that costs is what the operands already cost: a power the size of a stored denominator is
+     * the same order of work as that denominator, and a power past what the host holds is refused on
+     * sight by the count of bits rather than reached for.
      */
-    private static boolean writableWith(BigInteger whole, BigInteger twos, BigInteger fives) {
-        BigInteger bits = BigInteger.valueOf(whole.bitLength())
-                .add(twos.max(BigInteger.ZERO))
-                .add(fives.max(BigInteger.ZERO).multiply(BITS_PER_FIVE_ABOVE).divide(A_THOUSAND))
-                .add(BigInteger.ONE);
-        return bits.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
-    }
-
-    /** {@code whole × 2^twos × 5^fives}, each power taken only where its exponent is above nought — the
-     *  other side of a negative exponent being where the power belongs. */
-    private static BigInteger withPowers(BigInteger whole, BigInteger twos, BigInteger fives) {
-        return builtFrom(whole, twos.max(BigInteger.ZERO), fives.max(BigInteger.ZERO));
+    private static @Nullable BigInteger writtenOut(
+            BigInteger whole, BigInteger twos, BigInteger fives) {
+        try {
+            return builtFrom(whole, twos.max(BigInteger.ZERO), fives.max(BigInteger.ZERO));
+        } catch (ConstraintViolation _) {
+            return null;
+        } catch (ArithmeticException _) {
+            return null;
+        }
     }
 
     /**
@@ -937,9 +936,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         // The bracket left two whole numbers in it, so the value stands close to half of the way between
         // them. Where the powers can be written down, writing them down answers exactly — at whatever
         // closeness the value happens to have, which is the shape no width settled on beforehand reaches.
-        if (writableWith(magnitude, byTwos, byFives)
-                && writableWith(denominator, byTwos.negate(), byFives.negate())) {
-            return roundedExactly(byTwos, byFives, towards);
+        BigInteger exactly = roundedExactly(byTwos, byFives, towards);
+        if (exactly != null) {
+            return exactly;
         }
         // Powers no machine writes down, and a value the first bracket left undecided: then it is the
         // exponents that bring it near half of the way, and a few doublings of the width settle that.
@@ -949,7 +948,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 return decided;
             }
         }
-        throw new ConstraintViolation("no bracket this machine holds rounds " + this);
+        throw new ConstraintViolation("no whole number this machine holds rounds " + this);
     }
 
     /**
@@ -962,10 +961,13 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * the bit the host does not have at its own end. What writing the value out costs is asked about
      * before it is done, the powers landing on whichever side their signs send them to.
      */
-    private BigInteger roundedExactly(
+    private @Nullable BigInteger roundedExactly(
             BigInteger byTwos, BigInteger byFives, java.math.RoundingMode towards) {
-        BigInteger up = withPowers(numerator.abs(), byTwos, byFives);
-        BigInteger down = withPowers(denominator, byTwos.negate(), byFives.negate());
+        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives);
+        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate());
+        if (up == null || down == null) {
+            return null;
+        }
         BigInteger[] whole = up.divideAndRemainder(down);
         if (whole[1].signum() == 0) {
             // A whole number, so there is no fraction for a policy to have an opinion about.
