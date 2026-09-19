@@ -104,6 +104,11 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      *  of half way between two whole numbers a value stands. */
     private static final BigInteger HALVES = BigInteger.valueOf(2);
 
+    /** How many bits a factor of five is worth, in thousandths and rounded up, for counting the size of a
+     *  number before it is written out. */
+    private static final BigInteger BITS_PER_FIVE_ABOVE = BigInteger.valueOf(2322);
+    private static final BigInteger A_THOUSAND = BigInteger.valueOf(1000);
+
     public static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE, 0, 0);
     public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 0);
 
@@ -434,7 +439,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         // common measure takes, at whatever closeness the pair happens to have.
         BigInteger byTwos = apart(twos, other.twos);
         BigInteger byFives = apart(fives, other.fives);
-        if (writableAsPowers(byTwos, byFives)) {
+        if (writableWith(numerator.abs(), byTwos, byFives)
+                && writableWith(denominator, byTwos.negate(), byFives.negate())) {
             return comparedAsFractions(
                     withPowers(numerator.abs(), byTwos, byFives),
                     withPowers(denominator, byTwos.negate(), byFives.negate()),
@@ -459,10 +465,24 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         return BigInteger.valueOf(exponent).subtract(BigInteger.valueOf(from));
     }
 
-    /** Whether two exponents are ones a power can be written down at, which is the host's own bound on a
-     *  whole number and not a width chosen here. */
-    private static boolean writableAsPowers(BigInteger twos, BigInteger fives) {
-        return twos.abs().bitLength() < Integer.SIZE - 1 && fives.abs().bitLength() < Integer.SIZE - 2;
+    /**
+     * Whether a whole number written out with those powers in it is one the host holds.
+     *
+     * <p>The powers alone are the wrong question. A power the host has room for, multiplied into a stored
+     * number that already fills it, is a number it has no room for — so what is asked about is the product
+     * that would be formed and not one of its two parts. Asking about the parts sent pairs to a path that
+     * then refused them, which is a refusal over an intermediate by a longer road.
+     *
+     * <p>Counted above the truth rather than below it, a factor of five being nearer two and a third bits
+     * than the two and a third and a bit counted here — so this never sends to the exact reading a number
+     * the host would have turned away, which is the one thing the decision must not do.
+     */
+    private static boolean writableWith(BigInteger whole, BigInteger twos, BigInteger fives) {
+        BigInteger bits = BigInteger.valueOf(whole.bitLength())
+                .add(twos.max(BigInteger.ZERO))
+                .add(fives.max(BigInteger.ZERO).multiply(BITS_PER_FIVE_ABOVE).divide(A_THOUSAND))
+                .add(BigInteger.ONE);
+        return bits.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
     /** {@code whole × 2^twos × 5^fives}, each power taken only where its exponent is above nought — the
@@ -917,7 +937,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         // The bracket left two whole numbers in it, so the value stands close to half of the way between
         // them. Where the powers can be written down, writing them down answers exactly — at whatever
         // closeness the value happens to have, which is the shape no width settled on beforehand reaches.
-        if (writableAsPowers(byTwos, byFives)) {
+        if (writableWith(magnitude, byTwos, byFives)
+                && writableWith(denominator, byTwos.negate(), byFives.negate())) {
             return roundedExactly(byTwos, byFives, towards);
         }
         // Powers no machine writes down, and a value the first bracket left undecided: then it is the
@@ -934,11 +955,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * The whole number this rounds to at those exponents, read off one division of the value written out.
      *
-     * <p>Nothing is doubled and nothing is shifted. The whole part is the quotient, and where the value
-     * stands against half of the way is where the remainder stands against half the denominator — which is
-     * one fraction against another and is answered by the same walk the order uses. Doubling the remainder
-     * instead asks for a number a bit larger than one that is stored, which is the bit the host does not
-     * have at its own end.
+     * <p>The value is written out once and read once. The whole part is the quotient, and where the value
+     * stands against half of the way is where the remainder stands against half the denominator — one
+     * fraction against another, answered by the same walk the order uses. Nothing is doubled on top of
+     * that: doubling the remainder would ask for a number a bit larger than one already stored, which is
+     * the bit the host does not have at its own end. What writing the value out costs is asked about
+     * before it is done, the powers landing on whichever side their signs send them to.
      */
     private BigInteger roundedExactly(
             BigInteger byTwos, BigInteger byFives, java.math.RoundingMode towards) {

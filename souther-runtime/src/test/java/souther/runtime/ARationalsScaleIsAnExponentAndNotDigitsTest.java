@@ -275,6 +275,33 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertTrue(two.compareTo(justBelowTwo) > 0);
     }
 
+    /**
+     * And a value whose exponent a stored denominator cancels, which no width settles either.
+     *
+     * <p>A power of two over one more than itself: the exponent is far past what a bracket is taken to, and
+     * the denominator is the same size, so the two all but cancel and the value sits a part in that size
+     * below one. Neither the exponent's own size nor the fraction's says anything useful here — what
+     * decides is whether the value written out is a whole number the host holds, and it is, because the
+     * power is the size of a denominator that is already stored.
+     *
+     * <p>The exponent here is one a power can be written down at, so this pair is answered whether the
+     * decision reads the exponent or the value. What it pins is the shape, not the reading: the pair the
+     * two readings part company over needs a denominator of a hundred megabytes, which is past what a test
+     * holds and not past what the type does.
+     */
+    @Test
+    void anExponentAStoredDenominatorCancelsIsOrderedToo() {
+        BigInteger power = BigInteger.TWO.pow(4000);
+        Rational justBelowOne = new Rational(BigInteger.ONE, power.add(BigInteger.ONE), 4000, 0);
+        assertEquals(4000L, justBelowOne.twos(), "the exponent no bracket reaches");
+
+        assertNull(justBelowOne.magnitudeFromBrackets(Rational.ONE, 128));
+        assertTrue(justBelowOne.compareTo(Rational.ONE) < 0, "and the order is answered all the same");
+        assertTrue(Rational.ONE.compareTo(justBelowOne) > 0);
+        assertEquals(1L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowOne));
+        assertEquals(0L, RationalMath.toInt(DOWN.INSTANCE, justBelowOne));
+    }
+
     /** And the rounding of such a value, a factor of five standing between it and half of one. */
     @Test
     void aValueAFactorOfFiveFromHalfOfOneRoundsByThePolicy() {
