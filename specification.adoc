@@ -1718,7 +1718,7 @@ let 買う (額) = {
 
 Where the scale is not read, which side of nought the answer is on still is. Rounding to a grid never crosses zero, so a quotient at or above nought lands at or above nought at every scale.
 
-`+/+` over `+Decimal+` is *not* read, and is not a coarser statement of the rule above. It rounds half away from zero at a significant-digit precision the run time sets (<<stdlib-decimal>>) rather than at a scale the domain wrote down, so there is no grid for an end to land on — how many places the answer keeps depends on how large it is. That is different arithmetic and not the same operation read less sharply. A clause over one is left to the run-time check.
+`+/+` is *not* read, and is not a coarser statement of the rule above. It answers the exact quotient (<<stdlib-rational>>) rather than a number on a grid the domain wrote down, so there is no grid for an end to land on. That is different arithmetic and not the same operation read less sharply. A clause over one is left to the run-time check.
 
 *A choice.* A value that is one of several — chosen by an `+if+`, opened by a `+match+`, or answered by an attempted construction depending on whether its invariant held (<<attempted-construction>>) — is one of its arms, so it lies within the range holding every one of them: the lower of their lower ends and the higher of their higher ends, read where the construction stands. An arm the reading says nothing about leaves the whole choice unbounded that way, since the value may be that arm.
 
@@ -4287,7 +4287,7 @@ A scale is an `+Int+`, which is signed 64-bit (<<primitives>>), and the scales t
 
 The number is written here rather than left to whatever performs the arithmetic. A `+Decimal+` is a `+java.math.BigDecimal+` (<<primitives>>), so what a scale can be is already settled by what a `+Decimal+` is, and leaving it unsaid would not have made it any less settled — it would only have meant that a model's meaning was read off an implementation. Two things read this range, the check that says what a quotient lies between (<<invariant-discharge-arithmetic>>) and the run time that divides, and a rule read off one of them would be a rule the other need not hold to.
 
-A scale the run time receives exactly may still name a division whose result it cannot hold. That aborts too, and it is a different failure: the first is about the scale, the second about the value the operation would have had to build. Both reach a boundary as `+ConstraintViolation+` and neither is a business result. The same holds of `+round+` and of the four operators — a sum, a difference or a product whose scale runs off the end of what a `+Decimal+` holds aborts where it is computed.
+A scale the run time receives exactly may still name a division whose result it cannot hold. That aborts too, and it is a different failure: the first is about the scale, the second about the value the operation would have had to build. Both reach a boundary as `+ConstraintViolation+` and neither is a business result. The same holds of `+round+` and of the operators that answer a `+Decimal+` — a sum, a difference or a product whose scale runs off the end of what a `+Decimal+` holds aborts where it is computed.
 
 [[a-division-that-does-not-run-needs-no-scale]]*A zero divisor is answered before the scale is.* `+Decimal.divide(a, 0m, scale, mode)+` is `+DivisionByZero+` whatever the scale, including one the run time could not have divided at: a division that does not run needs no scale to run at. This is about which of two conditions decides the answer and not about which arguments are evaluated — all four are, as at any call, and only `+&&+` and `+||+` decide which of their operands run (<<a-condition-stops-when-its-answer-is-settled>>).
 
@@ -4299,7 +4299,9 @@ A scale the run time receives exactly may still name a division whose result it 
 
 `+abs+` / `+min+` / `+max+` / `+clamp+` are the same `+Basics+` arithmetic `+Int+` carries (<<stdlib-int>>), on the same reasoning: `+<+` and `+-+` are defined for `+Decimal+`, so these are ordinary core `+let+`s. `+abs+` compares against `+0.0m+`, so a value whose scale differs still answers by numeric value, as `+compare+` does. `+clamp+` answers one of the three values written, never a re-scaled copy.
 
-The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+`. Each of them aborts where the value it would answer is one no `+Decimal+` holds (<<a-scale-is-used-as-the-number-written>>) — a product's scale is the sum of its factors' scales, so that is where the end of the range is reached first. The operator `+/+` divides with a default rounding — significant digits (about 29) and HALF_UP — so `+10m / 3m+` is `+3.3333…+` and does not abort. Division by zero *aborts*. To make rounding an explicit domain decision, or to receive division by zero as a case, use the function `+Decimal.divide(dividend, divisor, scale, mode)+`.
+`{plus}` `+-+` `+*+` may also be written with the operators of the same name. Each of them aborts where the value it would answer is one no `+Decimal+` holds (<<a-scale-is-used-as-the-number-written>>) — a product's scale is the sum of its factors' scales, so that is where the end of the range is reached first.
+
+The operator `+/+` is not one of them: it answers the exact quotient and leaves `+Decimal+` (<<stdlib-rational>>). A finite decimal is not closed under division, so `+10m / 3m+` in the operand type would be a number rounded at a precision no model chose, and it is a `+Rational+` — exactly ten thirds — instead. Division by zero *aborts*. A model that wants a `+Decimal+` quotient says at which scale and by which rule, either through the narrowing `+Rational.toDecimal(scale, mode, r)+` or through the function `+Decimal.divide(dividend, divisor, scale, mode)+`, which is also the one that answers a zero divisor as a case.
 
 [#stdlib-rational]
 === Rational
@@ -4311,7 +4313,7 @@ fromInt  fromDecimal
 toWholeNumber  toFiniteDecimal  toInt  toDecimal
 ----
 
-`+Rational+` is the exact quotient `+/+` answers over two `+Int+` (<<primitives>>). Neither `+Int+` nor a finite `+Decimal+` is closed under division, so a quotient that stayed in the operand type would need a loss policy nobody stated; this is the type that needs none. `+7 / 2+` is seven halves exactly, and `+4 / 2+` is a `+Rational+` too — the type an operator answers does not depend on the value it computes.
+`+Rational+` is the exact quotient `+/+` answers, over two `+Int+` and over two `+Decimal+` alike (<<primitives>>). Neither `+Int+` nor a finite `+Decimal+` is closed under division, so a quotient that stayed in the operand type would need a loss policy nobody stated; this is the type that needs none. `+7 / 2+` is seven halves exactly, `+1m / 3m+` is a third, and `+4 / 2+` is a `+Rational+` too — the type an operator answers does not depend on the value it computes.
 
 A `+Rational+` is a value a computation holds and not one a boundary carries. It has *no external form*, so it is refused as a data's field, as a newtype's base, and as a behavior's input or output, and so is a `+List<Rational>+` or a `+Map<String, Rational>+` at one of those positions (<<primitives>>). Inside a computation it is an ordinary value: it compares for equality, it is ordered by exact value, and a `+List+`, `+Set+`, `+Map+` key, `+Option+` or tuple may hold one.
 

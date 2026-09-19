@@ -79,8 +79,9 @@ public final class BinaryElaborator {
             case ADD, SUB, MUL, DIV -> {
                 // `+ - * /` work on two Int or two Decimal operands (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow and `/` aborts on a
-                // zero divisor; Decimal `/` rounds by the default scale/mode. Case handling for a zero
-                // divisor is the `divide`/`remainder` functions.
+                // zero divisor; `/` answers the exact quotient over either pair and so leaves the
+                // operand type (ADR-0116). Case handling for a zero divisor is
+                // `Int.truncatingDivide`, `Int.truncatingRemainder` and `Decimal.divide`.
                 Type lt = left.type();
                 Type rt = right.type();
                 // The rules live in ArithmeticCheck, which answers with the type the operator gives

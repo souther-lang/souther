@@ -61,7 +61,7 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
      */
     private static final Set<String> REPRESENTATION = Set.of(
             "<init>",       // a literal, named as the bootstrap of the constant that loads it
-            "signum",       // the zero test the `/` operator branches on
+            "signum",       // the zero test a division branches on
             "compareTo",    // the comparison operators, and a Map/Set key
             "equals", "hashCode", "toString");
 
@@ -74,8 +74,17 @@ class DecimalArithmeticIsTheRunTimesAndNotTheBackendsTest {
 
             behavior ops : (i: In) -> Out constructs Out
             let ops (i) = Out {
-                value = i.a + i.b - i.a * i.b / i.b,
+                value = i.a + i.b - i.a * i.b,
                 m = Decimal.compare(i.a, i.b) + Decimal.toInt(HALF_UP, i.a)
+            }
+
+            // The exact quotient, which is what `/` over two Decimals answers. Here because a
+            // Decimal entering exact arithmetic and coming back out is still Decimal arithmetic,
+            // and what performs either half of it is the runtime's to say.
+            behavior exact : (i: In) -> Out constructs Out
+            let exact (i) = Out {
+                value = Rational.toDecimal(2, HALF_UP, i.a / i.b),
+                m = 0
             }
 
             behavior more : (i: In) -> Out constructs Out

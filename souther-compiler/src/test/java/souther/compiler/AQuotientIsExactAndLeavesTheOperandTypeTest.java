@@ -49,6 +49,44 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
         assertTrue(e.getMessage().contains("Rational"), e.getMessage());
     }
 
+    /** And a quotient of two decimals leaves the Decimal, for the same reason: no finite decimal is
+     *  a third, so the operand type does not hold what the division answers. */
+    @Test
+    void aQuotientOfDecimalsIsNoDecimal() {
+        CompileException e = refused("""
+                module demo
+                data M = Decimal
+                behavior calc : (m: M) -> M constructs M
+                let calc (m) = M { value = m.value / 3m }
+                """);
+        assertTrue(e.getMessage().contains("Rational"), e.getMessage());
+    }
+
+    /**
+     * The decimal quotient keeps the whole of the division, which is what the rounding operator
+     * discarded and said nothing about.
+     *
+     * <p>A third multiplied back by three is one. Rounded at any precision it is a number with a
+     * fraction below it, and the first of these is the assertion that tells the two apart.
+     */
+    @Test
+    void aQuotientOfDecimalsIsExact() throws Exception {
+        assertEquals(1L, run(INT_CALC.formatted("Rational.toInt(DOWN, 1m / 3m * 3m)"), 0L));
+        assertEquals(2L, run(INT_CALC.formatted("Rational.toInt(DOWN, 10m / 4m)"), 0L));
+    }
+
+    /** The exact arithmetic reads a {@code Decimal} operand at its exact value on either side, as it
+     *  reads an {@code Int} one, and the comparisons read it the same way. */
+    @Test
+    void anExactOperationReadsADecimalOperandAtItsExactValue() throws Exception {
+        assertEquals(3L, run(INT_CALC.formatted("Rational.toInt(DOWN, 1 / 2 + 2.5m)"), 0L));
+        assertEquals(0L, run(INT_CALC.formatted("Rational.toInt(DOWN, 1 / 2 - 0.5m)"), 0L));
+        assertEquals(1L, run(INT_CALC.formatted("Rational.toInt(DOWN, 2.0m * (1 / 2))"), 0L));
+        assertEquals(2L, run(INT_CALC.formatted("Rational.toInt(DOWN, 1m / (1 / 2))"), 0L));
+        assertEquals(1L, run(INT_CALC.formatted("if 0.4m < 1m / 2m then 1 else 0"), 0L));
+        assertEquals(1L, run(INT_CALC.formatted("if 1m / 2m > 0.4m then 1 else 0"), 0L));
+    }
+
     /** And a model says how the fraction becomes one. The rounding is the model's word, which is the
      *  whole point of the operator stating none. */
     @Test
@@ -104,6 +142,8 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
     void aComparisonWithAnExactSideIsByExactValue() throws Exception {
         assertEquals(1L, run(INT_CALC.formatted("if 1 == 2 / 2 then 1 else 0"), 0L));
         assertEquals(1L, run(INT_CALC.formatted("if 0.5m == 1 / 2 then 1 else 0"), 0L));
+        assertEquals(1L, run(INT_CALC.formatted("if 1 == 2m / 2m then 1 else 0"), 0L));
+        assertEquals(1L, run(INT_CALC.formatted("if 0.5m == 1m / 2m then 1 else 0"), 0L));
         assertEquals(1L, run(INT_CALC.formatted("if 1 < 3 / 2 then 1 else 0"), 0L));
         assertEquals(0L, run(INT_CALC.formatted("if 1 / 2 == 1 then 1 else 0"), 0L));
         refused(INT_CALC.formatted("if 1 == 1m then 1 else 0"));
@@ -176,6 +216,18 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
                 let calc (y) = y / 2
                 """);
         assertTrue(e.getMessage().contains("no Int is left to wrap as Yen"), e.getMessage());
+    }
+
+    /** And the same of a newtype over a Decimal, whose quotient leaves that type too. */
+    @Test
+    void aDecimalNewtypeIsNotDividedByAValueOfItsBase() {
+        CompileException e = refused("""
+                module demo
+                data Money = Decimal
+                behavior calc : (m: Money) -> Money constructs Money
+                let calc (m) = m / 2m
+                """);
+        assertTrue(e.getMessage().contains("no Decimal is left to wrap as Money"), e.getMessage());
     }
 
     /** A Rational crosses no boundary: what a computation holds is not what a field stores or a

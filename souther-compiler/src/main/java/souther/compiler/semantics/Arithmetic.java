@@ -141,8 +141,8 @@ public sealed interface Arithmetic {
         }
     }
 
-    /** A division of decimals rounded where the call says to round it. Not {@code /} over
-     *  {@code Decimal}, which rounds at a significant-digit precision the run time sets. */
+    /** A division of decimals rounded where the call says to round it. Not {@code /}, which answers
+     *  the exact quotient and rounds nowhere. */
     record AQuotientRoundedToAScale() implements Arithmetic {
 
         @Override

@@ -7,8 +7,6 @@ import souther.runtime.ConstraintViolation;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
-import java.math.RoundingMode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,10 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The arithmetic operators {@code + - * /} over Int and Decimal (spec
  * §an-operator-takes-the-types-it-is-defined-for). A Decimal literal carries the {@code m} suffix (F# form).
  * {@code /} aborts on a zero divisor (like overflow), while {@code Int.truncatingDivide} and
- * {@code Decimal.divide} return {@code X | DivisionByZero} for case handling. Over two whole numbers
- * {@code /} answers an exact quotient, so a whole-number answer is narrowed at the point the model
- * wants one (spec §stdlib-rational); Decimal {@code /} rounds to F#/.NET System.Decimal precision,
- * half away from zero.
+ * {@code Decimal.divide} return {@code X | DivisionByZero} for case handling. Over either pair of
+ * numbers {@code /} answers an exact quotient, so a number of the operand's own type is narrowed at
+ * the point the model wants one (spec §stdlib-rational).
  */
 class CompileArithmeticOperatorTest {
 
@@ -66,13 +63,44 @@ class CompileArithmeticOperatorTest {
                 .compareTo(new BigDecimal("500")));
     }
 
+    /** The quotient of two Decimals, which the operator answers exactly (spec §stdlib-rational). */
+    private static final String DEC_QUOTIENT = """
+            module demo
+            data Money = Decimal
+            behavior calc : (m: Money) -> Money constructs Money
+            let calc (m) =
+                match %s with
+                    | Decimal as d -> Money { value = d }
+                    | NotAFiniteDecimal -> Money { value = 0m }
+            """;
+
+    /** The same quotient asked whether it is a whole number, which a third multiplied back is. */
+    private static final String DEC_WHOLE = """
+            module demo
+            data Money = Decimal
+            behavior calc : (m: Money) -> Money constructs Money
+            let calc (m) =
+                match %s with
+                    | Int as n -> Money { value = Decimal.fromInt(n) }
+                    | NotWhole -> Money { value = 0m }
+            """;
+
     @Test
-    void decimalDivisionRoundsLikeFSharp() throws Exception {
-        // 10 / 3 rounds to ~29 significant digits, HALF_UP — it does not abort on a non-terminating result
-        BigDecimal expected = new BigDecimal("10").divide(new BigDecimal("3"),
-                new MathContext(29, RoundingMode.HALF_UP));
-        assertEquals(expected,
-                run(DEC_CALC.formatted("m.value / 3m"), "calc", "Money", new BigDecimal("10")));
+    void decimalDivisionIsExact() throws Exception {
+        // Ten over four is a decimal, and comes back as the decimal it is.
+        assertEquals(new BigDecimal("2.5"),
+                run(DEC_QUOTIENT.formatted("Rational.toFiniteDecimal(m.value / 4m)"),
+                        "calc", "Money", new BigDecimal("10")));
+        // A third is no decimal at all, which is the answer a quotient rounded to a precision
+        // nobody chose could not give: that one is a Decimal, and a terminating one.
+        assertEquals(new BigDecimal("0"),
+                run(DEC_QUOTIENT.formatted("Rational.toFiniteDecimal(m.value / 3m)"),
+                        "calc", "Money", new BigDecimal("10")));
+        // And the whole of the division is kept: multiplied back by the divisor it is the
+        // dividend, where a rounded quotient answers a number with a fraction on the end of it.
+        assertEquals(new BigDecimal("10"),
+                run(DEC_WHOLE.formatted("Rational.toWholeNumber(m.value / 3m * 3m)"),
+                        "calc", "Money", new BigDecimal("10")));
     }
 
     @Test
@@ -81,7 +109,8 @@ class CompileArithmeticOperatorTest {
         assertThrows(ConstraintViolation.class,
                 () -> run(INT_CALC.formatted("Rational.toInt(DOWN, n.value / 0)"), "calc", "N", 5L));
         assertThrows(ConstraintViolation.class,
-                () -> run(DEC_CALC.formatted("m.value / 0m"), "calc", "Money", new BigDecimal("5")));
+                () -> run(DEC_CALC.formatted("Rational.toDecimal(2, HALF_UP, m.value / 0m)"),
+                        "calc", "Money", new BigDecimal("5")));
     }
 
     @Test

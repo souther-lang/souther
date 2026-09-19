@@ -390,32 +390,6 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
-     * {@code /} on {@code Decimal} rounds rather than truncating, and where an end lands under that
-     * rounding is not something this states — so the quotient is read as nothing and the clause
-     * stands.
-     *
-     * <p>The witness has an end. Read as a truncating divide, {@code x / 100.0m} for an {@code x}
-     * between zero and one would come out at zero and discharge a clause the values fail —
-     * {@code 0.01m} is above zero. A witness bounded below only would come out right by accident,
-     * and would say nothing about whether the rounding was read.
-     */
-    @Test
-    void aDecimalQuotientIsNotRead() {
-        assertEquals(List.of("E2011"), warningsOf(TYPES + """
-                data NotAbove = Decimal
-                    invariant value <= 0.0m
-                behavior part : (x: Decimal) -> NotAbove | Bad constructs NotAbove
-                let part (x) = {
-                    guard x >= 0.0m
-                        else Bad
-                    guard x <= 1.0m
-                        else Bad
-                    NotAbove(x / 100.0m)
-                }
-                """));
-    }
-
-    /**
      * A clause naming a value a guard equated with a product is discharged through that guard,
      * though the clause names no product at all.
      *

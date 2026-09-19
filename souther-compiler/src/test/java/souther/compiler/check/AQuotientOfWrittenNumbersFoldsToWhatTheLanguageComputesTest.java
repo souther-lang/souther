@@ -24,12 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * What a divide of two written numbers comes to at compile time.
  *
- * <p>A whole-number divide by a divisor written down is the truncating quotient the language
- * defines, and this computes it as it computes a sum or a product. What it declines is what a value
- * handed back would be wrong about: a divisor of nought, which the run time aborts on; the quotient
- * whose value is outside the range an {@code Int} holds, which aborts there too while {@code long}
- * division quietly answers the dividend; and a {@code Decimal} divide, whose answer is rounded at a
- * scale this does not hold.
+ * <p>A divide by a divisor written down is the exact quotient the language defines, over either kind
+ * of number, and this computes it as it computes a sum or a product. What it declines is what a value
+ * handed back would be wrong about: a divisor of nought, which the run time aborts on. The pairs at
+ * the ends of what an {@code Int} holds are asked of both sides rather than declined — the exact
+ * quotient of a pair no truncating one had a value for is a value like any other.
  *
  * <p>Each refusal is written beside the case it differs from by one part, so that a fold answering
  * everything and a fold answering nothing are told apart here rather than at the reader.
@@ -151,19 +150,31 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
     }
 
     /**
-     * A {@code Decimal} divide is rounded at a scale the run time sets and this does not hold, so
-     * it stays the run time's to answer.
+     * A {@code Decimal} divide folds to the exact ratio, which is the number the operator answers
+     * over two of them.
      *
-     * <p>Beside a {@code Decimal} the fold does answer for, so what is read here is the divide and
-     * not the kind of number it was written over. Held by amount rather than by how the product is
-     * spelled, which is how a {@code Decimal} is compared everywhere else.
+     * <p>Held against the run time as the whole-number pairs above are, and for the same reason: the
+     * value is what {@code RationalMath} makes of the two embeddings, and a fold answering anything
+     * else would be a compile-time value for an expression the program computes differently. A
+     * divisor of nought is declined here as it is there, the run time aborting on it and no value
+     * handed back being about that.
+     *
+     * <p>Beside a product of the same two, so what is read here is the divide and not the kind of
+     * number it was written over. The product is held by amount rather than by how it is spelled,
+     * which is how a {@code Decimal} is compared everywhere else.
      */
     @Test
-    void aDecimalDivideIsLeftToTheRunTime() {
-        Hir.Expr seven = new Hir.DecimalLit(new BigDecimal("7.0"), POS, null);
-        Hir.Expr two = new Hir.DecimalLit(new BigDecimal("2.0"), POS, null);
+    void aDecimalDivideFoldsToTheExactRatio() {
+        BigDecimal sevenTenths = new BigDecimal("7.0");
+        BigDecimal twoTenths = new BigDecimal("2.0");
+        Hir.Expr seven = new Hir.DecimalLit(sevenTenths, POS, null);
+        Hir.Expr two = new Hir.DecimalLit(twoTenths, POS, null);
+        Hir.Expr nought = new Hir.DecimalLit(new BigDecimal("0.0"), POS, null);
 
-        assertEquals(Optional.empty(), fold(BinOp.DIV, seven, two));
+        assertEquals(RationalMath.divide(RationalMath.fromDecimal(sevenTenths),
+                        RationalMath.fromDecimal(twoTenths)).toString(),
+                fold(BinOp.DIV, seven, two).orElseThrow().toString());
+        assertEquals(Optional.empty(), fold(BinOp.DIV, seven, nought));
         assertEquals(0, ((BigDecimal) fold(BinOp.MUL, seven, two).orElseThrow())
                 .compareTo(new BigDecimal("14")));
     }

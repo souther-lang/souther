@@ -31,10 +31,10 @@ sealed interface NumericMeaning {
     /**
      * Arithmetic the language writes as an operator, over two operands in the order written.
      *
-     * <p>{@code /} over {@code Decimal} is here and is not a quotient below: it rounds to a
-     * significant-digit precision the run time sets rather than to a scale the domain chose
-     * (spec §stdlib-decimal), which is a different operation from the one
-     * {@link RoundedQuotient} states. Nothing derives a range from it, as nothing did before.
+     * <p>{@code /} is here and is neither quotient below: it answers the exact value of the division
+     * over either pair of numbers (spec §stdlib-rational), which is a different operation from the
+     * one {@link RoundedQuotient} states and from the one {@link TruncatingQuotient} does. Nothing
+     * derives a range from that division.
      */
     record Operator(BinOp op, Core left, Core right) implements NumericMeaning {
 

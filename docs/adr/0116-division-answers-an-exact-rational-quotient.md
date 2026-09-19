@@ -1,6 +1,6 @@
 # ADR-0116: Division answers an exact Rational quotient
 
-Status: Proposed. Amends ADR-0033, ADR-0047 and ADR-0082. ADR-0003's zero-divisor distinction and
+Status: Accepted. Amends ADR-0033, ADR-0047 and ADR-0082. ADR-0003's zero-divisor distinction and
 ADR-0095's naming rule stand.
 
 ## Context

@@ -1762,9 +1762,10 @@ final class BodyGen {
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
-                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and its
-                // `/` rounds by the default scale/mode and aborts on a zero divisor too. Case
-                // handling for a zero divisor is the divide/remainder functions, not the operator.
+                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and `/`
+                // over two of them answers an exact quotient that leaves the type and aborts on a
+                // zero divisor as well. Case handling for a zero divisor is the divide/remainder
+                // functions, not the operator.
                 //
                 // Both go through the runtime that owns the arithmetic — IntMath and DecimalMath —
                 // rather than to a host method. What an operator means is the runtime's, and calling
@@ -1778,10 +1779,10 @@ final class BodyGen {
                 case ADD -> { arithmetic(bin, "add", "addExact"); yield null; }
                 case SUB -> { arithmetic(bin, "subtract", "subtractExact"); yield null; }
                 case MUL -> { arithmetic(bin, "multiply", "multiplyExact"); yield null; }
-                // `/` answers an exact quotient over two whole numbers and rounds over two Decimals
-                // (spec §stdlib-rational, §stdlib-decimal), so there is no Int kernel for it to name:
-                // the Int pair goes to the exact arm above and nothing else reaches the other one.
-                case DIV -> { arithmetic(bin, "divide", null); yield null; }
+                // `/` answers an exact quotient over either pair of numbers (spec §stdlib-rational),
+                // so there is no kernel of either number for it to name: every pair goes to the
+                // exact arm above and nothing reaches the two below it.
+                case DIV -> { arithmetic(bin, null, null); yield null; }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
@@ -1850,17 +1851,18 @@ final class BodyGen {
             }
             Type t = genExpr(bin.left());
             genExpr(bin.right());
-            if (t == Type.DECIMAL) {
-                code.invokestatic(CD_DecimalMath, onDecimal, MTD_bdArith);
-            } else if (onInt == null) {
-                // An operator with no Int kernel reached two whole numbers, which the arm above was
-                // to have taken. Said rather than emitted against: what the null stands for is that
-                // nothing comes here, and a call built from it would answer a number of its own.
+            boolean decimal = t == Type.DECIMAL;
+            String kernel = decimal ? onDecimal : onInt;
+            if (kernel == null) {
+                // An operator with no kernel for this number reached it, which the exact arm above
+                // was to have taken. Said rather than emitted against: what the null stands for is
+                // that nothing comes here, and a call built from it would answer a number of its
+                // own.
                 throw new IllegalStateException(
-                        "no Int kernel for " + bin.op() + " over " + Type.show(t));
-            } else {
-                code.invokestatic(CD_IntMath, onInt, MTD_intExact);
+                        "no kernel for " + bin.op() + " over " + Type.show(t));
             }
+            code.invokestatic(decimal ? CD_DecimalMath : CD_IntMath, kernel,
+                    decimal ? MTD_bdArith : MTD_intExact);
         }
 
         /** What the exact kernel for {@code op} is called. Named from the operator rather than handed
