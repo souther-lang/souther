@@ -1,6 +1,8 @@
 # ADR-0033: Decimal literals carry an `m` suffix; `+ - * /` work on Int and Decimal
 
-Status: Accepted
+Status: Accepted. Amended by ADR-0116 — `/` no longer yields the operand type, and the implicit
+precision this one gave the Decimal operator is gone with it; the quotient is exact and answers a
+`Rational`. The literal rule and the zero-divisor distinction below stand.
 
 ## Context
 

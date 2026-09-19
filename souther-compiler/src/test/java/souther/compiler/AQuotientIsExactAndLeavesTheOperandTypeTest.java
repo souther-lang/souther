@@ -191,6 +191,30 @@ class AQuotientIsExactAndLeavesTheOperandTypeTest {
         assertEquals(150L, Codecs.encode(loader, "demo.N", Codecs.apply(b, in)));
     }
 
+    /**
+     * And over a newtype wrapping the other number, which is the one place the cancellation and the
+     * exact decimal quotient meet.
+     *
+     * <p>Three yen over two is three halves whether the amount was counted or measured. Run rather
+     * than compiled, because what a newtype over a {@code Decimal} divides through is the operand
+     * opened and read at its exact value, and only a run says the opening and the embedding compose.
+     */
+    @Test
+    void oneDecimalNewtypeOverItselfIsTheNumberTheUnitsLeave() throws Exception {
+        String model = """
+                module demo
+                data Money = Decimal
+                data N = Int
+                behavior calc : (n: N) -> N constructs N, Money
+                let calc (n) = N(Rational.toInt(DOWN, Money(3.0m) / Money(2.0m) * 100))
+                """;
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(model), getClass().getClassLoader());
+        Object in = Codecs.decoded(loader, "demo.N", 0L);
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
+        assertEquals(150L, Codecs.encode(loader, "demo.N", Codecs.apply(b, in)));
+    }
+
     /** And two quantities of different kinds do not divide: nothing says what their quotient is of. */
     @Test
     void twoUnlikeNewtypesDoNotDivide() {

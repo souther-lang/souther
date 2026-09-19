@@ -1288,8 +1288,27 @@ public final class Backend {
      * <p>That a check is emitted is one question and what the emitted code calls is another. The
      * first is not read back and needs no number. The second is not read back either and needs one
      * all the same: a class in a jar runs, and what it calls has to be there when it does.
+     *
+     * <p>Version 18 changes what a module's metadata carries: the behavior annotation held a flag
+     * saying whether a behavior was injected and now holds a word naming its implementation, and the
+     * reading asks for the word. A jar written before it carries metadata this reader takes for its
+     * own and finds something else in, which sends an author after a corrupt artifact rather than
+     * after a rebuild.
+     *
+     * <p>Version 19 widens what a published declaration may name and moves what an emitted class
+     * calls, both for the one decision (ADR-0116). {@code Rational} becomes a primitive, so a
+     * helper's published signature may name a type an older compiler has none for; and {@code /}
+     * over two whole numbers stops reaching the truncating kernel, which is renamed with the
+     * operation that computes it.
+     *
+     * <p>Version 20 is the other half of that decision and moves the second of those again. {@code /}
+     * over two decimals answers the exact quotient, so the runtime no longer holds the rounding
+     * divide the operator used to emit, and a class emitted under version 19 calls a method that is
+     * not there. One decision moving the number twice is what the number is for: it is not a name
+     * for a decision but a statement that a jar and a runtime were built together, and the two
+     * halves shipped apart.
      */
-    public static final int BOUNDARY_VERSION = 19;
+    public static final int BOUNDARY_VERSION = 20;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
