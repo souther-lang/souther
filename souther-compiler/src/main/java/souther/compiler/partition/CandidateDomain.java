@@ -176,7 +176,7 @@ sealed interface CandidateDomain {
         }
         if (order == 0) {
             // One point, and whether it is a member is decided rather than looked for.
-            return least.terminates() ? new One(at(from, by, least)) : new None();
+            return least.fitsWrittenDecimal() ? new One(at(from, by, least)) : new None();
         }
         return new Somewhere(at(from, by, between(least, leastIsItsOwn, most)));
     }

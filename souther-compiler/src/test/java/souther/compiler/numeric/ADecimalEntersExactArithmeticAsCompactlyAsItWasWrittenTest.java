@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -39,6 +40,10 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     /** How many bits the numbers a compact value holds are allowed to take. Wide enough that a value
      *  a model wrote is nowhere near it, and far below what one digit per unit of scale would be. */
     private static final int FEW = 1024;
+
+    /** A decimal written at a scale a model may write and no machine spells out. */
+    private static final ExactRatio TOO_WIDE_TO_SPELL =
+            ExactRatio.of(new BigDecimal(BigInteger.ONE, 16_000_000));
 
     private static void isCompact(ExactRatio ratio) {
         assertTrue(ratio.numeratorWithoutUnits().abs().bitLength() < FEW,
@@ -96,6 +101,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertEquals(WIDE, embedded.twos());
         assertEquals(WIDE, embedded.fives());
         assertTrue(embedded.isWhole());
+        assertEquals(0, embedded.compareTo(ExactRatio.of(BigDecimal.ONE.scaleByPowerOfTen(WIDE))));
+        assertTrue(embedded.compareTo(ExactRatio.ONE) > 0);
     }
 
     /** What the compactness is not allowed to cost: the value is the value it was, and every answer
@@ -190,49 +197,112 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
      */
     @Test
     void aWideDecimalThroughAnImagesPreimageNeverSpellsItsPowersOut() {
-        // A value whose powers cannot be written down at all, which is what makes this a question
-        // about the step and not about how long a machine takes: a step that reaches for the two
-        // numbers does not run slowly here, it has no answer. The residues it actually wants are a
-        // few multiplications whatever the exponents are.
-        ExactRatio past = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
-                -3_000_000_000L, -3_000_000_000L);
-        BigInteger prime = BigInteger.valueOf(97);
-        assertThrows(ArithmeticException.class, past::asFraction);
-        assertEquals(BigInteger.ONE, past.numeratorMod(prime));
-        assertEquals(BigInteger.TEN.modPow(BigInteger.valueOf(3_000_000_000L), prime),
-                past.denominatorMod(prime));
-
+        ExactRatio wide = TOO_WIDE_TO_SPELL;
         ExactRatio aThird = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
-        AdditiveImage overDecimals = new AdditiveImage.OverFiniteDecimals(past);
-        assertNotNull(overDecimals.affinePreimage(past, past, Granularity.DENSE));
-        assertNotNull(overDecimals.affinePreimage(past, past, Granularity.DISCRETE));
-        assertNotNull(overDecimals.affinePreimage(aThird, past, Granularity.DENSE));
-        assertNotNull(overDecimals.affinePreimage(aThird, past, Granularity.DISCRETE));
+        AdditiveImage overDecimals = new AdditiveImage.OverFiniteDecimals(wide);
+        assertNotNull(overDecimals.affinePreimage(wide, wide, Granularity.DENSE));
+        assertNotNull(overDecimals.affinePreimage(wide, wide, Granularity.DISCRETE));
+        assertNotNull(overDecimals.affinePreimage(aThird, wide, Granularity.DENSE));
+        assertNotNull(overDecimals.affinePreimage(aThird, wide, Granularity.DISCRETE));
 
-        AdditiveImage overWhole = new AdditiveImage.OverWholeNumbers(past);
-        assertNotNull(overWhole.affinePreimage(past, past, Granularity.DENSE));
-        assertNotNull(overWhole.affinePreimage(aThird, past, Granularity.DENSE));
+        AdditiveImage overWhole = new AdditiveImage.OverWholeNumbers(wide);
+        assertNotNull(overWhole.affinePreimage(wide, wide, Granularity.DENSE));
+        assertNotNull(overWhole.affinePreimage(aThird, wide, Granularity.DENSE));
     }
 
     /**
-     * The order over a pair the powers put far apart.
+     * The order answers every pair, including the ones the powers put far apart.
      *
-     * <p>Two values stand where they stand, and a reading that decided it from a machine's fractions
-     * would be deciding where the error in that reading grows with the exponent. So either the
-     * answer is the one writing both sides out gives, or this says it could not reach it — and never
-     * the other order.
+     * <p>An order always exists, and {@link Comparable} says this one is total — so a pair it
+     * declined would be a value this holds and cannot be reasoned about. The two here are decimals
+     * written at either end of the scale a model may write, which is not a corner of the range:
+     * embedding either of them is what this type exists to do.
      */
     @Test
-    void theOrderIsTheTrueOneOrNoneAtAll() {
+    void theOrderAnswersEveryPairThePowersSetApart() {
         ExactRatio justOverOne = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
                 -69_657_842_846_620_870L, 30_000_000_000_000_000L);
-        assertThrows(ArithmeticException.class, () -> justOverOne.compareTo(ExactRatio.ONE));
+        assertTrue(justOverOne.compareTo(ExactRatio.ONE) > 0);
+
+        ExactRatio tiny = ExactRatio.of(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE));
+        ExactRatio huge = ExactRatio.of(new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE));
+        assertTrue(tiny.compareTo(huge) < 0);
+        assertTrue(huge.compareTo(tiny) > 0);
+        assertEquals(0, tiny.compareTo(ExactRatio.of(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE))));
 
         ExactRatio wide = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
         assertTrue(wide.compareTo(ExactRatio.ONE) < 0);
         assertTrue(wide.compareTo(ExactRatio.ZERO) > 0);
         assertTrue(wide.negated().compareTo(wide) < 0);
         assertEquals(0, wide.compareTo(ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH)));
+    }
+
+    /**
+     * And the pairs a first reading cannot separate, which is the other arm.
+     *
+     * <p>Two values agreeing over thousands of bits are not told apart by a bracket of a hundred and
+     * some, so the width goes up until they come apart — and that arm is reached by no pair a model
+     * writes, which is exactly why it is asked for here. Each pair is put far apart by its powers as
+     * well, so what separates them is the fraction and writing either of them out is not open.
+     */
+    @Test
+    void theOrderTakesTheReadingAgainForAPairAFirstOneLeavesTogether() {
+        ExactRatio far = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -1_000_000_000L, -1_000_000_000L);
+        for (int bits : new int[] {100, 400, 1600, 3200}) {
+            ExactRatio aHair = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -bits, 0);
+            ExactRatio over = ExactRatio.ONE.plus(aHair);
+            ExactRatio under = ExactRatio.ONE.minus(aHair);
+            assertTrue(over.compareTo(ExactRatio.ONE) > 0, () -> "over one by a hair of " + bits);
+            assertTrue(under.compareTo(ExactRatio.ONE) < 0, () -> "under one by a hair of " + bits);
+            assertTrue(over.compareTo(under) > 0);
+            assertTrue(over.negated().compareTo(ExactRatio.ONE.negated()) < 0);
+            assertTrue(over.times(far).compareTo(far) > 0,
+                    () -> "the same pair with its powers a billion apart, at " + bits);
+        }
+    }
+
+    /**
+     * Whether some decimal is this value, and whether one a carrier holds is, are two questions.
+     *
+     * <p>A scale is thirty-two bits, so a value that is a finite decimal can still be one nothing
+     * writes — and a position holds what a model can write. Answering the second with the first
+     * would let such a value into a coset of the decimals, which is a different set.
+     */
+    @Test
+    void whatTerminatesAndWhatACarrierHoldsAreNotTheSameQuestion() {
+        ExactRatio past = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -3_000_000_000L, -3_000_000_000L);
+        assertTrue(past.terminates(), "a millionth of a millionth of a millionth is a decimal");
+        assertFalse(past.fitsWrittenDecimal(), "and no decimal here is written at that scale");
+        assertThrows(ArithmeticException.class, past::asWrittenDecimal);
+
+        assertTrue(TOO_WIDE_TO_SPELL.terminates());
+        assertTrue(TOO_WIDE_TO_SPELL.fitsWrittenDecimal());
+
+        ExactRatio aThird = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+        assertFalse(aThird.terminates());
+        assertFalse(aThird.fitsWrittenDecimal());
+    }
+
+    /**
+     * The whole number a value stands above, for a value standing nowhere near one.
+     *
+     * <p>These exist for every value and are small for a small one, so working them out from the two
+     * numbers refused a value over an answer that was never going to be large. The same reading the
+     * order rests on answers them.
+     */
+    @Test
+    void theWholeNumbersEitherSideOfATinyValueAreNotRefused() {
+        ExactRatio tiny = ExactRatio.of(new BigDecimal(BigInteger.ONE, 2_000_000_000));
+        assertEquals(BigInteger.ZERO, tiny.floor());
+        assertEquals(BigInteger.ONE, tiny.ceiling());
+        assertEquals(BigInteger.ZERO, tiny.truncated());
+        assertEquals(BigInteger.valueOf(-1), tiny.negated().floor());
+        assertEquals(BigInteger.ZERO, tiny.negated().ceiling());
+        assertEquals(BigInteger.ZERO, tiny.negated().truncated());
+        assertEquals(new BigDecimal("0.01"), tiny.asDecimal(java.math.RoundingMode.CEILING, 2));
+        assertEquals(new BigDecimal("0.00"), tiny.asDecimal(java.math.RoundingMode.FLOOR, 2));
     }
 
     /**

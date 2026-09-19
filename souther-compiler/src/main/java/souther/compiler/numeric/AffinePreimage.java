@@ -72,7 +72,7 @@ public sealed interface AffinePreimage {
                         "a position whose values step takes whole numbers, so a progression of them"
                                 + " is written in whole numbers: " + from + " by " + by);
             }
-            if (spacing == Granularity.DENSE && !(from.terminates() && by.terminates())) {
+            if (spacing == Granularity.DENSE && !(from.fitsWrittenDecimal() && by.fitsWrittenDecimal())) {
                 throw new IllegalArgumentException(
                         "a progression names values of its position, and a position holds what a"
                                 + " model can write: " + from + " by " + by);
@@ -119,7 +119,7 @@ public sealed interface AffinePreimage {
                                 + " units are out of it, which is what every generator this is asked"
                                 + " about is: " + by);
             }
-            if (!from.terminates()) {
+            if (!from.fitsWrittenDecimal()) {
                 throw new IllegalArgumentException(
                         "a member of a coset of the finite decimals is one, and a coset written from"
                                 + " a value that is not has no member that is: " + from);

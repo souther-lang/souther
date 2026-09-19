@@ -262,7 +262,7 @@ public sealed interface AdditiveImage {
 
         @Override
         public boolean contains(ExactRatio value) {
-            return value.dividedBy(generator).terminates();
+            return value.dividedBy(generator).fitsWrittenDecimal();
         }
 
         /**
@@ -289,7 +289,7 @@ public sealed interface AdditiveImage {
             ExactRatio owed = target.dividedBy(generator);
             java.math.BigInteger modulus = per.spread();
             if (modulus.equals(java.math.BigInteger.ONE)) {
-                return owed.terminates()
+                return owed.fitsWrittenDecimal()
                         ? new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE,
                                 Granularity.DISCRETE)
                         : new AffinePreimage.None();
@@ -297,7 +297,7 @@ public sealed interface AdditiveImage {
             // `q·(t/g)` has to be a decimal before any `x` can be chosen: `p·x` is whole, so a
             // residue that is not one leaves nothing whatever `x` is.
             ExactRatio reached = owed.times(per.denominatorAsRatio());
-            if (!reached.terminates()) {
+            if (!reached.fitsWrittenDecimal()) {
                 return new AffinePreimage.None();
             }
             // Both denominators are made of twos and fives and the modulus carries neither, so each
@@ -350,7 +350,7 @@ public sealed interface AdditiveImage {
             ExactRatio per = coefficient.dividedBy(generator);
             ExactRatio owed = target.dividedBy(generator);
             java.math.BigInteger spread = per.spread();
-            if (!owed.times(ExactRatio.of(spread)).terminates()) {
+            if (!owed.times(ExactRatio.of(spread)).fitsWrittenDecimal()) {
                 return new AffinePreimage.None();
             }
             java.math.BigInteger shift = spread.equals(java.math.BigInteger.ONE)

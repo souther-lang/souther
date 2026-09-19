@@ -322,54 +322,68 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * can put two values in the wrong order, and an order this type got wrong is a bound the algebra
      * then reasons from.
      *
-     * <p>So the cost of this is the cost of the difference between the two sides' powers, which is
-     * what the difference between the two values is. A cheaper order exists and is a real thing to
-     * want — a pair set far apart by its exponents is settled by brackets taken again wider until
-     * they come apart, which is what {@code Rational} does at run time. A second copy of that
-     * mechanism is the thing not to have: one of the two would be the one that drifts. Shared or not
-     * at all.
+     * <p>An order always exists, so this answers every pair — including the ones whose powers no
+     * machine writes down. Two of those are a decimal written at either end of the scale a model may
+     * write, so it is not an end of the range nothing reaches.
      *
-     * <p>Which leaves a pair whose powers stand further apart than a whole number this host builds:
-     * the order between those two exists and this cannot reach it, and that is said rather than
-     * guessed at. A reading that answered such a pair from a machine's fractions would be answering
-     * exactly where it has no proof.
-     *
-     * @throws ArithmeticException where the difference between the two sides' powers is past what a
-     *         whole number here holds
+     * <p>Cross-multiplying the two would write out the difference between their exponents, which is
+     * why {@link ExactRatioOrder} holds each magnitude between two whole numbers of a working width
+     * instead. Equal values are settled here, by the record's own equality: one canonical form per
+     * value makes that the whole of it, and it is what makes the widening over there end.
      */
     @Override
     public int compareTo(ExactRatio other) {
         if (signum() != other.signum()) {
             return Integer.compare(signum(), other.signum());
         }
-        if (isZero()) {
+        if (isZero() || equals(other)) {
             return 0;
         }
-        long sharedTwos = Math.min(twos, other.twos);
-        long sharedFives = Math.min(fives, other.fives);
-        return numeratorOver(sharedTwos, sharedFives).multiply(other.denominatorWithoutUnits)
-                .compareTo(other.numeratorOver(sharedTwos, sharedFives)
-                        .multiply(denominatorWithoutUnits));
+        int byMagnitude = ExactRatioOrder.compareMagnitudes(this, other);
+        return signum() > 0 ? byMagnitude : -byMagnitude;
     }
 
-    /** The largest whole number no greater than this. */
+    /**
+     * The largest whole number no greater than this.
+     *
+     * <p>Asked the same way as the order and for the same reason: the whole number a value stands
+     * above exists for every value, and one held between two powers no machine writes down has a
+     * floor of nought or of one below it. Working it out from the two numbers would have had to form
+     * them first, which is to refuse a value over an answer that was never going to be large.
+     */
     public BigInteger floor() {
-        Fraction fraction = asFraction();
-        BigInteger[] parts = fraction.numerator().divideAndRemainder(fraction.denominator());
-        return parts[1].signum() < 0 ? parts[0].subtract(BigInteger.ONE) : parts[0];
+        BigInteger[] parts = wholeAndRest();
+        return parts == null ? (signum() < 0 ? BigInteger.valueOf(-1) : BigInteger.ZERO)
+                : parts[1].signum() < 0 ? parts[0].subtract(BigInteger.ONE) : parts[0];
     }
 
     /** The smallest whole number no less than this. */
     public BigInteger ceiling() {
-        Fraction fraction = asFraction();
-        BigInteger[] parts = fraction.numerator().divideAndRemainder(fraction.denominator());
-        return parts[1].signum() > 0 ? parts[0].add(BigInteger.ONE) : parts[0];
+        BigInteger[] parts = wholeAndRest();
+        return parts == null ? (signum() > 0 ? BigInteger.ONE : BigInteger.ZERO)
+                : parts[1].signum() > 0 ? parts[0].add(BigInteger.ONE) : parts[0];
     }
 
     /** This with the part of it past the point dropped, which is towards nought from either side. */
     public BigInteger truncated() {
+        BigInteger[] parts = wholeAndRest();
+        return parts == null ? BigInteger.ZERO : parts[0];
+    }
+
+    /**
+     * The whole number this divides into and what is left over, or {@code null} where this stands
+     * between one below nought and one above it.
+     *
+     * <p>The three above answer from the factors and never write the value out where it is smaller
+     * than a whole number, which is the case their answer was never going to be large in. Where it
+     * is not, the whole number is as large as the value and writing it out is what the answer is.
+     */
+    private BigInteger[] wholeAndRest() {
+        if (abs().compareTo(ONE) < 0) {
+            return null;
+        }
         Fraction fraction = asFraction();
-        return fraction.numerator().divide(fraction.denominator());
+        return fraction.numerator().divideAndRemainder(fraction.denominator());
     }
 
     /**
@@ -398,17 +412,37 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * Whether a decimal is this exactly, which is a question about the value and not about any
-     * decimal that would hold it.
+     * Whether some decimal is this value exactly, which is a fact about the number and not about any
+     * {@link BigDecimal}.
      *
-     * <p>Separate from {@link #asWrittenDecimal} because a step asking only this is asking something
-     * the denominator answers on its own, and going through the number would make the answer depend
-     * on whether a {@link BigDecimal} has room for it — so a value that is a decimal, written at a
-     * scale past what a scale holds, would come back as one that is not. Which of those two a caller
-     * wants is not a distinction to leave to a null.
+     * <p>A third is not one; a millionth of a millionth is, however far a machine would have to
+     * count to write it. What a carrier holds is the narrower question, and
+     * {@link #fitsWrittenDecimal} is where that one is asked.
      */
     public boolean terminates() {
         return isZero() || denominatorWithoutUnits.equals(BigInteger.ONE);
+    }
+
+    /**
+     * Whether a {@link BigDecimal} is this value exactly, which is what a position holding what a
+     * model can write is asking.
+     *
+     * <p>Narrower than {@link #terminates} by the room a decimal has, and the two are not the same
+     * question: a scale is thirty-two bits, so a value that is a finite decimal can still be one no
+     * decimal here holds. A carrier's counts are decimals, so a step choosing a value for a position
+     * asks this one; a step reasoning about the finite decimals as a set asks the other.
+     *
+     * <p>Asked of the exponents rather than by building the number, so the answer costs nothing and
+     * is the answer building it would have given.
+     */
+    public boolean fitsWrittenDecimal() {
+        return terminates() && (isZero() || scaleOfTheDecimal() <= Integer.MAX_VALUE);
+    }
+
+    /** The scale a {@link BigDecimal} of this value is written at: the tens it takes to leave
+     *  neither exponent below the line. */
+    private long scaleOfTheDecimal() {
+        return Math.max(0, Math.max(-twos, -fives));
     }
 
     /**
@@ -431,10 +465,12 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
             return null;
         }
         // Ten carries one two and one five, so the tens it takes is however many of the more
-        // negative of them this stands on, and neither exponent is below the line after that.
-        long scale = Math.max(0, Math.max(-twos, -fives));
-        if (scale > Integer.MAX_VALUE) {
-            throw new ArithmeticException("no decimal holds a scale of " + scale);
+        // negative of them this stands on, and neither exponent is below the line after that. A
+        // value standing above the line on both is a whole number and is written as one: the digits
+        // are the value's own, which is the half of this the compactness was never about.
+        long scale = scaleOfTheDecimal();
+        if (!fitsWrittenDecimal()) {
+            throw new ArithmeticException("no decimal holds this value at a scale of " + scale);
         }
         return new BigDecimal(
                 numeratorWithoutUnits.multiply(power(BigInteger.TWO, added(twos, scale)))
@@ -471,9 +507,33 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * everything the rules admit, and rounded down refuses values they leave.
      */
     public BigDecimal asDecimal(RoundingMode towards, int scale) {
+        if (isZero()) {
+            return BigDecimal.ZERO.setScale(scale, towards);
+        }
+        // Below the last place the caller asked for, every value rounds the way one of three
+        // standing there does — a tenth of that place, half of it, or six tenths — and which of the
+        // three is two comparisons. Written out instead, a value standing that far below the place
+        // is a number as large as the powers that put it there, for an answer of nought or one.
+        ExactRatio place = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -(long) scale, -(long) scale);
+        ExactRatio size = abs();
+        if (size.compareTo(place) < 0) {
+            int half = size.compareTo(place.dividedBy(of(2)));
+            long tenths = half < 0 ? 1 : half == 0 ? 5 : 6;
+            return new BigDecimal(BigInteger.valueOf(signum() * tenths), addedScale(scale))
+                    .setScale(scale, towards);
+        }
         Fraction fraction = asFraction();
         return new BigDecimal(fraction.numerator())
                 .divide(new BigDecimal(fraction.denominator()), scale, towards);
+    }
+
+    /** One place past {@code scale}, which is where a stand-in for a value below that place is
+     *  written. */
+    private static int addedScale(int scale) {
+        if (scale == Integer.MAX_VALUE) {
+            throw new ArithmeticException("no decimal holds a scale past " + scale);
+        }
+        return scale + 1;
     }
 
     /**
