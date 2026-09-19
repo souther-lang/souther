@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.AlignedObservation;
 
@@ -103,10 +104,11 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
         // said it had run out.
         int[] standing = new int[about.size()];
         while (true) {
-            java.util.Map<Integer, Integer> pins = new java.util.LinkedHashMap<>();
-            for (int p = 0; p < about.size(); p++) {
-                pins.put(about.get(p), admitted.get(p).get(standing[p]));
-            }
+            Lookup<Integer, Integer> pins = Lookup.built(put -> {
+                for (int p = 0; p < about.size(); p++) {
+                    put.put(about.get(p), admitted.get(p).get(standing[p]));
+                }
+            });
             switch (taking.take(new Interpretation(pins))) {
                 case NOT_TAKEN -> {
                     return Traversal.STOPPED;
