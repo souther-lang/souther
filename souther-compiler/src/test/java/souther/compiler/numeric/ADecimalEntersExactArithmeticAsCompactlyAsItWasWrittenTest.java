@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -312,11 +313,70 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertFalse(past.fitsWrittenDecimal());
         assertNull(past.asWrittenDecimal());
 
-        // And a whole number no scale brings within reach, which is the other way it happens.
+        // And a whole number whose digits are past what this host addresses. That is a decimal, and
+        // saying otherwise would be a machine's room deciding what a set contains — so the question
+        // answers yes and the writing fails.
         ExactRatio tall = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 3_000_000_000L, 0);
         assertTrue(tall.terminates());
-        assertFalse(tall.fitsWrittenDecimal());
-        assertNull(tall.asWrittenDecimal());
+        assertTrue(tall.fitsWrittenDecimal(), "a whole number is a decimal however many digits");
+        assertThrows(ArithmeticException.class, tall::asWrittenDecimal);
+    }
+
+    /**
+     * The whole numbers either side of a value whose powers all but cancel.
+     *
+     * <p>About one, and so is its floor — while the two numbers it would be written as run to
+     * hundreds of millions of digits. How large a value is and how large the whole number below it
+     * is are two questions, and a step that answered the second by writing the value down refused
+     * this one over an answer of one digit.
+     */
+    @Test
+    void theWholeNumbersEitherSideOfAValueWhosePowersCancel() {
+        ExactRatio justOverOne = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -69_657_842_846_620_870L, 30_000_000_000_000_000L);
+        assertTrue(justOverOne.compareTo(ExactRatio.ONE) > 0);
+        assertTrue(justOverOne.compareTo(ExactRatio.of(2)) < 0);
+
+        assertEquals(BigInteger.ONE, justOverOne.floor());
+        assertEquals(BigInteger.TWO, justOverOne.ceiling());
+        assertEquals(BigInteger.ONE, justOverOne.truncated());
+        assertEquals(BigInteger.valueOf(-2), justOverOne.negated().floor());
+        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().ceiling());
+        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().truncated());
+
+        // And rounded to a place, which is the same reading with the value moved by that many tens.
+        assertEquals(new BigDecimal("2"), justOverOne.asDecimal(RoundingMode.CEILING, 0));
+        assertEquals(new BigDecimal("1"), justOverOne.asDecimal(RoundingMode.FLOOR, 0));
+        assertEquals(new BigDecimal("1.36"), justOverOne.asDecimal(RoundingMode.CEILING, 2));
+        assertEquals(new BigDecimal("1.35"), justOverOne.asDecimal(RoundingMode.FLOOR, 2));
+        assertEquals(new BigDecimal("1.352951"), justOverOne.asDecimal(RoundingMode.CEILING, 6));
+        assertEquals(new BigDecimal("1.352950"), justOverOne.asDecimal(RoundingMode.FLOOR, 6));
+    }
+
+    /**
+     * And the rounding is the rounding, for values a machine can hold either way.
+     *
+     * <p>Rewriting it to read the factors is a change to how the answer is reached and to nothing
+     * else, so the place to hold it is against the thing that already rounds: every mode, at several
+     * places, over values that sit on a half and values that do not.
+     */
+    @Test
+    void everyRoundingIsTheOneADecimalWouldHaveGiven() {
+        for (String each : List.of("2.5", "-2.5", "3.5", "1.005", "0.125", "3", "-0.5", "0",
+                "-1234.5678", "0.0001")) {
+            BigDecimal written = new BigDecimal(each);
+            ExactRatio ratio = ExactRatio.of(written);
+            for (RoundingMode mode : RoundingMode.values()) {
+                if (mode == RoundingMode.UNNECESSARY) {
+                    continue;
+                }
+                for (int scale : new int[] {0, 1, 2, 4}) {
+                    assertEquals(0, written.setScale(scale, mode)
+                                    .compareTo(ratio.asDecimal(mode, scale)),
+                            () -> each + " rounded " + mode + " to " + scale + " places");
+                }
+            }
+        }
     }
 
     /**

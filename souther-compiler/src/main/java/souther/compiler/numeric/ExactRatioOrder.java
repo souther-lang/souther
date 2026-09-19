@@ -58,6 +58,54 @@ final class ExactRatioOrder {
         }
     }
 
+    /**
+     * The whole number {@code |of|} stands above, {@code of} being neither nought nor a whole
+     * number itself.
+     *
+     * <p>The same reading as the order and for the same reason. How large a value is and how large
+     * the whole number below it is are not the same question: two powers that all but cancel leave a
+     * value of about one and a whole number of one digit, and a step that worked the second out by
+     * writing the value down refused it over an answer that was never going to be large. So the
+     * brackets are taken and the width rises until both ends stand above the same whole number.
+     *
+     * <p>That ends because the value is not a whole number: two ends closing on a value strictly
+     * inside a unit interval are inside it themselves once they stand closer together than the room
+     * left either side. A whole number is where they would not, and is the caller's to answer — it
+     * has the value already.
+     */
+    static BigInteger flooredMagnitude(ExactRatio of) {
+        for (int width = FIRST_WIDTH; ; width += width >> 1) {
+            Bracketed held = magnitude(of, width);
+            BigInteger below = flooredEnd(held.low, held.shift);
+            if (below.equals(flooredEnd(held.high, held.shift))) {
+                return below;
+            }
+        }
+    }
+
+    /**
+     * The whole number {@code end × 2^shift} stands above, the end being above nought.
+     *
+     * <p>A shift below nought by more than the end has bits leaves nothing above the point, and that
+     * is read off the two counts rather than by shifting — the shifts a bracket of a value standing
+     * near one carries are the size of the powers that value is written with, and no machine counts
+     * those. Above nought the shift is the answer's own size, and where that is past what a whole
+     * number here holds, so is the answer.
+     */
+    private static BigInteger flooredEnd(BigInteger end, BigInteger shift) {
+        if (shift.signum() < 0) {
+            return shift.negate().compareTo(BigInteger.valueOf(end.bitLength())) >= 0
+                    ? BigInteger.ZERO
+                    : end.shiftRight(shift.negate().intValueExact());
+        }
+        if (shift.add(BigInteger.valueOf(end.bitLength()))
+                .compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            throw new ArithmeticException(
+                    "no whole number here is the one this value stands above");
+        }
+        return end.shiftLeft(shift.intValueExact());
+    }
+
     /** Which magnitude is the larger where brackets of {@code width} bits say so, and null where
      *  they overlap. */
     private static Integer fromBrackets(ExactRatio a, ExactRatio b, int width) {

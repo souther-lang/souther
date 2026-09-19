@@ -169,10 +169,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      */
     public Fraction asFraction() {
         return new Fraction(
-                numeratorWithoutUnits.multiply(power(BigInteger.TWO, Math.max(twos, 0)))
-                        .multiply(power(FIVE, Math.max(fives, 0))),
-                denominatorWithoutUnits.multiply(power(BigInteger.TWO, Math.max(-twos, 0)))
-                        .multiply(power(FIVE, Math.max(-fives, 0))));
+                raised(numeratorWithoutUnits, Math.max(twos, 0), Math.max(fives, 0)),
+                raised(denominatorWithoutUnits, Math.max(-twos, 0), Math.max(-fives, 0)));
     }
 
     /** A ratio with its powers of two and five spelled out: two whole numbers in lowest terms, the
@@ -249,9 +247,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * two ratios' — so nothing here is a power below the line.
      */
     private BigInteger numeratorOver(long sharedTwos, long sharedFives) {
-        return numeratorWithoutUnits
-                .multiply(power(BigInteger.TWO, lessened(twos, sharedTwos)))
-                .multiply(power(FIVE, lessened(fives, sharedFives)));
+        return raised(numeratorWithoutUnits,
+                lessened(twos, sharedTwos), lessened(fives, sharedFives));
     }
 
     public ExactRatio minus(ExactRatio other) {
@@ -346,44 +343,77 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /**
      * The largest whole number no greater than this.
      *
-     * <p>Asked the same way as the order and for the same reason: the whole number a value stands
-     * above exists for every value, and one held between two powers no machine writes down has a
-     * floor of nought or of one below it. Working it out from the two numbers would have had to form
-     * them first, which is to refuse a value over an answer that was never going to be large.
+     * <p>Read the way the order is read, and for the same reason. How large a value is and how large
+     * the whole number below it is are two questions: two powers that all but cancel leave a value
+     * of about one, whose floor is one digit and whose two numbers are hundreds of millions. A step
+     * that worked the second out by writing the value down refused such a value over an answer that
+     * was never going to be large.
      */
     public BigInteger floor() {
-        BigInteger[] parts = wholeAndRest();
-        return parts == null ? (signum() < 0 ? BigInteger.valueOf(-1) : BigInteger.ZERO)
-                : parts[1].signum() < 0 ? parts[0].subtract(BigInteger.ONE) : parts[0];
+        return rounded(RoundingMode.FLOOR);
     }
 
     /** The smallest whole number no less than this. */
     public BigInteger ceiling() {
-        BigInteger[] parts = wholeAndRest();
-        return parts == null ? (signum() > 0 ? BigInteger.ONE : BigInteger.ZERO)
-                : parts[1].signum() > 0 ? parts[0].add(BigInteger.ONE) : parts[0];
+        return rounded(RoundingMode.CEILING);
     }
 
     /** This with the part of it past the point dropped, which is towards nought from either side. */
     public BigInteger truncated() {
-        BigInteger[] parts = wholeAndRest();
-        return parts == null ? BigInteger.ZERO : parts[0];
+        return rounded(RoundingMode.DOWN);
+    }
+
+    /** The whole number this comes to, rounded the way {@code towards} says. */
+    private BigInteger rounded(RoundingMode towards) {
+        if (isZero()) {
+            return BigInteger.ZERO;
+        }
+        if (isWhole()) {
+            return asFraction().numerator();
+        }
+        BigInteger below = ExactRatioOrder.flooredMagnitude(this);
+        BigInteger size = roundedMagnitude(below, towards);
+        return signum() < 0 ? size.negate() : size;
     }
 
     /**
-     * The whole number this divides into and what is left over, or {@code null} where this stands
-     * between one below nought and one above it.
+     * Which of the two whole numbers either side of this a rounding takes, said of the magnitude so
+     * that the two directions that name a side are the two that read the sign.
      *
-     * <p>The three above answer from the factors and never write the value out where it is smaller
-     * than a whole number, which is the case their answer was never going to be large in. Where it
-     * is not, the whole number is as large as the value and writing it out is what the answer is.
+     * @param below   the whole number this magnitude stands above, this value not being a whole
+     *                number
+     * @param towards what the caller asked for
      */
-    private BigInteger[] wholeAndRest() {
-        if (abs().compareTo(ONE) < 0) {
-            return null;
-        }
-        Fraction fraction = asFraction();
-        return fraction.numerator().divideAndRemainder(fraction.denominator());
+    private BigInteger roundedMagnitude(BigInteger below, RoundingMode towards) {
+        BigInteger above = below.add(BigInteger.ONE);
+        return switch (towards) {
+            case DOWN -> below;
+            case UP -> above;
+            case FLOOR -> signum() > 0 ? below : above;
+            case CEILING -> signum() > 0 ? above : below;
+            case HALF_UP -> pastHalfWay(below) >= 0 ? above : below;
+            case HALF_DOWN -> pastHalfWay(below) > 0 ? above : below;
+            case HALF_EVEN -> switch (Integer.signum(pastHalfWay(below))) {
+                case 1 -> above;
+                case -1 -> below;
+                default -> below.testBit(0) ? above : below;
+            };
+            case UNNECESSARY -> throw new ArithmeticException(
+                    "no whole number is this value, and none was to be chosen for it");
+        };
+    }
+
+    /** Where this magnitude stands against half way between {@code below} and the next one up,
+     *  which is the question the three roundings to the nearer of two ask. */
+    private int pastHalfWay(BigInteger below) {
+        return abs().compareTo(new ExactRatio(
+                below.shiftLeft(1).add(BigInteger.ONE), BigInteger.TWO));
+    }
+
+    /** This times ten to the {@code power}, which moves both exponents and builds nothing. */
+    private ExactRatio timesTenTo(int power) {
+        return new ExactRatio(numeratorWithoutUnits, denominatorWithoutUnits,
+                added(twos, power), added(fives, power));
     }
 
     /**
@@ -427,21 +457,34 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * Whether a {@link BigDecimal} is this value exactly, which is what a position holding what a
      * model can write is asking.
      *
-     * <p>Narrower than {@link #terminates} by the room a decimal has, and the two are not the same
+     * <p>Narrower than {@link #terminates} by the scale a decimal has, and the two are not the same
      * question: a scale is thirty-two bits, so a value that is a finite decimal can still be one no
      * decimal here holds. A carrier's counts are decimals, so a step choosing a value for a position
      * asks this one; a step reasoning about the finite decimals as a set asks the other.
      *
-     * <p>Asked of the exponents rather than by building the number, so the answer costs nothing and
-     * is the answer building it would have given.
+     * <p><b>A rule of this language and of nothing else.</b> How many digits the unscaled value then
+     * has is a question for whatever holds it, and holds nothing about what a decimal is: a value
+     * this calls a decimal on a machine with room is the same value on one without. A membership
+     * answered partly from a machine's room is one that would have let a run short of memory report
+     * that a set is empty, and every reader of this is deciding a membership.
+     *
+     * <p>Asked of the exponents rather than by building anything, so the answer costs nothing.
      */
     public boolean fitsWrittenDecimal() {
-        return terminates() && (isZero() || scaleOfTheDecimal() != NO_SCALE);
+        return terminates() && (isZero() || leastScale() <= Integer.MAX_VALUE);
     }
 
-    /** That no scale writes this value, which is what {@link #scaleOfTheDecimal} answers where the
-     *  value is a decimal and none of the scales a decimal has holds it. */
-    private static final long NO_SCALE = Long.MIN_VALUE;
+    /**
+     * The least scale this value can be written at: the tens it takes to leave neither exponent
+     * below the line.
+     *
+     * <p>Every scale from here up writes it too, so this is what decides whether any does. It is a
+     * question about the language's scale and about nothing else — how many digits the unscaled
+     * value then has is what a host holds or does not, and is not what makes a value a decimal.
+     */
+    private long leastScale() {
+        return Math.max(-twos, -fives);
+    }
 
     /**
      * The scale a {@link BigDecimal} of this value is written at, or {@link #NO_SCALE} where none
@@ -463,12 +506,9 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * not.
      */
     private long scaleOfTheDecimal() {
-        long least = Math.max(-twos, -fives);
+        long least = leastScale();
         long plain = Math.max(0, least);
-        if (writableAt(plain)) {
-            return plain;
-        }
-        return writableAt(least) ? least : NO_SCALE;
+        return heldAt(plain) ? plain : Math.max(least, Integer.MIN_VALUE);
     }
 
     /**
@@ -482,7 +522,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * this refuses nothing the host would have held and what the under-count lets through the host
      * refuses itself.
      */
-    private boolean writableAt(long scale) {
+    private boolean heldAt(long scale) {
         if (scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE) {
             return false;
         }
@@ -492,13 +532,12 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
             byTwos = Math.addExact(twos, scale);
             byFives = Math.addExact(fives, scale);
         } catch (ArithmeticException _) {
-            return false;   // an exponent that far out is nothing a count of bits reaches either
-        }
-        if (byTwos < 0 || byFives < 0) {
             return false;
         }
-        return byTwos + 2 * byFives + numeratorWithoutUnits.abs().bitLength()
-                <= Integer.MAX_VALUE;
+        if (byTwos < 0 || byFives < 0 || byTwos > Integer.MAX_VALUE || byFives > Integer.MAX_VALUE) {
+            return false;
+        }
+        return bitsOf(byTwos, byFives, numeratorWithoutUnits) <= Integer.MAX_VALUE;
     }
 
     /**
@@ -510,12 +549,19 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * caller asking has to know whether it was handed the value or an approximation of it, and a
      * number that came back cannot be asked which it was.
      *
-     * <p><b>And {@code null} for a decimal no scale writes.</b> That is a second reason and the same
-     * answer, because what every caller does next is the same: there is no written decimal to be
-     * had, so round, or say the run got no further. Left as a refusal instead it would have gone
-     * past readers that branch on the one reason there used to be — the third case has a place in
-     * the answer rather than a way out of it. Which of the two reasons holds is
-     * {@link #terminates} against {@link #fitsWrittenDecimal}, for a caller that needs to know.
+     * <p><b>And {@code null} for a value past the scale a decimal has</b>, which is the other way a
+     * value is not one: both are rules of the language, both are settled by
+     * {@link #fitsWrittenDecimal}, and a reader branching on the null is answering the question it
+     * thinks it is.
+     *
+     * <p><b>What does not come back as {@code null} is a shortage of room.</b> A value this says is
+     * a decimal, written at a scale this language has, whose digits are more than a whole number
+     * this host addresses, leaves as a failure of the run. Handed back as a {@code null} it would
+     * have become the answer that no decimal is this value — and then a coset would have said it
+     * holds nothing, a bound that no value stands at it, and a search that a position has nowhere to
+     * go. What a machine ran out of is not what a set contains.
+     *
+     * @throws ArithmeticException where the digits are past what a whole number here holds
      */
     public BigDecimal asWrittenDecimal() {
         if (isZero()) {
@@ -524,14 +570,12 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         if (!denominatorWithoutUnits.equals(BigInteger.ONE)) {
             return null;
         }
-        long scale = scaleOfTheDecimal();
-        if (scale == NO_SCALE) {
+        if (!fitsWrittenDecimal()) {
             return null;
         }
+        long scale = scaleOfTheDecimal();
         return new BigDecimal(
-                numeratorWithoutUnits.multiply(power(BigInteger.TWO, twos + scale))
-                        .multiply(power(FIVE, fives + scale)),
-                (int) scale);
+                raised(numeratorWithoutUnits, twos + scale, fives + scale), (int) scale);
     }
 
     /**
@@ -561,35 +605,14 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * <p>For a bound that has to be handed over as a written number. The direction is the caller's
      * because only the caller knows which way widens: an upper bound rounded up still admits
      * everything the rules admit, and rounded down refuses values they leave.
+     *
+     * <p>A decimal at a scale is a whole number of those places, so this is the rounding above with
+     * the value moved by that many tens first — which moves two exponents and builds nothing. The
+     * number that comes back is as large as the answer and no larger: neither the value's own two
+     * numbers nor the power that carried it to the place is formed.
      */
     public BigDecimal asDecimal(RoundingMode towards, int scale) {
-        if (isZero()) {
-            return BigDecimal.ZERO.setScale(scale, towards);
-        }
-        // Below the last place the caller asked for, every value rounds the way one of three
-        // standing there does — a tenth of that place, half of it, or six tenths — and which of the
-        // three is two comparisons. Written out instead, a value standing that far below the place
-        // is a number as large as the powers that put it there, for an answer of nought or one.
-        ExactRatio place = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -(long) scale, -(long) scale);
-        ExactRatio size = abs();
-        if (size.compareTo(place) < 0) {
-            int half = size.compareTo(place.dividedBy(of(2)));
-            long tenths = half < 0 ? 1 : half == 0 ? 5 : 6;
-            return new BigDecimal(BigInteger.valueOf(signum() * tenths), addedScale(scale))
-                    .setScale(scale, towards);
-        }
-        Fraction fraction = asFraction();
-        return new BigDecimal(fraction.numerator())
-                .divide(new BigDecimal(fraction.denominator()), scale, towards);
-    }
-
-    /** One place past {@code scale}, which is where a stand-in for a value below that place is
-     *  written. */
-    private static int addedScale(int scale) {
-        if (scale == Integer.MAX_VALUE) {
-            throw new ArithmeticException("no decimal holds a scale past " + scale);
-        }
-        return scale + 1;
+        return new BigDecimal(timesTenTo(scale).rounded(towards), scale);
     }
 
     /**
@@ -632,25 +655,39 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * {@code base^exponent}, where the exponent is one this type holds and the power is one the
-     * host builds.
+     * {@code of × 2^byTwos × 5^byFives}, both exponents standing at or above nought.
      *
-     * <p>Refused on sight where it is not, and by how many bits the power takes rather than by
-     * whether the exponent is a count the host addresses — those are two conditions, and an exponent
-     * within one is past the other long before. Reached by building the number instead, a power the
-     * host has no room for is not refused until it does not fit, which is minutes and hundreds of
-     * megabytes for an answer that was never going to come. The count is under the truth, a factor
-     * of five counted as two bits where it is nearer two and a third, so nothing the host would have
-     * held is refused here.
+     * <p>The one place a power is built, so the one place it is refused, and refused on sight. A
+     * whole number is addressed by a count of bits, so there is a size past which this host holds
+     * none — reached by building instead, the number is not refused until it does not fit, which is
+     * minutes and hundreds of megabytes for an answer that was never going to come.
+     *
+     * <p>Counted by {@link #bitsOf}, which is the count everything here asks with. Two counts, one
+     * of them over the truth and one under it, is how a question and the building that answers it
+     * came apart: a value the first called written was one the second then refused.
+     *
+     * @throws ArithmeticException where no whole number this host holds is that number, which is a
+     *         shortage of room and not a value with no representation
      */
-    private static BigInteger power(BigInteger base, long exponent) {
-        if (exponent == 0) {
-            return BigInteger.ONE;
+    private static BigInteger raised(BigInteger of, long byTwos, long byFives) {
+        if (byTwos > Integer.MAX_VALUE || byFives > Integer.MAX_VALUE
+                || bitsOf(byTwos, byFives, of) > Integer.MAX_VALUE) {
+            throw new ArithmeticException("no whole number here is " + of + " times two to the "
+                    + byTwos + " times five to the " + byFives);
         }
-        if (exponent > Integer.MAX_VALUE || exponent * base.bitLength() > Integer.MAX_VALUE) {
-            throw new ArithmeticException("no whole number here is " + base + " to the " + exponent);
-        }
-        return base.pow((int) exponent);
+        BigInteger raised = byTwos == 0 ? of : of.shiftLeft((int) byTwos);
+        return byFives == 0 ? raised : raised.multiply(FIVE.pow((int) byFives));
+    }
+
+    /**
+     * How many bits {@code of × 2^byTwos × 5^byFives} takes, counted under the truth.
+     *
+     * <p>A factor of five counted as two bits where it is nearer two and a third, so nothing this
+     * host would have held is refused by a reading of this — what the under-count lets through the
+     * host refuses itself, and says so where it is reached.
+     */
+    private static long bitsOf(long byTwos, long byFives, BigInteger of) {
+        return of.abs().bitLength() + byTwos + 2 * byFives;
     }
 
     /** Two exponents added, where a sum past this width is a value with no representation here. */
