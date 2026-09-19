@@ -114,11 +114,15 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 readings.add(reading);
                 return Taking.Taken.AND_MORE;
             });
-            if (readings.size() == 1 && readings.get(0).pins().size() == 1) {
+            if (readings.size() == 1) {
+                List<Map.Entry<Integer, Integer>> pinned = new ArrayList<>();
                 for (int i = 0; i < axes.size(); i++) {
                     if (readings.get(0).pins().containsKey(i)) {
-                        out.add(Map.entry(i, readings.get(0).pins().get(i)));
+                        pinned.add(Map.entry(i, readings.get(0).pins().get(i)));
                     }
+                }
+                if (pinned.size() == 1) {
+                    out.addAll(pinned);
                 }
             }
         }

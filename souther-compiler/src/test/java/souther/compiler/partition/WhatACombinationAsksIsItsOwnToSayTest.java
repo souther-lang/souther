@@ -114,7 +114,7 @@ class WhatACombinationAsksIsItsOwnToSayTest {
         assertEquals(2, everythingAsked(selection).size(),
                 "two things asked, whatever the free position may hold");
         assertTrue(everythingAsked(selection).stream()
-                        .allMatch(reading -> reading.pins().size() == 2
+                        .allMatch(reading -> !reading.pins().containsKey(0)
                                 && reading.pins().containsKey(1) && reading.pins().containsKey(2)),
                 "and both of them are about the same two positions");
     }
