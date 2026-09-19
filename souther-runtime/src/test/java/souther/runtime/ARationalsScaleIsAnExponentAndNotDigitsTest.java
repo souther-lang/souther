@@ -24,6 +24,8 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     /** A decimal written as one digit and a scale, which is eleven characters and not a billion. */
     private static final BigDecimal COMPACT = new BigDecimal(BigInteger.ONE, 1_000_000_000);
 
+    private static final BigInteger FIVE = BigInteger.valueOf(5);
+
     @Test
     void aScaleBecomesTwoExponentsAndNoDigits() {
         Rational taken = Rational.of(COMPACT);
@@ -95,12 +97,12 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertEquals(COMPACT, RationalMath.toDecimal(1_000_000_000, HALF_UP.INSTANCE, taken));
     }
 
-    /** A millionth of a millionth against one: the brackets on the two logs are nowhere near each
-     *  other, so the answer comes from the exponents. */
+    /** A millionth of a millionth against one: the two are nowhere near each other, so the brackets
+     *  the comparison starts with separate them and no power is built. */
     @Test
     void aComparisonIsDecidedFromTheExponentsWhereTheValuesAreApart() {
         Rational taken = Rational.of(COMPACT);
-        assertEquals(Integer.valueOf(-1), taken.magnitudeFromBounds(Rational.ONE));
+        assertEquals(Integer.valueOf(-1), taken.magnitudeFromBrackets(Rational.ONE, 128));
         assertTrue(taken.compareTo(Rational.ONE) < 0);
         assertTrue(Rational.ONE.compareTo(taken) > 0);
         assertTrue(taken.compareTo(taken.negated()) > 0);
@@ -108,24 +110,86 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
-     * And where they are close the brackets settle nothing, whatever the exponents are.
+     * A power of two against the power of five that comes nearest it, both far past what a machine
+     * holds.
      *
-     * <p>Two values within a factor of two of one another overlap however large they are, so the
-     * bracket is a way of answering cheaply where the values are apart and not a bound on what
-     * answering costs. The comparison of this pair is not asked for here: what it would build is the
-     * billion-bit number the assertion above says the cheap path avoids.
+     * <p>This is the pair the order is hardest to answer for, and it is the pair the whole of the
+     * comparison's shape is owed to. The two exponents are a very good whole-number approximation of
+     * {@code log2 5} — the five-exponent is the denominator of one, the two-exponent its numerator — so
+     * the two logs sit a tiny fraction of a bit apart. A bracket read off counts of bits can never
+     * separate that, however many digits the numbers have; and the numbers have far more digits than a
+     * machine holds, so nothing can fall back to them. Both values are one exponent each and the answer
+     * is one of three, so an order that refused here would be refusing over an intermediate.
+     */
+    private static Rational aPowerOfTwo() {
+        return new Rational(BigInteger.ONE, BigInteger.ONE, 3_086_630_039_907_612_845L, 0);
+    }
+
+    /** And the power of five just below it. */
+    private static Rational theNearestPowerOfFive() {
+        return new Rational(BigInteger.ONE, BigInteger.ONE, 0, 1_329_339_201_633_350_533L);
+    }
+
+    @Test
+    void aPowerOfTwoAndTheNearestPowerOfFiveAreOrdered() {
+        Rational twos = aPowerOfTwo();
+        Rational fives = theNearestPowerOfFive();
+
+        assertTrue(twos.compareTo(fives) > 0, "the power of two is the greater of the two");
+        assertTrue(fives.compareTo(twos) < 0);
+        assertEquals(0, twos.compareTo(twos));
+        assertTrue(twos.negated().compareTo(fives.negated()) < 0);
+    }
+
+    /**
+     * And a bracket too narrow to separate that pair says so rather than answering.
+     *
+     * <p>The control for the refinement: the same pair the comparison answers is undecided at a width
+     * the exponents' own is, so the width rising is what reaches the answer and not a first bracket that
+     * was always going to be enough. A bracket that always decided would leave the loop above it
+     * unreached, and one that never did would leave the comparison looping.
      */
     @Test
-    void closeValuesAreNotSettledByTheBracketsHoweverLargeTheyAre() {
-        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 1_000_000_000, 0);
-        Rational halfAgainBelowIt =
-                new Rational(BigInteger.valueOf(3), BigInteger.ONE, 999_999_999, 0);
-        assertNull(aPower.magnitudeFromBounds(halfAgainBelowIt));
-        assertNull(halfAgainBelowIt.magnitudeFromBounds(aPower));
+    void aBracketTooNarrowToSeparateAPairSaysSo() {
+        Rational twos = aPowerOfTwo();
+        Rational fives = theNearestPowerOfFive();
 
-        // the same bracket decides a pair that is merely small and far apart, which is what says the
-        // two answers above are the overlap and not a bracket that never decides anything
-        assertEquals(Integer.valueOf(-1), Rational.of(1).magnitudeFromBounds(Rational.of(1000)));
+        assertNull(twos.magnitudeFromBrackets(fives, 64));
+        assertNull(fives.magnitudeFromBrackets(twos, 64));
+        assertEquals(Integer.valueOf(1), twos.magnitudeFromBrackets(fives, 128));
+    }
+
+    /**
+     * A pair the width the comparison starts at cannot separate, which is what the width rises for.
+     *
+     * <p>A power of five, and the whole number one above it. The power is large enough that a bracket of
+     * the starting width has to drop bits off it, and the two values are one part in the whole number
+     * apart — far inside what dropping those bits leaves. So the first bracket overlaps and the answer
+     * comes from the next, which is the only way a pair this close is answered at all.
+     */
+    @Test
+    void aPairInsideTheStartingWidthIsAnsweredByRaisingIt() {
+        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 100);
+        Rational oneAbove = new Rational(FIVE.pow(100).add(BigInteger.ONE), BigInteger.ONE, 0, 0);
+
+        assertNull(aPower.magnitudeFromBrackets(oneAbove, 128),
+                "the width the comparison starts at does not separate this pair");
+        assertEquals(Integer.valueOf(-1), aPower.magnitudeFromBrackets(oneAbove, 256));
+
+        assertTrue(aPower.compareTo(oneAbove) < 0, "and the comparison reaches that width");
+        assertTrue(oneAbove.compareTo(aPower) > 0);
+    }
+
+    /** And a small close pair is answered too, where the numbers themselves are what the brackets are
+     *  built from. */
+    @Test
+    void aSmallCloseValueIsOrderedAsWell() {
+        Rational aThird = Rational.of(BigInteger.ONE, BigInteger.valueOf(3));
+        Rational aLittleMore = Rational.of(BigInteger.valueOf(334), BigInteger.valueOf(1000));
+
+        assertTrue(aThird.compareTo(aLittleMore) < 0);
+        assertTrue(aLittleMore.compareTo(aThird) > 0);
+        assertTrue(Rational.of(1).compareTo(Rational.of(1000)) < 0);
     }
 
     /** A value too large to read is described rather than spelled, and the description is the size of

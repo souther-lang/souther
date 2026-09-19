@@ -45,10 +45,10 @@ import java.math.BigInteger;
  * <p><b>What the exponents cost.</b> Multiplying and dividing add and subtract them and never build
  * them, so scale stays free across both. Adding does build the difference between two exponents,
  * because that is what the exact sum is: {@code 1 + 1E-1000000} has a million digits whatever holds
- * it. Comparing decides from bounds on the logs wherever that settles it — which is what keeps
- * {@code r < 1} from spelling out a millionth — and falls back to exact whole numbers where they do
- * not. Powers of two and five come arbitrarily close in the log, so that fallback is reachable with
- * small numerators and is not bounded by them.
+ * it. Comparing builds nothing at all: a power of two is a count of bits and a power of five is
+ * bracketed by squaring, so what a comparison costs is the bits of an exponent and not its size —
+ * which is what keeps {@code r < 1} from spelling out a millionth, and what makes the order answered
+ * for every pair rather than for the pairs whose digits happen to fit.
  *
  * <p><b>What a step is allowed to refuse.</b> An operation aborts where the answer has no
  * representation here, and not where a step on the way to it has none. The two are easy to confuse
@@ -59,6 +59,10 @@ import java.math.BigInteger;
  * power a compact decimal had carried as its scale; a rounding policy is asked for so that a value
  * comes back, so reading it off the digits refused values it was named to answer. Each of those is a
  * middle step narrower than the value it was handed.
+ *
+ * <p>The order is the case where that rule bites hardest, because an order always exists: the pairs
+ * whose logs sit closest together are the ones whose digits are largest, so a comparison that fell
+ * back to the digits would refuse exactly the pairs it was reached for. None of it is built.
  */
 public record Rational(BigInteger numerator, BigInteger denominator, long twos, long fives)
         implements Comparable<Rational> {
@@ -70,21 +74,15 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 0);
 
     /**
-     * A log2 is bracketed as a whole number of {@code 2^-LOG_BITS}, and this is that width.
+     * How many bits a power of five is first bracketed to when a comparison asks for one.
      *
-     * <p>Chosen against the exponents and not against a mantissa. An exponent runs to sixty-four bits
-     * and is multiplied by a bound on {@code log2 5}, so the error that multiplication makes is the
-     * exponent times the bound's own — and a width above the exponent's leaves it far below one bit
-     * however large the exponent is. A bound of a few digits is exact enough for the exponents a model
-     * writes and says nothing at all about the ones a run of squarings reaches, which is the one thing
-     * a bracket must not do: what it cannot separate it hands to a step that builds the powers.
+     * <p>A starting point and not a limit: a bracket too wide to separate the pair it was taken for is
+     * taken again at twice this. Wide enough that the second turn is not reached by any pair a
+     * comparison is likely to be asked about — the exponents would have to put the two values within
+     * this many bits of one another — and small enough that the first turn is a few dozen
+     * multiplications of numbers this size.
      */
-    private static final int LOG_BITS = 96;
-    private static final BigInteger LOG_UNIT = BigInteger.ONE.shiftLeft(LOG_BITS);
-
-    /** {@code log2 5} in those units, rounded down — so the true value stands between this and one
-     *  more, which is what makes an interval built from the two hold the number it is about. */
-    private static final BigInteger LOG2_FIVE = new BigInteger("183962096448172129506858884093");
+    private static final int BRACKET_BITS = 128;
 
     /**
      * How many bits of a value {@link #toString} will spell out. A rational's plain spelling is as
@@ -287,15 +285,18 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * Where this stands against {@code other} by exact mathematical value.
      *
-     * <p>Answered from the exponents wherever that settles it. The magnitudes are bracketed from the
-     * bit lengths of the two fractions and from the exponents, and where the brackets do not overlap
-     * the answer is read off them without a power being built — which is what a comparison of a
-     * millionth against one is.
+     * <p>Answered for every pair this type holds, and no power is ever built to answer it. What the
+     * two values are made of beyond their stored fractions is a power of two, which is a count of
+     * bits, and a power of five, which is bracketed between two whole numbers of a working width by
+     * squaring — so the work is the bits of an exponent rather than its size, and a comparison of a
+     * millionth of a millionth against one costs a few dozen multiplications of numbers that width.
      *
-     * <p>Where they do overlap the whole numbers are compared, and building them can cost what the
-     * exponents say. Powers of two and five approach one another arbitrarily closely in the log, so
-     * this is reachable for small numerators as well as large ones: the bracket is a way to answer
-     * cheaply where the values are apart, not a bound on what answering costs.
+     * <p>Where a bracket is too wide to separate the pair it is taken again at twice the width. That
+     * ends, because two values with one canonical representation each are equal exactly where those
+     * representations are, and unequal ones stand a fixed distance apart for a bracket to get inside
+     * of. Which is the whole of why this is answered from brackets rather than from the numbers: the
+     * exponents run to sixty-four bits, so the pairs whose logs sit closest together are also the ones
+     * whose digits no machine holds.
      */
     @Override
     public int compareTo(Rational other) {
@@ -310,71 +311,155 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         return signum() > 0 ? byMagnitude : -byMagnitude;
     }
 
-    /** Where {@code |this|} stands against {@code |other|}, both being non-zero. */
+    /**
+     * Where {@code |this|} stands against {@code |other|}, both being non-zero.
+     *
+     * <p>The fractions are cross-multiplied, which is the size of what is stored, and what is left of
+     * the two values is one power of two and one power of five — the differences of the two pairs of
+     * exponents, each taken once and put on the side its sign belongs to.
+     */
     private int compareMagnitude(Rational other) {
-        Integer fromBounds = magnitudeFromBounds(other);
-        if (fromBounds != null) {
-            return fromBounds;
+        // Equal magnitudes, which the refinement below would never get inside of. One canonical
+        // representation per value is what makes this a comparison of the four parts and not a sum.
+        if (twos == other.twos && fives == other.fives
+                && denominator.equals(other.denominator)
+                && numerator.abs().equals(other.numerator.abs())) {
+            return 0;
         }
-        long commonTwos = Math.min(twos, other.twos);
-        long commonFives = Math.min(fives, other.fives);
-        BigInteger here = numerator.abs()
-                .multiply(other.denominator)
-                .multiply(raised(lessened(twos, commonTwos), lessened(fives, commonFives)));
-        BigInteger there = other.numerator.abs()
-                .multiply(denominator)
-                .multiply(raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
-        return here.compareTo(there);
+        if (fives == other.fives) {
+            // No power of five between them, so the count of bits is the whole of the difference.
+            return compareShifted(
+                    numerator.abs().multiply(other.denominator), apart(twos, other.twos),
+                    other.numerator.abs().multiply(denominator), BigInteger.ZERO);
+        }
+        // The width stops rising where a count of bits does. Reaching that means the two values agree
+        // over more bits than a bracket is addressed in, which takes stored fractions far larger than
+        // the machine bracketing them — so this is where memory runs out rather than a value's range,
+        // and it says so instead of doubling into a negative width.
+        for (int width = BRACKET_BITS; width > 0; width += width) {
+            Integer decided = magnitudeFromBrackets(other, width);
+            if (decided != null) {
+                return decided;
+            }
+        }
+        throw new ConstraintViolation("no bracket this machine holds separates " + this + " from " + other);
     }
 
     /**
-     * Where {@code |this|} stands against {@code |other|} as far as bounds on their logs settle it,
-     * or null where the two brackets overlap and only the whole numbers answer.
+     * Where {@code |this|} stands against {@code |other|} as far as brackets of {@code width} bits
+     * settle it, and null where the two brackets overlap and a tighter pair is what answers.
      *
-     * <p>Separate from the comparison so that both of its answers are asked for directly. A bracket
-     * that never decided would leave every comparison correct and every one of them paying for a
-     * power, and a comparison is the reader that cannot tell the two apart.
-     *
-     * <p>The brackets are exact whole numbers, so the bracket itself has no range to leave: a pair
-     * whose exponents are at the ends of what this type holds is separated here as readily as a pair a
-     * model wrote. Counted in a sixty-four-bit number instead, the arithmetic of the bracket ran out
-     * before the values it was reading did, and the comparison that read a value as far from one as
-     * this type goes was handed to the step that builds the powers — for a pair it could have decided
-     * from the exponents alone.
+     * <p>Separate from the comparison above so that both of its answers are asked for directly. A
+     * width that always overlapped would leave the comparison correct and looping, and a width that
+     * always decided would leave the refinement above it unreached — a comparison is the reader that
+     * cannot tell either from a bracket that works.
      */
-    @Nullable Integer magnitudeFromBounds(Rational other) {
-        if (lowerLog(this).compareTo(upperLog(other)) > 0) {
+    @Nullable Integer magnitudeFromBrackets(Rational other, int width) {
+        BigInteger here = numerator.abs().multiply(other.denominator);
+        BigInteger there = other.numerator.abs().multiply(denominator);
+        BigInteger byFives = apart(fives, other.fives);
+        Bracketed five = fiveTo(byFives.abs(), width);
+        boolean fivesAreHere = byFives.signum() > 0;
+        Bracketed left = (fivesAreHere ? five.times(here) : Bracketed.exactly(here))
+                .shiftedBy(apart(twos, other.twos));
+        Bracketed right = fivesAreHere ? Bracketed.exactly(there) : five.times(there);
+        if (compareShifted(left.low(), left.shift(), right.high(), right.shift()) > 0) {
             return 1;
         }
-        if (upperLog(this).compareTo(lowerLog(other)) < 0) {
+        if (compareShifted(left.high(), left.shift(), right.low(), right.shift()) < 0) {
             return -1;
         }
         return null;
     }
 
-    /** A number {@code log2 |r|} is at least, in units of {@code 2^-LOG_BITS}. */
-    private static BigInteger lowerLog(Rational r) {
-        return atTheseBits(r.numerator.abs().bitLength() - 1L - r.denominator.bitLength(), r.twos)
-                .add(fivesInLog(r.fives, true));
+    /** How far one exponent stands from another, which no exponent's own width holds. */
+    private static BigInteger apart(long exponent, long from) {
+        return BigInteger.valueOf(exponent).subtract(BigInteger.valueOf(from));
     }
 
-    /** A number {@code log2 |r|} is below, in the same units. */
-    private static BigInteger upperLog(Rational r) {
-        return atTheseBits(r.numerator.abs().bitLength() - (r.denominator.bitLength() - 1L), r.twos)
-                .add(fivesInLog(r.fives, false));
+    /**
+     * Where {@code x × 2^a} stands against {@code y × 2^b}, both whole numbers being above nought.
+     *
+     * <p>Each side stands between its own count of bits and one more, so a gap of over one bit is read
+     * off those counts and neither side is shifted — which is what keeps a shift no machine holds out
+     * of this. Within a bit of one another, the two shifts are apart by no more than the bits the two
+     * numbers hold, and the lesser side is lifted to meet the other.
+     */
+    private static int compareShifted(BigInteger x, BigInteger a, BigInteger y, BigInteger b) {
+        BigInteger apart = a.add(BigInteger.valueOf(x.bitLength()))
+                .subtract(b.add(BigInteger.valueOf(y.bitLength())));
+        if (apart.compareTo(BigInteger.ONE) > 0) {
+            return 1;
+        }
+        if (apart.negate().compareTo(BigInteger.ONE) > 0) {
+            return -1;
+        }
+        BigInteger lift = a.subtract(b);
+        return lift.signum() >= 0
+                ? x.shiftLeft(lift.intValueExact()).compareTo(y)
+                : x.compareTo(y.shiftLeft(lift.negate().intValueExact()));
     }
 
-    /** What a whole number of bits — the fraction's, and the power of two's — is in log units. */
-    private static BigInteger atTheseBits(long ofTheFraction, long twos) {
-        return BigInteger.valueOf(ofTheFraction).add(BigInteger.valueOf(twos)).multiply(LOG_UNIT);
+    /**
+     * {@code 5^exponent} bracketed to {@code width} bits, the exponent being at least nought.
+     *
+     * <p>Squared up from the exponent's bits, so the work is how many bits the exponent has and not
+     * how large it is: a power of five whose digits no machine holds is bracketed here in as many
+     * multiplications of numbers this wide as the exponent has bits.
+     */
+    private static Bracketed fiveTo(BigInteger exponent, int width) {
+        Bracketed of = Bracketed.exactly(BigInteger.ONE);
+        for (int bit = exponent.bitLength() - 1; bit >= 0; bit--) {
+            of = of.squared(width);
+            if (exponent.testBit(bit)) {
+                of = of.times(FIVE).keptTo(width);
+            }
+        }
+        return of;
     }
 
-    /** What the power of five contributes to a bound on the log. Which of the two bounds on
-     *  {@code log2 5} makes a number smaller depends on the sign of the exponent, so the side being
-     *  built decides which is taken. */
-    private static BigInteger fivesInLog(long fives, boolean below) {
-        BigInteger bound = (fives >= 0) == below ? LOG2_FIVE : LOG2_FIVE.add(BigInteger.ONE);
-        return BigInteger.valueOf(fives).multiply(bound);
+    /**
+     * A number held between two whole numbers a count of bits short of it: the number is at least
+     * {@code low × 2^shift} and at most {@code high × 2^shift}.
+     *
+     * <p>Every step keeps the number between the two by rounding each end away from it, so what a
+     * bracket says is true by how it was built rather than by an error anyone has to have got right.
+     * What a width buys is how tight the bracket is, never whether it holds.
+     */
+    private record Bracketed(BigInteger low, BigInteger high, BigInteger shift) {
+
+        static Bracketed exactly(BigInteger whole) {
+            return new Bracketed(whole, whole, BigInteger.ZERO);
+        }
+
+        Bracketed times(BigInteger by) {
+            return new Bracketed(low.multiply(by), high.multiply(by), shift);
+        }
+
+        Bracketed shiftedBy(BigInteger bits) {
+            return new Bracketed(low, high, shift.add(bits));
+        }
+
+        Bracketed squared(int width) {
+            return new Bracketed(low.multiply(low), high.multiply(high), shift.add(shift))
+                    .keptTo(width);
+        }
+
+        /** The same number, held between two numbers of no more than {@code width} bits. The lower end
+         *  falls to where the shift leaves it and the upper end rises to the next one up, so the number
+         *  stays inside. */
+        Bracketed keptTo(int width) {
+            int over = high.bitLength() - width;
+            if (over <= 0) {
+                return this;
+            }
+            BigInteger down = low.shiftRight(over);
+            BigInteger up = high.shiftRight(over);
+            if (up.shiftLeft(over).compareTo(high) < 0) {
+                up = up.add(BigInteger.ONE);
+            }
+            return new Bracketed(down, up, shift.add(BigInteger.valueOf(over)));
+        }
     }
 
     /** {@code 2^twos × 5^fives}, both exponents being non-negative. */
