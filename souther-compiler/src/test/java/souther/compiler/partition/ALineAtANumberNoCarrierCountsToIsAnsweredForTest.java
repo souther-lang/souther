@@ -1,12 +1,14 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.PartitionEvidence;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,9 +30,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * them a level survives is what this is about — held on one, a reading that answered for the
  * threshold alone would pass.
  *
+ * <p><b>One module and not one apiece.</b> What is being asked of each rule is what the report says
+ * about the behavior it is written in, and a behavior is where a report is keyed — so every rule in
+ * the sweep stands in one source, and the whole crossing is compiled once. Which rule stopped the
+ * reading is the question that wants them apart, and it is asked only where one did
+ * ({@link #whichOneStopped}): a run that answers for all of them has nothing to tell apart.
+ *
  * <p><b>And what is asked for is the report and not the absence of a throw.</b> A harness that
- * compiled nothing would see no throw either, so one model here is held to drawing a line: it is
- * the same matrix under a claim that cannot be met by falling silent.
+ * compiled nothing would see no throw either, so one rule here is held to drawing a line: it is
+ * the same crossing under a claim that cannot be met by falling silent.
  */
 class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
 
@@ -54,109 +62,148 @@ class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
      *  language writes, so it is not one an author reaches a line at a third by. */
     private static final List<String> OPERATORS = List.of("<", "<=", ">", ">=", "==");
 
+    /** The rule each behavior of the crossing is written with, by the name it is written under. */
+    private static final Map<String, String> CROSSING = crossing();
+
+    private static Map<String, String> crossing() {
+        Map<String, String> out = new LinkedHashMap<>();
+        int at = 0;
+        for (String type : List.of("Int", "Decimal")) {
+            for (String operator : OPERATORS) {
+                for (String shape : ONE_POSITION) {
+                    out.put("b" + at++ + " " + type, shape.formatted(operator));
+                }
+                for (String shape : TWO_POSITIONS) {
+                    out.put("b" + at++ + " " + type, shape.formatted(operator));
+                }
+            }
+        }
+        return out;
+    }
+
     /**
      * Every one of them is answered for.
      *
      * <p>Counted rather than asserted one at a time: what a reader needs is every rule this could
-     * not answer for, and a run that stopped at the first of them says one model and leaves the
-     * population it was standing for unmeasured.
+     * not answer for, and a run that stopped at the first of them says one rule and leaves the
+     * crossing it was standing for unmeasured.
      */
     @Test
     void everyRuleCuttingAPositionAtSuchANumberIsAnsweredFor() {
-        List<String> unanswered = new ArrayList<>();
-        int asked = 0;
-        for (String type : List.of("Int", "Decimal")) {
-            for (String operator : OPERATORS) {
-                for (String shape : ONE_POSITION) {
-                    asked++;
-                    unanswered.addAll(answeredFor(onePosition(type, shape.formatted(operator))));
-                }
-                for (String shape : TWO_POSITIONS) {
-                    asked++;
-                    unanswered.addAll(answeredFor(twoPositions(type, shape.formatted(operator))));
-                }
-            }
-        }
-        assertEquals(List.of(), unanswered);
-        assertEquals(2 * OPERATORS.size() * (ONE_POSITION.size() + TWO_POSITIONS.size()), asked,
-                "every shape was crossed with every operator on both carriers");
+        assertEquals(List.of(), whichOneStopped());
+        assertEquals(2 * OPERATORS.size() * (ONE_POSITION.size() + TWO_POSITIONS.size()),
+                CROSSING.size(), "every shape was crossed with every operator on both carriers");
     }
 
     /**
-     * And the matrix is one a silent reading could not pass.
+     * And the crossing is one a silent reading could not pass.
      *
      * <p>The measurement beside the sweep. A third on a whole-numbered position parts it between two
      * whole numbers, which is a line with points either side — so a harness that answered for every
-     * model by compiling none of them fails here.
+     * rule by compiling none of them fails here.
      */
     @Test
-    void andAModelInItDrawsALine() {
-        assertFalse(bordersOf(onePosition("Int", "n > 1 / 3")).isEmpty(),
-                "a third parts the whole numbers");
+    void andARuleInItDrawsALine() {
+        PartitionEvidence read = whole().get(named("n > 1 / 3", "Int"));
+
+        assertFalse(read.axes().isEmpty(), "a third parts the whole numbers");
+        assertFalse(read.axes().getFirst().classes().isEmpty(),
+                "and the position it parts has the classes it was parted into");
     }
 
-    /** What the report could not answer for in this model, which is nothing where it answered. */
-    private static List<String> answeredFor(String model) {
+    /** The name the crossing writes one of its rules under. */
+    private static String named(String guard, String type) {
+        return CROSSING.entrySet().stream()
+                .filter(each -> each.getValue().equals(guard) && each.getKey().endsWith(type))
+                .map(each -> each.getKey().split(" ")[0]).findFirst().orElseThrow();
+    }
+
+    /**
+     * Which rules of the crossing the report could not be asked for, and what stopped each.
+     *
+     * <p>Asked of the whole crossing first, which is one compilation and one report. Where that
+     * answers, every rule in it was answered for and there is nothing to tell apart; where it does
+     * not, each rule is put on its own so that what comes back names the rule rather than the
+     * crossing it was standing in.
+     */
+    private static List<String> whichOneStopped() {
         try {
-            bordersOf(model);
+            whole();
             return List.of();
-        } catch (RuntimeException e) {
-            return List.of(model.lines().filter(line -> line.contains("guard")).findFirst()
-                    .orElse("?").trim() + " — " + e);
+        } catch (RuntimeException _) {
+            List<String> stopped = new ArrayList<>();
+            CROSSING.forEach((name, guard) -> {
+                try {
+                    divided(behaviors(Map.of(name, guard)));
+                } catch (RuntimeException e) {
+                    stopped.add(name + " — " + guard + " — " + e);
+                }
+            });
+            return stopped;
         }
     }
 
-    private static Map<String, BorderAssessment> bordersOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, List<BorderAssessment>> boundaries =
-                Adequacy.searchedBoundariesOf(compilation.db(), "example.form");
-        Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
-        boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));
-        return out;
+    /**
+     * The module read into the classes its rules divide its positions into.
+     *
+     * <p>Which is the reading this is about: what a line at such a number costs a reader is paid
+     * where the rules are turned into classes, and the rows a search would then write at the points
+     * of each are a further question with an answer of its own. Asked for the rows as well, the
+     * sweep would spend the search on a hundred rules to reach a step every one of them takes
+     * before it.
+     */
+    private static Map<String, PartitionEvidence> divided(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        return compilation.db().ask(new Adequacy.Coverage("example.form")).value();
     }
 
-    private static String onePosition(String type, String guard) {
-        return """
+    /** The whole crossing, divided once. Read when a question asks rather than in an initialiser,
+     *  so a source that stopped compiling fails the reading that met it. */
+    private static Map<String, PartitionEvidence> whole() {
+        if (whole == null) {
+            whole = divided(behaviors(CROSSING));
+        }
+        return whole;
+    }
+
+    private static Map<String, PartitionEvidence> whole;
+
+    /** Let go at the end, so the fork's later classes do not carry this crossing's answers. */
+    @AfterAll
+    static void release() {
+        whole = null;
+    }
+
+    /** One module holding a behavior per rule, each named by the crossing. */
+    private static String behaviors(Map<String, String> rules) {
+        StringBuilder out = new StringBuilder("""
                 module example.form
 
                 data No = { why: Int }
                 data Yes = { v: Int }
                 data Result = No | Yes
+                """);
+        rules.forEach((named, guard) -> {
+            String[] parts = named.split(" ");
+            String name = parts[0];
+            String type = parts[1];
+            boolean two = guard.contains("m");
+            String value = type.equals("Int") ? "0" : "0m";
+            out.append("""
 
-                behavior f : (n: %s) -> Result
-                    constructs Yes, No
-
-                let f (n) = {
-                    guard %s else No { why = 0 }
-                    Yes { v = 1 }
-                }
-
-                example f
-                    | "one" : (%s) -> No { why = 0 }
-                """.formatted(type, guard, type.equals("Int") ? "0" : "0m");
-    }
-
-    private static String twoPositions(String type, String guard) {
-        String value = type.equals("Int") ? "0" : "0m";
-        return """
-                module example.form
-
-                data No = { why: Int }
-                data Yes = { v: Int }
-                data Result = No | Yes
-
-                behavior f : (n: %s, m: %s) -> Result
-                    constructs Yes, No
-
-                let f (n, m) = {
-                    guard %s else No { why = 0 }
-                    Yes { v = 1 }
-                }
-
-                example f
-                    | "one" : (%s, %s) -> No { why = 0 }
-                """.formatted(type, type, guard, value, value);
+                    behavior %s : (%s) -> Result
+                        constructs Yes, No
+                    let %s (%s) = {
+                        guard %s else No { why = 0 }
+                        Yes { v = 1 }
+                    }
+                    example %s
+                        | "one" : (%s) -> No { why = 0 }
+                    """.formatted(name,
+                    two ? "n: " + type + ", m: " + type : "n: " + type,
+                    name, two ? "n, m" : "n",
+                    guard, name, two ? value + ", " + value : value));
+        });
+        return out.toString();
     }
 }
