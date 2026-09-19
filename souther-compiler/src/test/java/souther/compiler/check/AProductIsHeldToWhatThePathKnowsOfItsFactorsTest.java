@@ -6,7 +6,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -53,10 +52,6 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
 
     private static Core.Binary arithmetic(BinOp op, Core left, Core right) {
         return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.INT, POS);
-    }
-
-    private static LinearForm<FactSubject> num(long n) {
-        return LinearForm.constant(ExactRatio.of(n));
     }
 
     /** A domain in which each of {@code atoms} is at or above zero. */
