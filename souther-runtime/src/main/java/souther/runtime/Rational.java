@@ -63,6 +63,13 @@ import java.math.BigInteger;
  * <p>The order is the case where that rule bites hardest, because an order always exists: the pairs
  * whose logs sit closest together are the ones whose digits are largest, so a comparison that fell
  * back to the digits would refuse exactly the pairs it was reached for. None of it is built.
+ *
+ * <p><b>The host's own limits leave by this type's abort.</b> A whole number is held by a host that has
+ * a largest one, and a number past it is one no value here is made of — so no method of this type
+ * answers with an exception of the host's arithmetic, which says nothing about a Rational to whoever
+ * reads it (ADR-0112). The translation is here and not at the operators, because it is here that the
+ * host is reached: {@code List.sum} over these asks this type for a sum directly, and an operator that
+ * caught what it never called would have left the fold answering the other way.
  */
 public record Rational(BigInteger numerator, BigInteger denominator, long twos, long fives)
         implements Comparable<Rational> {
@@ -216,11 +223,15 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
         BigInteger acrossOne = numerator.gcd(other.denominator);
         BigInteger acrossTwo = other.numerator.gcd(denominator);
-        return new Rational(
-                numerator.divide(acrossOne).multiply(other.numerator.divide(acrossTwo)),
-                denominator.divide(acrossTwo).multiply(other.denominator.divide(acrossOne)),
-                added(twos, other.twos),
-                added(fives, other.fives));
+        try {
+            return new Rational(
+                    numerator.divide(acrossOne).multiply(other.numerator.divide(acrossTwo)),
+                    denominator.divide(acrossTwo).multiply(other.denominator.divide(acrossOne)),
+                    added(twos, other.twos),
+                    added(fives, other.fives));
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -241,11 +252,15 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
         BigInteger acrossOne = numerator.gcd(other.numerator);
         BigInteger acrossTwo = denominator.gcd(other.denominator);
-        return new Rational(
-                numerator.divide(acrossOne).multiply(other.denominator.divide(acrossTwo)),
-                denominator.divide(acrossTwo).multiply(other.numerator.divide(acrossOne)),
-                lessened(twos, other.twos),
-                lessened(fives, other.fives));
+        try {
+            return new Rational(
+                    numerator.divide(acrossOne).multiply(other.denominator.divide(acrossTwo)),
+                    denominator.divide(acrossTwo).multiply(other.numerator.divide(acrossOne)),
+                    lessened(twos, other.twos),
+                    lessened(fives, other.fives));
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -268,14 +283,19 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
         long commonTwos = Math.min(twos, other.twos);
         long commonFives = Math.min(fives, other.fives);
-        BigInteger here = numerator.multiply(
-                raised(lessened(twos, commonTwos), lessened(fives, commonFives)));
-        BigInteger there = other.numerator.multiply(
-                raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
-        BigInteger shared = denominator.gcd(other.denominator);
-        BigInteger overThis = denominator.divide(shared);
-        BigInteger sum = here.multiply(other.denominator.divide(shared)).add(there.multiply(overThis));
-        return new Rational(sum, overThis.multiply(other.denominator), commonTwos, commonFives);
+        try {
+            BigInteger here = numerator.multiply(
+                    raised(lessened(twos, commonTwos), lessened(fives, commonFives)));
+            BigInteger there = other.numerator.multiply(
+                    raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
+            BigInteger shared = denominator.gcd(other.denominator);
+            BigInteger overThis = denominator.divide(shared);
+            BigInteger sum =
+                    here.multiply(other.denominator.divide(shared)).add(there.multiply(overThis));
+            return new Rational(sum, overThis.multiply(other.denominator), commonTwos, commonFives);
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     public Rational minus(Rational other) {
@@ -307,8 +327,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (bySign != 0) {
             return bySign;
         }
-        int byMagnitude = compareMagnitude(other);
-        return signum() > 0 ? byMagnitude : -byMagnitude;
+        try {
+            int byMagnitude = compareMagnitude(other);
+            return signum() > 0 ? byMagnitude : -byMagnitude;
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -461,8 +485,44 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /** {@code 2^twos × 5^fives}, both exponents being non-negative. */
     private static BigInteger raised(long twos, long fives) {
-        BigInteger of = BigInteger.ONE.shiftLeft(buildable(twos));
-        return fives == 0 ? of : of.multiply(FIVE.pow(buildable(fives)));
+        int byTwos = buildable(twos);
+        int byFives = buildable(fives);
+        heldByTheHost(byTwos + 2L * byFives);
+        BigInteger of = BigInteger.ONE.shiftLeft(byTwos);
+        return byFives == 0 ? of : of.multiply(FIVE.pow(byFives));
+    }
+
+    /**
+     * That a whole number of this many bits is one the host holds, asked before it is built.
+     *
+     * <p>A {@code BigInteger} is addressed by a count of bits, so there is a size past which the host has
+     * none — and a whole number the host cannot hold is one no value of this type is made of either. So
+     * the refusal belongs to this type and leaves by its own abort, the way an exponent past its width
+     * does. Reached instead by building the number, the host says it by an exception of its arithmetic,
+     * which says nothing about a Rational to whoever reads it (ADR-0112) and does not say it quickly: a
+     * power of five the host has no room for is not refused on sight but computed until it does not fit,
+     * which is minutes and hundreds of megabytes for an answer that was never going to come.
+     *
+     * <p>The count is under the truth rather than over it — a factor of five counted as two bits when it
+     * is nearer two and a third — so this refuses nothing the host would have held, and what the
+     * under-count lets through is refused by the host and translated where it is caught.
+     */
+    private static void heldByTheHost(long bits) {
+        if (bits > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("no Rational holds a whole number of " + bits + " bits");
+        }
+    }
+
+    /**
+     * The abort a whole number the host had no range for leaves by.
+     *
+     * <p>Every method of this type that computes translates it, and the translation is here rather than
+     * at the operators in {@link RationalMath} because it is here that the host is reached: a list folded
+     * with {@code List.sum} asks this type for a sum directly, so a translation at the operator alone
+     * would leave the fold answering with an exception of the host's arithmetic.
+     */
+    private static ConstraintViolation noRoomForIt(ArithmeticException thrown) {
+        return new ConstraintViolation("no Rational holds a whole number that size: " + thrown.getMessage());
     }
 
     /** Two exponents subtracted, or the abort of a computation asking for one past what is held. The
@@ -524,8 +584,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
         // The scale first, which is the question about the answer; the digits after, which are the work.
         int scale = aScaleThatClearsBothExponents();
-        return new BigDecimal(
-                numerator.multiply(raised(added(twos, scale), added(fives, scale))), scale);
+        try {
+            return new BigDecimal(
+                    numerator.multiply(raised(added(twos, scale), added(fives, scale))), scale);
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -558,7 +622,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /** This as a whole number where it is one, and null where it is not. */
     public @Nullable BigInteger asWholeNumber() {
-        return isWhole() ? numerator.multiply(raised(twos, fives)) : null;
+        if (!isWhole()) {
+            return null;
+        }
+        try {
+            return numerator.multiply(raised(twos, fives));
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -578,8 +649,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * this reads too.
      */
     public BigDecimal asDecimal(int scale, java.math.RoundingMode towards) {
-        return new BigDecimal(
-                isZero() ? BigInteger.ZERO : roundedTimesTenTo(scale, towards), scale);
+        if (isZero()) {
+            return new BigDecimal(BigInteger.ZERO, scale);
+        }
+        try {
+            return new BigDecimal(roundedTimesTenTo(scale, towards), scale);
+        } catch (ArithmeticException e) {
+            throw noRoomForIt(e);
+        }
     }
 
     /**
@@ -668,7 +745,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /** {@code whole × 2^twos × 5^fives}, both exponents being at least nought. What this builds is the
      *  answer's own digits, which is the one thing a narrowing is always allowed to ask for. */
     private static BigInteger builtFrom(BigInteger whole, BigInteger twos, BigInteger fives) {
-        return whole.shiftLeft(buildable(twos)).multiply(FIVE.pow(buildable(fives)));
+        int byTwos = buildable(twos);
+        int byFives = buildable(fives);
+        heldByTheHost(whole.bitLength() + byTwos + 2L * byFives);
+        return whole.shiftLeft(byTwos).multiply(FIVE.pow(byFives));
     }
 
     /** {@code floor(x × 2^byBits / y)}, {@code x} being at least nought and {@code y} above it. */

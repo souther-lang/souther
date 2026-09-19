@@ -130,15 +130,17 @@ public final class RationalMath {
         return decimalAt(r, scale, mode);
     }
 
-    /** This as a decimal at {@code scale} places by {@code mode}, so that the two lossy narrowings
-     *  round the same way and the range they leave is reported once. */
+    /**
+     * This as a decimal at {@code scale} places by {@code mode}, so that the two lossy narrowings round
+     * the same way and read a scale the same way.
+     *
+     * <p>Nothing is caught here. What the arithmetic cannot hold is {@link Rational}'s to report, and it
+     * reports it as an abort of the language rather than of its host — so an operator that caught the
+     * host's exception would be a second place deciding the same thing, and the one place it does not
+     * cover is the fold that asks the type directly.
+     */
     private static BigDecimal decimalAt(Rational r, long scale, RoundingMode mode) {
-        try {
-            return r.asDecimal(scale(scale), DecimalMath.toJava(mode));
-        } catch (ArithmeticException _) {
-            throw new ConstraintViolation(
-                    "the decimal " + r + " rounds to at scale " + scale + " is outside the range");
-        }
+        return r.asDecimal(scale(scale), DecimalMath.toJava(mode));
     }
 
     /** A scale held to what the run time takes, as {@code DecimalMath} holds one. */

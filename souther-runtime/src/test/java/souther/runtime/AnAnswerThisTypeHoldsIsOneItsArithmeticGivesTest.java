@@ -1,9 +1,11 @@
 package souther.runtime;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -83,6 +85,50 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
         BigDecimal back = (BigDecimal) RationalMath.toFiniteDecimal(exact);
 
         assertEquals(0, written.compareTo(back), "the amount is the one that went in: " + back);
+    }
+
+    /**
+     * And where the whole number is one the host has no room for, the abort is this language's.
+     *
+     * <p>A value the host cannot hold is a value this type cannot hold, so the refusal is the type's own
+     * and reads as one. The host says it by an exception of its arithmetic, which names a
+     * {@code BigInteger} to whoever catches it and nothing about a Rational (ADR-0112) — and says it only
+     * after computing the number far enough to find it does not fit, which for a power of five this size
+     * is minutes of work for an answer that was never coming. Hence the bound on how long this may take:
+     * it is the difference between a size being asked about and a size being reached.
+     *
+     * <p>Squaring is how a value reaches exponents past the far end of a scale: this one is a compact
+     * decimal, squared. Its decimal exists and repeats nowhere, and the whole number one would be written
+     * with is larger than the host has an index for.
+     */
+    @Test
+    @Timeout(20)
+    void aWholeNumberTheHostHasNoRoomForAbortsAsThisLanguageDoes() {
+        Rational wide = Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)).times(
+                Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)));
+        assertEquals(3_147_483_648L, wide.twos(), "the value this is about");
+        assertTrue(wide.hasFiniteDecimal());
+
+        assertThrows(ConstraintViolation.class, () -> RationalMath.toFiniteDecimal(wide));
+        assertThrows(ConstraintViolation.class, () -> RationalMath.toWholeNumber(wide));
+        assertThrows(ConstraintViolation.class, () -> RationalMath.toDecimal(0, DOWN.INSTANCE, wide));
+    }
+
+    /**
+     * And the same holds of a fold, which asks this type for a sum without going by the operator.
+     *
+     * <p>The reason the translation belongs to the type and not to the operators beside it. {@code
+     * List.sum} over these reaches {@code plus} directly, so an operator that caught the host's refusal
+     * would have left this one answering with it.
+     */
+    @Test
+    @Timeout(20)
+    void aFoldOverTheseAbortsTheSameWay() {
+        Rational one = Rational.of(1);
+        Rational tiny = Rational.of(new BigDecimal(BigInteger.ONE, 1_000_000_000));
+
+        assertThrows(ConstraintViolation.class, () -> Lists.sumRational(List.of(one, tiny)),
+                "the exact sum of these has more digits than the host holds");
     }
 
     /** And the other end is where a decimal really has none: a scale counts only so far up, and no
