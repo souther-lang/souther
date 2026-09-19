@@ -147,6 +147,31 @@ class ARationalHoldsOneRepresentationOfEachValueTest {
     }
 
     /**
+     * A part past what this representation stores has no value here and aborts, as an exponent past its
+     * width does.
+     *
+     * <p>The bound is what makes the order total rather than something the order gives up on. Telling two
+     * values apart takes as many bits as they agree over, and how closely two of these can stand is set by
+     * their stored parts — so parts left to run to the platform's own end would want a bracket several times
+     * that end, and a bracket is one whole number, whose bits the platform counts in an {@code int}. Then
+     * the pair the order could not answer would be one no amount of room would answer, which is an
+     * implementation's limit wearing the platform's name. A bound on the value instead is a bound the
+     * language has a shape for, and this says out loud where it is.
+     *
+     * <p>Asserted on the numerator and on the denominator both, and asked before the value is canonical:
+     * a part this size is turned away rather than run through a gcd first.
+     */
+    @Test
+    void aPartPastWhatTheRepresentationStoresAborts() {
+        BigInteger pastIt = BigInteger.ONE.shiftLeft(Integer.MAX_VALUE / 16 + 1).subtract(BigInteger.ONE);
+
+        assertThrows(ConstraintViolation.class, () -> Rational.of(pastIt, BigInteger.ONE));
+        assertThrows(ConstraintViolation.class, () -> Rational.of(BigInteger.ONE, pastIt));
+        // and the part one bit narrower is a value, which is the control for the bound being where it says
+        assertEquals(BigInteger.ONE, Rational.of(pastIt.shiftRight(1), BigInteger.ONE).denominator());
+    }
+
+    /**
      * The one rule {@link Values} needs of this type: its own equality and its own hash are the
      * language's, which is what the arm that asks a value for itself relies on.
      */

@@ -522,6 +522,48 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
+     * A power of two against a power of five brought within a hundred and thirty bits of it by a fraction:
+     * one pair with every part of the shape in it.
+     *
+     * <p>Compact — one exponent on one side, a fraction of some forty digits on the other. Large exponents
+     * pulling opposite ways, so neither writing of the pair is a number the host holds. Closer together than
+     * the width the comparison starts at, so the cheap bracket leaves them open. And ordered, because they
+     * are not the same value. So {@code compareTo} reaches the refinement by its own route, with nothing
+     * standing in for anything.
+     *
+     * <p>The fraction is the correction, and where it came from is arithmetic this type cannot do. The two
+     * exponents put the two logarithms some sixty-odd bits apart — as close as whole numbers of their size
+     * bring them — and the fraction closes that to about a hundred and thirty-five bits, which needed
+     * {@code log2 5} to more places than any value here holds. It was computed apart from this and is
+     * checked here by what it does: the assertions below say the starting width does not separate the pair
+     * and that twice it does, which is the closeness, and the order follows from the fraction standing below
+     * the correction it approximates.
+     */
+    @Test
+    void aPowerOfTwoAndACorrectedPowerOfFiveReachTheRefinementByThemselves() {
+        Rational twos = aPowerOfTwo();
+        Rational correctedFives = new Rational(
+                new BigInteger("1393796574908163946434124475858836208137477"),
+                new BigInteger("1393796574908163946345982392040522594123779"),
+                0, 1_329_339_201_633_350_533L);
+
+        assertNull(twos.magnitudeFromBrackets(correctedFives, 128),
+                "the width the comparison starts at does not separate this pair");
+        assertEquals(Integer.valueOf(1), twos.magnitudeFromBrackets(correctedFives, 256),
+                "and twice that width does, which is how close they stand");
+        assertNull(twos.magnitudeWrittenOut(correctedFives, Long.MAX_VALUE),
+                "no writing of this pair is a number the host holds, whatever it may cost");
+        assertNull(correctedFives.magnitudeWrittenOut(twos, Long.MAX_VALUE));
+
+        assertTrue(twos.compareTo(correctedFives) > 0, "the power of two is the greater of the two");
+        assertTrue(correctedFives.compareTo(twos) < 0);
+        assertEquals(0, correctedFives.compareTo(new Rational(
+                new BigInteger("1393796574908163946434124475858836208137477"),
+                new BigInteger("1393796574908163946345982392040522594123779"),
+                0, 1_329_339_201_633_350_533L)));
+    }
+
+    /**
      * And a pair the starting width leaves open, whose powers no writing is worth, is answered by refining —
      * through the comparison's own readings and not by asking the last of them directly.
      *

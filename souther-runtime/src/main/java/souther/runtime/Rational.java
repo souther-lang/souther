@@ -143,6 +143,41 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      *  so that the count of what a writing would cost is over it too. */
     private static final int MORE_BITS_THAN_A_FIVE_TAKES = 3;
 
+    /**
+     * How many bits a stored numerator or denominator holds. A value whose parts want more of them has no
+     * representation here and aborts, as one whose exponent wants more than sixty-four bits does.
+     *
+     * <p><b>Why this type bounds its parts at all,</b> when the platform's own largest whole number is far
+     * larger. Because the order has to be answered for every pair this type holds, and how much working
+     * room that takes is set by the parts: telling two values apart takes as many bits as they agree over.
+     * Left to the platform's own end, a pair of parts near it would want a bracket of several times that
+     * end — and a bracket is one whole number, which the platform counts the bits of in a thirty-two-bit
+     * count. So the width the question needed would have been past what the instrument can be, and that is
+     * not the platform running out of room: more of it would not help, and the same pair would go
+     * unanswered on any machine. It would be this implementation's own limit wearing the platform's name.
+     *
+     * <p>A bound on the parts is the other way to close that, and it is the one the language already has a
+     * shape for: a representation may bound what it holds, and a value past the bound aborts (spec
+     * §stdlib-rational). It is a bound on the value, in one place, said out loud — as against a limit on
+     * which pairs can be ordered, which is a bound on the operation and one the order may not carry.
+     *
+     * <p><b>Why a sixteenth.</b> Two values the starting bracket leaves open are brought close either by
+     * their exponents or by their parts. By their exponents alone the closest they come is a power of two
+     * against a power of five, and whole numbers of sixty-four bits put those logarithms some sixty bits
+     * apart — which the starting width settles. So closer than that is the parts' doing, and a fraction of
+     * so many bits closes on what it is approximating to about twice that many. The width ever wanted is
+     * therefore a few times what the parts take up, and a bracket of some width forms numbers of about
+     * twice it. A sixteenth leaves every number a comparison forms inside what the platform holds with a
+     * factor of two over the estimate — and where the estimate is wrong the outcome is a shortage reported
+     * as one, never a wrong answer, a bracket holding the value it was taken for however it was reached.
+     *
+     * <p>What it costs is values no operator here builds. An {@code Int} is sixty-four bits and a
+     * {@code Decimal}'s unscaled value is a whole number the platform holds; what reaches this is a sum
+     * across distant exponents, which builds the difference between them — so a fold of values whose scales
+     * are spread over a hundred million places aborts here, where before it aborted at the platform's end.
+     */
+    private static final int STORED_BITS = Integer.MAX_VALUE / 16;
+
 
     /**
      * How many bits of a value {@link #toString} will spell out. A rational's plain spelling is as
@@ -160,6 +195,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (denominator.signum() == 0) {
             throw new IllegalArgumentException("a rational has no zero denominator: " + numerator + "/0");
         }
+        heldByTheRepresentation(numerator);
+        heldByTheRepresentation(denominator);
         if (numerator.signum() == 0) {
             denominator = BigInteger.ONE;
             twos = 0;
@@ -641,32 +678,77 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /**
      * Where {@code |this|} stands against {@code |other|} by writing both out as one fraction each, and
-     * null where one of the four whole numbers that takes is not worth forming.
+     * null where what that takes altogether is not worth forming.
      *
      * <p>Each value is written out at its own exponents first, which is the writing that does not depend on
      * which of the two was asked about. Where that is not worth it, the difference of the two exponents is
      * put on this side instead and the other side is left as it stands — two values of huge but equal
      * exponents cancel that way and are written out where their own forms would have cost too much.
+     *
+     * <p>A writing is what its numbers come to together, because they are all held at once and it is what
+     * the reading costs that is being weighed. Weighed one at a time against the same budget, a writing of
+     * four numbers each just inside it cost four times what the budget said.
      */
     @Nullable Integer magnitudeWrittenOut(Rational other, long within) {
-        BigInteger up = writtenOut(
-                numerator.abs(), BigInteger.valueOf(twos), BigInteger.valueOf(fives), within);
-        BigInteger down = writtenOut(denominator,
-                BigInteger.valueOf(twos).negate(), BigInteger.valueOf(fives).negate(), within);
-        BigInteger thereUp = writtenOut(other.numerator.abs(),
-                BigInteger.valueOf(other.twos), BigInteger.valueOf(other.fives), within);
-        BigInteger thereDown = writtenOut(other.denominator,
-                BigInteger.valueOf(other.twos).negate(), BigInteger.valueOf(other.fives).negate(), within);
-        if (up != null && down != null && thereUp != null && thereDown != null) {
-            return comparedAsFractions(up, down, thereUp, thereDown);
+        BigInteger @Nullable [] eachAtItsOwn = allWrittenOut(within,
+                new ToWriteOut(numerator.abs(), BigInteger.valueOf(twos), BigInteger.valueOf(fives)),
+                new ToWriteOut(denominator,
+                        BigInteger.valueOf(twos).negate(), BigInteger.valueOf(fives).negate()),
+                new ToWriteOut(other.numerator.abs(),
+                        BigInteger.valueOf(other.twos), BigInteger.valueOf(other.fives)),
+                new ToWriteOut(other.denominator,
+                        BigInteger.valueOf(other.twos).negate(), BigInteger.valueOf(other.fives).negate()));
+        if (eachAtItsOwn != null) {
+            return comparedAsFractions(
+                    eachAtItsOwn[0], eachAtItsOwn[1], eachAtItsOwn[2], eachAtItsOwn[3]);
         }
         BigInteger byTwos = apart(twos, other.twos);
         BigInteger byFives = apart(fives, other.fives);
-        BigInteger relativeUp = writtenOut(numerator.abs(), byTwos, byFives, within);
-        BigInteger relativeDown = writtenOut(denominator, byTwos.negate(), byFives.negate(), within);
-        return relativeUp == null || relativeDown == null ? null
-                : comparedAsFractions(
-                        relativeUp, relativeDown, other.numerator.abs(), other.denominator);
+        BigInteger @Nullable [] theDifferenceOnThisSide = allWrittenOut(within,
+                new ToWriteOut(numerator.abs(), byTwos, byFives),
+                new ToWriteOut(denominator, byTwos.negate(), byFives.negate()));
+        return theDifferenceOnThisSide == null ? null
+                : comparedAsFractions(theDifferenceOnThisSide[0], theDifferenceOnThisSide[1],
+                        other.numerator.abs(), other.denominator);
+    }
+
+    /** A whole number to be written out with powers in it: what the powers multiply, and the powers. A
+     *  negative one of them belongs to the other side of the fraction and counts for nothing here. */
+    private record ToWriteOut(BigInteger whole, BigInteger twos, BigInteger fives) {
+
+        /** How many bits writing it out takes, counted over the truth so that a writing is turned away
+         *  rather than attempted where the count is the wrong side of the budget. */
+        BigInteger bits() {
+            return BigInteger.valueOf(whole.bitLength())
+                    .add(twos.max(BigInteger.ZERO))
+                    .add(fives.max(BigInteger.ZERO)
+                            .multiply(BigInteger.valueOf(MORE_BITS_THAN_A_FIVE_TAKES)));
+        }
+
+        @Nullable BigInteger written() {
+            return writtenOut(whole, twos, fives);
+        }
+    }
+
+    /** All of them written out, or null where what they come to together is past {@code within} bits or
+     *  where the host turns one of them down after all. */
+    private static BigInteger @Nullable [] allWrittenOut(long within, ToWriteOut... these) {
+        BigInteger bits = BigInteger.ZERO;
+        for (ToWriteOut one : these) {
+            bits = bits.add(one.bits());
+        }
+        if (bits.compareTo(BigInteger.valueOf(within)) > 0) {
+            return null;
+        }
+        BigInteger[] written = new BigInteger[these.length];
+        for (int at = 0; at < these.length; at++) {
+            BigInteger one = these[at].written();
+            if (one == null) {
+                return null;
+            }
+            written[at] = one;
+        }
+        return written;
     }
 
     /** How far one exponent stands from another, held wider than an exponent is — the difference of two
@@ -676,32 +758,25 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     }
 
     /**
-     * A whole number written out with those powers in it, or null where it would take more than
-     * {@code within} bits and the reading that needs no writing is the cheaper way to the same answer.
+     * A whole number written out with those powers in it, or null where the host turns it down.
      *
-     * <p>The size is counted before the number is formed, and counted over the truth rather than under it —
-     * a factor of five taken as three bits when it is nearer two and a third. So the count turns away
-     * numbers that would have fitted the budget, and that is the side to be wrong on: a writing turned away
-     * costs nothing and the pair is answered by the refinement, while a writing attempted at hundreds of
-     * megabytes costs that whether or not it ends in a number.
+     * <p>What it would cost is counted before this is reached, by whoever is weighing the whole writing, and
+     * counted over the truth rather than under it — a factor of five taken as three bits when it is nearer
+     * two and a third. So a writing that would have fitted its budget is sometimes turned away, and that is
+     * the side to be wrong on: a writing turned away costs nothing and the pair is answered by the
+     * refinement, while a writing attempted at hundreds of megabytes costs that whether or not it ends in a
+     * number.
      *
      * <p>Which is the opposite of how this had to lean while the writing was the last word. Then a count
      * that turned away what the host would have held left the order unanswered, so the count was kept under
      * the truth and everything else was attempted and let stand or not by whoever held it — and a power of
      * five of some hundreds of millions passed that test, took minutes, and ended in nothing. The host's own
-     * refusal is still caught, the budget being a cost and not a promise about what fits.
+     * refusal is still caught here, a budget being a cost and not a promise about what fits.
      */
     private static @Nullable BigInteger writtenOut(
-            BigInteger whole, BigInteger twos, BigInteger fives, long within) {
-        BigInteger byTwos = twos.max(BigInteger.ZERO);
-        BigInteger byFives = fives.max(BigInteger.ZERO);
-        BigInteger bits = BigInteger.valueOf(whole.bitLength()).add(byTwos)
-                .add(byFives.multiply(BigInteger.valueOf(MORE_BITS_THAN_A_FIVE_TAKES)));
-        if (bits.compareTo(BigInteger.valueOf(within)) > 0) {
-            return null;
-        }
+            BigInteger whole, BigInteger twos, BigInteger fives) {
         try {
-            return builtFrom(whole, byTwos, byFives);
+            return builtFrom(whole, twos.max(BigInteger.ZERO), fives.max(BigInteger.ZERO));
         } catch (ConstraintViolation _) {
             return null;
         } catch (ArithmeticException _) {
@@ -998,6 +1073,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         }
     }
 
+    /** That a whole number is one this type stores, which {@link #STORED_BITS} says why it bounds. */
+    private static void heldByTheRepresentation(BigInteger part) {
+        if (part != null && part.bitLength() > STORED_BITS) {
+            throw new ConstraintViolation(
+                    "no Rational holds a numerator or a denominator of " + part.bitLength() + " bits");
+        }
+    }
+
     /**
      * A count of bits as the host takes one, and the run's shortage where it is past what the host counts.
      *
@@ -1230,12 +1313,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      */
     private @Nullable BigInteger roundedExactly(
             BigInteger byTwos, BigInteger byFives, java.math.RoundingMode towards) {
-        long within = bitsAWritingIsWorth(storedBits());
-        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives, within);
-        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate(), within);
-        if (up == null || down == null) {
+        BigInteger @Nullable [] written = allWrittenOut(bitsAWritingIsWorth(storedBits()),
+                new ToWriteOut(numerator.abs(), byTwos, byFives),
+                new ToWriteOut(denominator, byTwos.negate(), byFives.negate()));
+        if (written == null) {
             return null;
         }
+        BigInteger up = written[0];
+        BigInteger down = written[1];
         BigInteger[] whole = up.divideAndRemainder(down);
         if (whole[1].signum() == 0) {
             // A whole number, so there is no fraction for a policy to have an opinion about.

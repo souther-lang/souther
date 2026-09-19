@@ -14,9 +14,15 @@ package souther.runtime;
  * out of room were a refusal of the value, then a type would be ordered for some pairs and not others, and
  * what a {@code sort} over it meant — and whether the compiler admitted one at all — would depend on how
  * much room the machine that ran it happened to have. That a given run of one may not finish for want of
- * room is a different thing and is true of every operation there is. The same two values compare in a run
- * with more room, so the shortage belongs to the run and is reported as the run's, the way a list longer
- * than memory holds is (ADR-0113).
+ * room is a different thing and is true of every operation there is. So the shortage belongs to the run and
+ * is reported as the run's, the way a list longer than memory holds is (ADR-0113).
+ *
+ * <p>What ran short is the platform's, and room is not the only thing a platform is short of. A computation
+ * may want a working number larger than the platform's whole numbers go, which more memory does not answer —
+ * and that is still the platform failing to supply what the computation needed rather than anything said
+ * about the values. Where a type can keep that out of reach it should, by bounding what it stores so that
+ * what its own questions want stays inside what the platform builds, which is what {@code Rational} does;
+ * this is what is left when that is not enough.
  *
  * <p>Souther code cannot catch it, as it cannot catch the other aborts. A boundary may, and should read it
  * as the platform failing rather than as anything the request asked for.
