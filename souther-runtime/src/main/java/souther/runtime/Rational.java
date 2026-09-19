@@ -64,10 +64,12 @@ import java.math.BigInteger;
  * <p>The order is the case where that rule bites hardest, because an order always exists. So it rests on
  * neither of the two things that would refuse it: not on a precision settled before the pair arrived, two
  * fractions being able to stand closer than any such precision; and not on the powers the two values
- * stand for, the pairs whose logs sit closest together being the ones whose powers are largest. What it
- * does rest on is the room a whole number takes, because telling two values apart takes as many bits as
- * they agree over — so the pair it cannot answer is one whose stored fractions are already within a
- * factor of the largest whole number there is room for, and nothing it does makes that pair smaller.
+ * stand for, the pairs whose logs sit closest together being the ones whose powers are largest. Telling
+ * two values apart takes as many bits as they agree over, and a pair may agree over as many as its own
+ * fractions have — so a comparison may want working room in proportion to what it was handed. That is what
+ * it costs, and not a pair it declines: where the room runs out the run has failed and says so
+ * ({@link OutOfRoom}), and the same pair compares where there is more of it. Being ordered is a fact about
+ * this type, and a {@code sort} the compiler admitted does not succeed or fail by the size of a heap.
  *
  * <p><b>The host's own limits leave by this type's abort.</b> A whole number is held by a host that has
  * a largest one, and a number past it is one no value here is made of — so no method of this type
@@ -123,16 +125,6 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      */
     private static final int BRACKET_BITS = 128;
 
-    /**
-     * The widest bracket a machine holds, and where the rising stops.
-     *
-     * <p>Taking a bracket to a width puts a couple of numbers of about twice it beside one another, so the
-     * widest one is a quarter of the largest whole number the host has bits to address. Past that there is
-     * no bracket to take rather than a value to refuse, which is a limit of the room this runs in and not
-     * of what this type holds — what it takes to reach is a pair whose stored fractions run to that many
-     * bits themselves, which is to say a pair of numbers of hundreds of megabytes.
-     */
-    private static final int WIDEST_BRACKET = Integer.MAX_VALUE / 4;
 
     /**
      * How many bits of a value {@link #toString} will spell out. A rational's plain spelling is as
@@ -448,18 +440,24 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (theOtherWayAbout != null) {
             return -theOtherWayAbout;
         }
-        // Powers no machine writes down, and a pair the first bracket left undecided. Then what brings
-        // them together is the exponents rather than the fractions, and how near two powers of two and
-        // five come is bounded by how well whole numbers approximate the log — so a bracket a few
-        // doublings wider settles it, and the width is the instrument for exactly this shape.
-        for (int width = BRACKET_BITS + BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
-            Integer decided = magnitudeFromBrackets(other, width);
+        // Neither writing fits, and the first bracket left the pair undecided. So the width rises, and it
+        // rises until the machine says it cannot hold the next one — not until a number written here says
+        // to stop. Telling two values apart takes as many bits as they agree over, and a pair may agree
+        // over as many as its own fractions have; a width settled on in advance therefore leaves pairs
+        // undecided for a reason that is this code's rather than the machine's.
+        for (int width = BRACKET_BITS + BRACKET_BITS; width > 0; width += width) {
+            Integer decided;
+            try {
+                decided = magnitudeFromBrackets(other, width);
+            } catch (ConstraintViolation | ArithmeticException _) {
+                // The machine will not hold a bracket this wide, and holds no wider one either.
+                break;
+            }
             if (decided != null) {
                 return decided;
             }
         }
-        throw new ConstraintViolation(
-                "no whole number this machine holds tells " + this + " from " + other);
+        throw new OutOfRoom("this run has no room to tell " + this + " from " + other);
     }
 
     /**
@@ -974,15 +972,20 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (exactly != null) {
             return exactly;
         }
-        // Powers no machine writes down, and a value the first bracket left undecided: then it is the
-        // exponents that bring it near half of the way, and a few doublings of the width settle that.
-        for (int width = BRACKET_BITS + BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
-            BigInteger decided = roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, width);
+        // The value cannot be written out and the first bracket left it undecided, so the width rises —
+        // until the machine will not hold the next one, which is where the rising stops and why.
+        for (int width = BRACKET_BITS + BRACKET_BITS; width > 0; width += width) {
+            BigInteger decided;
+            try {
+                decided = roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, width);
+            } catch (ConstraintViolation | ArithmeticException _) {
+                break;
+            }
             if (decided != null) {
                 return decided;
             }
         }
-        throw new ConstraintViolation("no whole number this machine holds rounds " + this);
+        throw new OutOfRoom("this run has no room to round " + this);
     }
 
     /**
