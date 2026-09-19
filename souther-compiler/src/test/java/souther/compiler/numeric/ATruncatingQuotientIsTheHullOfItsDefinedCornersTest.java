@@ -11,10 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Where {@code x / y} lies, given where each of them does.
+ * Where {@code Int.truncatingDivide(x, y)} lies, given where each of them does.
  *
- * <p>{@code /} on {@code Int} truncates toward zero (spec §stdlib-int), which is a step function and
- * not an equation — so what is written here is a bound and not a form the affine domain could have
+ * <p>That operation and not the operator, which answers the exact quotient and is a form the affine
+ * domain carries itself. This one truncates toward zero (spec §stdlib-int), which is a step function
+ * and not an equation — so what is written here is a bound and not a form that domain could have
  * carried. Over a divisor range held away from zero the quotient's extremes are at the corners of
  * the box the two ranges make, and truncation toward zero is non-decreasing, so the corners put
  * through it are still the extremes.
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * the other pair it aborts on, and it is refused here rather than answered for: what a range through
  * zero leaves depends on how its values are spaced, which a range does not say.
  */
-class AQuotientIsTheHullOfItsDefinedCornersTest {
+class ATruncatingQuotientIsTheHullOfItsDefinedCornersTest {
 
     private static Bounds between(Long min, Long max) {
         return new Bounds(min == null ? null : Endpoint.inclusive(Count.of(min)),
@@ -211,7 +212,8 @@ class AQuotientIsTheHullOfItsDefinedCornersTest {
     /**
      * The one pair whose quotient no {@code Int} holds is not held out of the answer.
      *
-     * <p>{@code Long.MIN_VALUE / -1} aborts (spec §stdlib-int), so it produces no value and a range
+     * <p>{@code Int.truncatingDivide(Long.MIN_VALUE, -1)} aborts (spec §stdlib-int), so it produces
+     * no value and a range
      * taking in the number the arithmetic gives there still covers every value the operation
      * produced. Holding it out would be a definedness analysis inside an interval transfer, and the
      * two would then have to be told apart in an answer that has room for one.
