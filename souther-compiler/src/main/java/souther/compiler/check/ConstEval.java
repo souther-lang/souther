@@ -77,12 +77,23 @@ public final class ConstEval {
         };
     }
 
+    /**
+     * The negation of a folded number, over every number a fold reaches.
+     *
+     * <p>The exact one among them for the reason the binary arms admit it: negation answers the type
+     * it is given, so a value this reads and cannot negate would be a constant that stops being one
+     * for the way it was bracketed — {@code -1 / 2} folding where {@code -(1 / 2)} does not, of the
+     * same number.
+     */
     private static Optional<Object> negate(Object o) {
         if (o instanceof Long x) {
             return Optional.of(-x);
         }
         if (o instanceof BigDecimal d) {
             return Optional.of(d.negate());
+        }
+        if (o instanceof ExactRatio r) {
+            return Optional.of(r.negated());
         }
         return Optional.empty();
     }

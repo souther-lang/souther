@@ -46,6 +46,28 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
                         POS, null));
     }
 
+    /**
+     * The same number written two ways: the minus outside the quotient, and inside it on the
+     * dividend.
+     *
+     * <p>Asked because the second folds through the whole numbers and the first through the ratio, so
+     * a fold that read one and not the other would make a constant of a number for the way it was
+     * bracketed. What reads a form of these later is the affine walk, and it reads a name given
+     * either.
+     */
+    @Test
+    void theNegationOfAQuotientFoldsWhereverTheMinusWasWritten() {
+        Optional<Object> outside = ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(
+                new Hir.Neg(new Hir.Binary(BinOp.DIV, new Hir.IntLit(1, POS, null),
+                        new Hir.IntLit(2, POS, null),
+                        SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                                SourceConstruct.BINARY),
+                        POS, null), POS, null));
+
+        assertEquals(ratio(-1, 2), outside);
+        assertEquals(outside, whole(-1, 2), "one number, whichever side the minus was written on");
+    }
+
     private static Optional<Object> whole(long dividend, long divisor) {
         return fold(BinOp.DIV, new Hir.IntLit(dividend, POS, null),
                 new Hir.IntLit(divisor, POS, null));
