@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
@@ -2165,9 +2166,8 @@ public final class Generator {
 
         /** The demand these make over the positions, which is what the walk is asked for. */
         Interpretation reading() {
-            Map<Integer, Integer> pins = new LinkedHashMap<>();
-            at.forEach(each -> pins.put(each.axis(), each.cls()));
-            return new Interpretation(pins);
+            return new Interpretation(Lookup.built(put -> at.forEach(each ->
+                    put.put(each.axis(), each.cls()))));
         }
 
         /** What a report writes this row as being about. */
@@ -2495,7 +2495,7 @@ public final class Generator {
     private static Traversal nearestFirst(List<Axis> axes, Interpretation reading,
                                           List<ResolvedOrigin> origins, Admits admits,
                                           Taking<Candidate> taking) {
-        int[] about = about(reading);
+        int[] about = about(axes, reading);
         Set<String> asked = reading.heads(axes);
         // The origins that state most of what the demand is about, whole and at every distance,
         // before any that state less of it.
@@ -2534,7 +2534,7 @@ public final class Generator {
     private static Traversal composing(List<Axis> axes, Interpretation reading,
                                        List<ResolvedOrigin> origins, Admits admits,
                                        Taking<Candidate> taking) {
-        int[] about = about(reading);
+        int[] about = about(axes, reading);
         for (ResolvedOrigin origin : origins) {
             if (!origin.composes()) {
                 continue;
@@ -4629,7 +4629,7 @@ public final class Generator {
         @Override
         public Taken take(Interpretation reading) {
             offered = true;
-            int[] about = about(reading);
+            int[] about = about(axes.axes(), reading);
             // Whether one value can hold what this reading asks, which is the model's answer and not
             // the combination's. Asked of the classes it pins alone: what they require is required
             // whichever value the row is written against, so this does not change with the origin.
@@ -4800,9 +4800,19 @@ public final class Generator {
         }
     }
 
-    /** The positions one reading is about, in the axes' own order. */
-    private static int[] about(Interpretation reading) {
-        return reading.at().stream().mapToInt(Integer::intValue).sorted().toArray();
+    /** The positions one reading is about, in the axes' own order. Asked of the axes rather than
+     *  walked off {@code reading}: what {@link Interpretation#pins} answers is what is bound to a
+     *  position, not which positions there are, and asking each in turn is what puts this in the
+     *  axes' order without a sort standing in for one. */
+    private static int[] about(List<Axis> axes, Interpretation reading) {
+        int[] found = new int[axes.size()];
+        int n = 0;
+        for (int i = 0; i < axes.size(); i++) {
+            if (reading.pins().containsKey(i)) {
+                found[n++] = i;
+            }
+        }
+        return java.util.Arrays.copyOf(found, n);
     }
 
 
@@ -5782,8 +5792,10 @@ public final class Generator {
         if (from != null) {
             System.arraycopy(from, 0, wanted, 0, Math.min(from.length, wanted.length));
         }
-        for (Map.Entry<Integer, Integer> pin : reading.pins().entrySet()) {
-            wanted[pin.getKey()] = pin.getValue();
+        for (int i = 0; i < axes.size(); i++) {
+            if (reading.pins().containsKey(i)) {
+                wanted[i] = reading.pins().get(i);
+            }
         }
         return wanted;
     }

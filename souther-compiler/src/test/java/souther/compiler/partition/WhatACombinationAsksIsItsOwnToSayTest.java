@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.coverage.Numberings;
 
 import org.junit.jupiter.api.Test;
@@ -8,7 +9,6 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,7 +92,9 @@ class WhatACombinationAsksIsItsOwnToSayTest {
         CellSelection selection =
                 over(leaving(0, 1, 2, 3), leaving(0, 2), leaving(1));
 
-        assertEquals(List.of(Map.of(1, 0, 2, 1), Map.of(1, 2, 2, 1)),
+        assertEquals(
+                List.of(Lookup.built(put -> { put.put(1, 0); put.put(2, 1); }),
+                        Lookup.built(put -> { put.put(1, 2); put.put(2, 1); })),
                 everythingAsked(selection).stream().map(Interpretation::pins).toList(),
                 "the free position is no part of what the combination asks");
     }
@@ -112,7 +114,8 @@ class WhatACombinationAsksIsItsOwnToSayTest {
         assertEquals(2, everythingAsked(selection).size(),
                 "two things asked, whatever the free position may hold");
         assertTrue(everythingAsked(selection).stream()
-                        .allMatch(reading -> reading.at().equals(java.util.Set.of(1, 2))),
+                        .allMatch(reading -> reading.pins().size() == 2
+                                && reading.pins().containsKey(1) && reading.pins().containsKey(2)),
                 "and both of them are about the same two positions");
     }
 

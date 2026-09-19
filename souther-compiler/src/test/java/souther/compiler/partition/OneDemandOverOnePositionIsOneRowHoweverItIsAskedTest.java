@@ -115,7 +115,11 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 return Taking.Taken.AND_MORE;
             });
             if (readings.size() == 1 && readings.get(0).pins().size() == 1) {
-                out.addAll(readings.get(0).pins().entrySet());
+                for (int i = 0; i < axes.size(); i++) {
+                    if (readings.get(0).pins().containsKey(i)) {
+                        out.add(Map.entry(i, readings.get(0).pins().get(i)));
+                    }
+                }
             }
         }
         return out;
