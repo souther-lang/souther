@@ -110,6 +110,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 denominator = denominator.shiftRight(inDenominator);
                 twos = added(twos, -inDenominator);
             }
+            // One five at a time, which costs a division per trailing zero of the number it is taking
+            // them off. That is bounded by the digits the number already has, so nothing here is
+            // amplified by the exponents this type carries — a power of ten held as a scale never
+            // reaches this loop at all.
             while (true) {
                 BigInteger[] divided = numerator.divideAndRemainder(FIVE);
                 if (divided[1].signum() != 0) {
@@ -400,13 +404,37 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * This as a decimal of {@code scale} places, rounded by {@code towards}.
      *
-     * <p>Where a caller must have a decimal whatever the value is. The exponents are built here
-     * because a decimal of a scale is what is being asked for, and what it costs is the size of that
-     * decimal — which is the rule the rest of this type keeps and not an exception to it.
+     * <p>Where a caller must have a decimal whatever the value is.
+     *
+     * <p><b>The power of ten stays a scale.</b> What the two exponents have in common is a power of
+     * ten, and a decimal already holds one of those as its scale — so it is moved there rather than
+     * built. Multiplied out instead, a compact decimal that entered exact arithmetic and came back out
+     * of it paid for every digit of its scale on the way, which is the cost this representation exists
+     * to keep from being paid.
+     *
+     * <p>What is left is the part ten is not made of, and it is built: the fraction that remains is
+     * the size of the answer at the scale asked for.
+     *
+     * <p>A scale far from the value's own is where this stops. Rounding {@code 1E-1000000000} to a
+     * whole number is a rescaling {@code BigDecimal} refuses, so the operation aborts — which is what
+     * {@code Decimal.toInt} does with the same decimal, for the same reason and at the same place.
      */
     public BigDecimal asDecimal(int scale, java.math.RoundingMode towards) {
-        return new BigDecimal(numeratorWithItsPowers())
-                .divide(new BigDecimal(denominatorWithItsPowers()), scale, towards);
+        long tens = Math.min(twos, fives);
+        BigInteger up = numerator.multiply(raised(distance(twos, tens), distance(fives, tens)));
+        return new BigDecimal(up, asAScale(tens))
+                .divide(new BigDecimal(denominator), scale, towards);
+    }
+
+    /** A power of ten as the scale that holds it, which is its negation. A scale is thirty-two bits,
+     *  so a power past that is one no decimal holds — and it aborts rather than being built into the
+     *  digits, which is the one thing this is here to avoid. */
+    private static int asAScale(long tens) {
+        long scale = negated(tens);
+        if (scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("no Decimal holds a scale of " + scale);
+        }
+        return (int) scale;
     }
 
     /** The numerator with the powers that multiply it built in. */

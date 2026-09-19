@@ -80,6 +80,21 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertEquals(-4_000_000_000L, squared.times(squared).twos());
     }
 
+    /**
+     * And narrowing it back to a decimal keeps the power of ten as a scale.
+     *
+     * <p>The way out is part of the same promise as the way in. Multiplied into the digits instead, a
+     * compact decimal that entered exact arithmetic paid for every digit of its scale on the way back
+     * out — a billion of them here, which is why this assertion is reached only by an implementation
+     * that moved the power to the scale.
+     */
+    @Test
+    void narrowingBackToADecimalMovesThePowerToTheScale() {
+        Rational taken = Rational.of(COMPACT);
+
+        assertEquals(COMPACT, RationalMath.toDecimal(1_000_000_000, HALF_UP.INSTANCE, taken));
+    }
+
     /** A millionth of a millionth against one: the brackets on the two logs are nowhere near each
      *  other, so the answer comes from the exponents. */
     @Test

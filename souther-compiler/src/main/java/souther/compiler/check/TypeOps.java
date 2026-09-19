@@ -108,8 +108,17 @@ public final class TypeOps {
             // and `hasExternalForm` would not hold.
             case Type.Union u -> switch (required) {
                 case EQUALITY -> true;
-                case EXTERNAL_FORM -> u.members().stream()
-                        .allMatch(m -> memberAnswers(m, required, symbols));
+                // Walked rather than streamed, as the tuple arm below is: this is asked of every field
+                // and every boundary position of every declaration, so the walk is the shape the rest
+                // of this table is in.
+                case EXTERNAL_FORM -> {
+                    for (TypeSymbol member : u.members()) {
+                        if (!memberAnswers(member, required, symbols)) {
+                            yield false;
+                        }
+                    }
+                    yield true;
+                }
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
@@ -1794,6 +1803,13 @@ public final class TypeOps {
      * than repeating it, and stops where a newtype's {@code value} is not declared.
      */
     public static NewtypeSpine newtypeSpine(Type t, NewtypeInners inners) {
+        // A type that is no name wears none, which is the answer most callers get: this walk is under
+        // `base`, and what asks for a base asks it of a primitive far more often than of a newtype.
+        // Reached through the loop below, those answers cost a list and a set to say that nothing was
+        // taken off.
+        if (!(t instanceof Type.Ref)) {
+            return new NewtypeSpine(List.of(), t);
+        }
         List<Layer> layers = new ArrayList<>();
         Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
