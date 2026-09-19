@@ -82,7 +82,7 @@ final class PathCompletion {
             return Completion.MAY;
         }
         // The number is one no run computes. Whether the operation answers all the same is what its
-        // other case decides: `Int.divide` comes back as `DivisionByZero` where the divisor is zero,
+        // other case decides: `Int.truncatingDivide` comes back as `DivisionByZero` where the divisor is zero,
         // and a run that takes that arm has carried on. So this is the operation answering nothing
         // only where nothing here can come back as anything else.
         Core otherwise = TheOtherCase.conditionAt(called);

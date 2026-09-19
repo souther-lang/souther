@@ -23,8 +23,8 @@ import souther.compiler.types.BinOp;
  * {@link Derivation} does — the two are apart because they answer different questions. This says
  * what was computed. {@link Derivation} says what of that the numeric fragment can prove in, which
  * is less: {@code Decimal.divide} has a meaning here and a recipe only where its scale is a number
- * the reading holds, and the value case of {@code Int.divide} had a meaning here before anything
- * derived a bound from it.
+ * the reading holds, and the value case of {@code Int.truncatingDivide} has a meaning here whether or
+ * not anything derives a bound from it.
  */
 sealed interface NumericMeaning {
 

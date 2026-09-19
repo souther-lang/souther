@@ -234,7 +234,7 @@ final class PathEngine {
      * case.
      *
      * <p>About which case came back and not about whether a number was answered. An operation may
-     * answer nothing at all — {@code Int.divide} aborts on the one pair whose quotient no {@code
+     * answer nothing at all — {@code Int.truncatingDivide} aborts on the one pair whose quotient no {@code
      * Int} holds (spec §stdlib-int) — and an abort comes back as no case, so no arm is reached and
      * there is nothing here for it to say.
      *

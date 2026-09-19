@@ -1323,7 +1323,7 @@ final class Terms {
      * would be a third.
      *
      * <p>Read through the names the call was given, as everything else about a scrutinee is: {@code
-     * let q = Int.divide(a, b)} and a {@code match} written straight over the call are the same
+     * let q = Int.truncatingDivide(a, b)} and a {@code match} written straight over the call are the same
      * program, and a binding between the two is a name for the call rather than a step away from it.
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
@@ -1890,18 +1890,14 @@ final class Terms {
     /**
      * What the value {@code meaning} computes is about, where a case of {@code scrutinee} opened it.
      *
-     * <p>Named by the arithmetic where the language writes that arithmetic another way, and by the
-     * case otherwise. An operation whose value case carries what an operator computes is the first:
-     * where the operation answers a sum as one case of a union, that case carries the very value
-     * {@code a + b} is. A truncating quotient, a remainder and a quotient rounded to a scale are the
-     * other: no operator writes them, so what they are is the value that case opens out of that
-     * call, and naming them by the call itself would file the union and the number it carries under
-     * one key.
-     *
-     * <p>The truncating quotient was once the first of those, {@code a / b} being a spelling of the
-     * very value {@code Int.divide(a, b)} carries. The operator's quotient is exact now, and exact
-     * and truncated are two numbers (ADR-0116) — so filing the function's value under the operator's
-     * term would say of one of them what holds of the other.
+     * <p>Named by the arithmetic it is, or by the case it arrived at. An operation whose value case
+     * carries what an operator computes is the first: where the operation answers a sum as one case
+     * of a union, that case carries the very value {@code a + b} is. So is the truncating quotient,
+     * which is named by the divide it is — the {@code /} operator answers an exact quotient, and an
+     * exact quotient is on no carrier and makes no term at all (ADR-0116), so that identity is this
+     * quotient's alone. A remainder and a quotient rounded to a scale are the other: no arithmetic
+     * names them, so what they are is the value that case opens out of that call, and naming them by
+     * the call itself would file the union and the number it carries under one key.
      */
     FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
                                 Denotations at) {
