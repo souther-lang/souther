@@ -487,23 +487,22 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * The scale a {@link BigDecimal} of this value is written at, or {@link #NO_SCALE} where none
-     * writes it.
+     * Which scale a {@link BigDecimal} of this value is written at, this value being one some scale
+     * writes.
      *
-     * <p>More than one scale can: any of them leaving neither exponent above what a power here
-     * builds. The one taken is the plain one — nothing below the line, and a value standing above it
-     * on both written out as the whole number it is — because that is the shape a reader of a count
-     * expects and the one the rest of this compiler was written against.
+     * <p>More than one does: every scale from {@link #leastScale} up. The one taken is the plain
+     * one — nothing below the line, and a value standing above it on both written out as the whole
+     * number it is — because that is the shape a reader of a count expects and the one the rest of
+     * this compiler was written against.
      *
      * <p>Where those digits are past what a whole number here holds, the plain shape is not on offer
      * and the scale goes below nought instead, which leaves the unscaled value only what the two
      * exponents differ by. A decimal written at the least scale one has is the case: its value is a
-     * whole number of some six hundred million digits, and the decimal it came from held it in one.
+     * whole number of hundreds of millions of digits, and the decimal it came from held it in one.
      *
-     * <p>One answer, read by the question and by the writing alike. Asked separately they went apart
-     * at exactly this value: the scale a decimal has, and the digits a scale leaves to be built, are
-     * two conditions, and a predicate that weighed one of them said yes where the writing then could
-     * not.
+     * <p>Which of the two is a question about room and not about what a decimal is, so it decides
+     * how the value is written and never whether it is one. A scale past the last one a decimal has
+     * is what settles that, and {@link #fitsWrittenDecimal} is where it is settled.
      */
     private long scaleOfTheDecimal() {
         long least = leastScale();
