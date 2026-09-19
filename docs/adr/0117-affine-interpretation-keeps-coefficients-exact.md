@@ -1,6 +1,6 @@
 # ADR-0117: Affine interpretation keeps coefficients exact
 
-Status: Proposed. Specialises ADR-0111. Follows ADR-0116.
+Status: Accepted. Specialises ADR-0111. Follows ADR-0116.
 
 ## Context
 
