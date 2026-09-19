@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -96,13 +97,15 @@ final class WhoHoldsWhatAReaderHandedOver {
      * <p>What makes a parameter somewhere a collection can be put. A method taking none of these
      * cannot have been handed one, whoever called it — so the walk stops there rather than running
      * on through every method the caller reaches.
+     *
+     * <p>Said as the few things a walk is, and asked of a type by whether it is one of them rather
+     * than by whether it is spelled as one ({@link #isAKindOf}). A parameter written as the
+     * collection it will be handed is as much somewhere a walk arrives as one written as the
+     * interface, and a rule that read the spelling would follow the second and not the first.
      */
     private static final Set<String> A_WALK_ARRIVES_IN = Set.of(
-            "java/util/Collection", "java/util/List", "java/util/Set", "java/util/Map",
-            "java/util/SequencedCollection", "java/util/SequencedSet", "java/util/SequencedMap",
-            "java/util/SortedSet", "java/util/SortedMap", "java/util/NavigableSet",
-            "java/lang/Iterable", "java/util/Iterator", "java/util/stream/Stream",
-            "java/util/stream/BaseStream");
+            "java/util/Collection", "java/util/Map", "java/lang/Iterable",
+            "java/util/Iterator", "java/util/stream/BaseStream");
 
     /** Each method by what it is called and what it takes, which is what tells two of one name
      *  apart. */
@@ -117,13 +120,24 @@ final class WhoHoldsWhatAReaderHandedOver {
      *  for. */
     private final Map<String, Set<String>> standingInFor = new HashMap<>();
 
+    /** Each class here against every name it is: itself, what it extends, what it implements. The
+     *  other way round from {@link #standingInFor}, and what says whether a type is a kind of
+     *  something. */
+    private final Map<String, Set<String>> knownAs = new HashMap<>();
+
+    /** What each name is as a loaded class, or empty where nothing here can load it. Remembered
+     *  because the question is asked of the same few names at every method. */
+    private final Map<String, Optional<Class<?>>> asLoaded = new HashMap<>();
+
     /** Every method compiled in {@code where}, with what each of them calls. */
     WhoHoldsWhatAReaderHandedOver(CompiledOutputs where) {
         List<ClassModel> read = where.all();
         for (ClassModel each : read) {
             String owner = each.thisClass().name().stringValue();
-            for (String named : everythingItIs(each, read)) {
-                standingInFor.computeIfAbsent(named, _ -> new HashSet<>()).add(owner);
+            Set<String> named = everythingItIs(each, read);
+            knownAs.put(owner, named);
+            for (String one : named) {
+                standingInFor.computeIfAbsent(one, _ -> new HashSet<>()).add(owner);
             }
         }
         // Every method first and what each of them calls afterwards. A call is followed to the
@@ -206,15 +220,62 @@ final class WhoHoldsWhatAReaderHandedOver {
     }
 
     /** Whether any parameter of this method is somewhere a walk of something can be put. */
-    private static boolean hasSomewhereToPutAWalk(MethodModel method) {
+    private boolean hasSomewhereToPutAWalk(MethodModel method) {
         for (var parameter : method.methodTypeSymbol().parameterList()) {
-            String named = parameter.descriptorString();
-            if (named.startsWith("L") && named.endsWith(";")
-                    && A_WALK_ARRIVES_IN.contains(named.substring(1, named.length() - 1))) {
+            if (isOneOf(parameter.descriptorString(), A_WALK_ARRIVES_IN)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Whether the type this descriptor names is a kind of any of {@code these}. */
+    private boolean isOneOf(String descriptor, Set<String> these) {
+        if (!descriptor.startsWith("L") || !descriptor.endsWith(";")) {
+            return false;
+        }
+        String named = descriptor.substring(1, descriptor.length() - 1);
+        return these.stream().anyMatch(one -> isAKindOf(named, one));
+    }
+
+    /**
+     * Whether {@code type} is a kind of {@code wanted}.
+     *
+     * <p><b>Asked of what a type is and not of what it is called.</b> A method handing back an
+     * {@code ArrayList} hands back a list; one handing back a class written here that implements a
+     * list does too. A rule written over the names of the interfaces would follow the method that
+     * says {@code List} and pass over the one that says what kind of list — which is the same hole
+     * as naming the ways a list gets built, one level up.
+     *
+     * <p>Answered from what was compiled here first, because that is the hierarchy this already
+     * holds, and from the class itself where it can be loaded — which is how a type of the
+     * platform's, named by nothing compiled here, is reached.
+     */
+    private boolean isAKindOf(String type, String wanted) {
+        if (type.equals(wanted)) {
+            return true;
+        }
+        Set<String> named = knownAs.get(type);
+        if (named != null && named.contains(wanted)) {
+            return true;
+        }
+        Optional<Class<?>> one = asLoaded(type);
+        Optional<Class<?>> other = asLoaded(wanted);
+        return one.isPresent() && other.isPresent() && other.get().isAssignableFrom(one.get());
+    }
+
+    /** The class this name is, where anything here can load it. */
+    private Optional<Class<?>> asLoaded(String type) {
+        return asLoaded.computeIfAbsent(type, named -> {
+            try {
+                return Optional.of(Class.forName(named.replace('/', '.'), false,
+                        WhoHoldsWhatAReaderHandedOver.class.getClassLoader()));
+            } catch (ClassNotFoundException | LinkageError unreachable) {
+                // Compiled somewhere this test does not have on its path. What such a type is, is
+                // whatever the hierarchy above said it was.
+                return Optional.empty();
+            }
+        });
     }
 
     /** What this method calls: every method compiled here that could answer each of its call
@@ -327,16 +388,23 @@ final class WhoHoldsWhatAReaderHandedOver {
      * the order in the answer — what a reader of it then does is that reader's to answer for.
      */
     private static final Set<String> AN_ANSWER_WITH_AN_ORDER_IN_IT = Set.of(
-            "Ljava/util/List;", "Ljava/util/SequencedCollection;", "Ljava/util/Deque;",
-            "Ljava/util/Queue;", "Ljava/util/Iterator;", "Ljava/util/stream/Stream;",
-            "Ljava/lang/String;", "Ljava/lang/CharSequence;", "Ljava/lang/StringBuilder;",
-            "Ljava/util/StringJoiner;");
+            "java/util/Collection", "java/util/Iterator", "java/util/stream/BaseStream",
+            "java/lang/CharSequence", "java/util/StringJoiner");
 
-    /** Whether what this method hands back is something two of which are one only where they are in
-     *  one order — a sequence, a text, or an array of either. */
-    private static boolean theAnswerHasAnOrderInIt(MethodModel method) {
+    /**
+     * Whether what this method hands back may have an order in it — a walk of anything, a text, or
+     * an array of either.
+     *
+     * <p><b>Every collection and not the sequences alone.</b> What a method says it hands back is
+     * not what it hands back: a method written to give a {@code Collection} gives whatever it
+     * built, and a list built inside it is a list to everyone who receives it. So a walk handed
+     * back at all is read, and the ones that really are sets — two of which are one whatever order
+     * either was filled in — say so where the rule is written rather than being passed over here on
+     * the strength of a declared type.
+     */
+    private boolean theAnswerMayHaveAnOrderInIt(MethodModel method) {
         String gives = method.methodTypeSymbol().returnType().descriptorString();
-        return gives.startsWith("[") || AN_ANSWER_WITH_AN_ORDER_IN_IT.contains(gives);
+        return gives.startsWith("[") || isOneOf(gives, AN_ANSWER_WITH_AN_ORDER_IN_IT);
     }
 
     /**
@@ -347,15 +415,15 @@ final class WhoHoldsWhatAReaderHandedOver {
      * is the defect, or does it to something else while holding a walk, which is a method doing two
      * things and is worth being told about either way.
      */
-    static boolean readsAWalkForWhereThingsAre(MethodModel method) {
-        if (theAnswerHasAnOrderInIt(method)) {
+    boolean readsAWalkForWhereThingsAre(MethodModel method) {
+        if (theAnswerMayHaveAnOrderInIt(method)) {
             return true;
         }
         return takesSomethingByWhereItIs(method);
     }
 
     /** The reads that are one whatever the method goes on to hand back. */
-    private static boolean takesSomethingByWhereItIs(MethodModel method) {
+    private boolean takesSomethingByWhereItIs(MethodModel method) {
         List<InvokeInstruction> made = method.code().stream()
                 .flatMap(code -> code.elementStream())
                 .filter(InvokeInstruction.class::isInstance)
@@ -377,18 +445,18 @@ final class WhoHoldsWhatAReaderHandedOver {
      * an answer that has the order in it; a list of the same things is two lists where the walk went
      * two ways, and so is a text built a piece at a time.
      */
-    private static boolean isGatheringIntoASequence(InvokeInstruction call) {
+    private boolean isGatheringIntoASequence(InvokeInstruction call) {
         String owner = call.owner().asInternalName();
-        return (owner.equals("java/util/ArrayList") && call.name().stringValue().equals("<init>"))
-                || (owner.equals("java/lang/StringBuilder")
+        return (isAKindOf(owner, "java/util/List") && call.name().stringValue().equals("<init>"))
+                || (isAKindOf(owner, "java/lang/Appendable")
                         && call.name().stringValue().equals("append"));
     }
 
-    /** {@code get} of a list or of an iterator's place, which a map is asked the same word. */
-    private static boolean isReadingAListByIndex(InvokeInstruction call) {
+    /** {@code get} of a list or of an iterator's place, which a map is asked the same word. Asked
+     *  of what the thing is rather than of what it is spelled as, for the reason above. */
+    private boolean isReadingAListByIndex(InvokeInstruction call) {
         return call.name().stringValue().equals("get")
-                && (call.owner().asInternalName().equals("java/util/List")
-                        || call.owner().asInternalName().equals("java/util/ArrayList"));
+                && isAKindOf(call.owner().asInternalName(), "java/util/List");
     }
 
     /** A walk asked for its first and nothing else, which is the same read written the long way:

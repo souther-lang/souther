@@ -66,42 +66,61 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
      * is. What must not happen is a name added here without that reading — which is why each of
      * them says what was found rather than that it is allowed.
      */
-    private static final Map<String, String> READ_AND_SETTLED = Map.of(
-            "souther/compiler/check/ProofOfEmptiness#declaredIn"
-                    + "(Ljava/util/Set;Ljava/util/SequencedMap;)Ljava/util/List;",
-            "the positions are gathered into a set that holds no order, and the sequence handed"
-                    + " back is walked out of the positions the value declares, in theirs",
-            "souther/compiler/check/ProofOfEmptiness#declared"
-                    + "(Lsouther/compiler/values/Sameness$Block;Ljava/util/Map;)Ljava/util/List;",
-            "what comes back is the ordinals the value gives the positions, sorted — so the walk"
-                    + " decides which numbers are in it and nothing about their order",
-            "souther/compiler/values/Reached#at"
-                    + "(Lsouther/compiler/values/Sameness$Block;)Lsouther/compiler/values/"
-                    + "AdmittedPlan;",
-            "the sequence is handed straight to a meet over the plans in it, which comes to the"
-                    + " same plan whichever order they are met in",
-            "souther/compiler/values/Refinement#of"
-                    + "(Lsouther/compiler/values/Sameness;Lsouther/compiler/values/Sameness;)"
-                    + "Lsouther/compiler/values/Refinement;",
-            "the positions gathered are what a refusal names, and it names them in one order"
-                    + " (InOneOrder) rather than in the order the walk reached them",
-            "souther/compiler/values/AdmittedPlan#held"
-                    + "(Ljava/util/Set;Ljava/lang/String;)Ljava/util/Set;",
-            "the parts are put in the order a plan itself decides (PlanOrder) before anything is"
-                    + " built from them, so what a walk handed in cannot reach the answer",
-            "souther/compiler/values/AdmittedPlan#flattened(Ljava/util/List;Z)Ljava/util/List;",
-            "what it hands back is poured into a set by both its callers and then put in the"
-                    + " plan's own order, so the sequence it keeps is one nothing reads",
-            "souther/compiler/values/Standing#across(Ljava/util/Set;)Ljava/util/List;",
-            "the positions are asked for membership and nothing else; what comes back is every"
-                    + " reason once in the order the rules were written, which the entries carry",
-            "souther/compiler/values/Standing#<init>(Ljava/util/List;Ljava/util/Set;)V",
-            "the entries are the rules in the order they were written and the positions are a set"
-                    + " asked for membership, so neither is read for where anything came",
-            "souther/compiler/values/AdmissibleValues#unreadAffecting"
-                    + "(Ljava/lang/Object;)Ljava/util/List;",
-            "the positions are handed on to be asked for membership, and what comes back is every"
-                    + " reason once in the order the parts of the clause were met");
+    private static final Map<String, String> READ_AND_SETTLED = Map.ofEntries(
+            Map.entry("souther/compiler/check/ProofOfEmptiness#declaredIn"
+                            + "(Ljava/util/Set;Ljava/util/SequencedMap;)Ljava/util/List;",
+                    "the positions are gathered into a set that holds no order, and the sequence"
+                            + " handed back is walked out of the positions the value declares"),
+            Map.entry("souther/compiler/check/ProofOfEmptiness#declared"
+                            + "(Lsouther/compiler/values/Sameness$Block;Ljava/util/Map;)"
+                            + "Ljava/util/List;",
+                    "what comes back is the ordinals the value gives the positions, sorted — so the"
+                            + " walk decides which numbers are in it and nothing about their"
+                            + " order"),
+            Map.entry("souther/compiler/values/Reached#at"
+                            + "(Lsouther/compiler/values/Sameness$Block;)"
+                            + "Lsouther/compiler/values/AdmittedPlan;",
+                    "the sequence is handed straight to a meet over the plans in it, which comes to"
+                            + " the same plan whichever order they are met in"),
+            Map.entry("souther/compiler/values/Refinement#of"
+                            + "(Lsouther/compiler/values/Sameness;Lsouther/compiler/values/"
+                            + "Sameness;)Lsouther/compiler/values/Refinement;",
+                    "the positions gathered are what a refusal names, and it names them in one"
+                            + " order (InOneOrder) rather than in the order the walk reached them"),
+            Map.entry("souther/compiler/values/AdmittedPlan#held"
+                            + "(Ljava/util/Set;Ljava/lang/String;)Ljava/util/Set;",
+                    "the parts are put in the order a plan itself decides (PlanOrder) before"
+                            + " anything is built from them, so what a walk handed in cannot reach"
+                            + " the answer"),
+            Map.entry("souther/compiler/values/AdmittedPlan#flattened"
+                            + "(Ljava/util/List;Z)Ljava/util/List;",
+                    "what it hands back is poured into a set by both its callers and then put in"
+                            + " the plan's own order, so the sequence it keeps is one nothing"
+                            + " reads"),
+            Map.entry("souther/compiler/values/Standing#across(Ljava/util/Set;)Ljava/util/List;",
+                    "the positions are asked for membership and nothing else; what comes back is"
+                            + " every reason once in the order the rules were written, which the"
+                            + " entries carry"),
+            Map.entry("souther/compiler/values/Standing#<init>(Ljava/util/List;Ljava/util/Set;)V",
+                    "the entries are the rules in the order they were written and the positions are"
+                            + " a set asked for membership, so neither is read for where anything"
+                            + " came"),
+            Map.entry("souther/compiler/values/AdmissibleValues#unreadAffecting"
+                            + "(Ljava/lang/Object;)Ljava/util/List;",
+                    "the positions are handed on to be asked for membership, and what comes back is"
+                            + " every reason once in the order the parts of the clause were met"),
+            // The two below hand a walk back and are read for that reason, and what they hand back
+            // is a set: two of them are one set wherever they hold the same things, so the order
+            // either was filled in is not in the answer.
+            Map.entry("souther/compiler/values/Sameness#holding"
+                            + "(Lsouther/compiler/values/Sameness$Block;)Ljava/util/Set;",
+                    "what comes back is the blocks holding those positions, as a set — one set"
+                            + " however the positions were walked to reach them"),
+            Map.entry("souther/compiler/values/Apartness#partsOf"
+                            + "(Lsouther/compiler/values/Sameness$Block;"
+                            + "Lsouther/compiler/values/Sameness;)Ljava/util/Set;",
+                    "what comes back is the parts that block is made of, as a set — one set however"
+                            + " the positions were walked to reach them"));
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
@@ -150,20 +169,29 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
     }
 
     /**
-     * And what a reader is allowed to do is not what this looks for.
+     * And a reading that comes to an answer with no walk in it is not what this looks for.
      *
      * <p>The negative control. A rule that named every reader of a block would be green only while
-     * nobody read one, and the ones written here are what every reader left does: what a block
-     * holds walked into a set, asked of every position at once, and handed over whole.
+     * nobody read one, and the ones written here are what a reader may do without anybody having
+     * to read the body: ask whether a position is among them, and ask how many there are.
+     *
+     * <p><b>Handing a walk back is not one of those, however commutative the walk was.</b> What a
+     * method says it hands back is not what it hands back — a method giving a {@code Collection}
+     * gives whatever it built — so a reader that hands one over is read and settled above rather
+     * than passed over here on the strength of a declared type. {@code everyOneOfThem} beside them
+     * is such a reader, and it is where the rule can see it.
      */
     @Test
-    void andTheWaysAReaderMayWalkABlockAreNotFound() {
+    void andAReadingThatKeepsNoWalkInItsAnswerIsNotFound() {
         List<String> found = whoReadsOneByWhereItIs(AND_WHAT_IS_COMPILED_BESIDE_IT);
         String here = ABlockReadCommutatively.class.getName().replace('.', '/');
 
-        assertEquals(List.of(), found.stream().filter(each -> each.startsWith(here)).toList(),
-                "a commutative reading of a block was named as taking a position by where it is,"
-                        + " so this rule would refuse the readers it is written to allow");
+        assertEquals(List.of(),
+                found.stream().filter(each -> each.startsWith(here + "#anyOfThemIs(")
+                        || each.startsWith(here + "#howManyThereAre(")).toList(),
+                "a reading of a block that comes to an answer holding no walk was named as reading"
+                        + " one for where its positions are, so this rule would refuse the readers"
+                        + " it is written to allow");
     }
 
     /** Whether one of {@code found} is this method, which is named by what it takes as well as by
@@ -238,14 +266,16 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
             return String.valueOf(number);
         }
 
-        /** And a sequence handed back that was built by nothing this rule names. Written so that
-         *  what the rule looks for is what the answer is rather than how it was made. */
+        /** And a sequence handed back that was built by nothing this rule names and handed back as
+         *  a kind of list nothing names either. Written so that what the rule looks for is what the
+         *  answer is rather than what it is called or how it was made. */
         static <A> List<A> theSequenceAHelperMakes(souther.compiler.values.Sameness.Block<A> block) {
             return intoASequence(block.members());
         }
 
-        private static <T> List<T> intoASequence(java.util.Collection<T> these) {
-            return new java.util.LinkedList<>(these);
+        private static <T> java.util.concurrent.CopyOnWriteArrayList<T> intoASequence(
+                java.util.Collection<T> these) {
+            return new java.util.concurrent.CopyOnWriteArrayList<>(these);
         }
     }
 
@@ -287,8 +317,7 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
         WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> reading = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_BLOCK, "members")) {
-            if (WhoHoldsWhatAReaderHandedOver.readsAWalkForWhereThingsAre(
-                    handed.methodThatIs(holding))) {
+            if (handed.readsAWalkForWhereThingsAre(handed.methodThatIs(holding))) {
                 reading.add(holding);
             }
         }

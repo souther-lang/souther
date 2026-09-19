@@ -195,8 +195,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
         WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
         List<String> walking = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_FORM, "coefs")) {
-            if (WhoHoldsWhatAReaderHandedOver.readsAWalkForWhereThingsAre(
-                    handed.methodThatIs(holding))) {
+            if (handed.readsAWalkForWhereThingsAre(handed.methodThatIs(holding))) {
                 walking.add(holding);
             }
         }
