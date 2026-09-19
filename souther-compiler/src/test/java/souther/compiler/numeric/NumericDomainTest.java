@@ -72,7 +72,7 @@ class NumericDomainTest {
      * refuses {@code a = 2.5} — a value the constraint admits. */
     @Test
     void anUpperBoundWithARemainderIsNeverRoundedDown() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(times(2, A).minus(num(5)), Rel.LE, dense(A));
 
         assertTrue(provesAtMost(d, A, 3), "2a <= 5 gives a <= 2.5, so a <= 3 follows");
@@ -82,7 +82,7 @@ class NumericDomainTest {
     /** The mirror: {@code -2a <= -5} is {@code a >= 2.5}, and rounding up would refuse 2.5. */
     @Test
     void aLowerBoundWithARemainderIsNeverRoundedUp() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(times(-2, A).plus(num(5)), Rel.LE, dense(A));
 
         assertTrue(provesAtLeast(d, A, 2), "-2a + 5 <= 0 gives a >= 2.5, so a >= 2 follows");
@@ -93,7 +93,7 @@ class NumericDomainTest {
      * bound: a remainder under an integer atom is a value the atom cannot take. */
     @Test
     void aWholeNumberBoundIsSharpenedByItsSpacing() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(times(2, A).minus(num(5)), Rel.LE, whole(A));
 
         assertTrue(provesAtMost(d, A, 2), "no integer over two satisfies 2a <= 5");
@@ -102,7 +102,7 @@ class NumericDomainTest {
 
     @Test
     void aWholeNumberLowerBoundIsSharpenedTheOtherWay() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(times(-2, A).plus(num(5)), Rel.LE, whole(A));
 
         assertTrue(provesAtLeast(d, A, 3), "no integer under three satisfies a >= 2.5");
@@ -114,7 +114,7 @@ class NumericDomainTest {
     /** {@code a < 3} over the reals bounds nothing below 3, and that is the whole of it. */
     @Test
     void aStrictBoundOnADenseAtomGivesNothingTighterThanTheValue() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, dense(A));
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertTrue(provesAtMost(d, A, 3));
         assertFalse(provesAtMost(d, A, 2), "2.5 is under three and over two");
@@ -123,7 +123,7 @@ class NumericDomainTest {
     /** {@code a < 3} over the integers is {@code a <= 2}. */
     @Test
     void aStrictBoundOnAWholeNumberStepsDownToTheNextValue() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertTrue(provesAtMost(d, A, 2));
         assertFalse(provesAtMost(d, A, 1), "a = 2 satisfies it");
@@ -132,7 +132,7 @@ class NumericDomainTest {
     /** And {@code a > 3} is {@code a >= 4}. */
     @Test
     void aStrictLowerBoundOnAWholeNumberStepsUp() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.GT, whole(A));
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A).minus(num(3)), Rel.GT, whole(A));
 
         assertTrue(provesAtLeast(d, A, 4));
         assertFalse(provesAtLeast(d, A, 5), "a = 4 satisfies it");
@@ -147,7 +147,7 @@ class NumericDomainTest {
      */
     @Test
     void aStrictLowerBoundOnADenseAtomKeepsTheValueOutOfItsOwnRange() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A), Rel.GT, dense(A));
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A), Rel.GT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(BigDecimal.ZERO)), d.boundsOf(A).min());
     }
@@ -163,7 +163,7 @@ class NumericDomainTest {
      */
     @Test
     void aStrictDifferenceBetweenWholeNumbersStepsTheBoundThrough() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B));
 
@@ -186,7 +186,7 @@ class NumericDomainTest {
     void aWholePositionStepsThroughEvenWhereTheDifferenceCannot() {
         Map<String, Granularity> mixed = new LinkedHashMap<>(whole(A));
         mixed.putAll(dense(B));
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LT, mixed)
                 .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
 
@@ -198,7 +198,7 @@ class NumericDomainTest {
      * 1439.5} satisfies {@code a < b <= 1440}. */
     @Test
     void aStrictDifferenceOverDecimalsHasNoStepToTake() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
 
@@ -210,7 +210,7 @@ class NumericDomainTest {
      * every relational invariant in {@code souther-examples} is, and why they move nothing. */
     @Test
     void aNonStrictDifferenceBetweenEqualDomainsNarrowsNothing() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
@@ -223,7 +223,7 @@ class NumericDomainTest {
 
     @Test
     void aBoundReachesAnAtomThroughAChainOfDifferences() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B))
                 .assume(atom(B).minus(atom("c")), Rel.LE, whole(B, "c"))
                 .assume(atom("c").minus(num(10)), Rel.LE, whole("c"));
@@ -233,7 +233,7 @@ class NumericDomainTest {
 
     @Test
     void contradictingBoundsMakeThePathInfeasible() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(1)), Rel.GE, whole(A))
                 .assume(atom(A), Rel.LE, whole(A));
 
@@ -245,7 +245,7 @@ class NumericDomainTest {
     /** An interval and a difference are both things a range and its differences state in full. */
     @Test
     void anIntervalAndADifferenceAreStatedByWhatIsHandedOver() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
@@ -258,7 +258,7 @@ class NumericDomainTest {
      * whole of what was asserted. */
     @Test
     void aStrictBoundOnADenseAtomIsKeptAsAnEndTheRangeDoesNotReach() {
-        NumericDomain<String> interval = NumericDomain.<String>top()
+        NumericDomain<String> interval = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
@@ -269,7 +269,7 @@ class NumericDomainTest {
      * it steps onto is one the rule admits. */
     @Test
     void aStrictBoundOnAWholeNumberIsStatedByTheStepItTook() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
@@ -285,7 +285,7 @@ class NumericDomainTest {
      */
     @Test
     void aHoleIsStatedByTheRangesOnlyWhereItMovedAnEdge() {
-        NumericDomain<String> loose = NumericDomain.<String>top()
+        NumericDomain<String> loose = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A), Rel.NE, whole(A));
         assertFalse(loose.provenByTheBoxAndItsDifferences(atom(A), Rel.NE),
                 "nothing says which side of nought a is on, so the range keeps the nought");
@@ -302,7 +302,7 @@ class NumericDomainTest {
      */
     @Test
     void aRuleOverTwoPositionsNarrowsBothAndIsStillNotARange() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).negate(), Rel.LE, whole(A, B))
                 .assume(atom(B).negate(), Rel.LE, whole(A, B))
                 .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
@@ -317,7 +317,7 @@ class NumericDomainTest {
     /** Where the ranges are tight enough to hold it, they state it, and nothing is owed. */
     @Test
     void aRuleOverTwoPositionsIsStatedWhereTheRangesAlreadyHoldIt() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).negate(), Rel.LE, whole(A, B))
                 .assume(atom(B).negate(), Rel.LE, whole(A, B))
                 .assume(atom(A).minus(num(3)), Rel.LE, whole(A, B))
@@ -332,7 +332,7 @@ class NumericDomainTest {
 
     @Test
     void endsOnWholeNumbersAreWrittenExactly() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(3)), Rel.LE, whole(A));
         assertTrue(d.endsAreWrittenExactly(A));
     }
@@ -340,7 +340,7 @@ class NumericDomainTest {
     /** A third is not a decimal, so the number standing for that edge is a hair outside it. */
     @Test
     void anEndAtAValueNoDecimalWritesIsRoundedPast() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).times(ExactRatio.of(3)).minus(num(1)),
                         Rel.LE, dense(A));
         assertFalse(d.endsAreWrittenExactly(A));
@@ -355,7 +355,7 @@ class NumericDomainTest {
      * naming and the typing disagree, and the answer is to stop rather than to take the safer one. */
     @Test
     void oneAtomIsOneKindOfNumber() {
-        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LE, whole(A));
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A).minus(num(3)), Rel.LE, whole(A));
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
                 () -> d.assume(atom(A).minus(num(1)), Rel.GE, dense(A)));
@@ -367,13 +367,13 @@ class NumericDomainTest {
     @Test
     void anAtomWithNoSpacingIsRefusedRatherThanAssumed() {
         assertThrows(IllegalStateException.class,
-                () -> NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LE, Map.of()));
+                () -> NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(atom(A).minus(num(3)), Rel.LE, Map.of()));
     }
 
     /** A form over no atoms needs none: {@code 1 <= 0} is decided by arithmetic. */
     @Test
     void aConstantFormNeedsNoSpacingAtAll() {
-        assertTrue(NumericDomain.<String>top().assume(num(1), Rel.LE, Map.of()).isBottom());
-        assertFalse(NumericDomain.<String>top().assume(num(-1), Rel.LE, Map.of()).isBottom());
+        assertTrue(NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(num(1), Rel.LE, Map.of()).isBottom());
+        assertFalse(NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).assume(num(-1), Rel.LE, Map.of()).isBottom());
     }
 }

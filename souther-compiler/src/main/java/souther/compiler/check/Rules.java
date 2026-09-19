@@ -115,7 +115,7 @@ public sealed interface Rules {
     ProjectionEvidence NOTHING_WAS_WRITTEN = whatNoRuleAtAllComesTo();
 
     private static ProjectionEvidence whatNoRuleAtAllComesTo() {
-        return switch (souther.compiler.numeric.NumericDomain.<FactSubject>top()
+        return switch (souther.compiler.numeric.NumericDomain.top(FactSubject.inOneOrder())
                 .projectionCertification()) {
             case souther.compiler.numeric.ProjectionCertification.Certified it ->
                     new ProjectionEvidence.CertifiedExact(it.by());

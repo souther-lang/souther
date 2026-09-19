@@ -680,33 +680,46 @@ public final class Scoping {
      */
     public static List<Ast.Import> importsOf(ModuleUniverse universe, Ast.Module m) {
         List<Ast.Import> imports = new ArrayList<>(m.imports());
-        Map<String, Set<String>> borrowed = borrowed(universe, m);
-        for (Map.Entry<String, Set<String>> reached : borrowed.entrySet()) {
+        List<Borrowed> reached = borrowed(universe, m);
+        // One line per module reached, in the order the first reference to each is written — and
+        // the names on it in the order they are written too. An import list is a sequence and a
+        // reader is offered it as one, so what says what that sequence is has to be a sequence
+        // itself rather than a mapping somebody walked.
+        for (String target : reached.stream().map(Borrowed::module).distinct().toList()) {
             Set<String> already = new LinkedHashSet<>();
             for (Ast.Import imp : m.imports()) {
-                if (imp.module().equals(reached.getKey())) {
+                if (imp.module().equals(target)) {
                     already.addAll(imp.names());
                 }
             }
-            List<Ast.ImportedName> names = new ArrayList<>();
-            for (String bare : reached.getValue()) {
-                if (!already.contains(bare)) {
-                    // No position on a synthesized name: nobody wrote it on an import list. The
-                    // qualified reference that asked for it is where it came from.
-                    names.add(new Ast.ImportedName(bare, null));
-                }
-            }
+            // No position on a synthesized name: nobody wrote it on an import list. The qualified
+            // reference that asked for it is where it came from.
+            List<Ast.ImportedName> names = reached.stream()
+                    .filter(each -> each.module().equals(target)
+                            && !already.contains(each.behavior()))
+                    .map(each -> new Ast.ImportedName(each.behavior(), null))
+                    .toList();
             if (!names.isEmpty()) {
-                imports.add(new Ast.Import(reached.getKey(), null, names, m.pos()));
+                imports.add(new Ast.Import(target, null, names, m.pos()));
             }
         }
         return imports;
     }
 
-    /** The behaviors this module names through another module's name, by that module. */
-    private static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
+    /** One behavior this module names through another module's name, and the module it is of. */
+    private record Borrowed(String module, String behavior) {}
+
+    /**
+     * The behaviors this module names through another module's name, in the order the references
+     * are written.
+     *
+     * <p>Once apiece and in that order: the set keeps the once-apiece, the list is what says what
+     * the order is. A module reached by two references brings its names in where the first of them
+     * is written, which is where an author reading down the file first asked for it.
+     */
+    private static List<Borrowed> borrowed(ModuleUniverse universe, Ast.Module m) {
         Map<String, String> qualifiers = qualifiersWritten(m);
-        Map<String, Set<String>> out = new LinkedHashMap<>();
+        Set<Borrowed> out = new LinkedHashSet<>();
         for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
             String written = ref.name();
             String target = moduleNamedBy(written, qualifiers);
@@ -716,10 +729,10 @@ public final class Scoping {
             }
             String bare = written.substring(written.lastIndexOf('.') + 1);
             if (read.declaresBehavior(bare)) {
-                out.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
+                out.add(new Borrowed(target, bare));
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**

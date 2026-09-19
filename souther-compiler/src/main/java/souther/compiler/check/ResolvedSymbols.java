@@ -55,7 +55,8 @@ public final class ResolvedSymbols implements Symbols {
                 def -> new Denotation.Denotes(def.declares()));
         return new ResolvedSymbols(new SymbolTable<>(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
-                        declared.declarations(), Registry.baseNames(m.exposing())))),
+                        declared.declarations(), declared.asDeclared(),
+                        Registry.baseNames(m.exposing())))),
                 Denoting.of(names, Map.of()), Declarations.Vocabulary.of(stdlib), stdlib,
                 each -> each));
     }

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.CanonicalOrder;
+
 /**
  * What a fact is about: the subject a constraint, a predicate or a clause is read against.
  *
@@ -41,5 +43,22 @@ record FactSubject(Term identity) {
     /** What to call this where a message names it. For a reader, not for equality. */
     String rendered() {
         return identity.rendered();
+    }
+
+    /**
+     * The one order a walk of several of these takes them in.
+     *
+     * <p>Read off what the term this stands for is told apart by ({@link Term#standsForText}) and
+     * not off what it renders as. A subject renders as the value it points at written for a person,
+     * and two subjects of one line evaluated in two places render alike — so a walk ordered by the
+     * renderings would take such a pair for one subject.
+     *
+     * <p>What stands for a term is weaker than what tells two terms apart, so two subjects may be
+     * one to this and not be one subject. That is refused where such a walk is taken rather than
+     * chosen through, which is what {@link souther.compiler.numeric.CanonicalForm#entriesIn} does.
+     */
+    static CanonicalOrder<FactSubject> inOneOrder() {
+        return (one, other) ->
+                one.identity.standsForText().compareTo(other.identity.standsForText());
     }
 }

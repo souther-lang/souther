@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -139,7 +140,10 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
     public static ExactRatio along(Map<NumericTerm, ExactRatio> direction,
                                    Map<NumericTerm, Place> values) {
         ExactRatio at = ExactRatio.ZERO;
-        for (Map.Entry<NumericTerm, ExactRatio> each : direction.entrySet()) {
+        // Walked by the terms. What the sum comes to does not depend on the order, but which
+        // position is named where a row holds no number at one of them does, and a direction says
+        // which positions it weighs without saying which was written first.
+        for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(direction)) {
             Place held = values.get(each.getKey());
             if (held == null) {
                 throw new IllegalArgumentException("a row read at a quantity holds a number at each"

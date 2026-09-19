@@ -6,8 +6,8 @@ import souther.compiler.values.Sameness;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -183,14 +183,16 @@ final class ProofOfEmptiness {
     private static <A> List<Emptiness.AtAField.Where> declaredIn(
             Set<Sameness.Block<A>> blocks,
             SequencedMap<A, Emptiness.AtAField.Where> positions) {
-        Set<A> named = new LinkedHashSet<>();
+        // Every position of every block, and then whether the value declares all of them. Asked
+        // the other way round — stopping at the first it does not declare — the walk would be over
+        // a set of blocks that holds no order and a set of positions that holds none either, and
+        // nothing about the answer would say which of them it had stopped at.
+        Set<A> named = new HashSet<>();
         for (Sameness.Block<A> block : blocks) {
-            for (A member : block.members()) {
-                if (!positions.containsKey(member)) {
-                    return List.of();
-                }
-                named.add(member);
-            }
+            named.addAll(block.members());
+        }
+        if (!positions.keySet().containsAll(named)) {
+            return List.of();
         }
         List<Emptiness.AtAField.Where> out = new ArrayList<>();
         positions.forEach((position, place) -> {
@@ -204,14 +206,14 @@ final class ProofOfEmptiness {
     /** Where the value declares each of a block's positions, in that order, or null where it
      *  declares none of one of them. */
     private static <A> List<Integer> declared(Sameness.Block<A> block, Map<A, Integer> ordinal) {
-        List<Integer> out = new ArrayList<>();
-        for (A member : block.members()) {
-            Integer at = ordinal.get(member);
-            if (at == null) {
-                return null;
-            }
-            out.add(at);
+        // Whether the value declares all of them, and then where. Asked while walking, the answer
+        // would be taken at whichever position the block happens to hand over first, and a block
+        // holds its positions in no order.
+        if (!ordinal.keySet().containsAll(block.members())) {
+            return null;
         }
+        List<Integer> out = new ArrayList<>();
+        block.members().forEach(member -> out.add(ordinal.get(member)));
         out.sort(Comparator.naturalOrder());
         return out;
     }

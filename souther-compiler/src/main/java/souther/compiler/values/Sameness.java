@@ -2,8 +2,9 @@ package souther.compiler.values;
 
 import souther.compiler.hash.ValueHash;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -41,7 +42,11 @@ public final class Sameness<A> {
     private final Map<A, Block<A>> blocks;
 
     private Sameness(Map<A, Block<A>> blocks) {
-        this.blocks = Collections.unmodifiableMap(new LinkedHashMap<>(blocks));
+        // Which block each position is on, in no order. What this is equal to is that mapping, and
+        // the blocks it holds are written out in one order wherever one is written ({@link
+        // #toString}) — so an order kept here would be one nothing reads and one a reader could
+        // start reading.
+        this.blocks = Collections.unmodifiableMap(new HashMap<>(blocks));
     }
 
     /** No two positions held as one, which is what a reading that read no equality is a product
@@ -77,15 +82,22 @@ public final class Sameness<A> {
     public static <A> Sameness<A> of(Collection<Block<A>> blocks) {
         Map<A, Block<A>> out = new LinkedHashMap<>();
         Set<A> seen = new LinkedHashSet<>();
+        // Every position held twice, and not the first one met. What is handed in holds no order
+        // of its blocks, so a refusal that stopped at the first would name whichever of them the
+        // caller's walk reached first and tell two callers of one relation two different things.
+        Set<A> shared = new LinkedHashSet<>();
         blocks.forEach(block -> block.members().forEach(each -> {
             if (!seen.add(each)) {
-                throw new IllegalArgumentException(
-                        "two classes of one relation hold " + each + " between them: " + blocks);
+                shared.add(each);
             }
             if (!block.isOne()) {
                 out.put(each, block);
             }
         }));
+        if (!shared.isEmpty()) {
+            throw new IllegalArgumentException("two classes of one relation hold "
+                    + InOneOrder.of(shared) + " between them: " + InOneOrder.of(blocks));
+        }
         return out.isEmpty() ? discrete() : new Sameness<>(out);
     }
 
@@ -138,19 +150,14 @@ public final class Sameness<A> {
      * position taken out of the set would be an answer about that position's block.
      */
     boolean has(Block<A> block) {
-        for (A member : block.members()) {
-            if (!block.equals(blockOf(member))) {
-                return false;
-            }
-        }
-        return true;
+        return block.members().stream().allMatch(member -> block.equals(blockOf(member)));
     }
 
     /** The blocks this holds {@code block}'s positions in, which is one block where it holds them
      *  as {@code block} does and several where it cuts them apart. */
     Set<Block<A>> holding(Block<A> block) {
         if (block.isOne()) {
-            return Set.of(blockOf(block.members().iterator().next()));
+            return Set.of(blockOf(TheOnly.of(block.members(), "position of a block of one")));
         }
         Set<Block<A>> out = new LinkedHashSet<>();
         block.members().forEach(each -> out.add(blockOf(each)));
@@ -208,9 +215,18 @@ public final class Sameness<A> {
         }
         Sameness<A> out = this;
         for (Block<A> block : other.joined()) {
-            List<A> members = new ArrayList<>(block.members());
-            for (int each = 1; each < members.size(); each++) {
-                out = out.joining(members.get(0), members.get(each));
+            // Each of the block's positions joined to one of them, and which one that is does not
+            // matter: joining is transitive, so every way of spanning a block reaches the same
+            // relation. Taken off the block as a list and read at its first, which one it was would
+            // be how the positions are spelled — and a reader of this would be none the wiser,
+            // since the relation is the same either way and the list is not.
+            A joinedTo = null;
+            for (A member : block.members()) {
+                if (joinedTo == null) {
+                    joinedTo = member;
+                } else {
+                    out = out.joining(joinedTo, member);
+                }
             }
         }
         return out;
@@ -231,11 +247,15 @@ public final class Sameness<A> {
         if (isDiscrete() || other.isDiscrete()) {
             return discrete();
         }
-        Map<List<Block<A>>, Set<A>> together = new LinkedHashMap<>();
+        // Gathered in no order. Which positions land together is settled by which pair of blocks
+        // holds each, and the blocks that come of it are disjoint — so what this leaves is the same
+        // relation whichever order the positions were met in, and an order kept here would be one
+        // a reader could start taking off the relation.
+        Map<List<Block<A>>, Set<A>> together = new HashMap<>();
         for (A position : blocks.keySet()) {
             if (other.blocks.containsKey(position)) {
                 together.computeIfAbsent(List.of(blockOf(position), other.blockOf(position)),
-                        _ -> new LinkedHashSet<>()).add(position);
+                        _ -> new HashSet<>()).add(position);
             }
         }
         Sameness<A> out = discrete();
@@ -262,7 +282,7 @@ public final class Sameness<A> {
     }
 
     private Sameness<A> withBlock(Block<A> block) {
-        Map<A, Block<A>> out = new LinkedHashMap<>(blocks);
+        Map<A, Block<A>> out = new HashMap<>(blocks);
         block.members().forEach(each -> out.put(each, block));
         return new Sameness<>(out);
     }

@@ -61,7 +61,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
 
     /** A domain in which each of {@code atoms} is at or above zero. */
     private static NumericDomain<FactSubject> atOrAboveZero(Terms terms, FactSubject... atoms) {
-        NumericDomain<FactSubject> d = NumericDomain.top();
+        NumericDomain<FactSubject> d = NumericDomain.top(FactSubject.inOneOrder());
         for (FactSubject atom : atoms) {
             LinearForm<FactSubject> form = LinearForm.atom(atom);
             d = d.assume(form, Rel.GE, terms.kindsOf(form));
@@ -116,7 +116,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 
-        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(NumericDomain.top(), terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedNumericFacts.refine(NumericDomain.top(FactSubject.inOneOrder()), terms, Set.of(atom));
 
         assertTrue(derived.boundsOf(atom).saysNothing());
     }
@@ -165,7 +165,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         FactSubject atom = form.coefs().keySet().iterator().next();
         FactSubject factorA = FactSubject.of(terms.bodyKey(read("a", a), at));
         FactSubject factorB = FactSubject.of(terms.bodyKey(read("b", b), at));
-        NumericDomain<FactSubject> guarded = NumericDomain.<FactSubject>top()
+        NumericDomain<FactSubject> guarded = NumericDomain.top(FactSubject.inOneOrder())
                 .assume(LinearForm.atom(factorA), Rel.GE,
                         terms.kindsOf(LinearForm.atom(factorA)))
                 .assume(LinearForm.atom(factorA).minus(num(10)), Rel.LE,

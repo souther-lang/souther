@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * An affine form {@code const + Σ coef·atom} over whatever a caller names its atoms by.
@@ -64,13 +65,20 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      * number and a report wants the decimal wherever one is the number exactly, which is what
      * {@link ExactRatio#spelled} answers — a coefficient of four fifths reads {@code 0.8} in a
      * document that has always said {@code 0.8}.
+     *
+     * <p>In one order whichever order the form was built in. What this holds is a mapping, so a
+     * form written {@code 6b + 3a} and one written {@code 3a + 6b} are one form — and a reader
+     * shown them as they happen to be held would be shown two things about one value. Sorted by
+     * the name of the position, for the reason {@link CanonicalForm#toString} sorts.
      */
     @Override
     public String toString() {
+        Map<String, ExactRatio> named = new TreeMap<>();
+        coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
         StringBuilder out = new StringBuilder("LinearForm[constant=")
                 .append(constant.spelled()).append(", coefs={");
         boolean first = true;
-        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+        for (Map.Entry<String, ExactRatio> each : named.entrySet()) {
             out.append(first ? "" : ", ").append(each.getKey()).append('=')
                     .append(each.getValue().spelled());
             first = false;

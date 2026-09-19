@@ -226,13 +226,51 @@ final class IndexEdges {
         return !(held instanceof Collection<?>) && entriesOf(all).contains(held);
     }
 
-    /** What a table holds, or null where what was handed over is not one. */
+    /**
+     * What a table holds, or null where what was handed over is not one.
+     *
+     * <p>A table with sequences written beside it is that table for this question. An index whose
+     * answer carries something beside its entries — the order the module writes them in, the
+     * declarations it may not have — is still an index of those entries, and a reader that took one
+     * of them is still projecting. One table and the rest collections: a value holding two tables
+     * gives no answer to which of them an entry came from, and one holding something that is not
+     * entries at all is a thing built out of a table rather than a table.
+     */
     private static Collection<?> entriesOf(Object held) {
         return switch (held) {
             case Map<?, ?> map -> map.values();
             case Collection<?> all -> all;
-            case null, default -> null;
+            case null -> null;
+            default -> theOneTableItHolds(held);
         };
+    }
+
+    /** The one table a value is, or null where it holds none, more than one, or anything that is
+     *  not entries of it. */
+    private static Collection<?> theOneTableItHolds(Object held) {
+        RecordComponent[] parts = held.getClass().getRecordComponents();
+        if (parts == null) {
+            return null;
+        }
+        Collection<?> only = null;
+        for (RecordComponent part : parts) {
+            if (!Map.class.isAssignableFrom(part.getType())) {
+                if (!Collection.class.isAssignableFrom(part.getType())) {
+                    return null;
+                }
+                continue;
+            }
+            if (only != null) {
+                return null;
+            }
+            try {
+                Object table = part.getAccessor().invoke(held);
+                only = table == null ? null : ((Map<?, ?>) table).values();
+            } catch (ReflectiveOperationException unreadable) {
+                return null;
+            }
+        }
+        return only;
     }
 
     /**

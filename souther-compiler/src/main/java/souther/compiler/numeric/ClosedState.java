@@ -106,14 +106,20 @@ public final class ClosedState<A> {
         this.status = status;
     }
 
-    /** What {@code constraints} leave, worked out. */
+    /**
+     * What {@code constraints} leave, worked out.
+     *
+     * @param order the one order the positions of a form are walked in, for the readings below that
+     *              work a bound out at each of them — see {@link CanonicalOrder}
+     */
     public static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
-                                        Function<A, Granularity> spacing) {
-        DifferenceBounds<A> differences = DifferenceBounds.over(constraints);
+                                        Function<A, Granularity> spacing,
+                                        CanonicalOrder<A> order) {
+        DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
         }
-        Set<A> positions = positionsOf(constraints);
+        Set<A> positions = positionsOf(constraints, order);
         Box<A> box = boxOf(differences, positions);
         if (!box.holdsAValue()) {
             return empty(differences);
@@ -123,11 +129,11 @@ public final class ClosedState<A> {
             // against that one. A reading that carried the box along as the rules narrowed it would
             // answer a rule differently depending on which rules had been read before it, which is
             // the order deciding the result — the thing the rounds exist to be rid of.
-            FormReach<A> reading = FormReach.over(constraints, box, differences);
+            FormReach<A> reading = FormReach.over(constraints, box, differences, order);
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
-            AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing);
+            AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing, order);
             if (found instanceof AffineReduction.Reduction.NothingIsLeft) {
                 return empty(differences);
             }
@@ -216,9 +222,10 @@ public final class ClosedState<A> {
         return new ClosedState<>(Box.unbounded(), differences, true, Status.STABLE);
     }
 
-    private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints) {
+    private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints,
+                                          CanonicalOrder<A> order) {
         Set<A> out = new LinkedHashSet<>();
-        constraints.forEach(each -> out.addAll(each.form().coefs().keySet()));
+        constraints.forEach(each -> out.addAll(each.form().atomsIn(order)));
         return out;
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -92,9 +93,9 @@ final class Conditions {
             // rather than a relation, and it is read where places are seeded (#982). Written as arms
             // of this switch and not left to a default: what a way of deciding settles is a question
             // somebody has to answer, and "nothing" is an answer rather than the absence of one.
-            case Choice.Decides.ACase ignored -> { }
-            case Choice.Decides.ItWasBuilt ignored -> { }
-            case Choice.Decides.ItDeparted ignored -> { }
+            case Choice.Decides.ACase _ -> { }
+            case Choice.Decides.ItWasBuilt _ -> { }
+            case Choice.Decides.ItDeparted _ -> { }
         }
         return out;
     }
@@ -323,7 +324,17 @@ final class Conditions {
         java.util.Map<Object, Granularity> spacing =
                 java.util.Map.of(sign, terms.granularityOf(call.type()));
         LinearForm<Object> answered = LinearForm.atom(sign);
-        NumericDomain<Object> known = NumericDomain.<Object>top()
+        // One position, so the order is total on the domain by there being nothing to put in an
+        // order. Two of them reaching it would be a second position in a domain written to have
+        // one, and it says so rather than choosing between them.
+        CanonicalOrder<Object> order = (one, other) -> {
+            if (one == other) {
+                return 0;
+            }
+            throw new IllegalStateException("this domain stands for one number and was asked to"
+                    + " walk two: " + one + " and " + other);
+        };
+        NumericDomain<Object> known = NumericDomain.top(order)
                 .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
                         .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
                 .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);

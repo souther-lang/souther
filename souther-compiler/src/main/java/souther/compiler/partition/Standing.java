@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -92,7 +93,9 @@ public sealed interface Standing {
             }
             if (!on.keySet().equals(form.coefs().keySet())) {
                 throw new IllegalArgumentException("a form stands over the positions it names, each"
-                        + " on one order: " + form.coefs().keySet() + " against " + on.keySet());
+                        + " on one order: "
+                        + NumericTerms.inOrder(form.coefs().keySet())
+                        + " against " + NumericTerms.inOrder(on.keySet()));
             }
         }
     }

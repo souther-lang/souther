@@ -73,6 +73,30 @@ public final class Names {
     }
 
     /**
+     * What a registry over a rung below the source has, in the order the source writes them.
+     *
+     * <p>The order is the module's own and is asked of the one answer that has it. A rung below is
+     * a mapping from the same names to what that rung made of each, and the order it is walked in
+     * belongs to the source rather than to whatever the rung's own answer was built in — so a
+     * declaration this rung could not make for is left out rather than moved.
+     */
+    private static <D> List<D> inTheOrderTheSourceWritesThem(Db db, String moduleName,
+                                                             Map<String, D> made) {
+        Answer<DeclaredNames.Index<Ast.Def>> source = db.ask(new Declarations(moduleName));
+        if (!source.present()) {
+            return List.of();
+        }
+        List<D> out = new ArrayList<>();
+        for (String name : source.value().asDeclared()) {
+            D def = made.get(name);
+            if (def != null) {
+                out.add(def);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * A registry over this compilation, reading each module's declarations as resolution left them.
      *
      * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
@@ -98,6 +122,11 @@ public final class Names {
             public Map<String, Hir.Def> declaredIn(String moduleName) {
                 Answer<Map<String, Hir.Def>> defs = db.ask(new ResolvedDeclarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public List<Hir.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
             }
 
             @Override
@@ -137,8 +166,14 @@ public final class Names {
 
             @Override
             public Map<String, Ast.Def> declaredIn(String moduleName) {
-                Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(moduleName));
-                return defs.present() ? defs.value() : Map.of();
+                Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(moduleName));
+                return defs.present() ? defs.value().declarations() : Map.of();
+            }
+
+            @Override
+            public List<Ast.Def> inDeclarationOrder(String moduleName) {
+                Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(moduleName));
+                return defs.present() ? defs.value().inDeclarationOrder() : List.of();
             }
 
             @Override
@@ -181,6 +216,11 @@ public final class Names {
                 Answer<Map<String, Normalized.Def>> defs =
                         db.ask(new Shapes.NormalizedDeclarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public List<Normalized.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
             }
 
             @Override
@@ -234,6 +274,11 @@ public final class Names {
             }
 
             @Override
+            public List<Derived.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
+            }
+
+            @Override
             public Set<String> exposedBy(String moduleName) {
                 Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
@@ -264,14 +309,14 @@ public final class Names {
      * the author of the project importing it — {@code E1011}, under the caret of their own
      * {@code import} line, about a file they do not have and did not write.
      */
-    public record Declarations(String name) implements Key<Map<String, Ast.Def>> {
+    public record Declarations(String name) implements Key<DeclaredNames.Index<Ast.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.Def>> compute(Db db) {
+        public Answer<DeclaredNames.Index<Ast.Def>> compute(Db db) {
             if (cyclic(db, name)) {
                 // What this module declares depends on the module it names, which depends on this
                 // one. Reported by InCycle; nothing below here can be answered, and going on would
@@ -288,10 +333,14 @@ public final class Names {
                 for (DeclaredNames.Refusal<Ast.Def> refused : declared.refusals()) {
                     reports.add(Report.of(DeclarationRefusals.reportedAsWritten(refused)));
                 }
-                return Answer.of(declared.declarations(), reports);
+                return Answer.of(declared, reports);
             }
             Front.FromPath.OnThePath fromPath = Front.onThePath(db, name);
-            return fromPath == null ? Answer.absent() : Answer.of(fromPath.declarations());
+            // Indexed where it was read back, and a set of declarations a module may not have is an
+            // artifact this compiler refused to read — so there is nothing left here to refuse.
+            return fromPath == null ? Answer.absent()
+                    : Answer.of(new DeclaredNames.Index<>(fromPath.declarations(),
+                            fromPath.asDeclared(), List.of()));
         }
     }
 
@@ -334,11 +383,11 @@ public final class Names {
 
         @Override
         public Answer<Ast.Def> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(named.module()));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(named.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            Ast.Def def = defs.value().get(named.name());
+            Ast.Def def = defs.value().declarations().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
         }
     }
@@ -1391,9 +1440,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(name));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(name));
             if (defs.present()) {
-                for (Ast.Def def : defs.value().values()) {
+                // Walked in the order the module writes them, because what is looked for is the
+                // declaration a place falls inside and the places are the module's own.
+                for (Ast.Def def : defs.value().inDeclarationOrder()) {
                     if (spans(def.written(), at)) {
                         // Asked of the declaration world this came out of, rather than made from the
                         // address it answers to.
@@ -1664,14 +1715,14 @@ public final class Names {
 
         @Override
         public Answer<WrittenName> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
             // The occurrence of the name, not where the declaration starts: a reader sent to a
             // declaration is being sent to the name it declares, the keyword in front of it is not
             // what they asked about, and how far the name reaches is the characters that spell it.
-            Ast.Def def = defs.value().get(denoted.name());
+            Ast.Def def = defs.value().declarations().get(denoted.name());
             return def == null || !def.written().authored()
                     ? Answer.absent() : Answer.of(def.written());
         }

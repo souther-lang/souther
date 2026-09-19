@@ -2,11 +2,10 @@ package souther.compiler.values;
 
 import souther.compiler.hash.ValueHash;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -24,17 +23,15 @@ import java.util.function.Predicate;
  * by taking a block's values through different rules, and both lots of rules are what an author has
  * to answer for.
  *
- * <p><b>Which is why what is inside is not what is handed out.</b> These are held in the order they
- * arrived, because a lack about several blocks hashes through the set of blocks it names — measured
- * on the shape the walk is admitted at, and on the numbers a lack had then, putting them somewhere
- * that hashes them on the way in was what a reduction cost rather than a part of it. An order
- * nobody may read is not an order a value may show, so nothing here answers with one: a reader asks
- * what was claimed, what a report may name, or whether every lack is of some kind.
- *
- * <p>And what a lack claims is what these are looked up by, which is a question asked of every lack
+ * <p>And what a lack claims is what these are held under, which is a question asked of every lack
  * of one of these against every lack of another wherever two are put together. Asked by walking,
  * that is the square of a relation's sets on a relation admitted for as many of them as the bound
- * allows — so which of these claims what is worked out once, when they are made.
+ * allows — so which of these claims what is a lookup rather than a search.
+ *
+ * <p><b>Which is the whole of what is inside.</b> Nothing here answers with an order and nothing
+ * here holds one: a reader asks what was claimed, what a report may name, or whether every lack is
+ * of some kind, and each of those is about what these hold rather than about where in a walk one of
+ * them was found.
  *
  * @param <A> what a position is called
  */
@@ -42,31 +39,49 @@ public final class Lacks<A> {
 
     /** What an argument that refused nothing showed, which is one value however its positions are
      *  named — see {@link #none()}. */
-    private static final Lacks<?> NONE = new Lacks<>(List.of());
+    private static final Lacks<?> NONE = new Lacks<>(Map.of());
 
-    /** In the order they arrived, which nothing reads. */
-    private final List<Shown<A>> each;
+    /**
+     * What was shown, under what each of them claims.
+     *
+     * <p><b>Held under the claim and not beside a place in a list.</b> These are equal by which
+     * lacks they are and how each was reached, so where in a walk one was found is not something
+     * one of these has — and a table from a claim to a place in a list is that place carried under
+     * another name. Two of them that are equal were built two ways, and what the second was found
+     * after is not the same there.
+     */
+    private final Map<RelationalLack<A>, Shown<A>> claiming;
 
-    /** Which of them claims what, so that putting two of these together is a lookup apiece rather
-     *  than a walk. */
-    private final Map<RelationalLack<A>, Integer> claiming;
+    private Lacks(Map<RelationalLack<A>, Shown<A>> claiming) {
+        this.claiming = Collections.unmodifiableMap(claiming);
+    }
 
-    private Lacks(List<Shown<A>> each) {
-        this.each = List.copyOf(each);
-        Map<RelationalLack<A>, Integer> claiming = new HashMap<>(this.each.size() * 2);
-        for (int at = 0; at < this.each.size(); at++) {
-            if (claiming.put(this.each.get(at).lack(), at) != null) {
-                throw new IllegalArgumentException(
-                        "a lack is claimed once, with every route that reached it: "
-                                + this.each.get(at).lack());
+    /**
+     * These, each claimed once.
+     *
+     * <p>Every claim made twice is named and not the first one met. What is handed in is a list
+     * because a caller has one, and what a list of these is equal to is settled by which lacks are
+     * in it — so a refusal that stopped at the first would tell two callers that wrote one argument
+     * two ways two different things about the same mistake.
+     */
+    private static <A> Lacks<A> claimedOnce(Collection<Shown<A>> each) {
+        Map<RelationalLack<A>, Shown<A>> claiming = new HashMap<>(each.size() * 2);
+        Set<RelationalLack<A>> twice = new LinkedHashSet<>();
+        for (Shown<A> shown : each) {
+            if (claiming.put(shown.lack(), shown) != null) {
+                twice.add(shown.lack());
             }
         }
-        this.claiming = claiming;
+        if (!twice.isEmpty()) {
+            throw new IllegalArgumentException("a lack is claimed once, with every route that "
+                    + "reached it: " + InOneOrder.of(twice));
+        }
+        return new Lacks<>(claiming);
     }
 
     /** These lacks, each of them claimed once. */
-    static <A> Lacks<A> of(List<Shown<A>> each) {
-        return new Lacks<>(each);
+    static <A> Lacks<A> of(Collection<Shown<A>> each) {
+        return claimedOnce(each);
     }
 
     /**
@@ -85,22 +100,22 @@ public final class Lacks<A> {
 
     /** The one lack an argument showed, of the blocks it names and of nothing else. */
     public static <A> Lacks<A> of(RelationalLack<A> lack) {
-        return new Lacks<>(List.of(Shown.of(lack)));
+        return new Lacks<>(Map.of(lack, Shown.of(lack)));
     }
 
     /** The one lack an argument showed, and how it reached it. */
     public static <A> Lacks<A> of(RelationalLack<A> lack, RelationalEvidence<A> reached) {
-        return new Lacks<>(List.of(new Shown<>(lack, reached)));
+        return new Lacks<>(Map.of(lack, new Shown<>(lack, reached)));
     }
 
     /** Whether nothing was shown. */
     public boolean isEmpty() {
-        return each.isEmpty();
+        return claiming.isEmpty();
     }
 
     /** How many of them there are, which is how many lots of blocks the argument was short of. */
     public int size() {
-        return each.size();
+        return claiming.size();
     }
 
     /**
@@ -110,21 +125,21 @@ public final class Lacks<A> {
      *         several would be reading whichever arrived first
      */
     public Shown<A> only() {
-        if (each.size() != 1) {
+        if (claiming.size() != 1) {
             throw new IllegalStateException("one lack was asked for, and these are " + this);
         }
-        return each.getFirst();
+        return claiming.values().iterator().next();
     }
 
     /** What each of them claims, less how any of them was reached. */
     public Set<RelationalLack<A>> claimed() {
-        return Collections.unmodifiableSet(claiming.keySet());
+        return claiming.keySet();
     }
 
     /** Every block a report may name: what the lacks are about, and what the routes to them read. */
     public Set<Sameness.Block<A>> blocks() {
         Set<Sameness.Block<A>> out = new LinkedHashSet<>();
-        each.forEach(shown -> {
+        claiming.values().forEach(shown -> {
             out.addAll(shown.lack().blocks());
             out.addAll(shown.reached().restingOn(shown.lack().blocks()));
         });
@@ -133,70 +148,63 @@ public final class Lacks<A> {
 
     /** Whether every lack is something, which is how a reader asks what argument refused. */
     public boolean all(Predicate<RelationalLack<A>> asked) {
-        return each.stream().allMatch(shown -> asked.test(shown.lack()));
+        return claiming.keySet().stream().allMatch(asked);
     }
 
     /** Both of these: every lack either shows, each with every route that reached it. */
     public Lacks<A> and(Lacks<A> other) {
-        List<Shown<A>> out = new ArrayList<>(each);
-        other.each.forEach(shown -> {
-            Integer at = claiming.get(shown.lack());
-            if (at == null) {
-                out.add(shown);
-            } else {
-                out.set(at, out.get(at).alsoReachedBy(shown));
-            }
-        });
+        Map<RelationalLack<A>, Shown<A>> out = new HashMap<>(claiming);
+        other.claiming.forEach((lack, shown) -> out.merge(lack, shown, Shown::alsoReachedBy));
         return new Lacks<>(out);
     }
 
     /** The lacks both of these claim, each with the routes both of them reached it by. */
     public Lacks<A> sharedWith(Lacks<A> other) {
-        List<Shown<A>> out = new ArrayList<>();
-        for (Shown<A> shown : each) {
-            Integer at = other.claiming.get(shown.lack());
-            if (at != null) {
-                out.add(shown.alsoReachedBy(other.each.get(at)));
+        Map<RelationalLack<A>, Shown<A>> out = new HashMap<>();
+        claiming.forEach((lack, shown) -> {
+            Shown<A> theirs = other.claiming.get(lack);
+            if (theirs != null) {
+                out.put(lack, shown.alsoReachedBy(theirs));
             }
-        }
+        });
         return new Lacks<>(out);
     }
 
-    /** The same lacks about the blocks {@code naming} calls these. */
+    /**
+     * The same lacks about the blocks {@code naming} calls these.
+     *
+     * <p>A change of vocabulary and not a fold: the naming names two lacks two lacks, so what was
+     * claimed once is claimed once under the new names too, and nothing here has to be told apart
+     * again.
+     */
     public <B> Lacks<B> renamed(Function<A, B> naming) {
-        List<Shown<B>> out = new ArrayList<>();
-        each.forEach(shown -> out.add(shown.renamed(naming)));
+        Map<RelationalLack<B>, Shown<B>> out = new HashMap<>(claiming.size() * 2);
+        claiming.values().forEach(shown -> {
+            Shown<B> under = shown.renamed(naming);
+            out.put(under.lack(), under);
+        });
         return new Lacks<>(out);
     }
 
     /** The same lacks, each reached the same way, whichever order they arrived in. */
     @Override
     public boolean equals(Object said) {
-        if (!(said instanceof Lacks<?> it) || each.size() != it.each.size()) {
-            return false;
-        }
-        for (Shown<?> shown : it.each) {
-            Integer at = claiming.get(shown.lack());
-            if (at == null || !each.get(at).equals(shown)) {
-                return false;
-            }
-        }
-        return true;
+        return said instanceof Lacks<?> it && claiming.equals(it.claiming);
     }
 
     /** What was shown, in no order — see {@link ValueHash}. */
     @Override
     public int hashCode() {
         int summed = 0;
-        for (Shown<A> shown : each) {
+        for (Shown<A> shown : claiming.values()) {
             summed += shown.hashCode();
         }
-        return ValueHash.ofWhatItHolds(Lacks.class, summed, each.size());
+        return ValueHash.ofWhatItHolds(Lacks.class, summed, claiming.size());
     }
 
     /** Written in one order whichever they arrived in — see {@link InOneOrder}. */
     @Override
     public String toString() {
-        return InOneOrder.of(each);
+        return InOneOrder.of(claiming.values());
     }
 }

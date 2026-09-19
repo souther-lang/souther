@@ -263,7 +263,10 @@ public sealed interface AdmittedPlan {
             return met ? ANY : NONE;
         }
         if (parts.size() == 1) {
-            return parts.iterator().next();
+            // The one it holds and not the first the walk hands over. What is left after the
+            // normalising above is a set, so "the first" would be an answer about how the parts
+            // arrived — and where there is one, the two readings differ only in what they claim.
+            return TheOnly.of(parts, "part a plan is left with");
         }
         return met ? new Both(parts) : new Either(parts);
     }

@@ -78,7 +78,7 @@ public final class FieldDomains {
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
-                    ConstraintState.<FactSubject>top(), null, null, null, Map.of(),
+                    ConstraintState.top(FactSubject.inOneOrder()), null, null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
                     Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE, KnownExtents.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
@@ -1089,7 +1089,8 @@ public final class FieldDomains {
          */
         public <B> Carried<B> constraintsOver(
                 java.util.function.Function<NumberAt<RuleKey>, B> named,
-                                              java.util.function.Function<Object, B> otherwise) {
+                java.util.function.Function<Object, B> otherwise,
+                souther.compiler.numeric.CanonicalOrder<B> order) {
             Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
             atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
             countAt.forEach((path, counted) -> at(where, counted.atom(),
@@ -1115,7 +1116,7 @@ public final class FieldDomains {
             // state has renamed its subjects to its own.
             SequencedMap<B, String> carried = new java.util.LinkedHashMap<>();
             namedBy.forEach((atom, path) -> carried.put(naming.apply(atom), path.toString()));
-            return new Carried<>(constraints.renamed(naming), carried);
+            return new Carried<>(constraints.renamed(naming, order), carried);
         }
 
         /**
@@ -2263,23 +2264,31 @@ public final class FieldDomains {
         if (form.isEmpty()) {
             return null;
         }
-        Map<FactSubject, ExactRatio> coefs = new LinkedHashMap<>();
-        for (Map.Entry<NumberAt<RuleKey>, java.math.BigDecimal> each : form.entrySet()) {
-            NumberAt<RuleKey> at = each.getKey();
+        // The atom each coordinate carries, worked out for all of them before any is weighed. What
+        // is asked of the form is asked of every coordinate at once: one this reading takes no
+        // range of leaves the whole form unanswered, and a walk that stopped at the first such
+        // coordinate would be reading a map that promises no order for which one that is.
+        Map<NumberAt<RuleKey>, FactSubject> atoms = new HashMap<>();
+        form.keySet().forEach(at -> {
             FactSubject atom = switch (at.of()) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(countAt.get(at.position())) : null;
             };
-            if (atom == null) {
-                return null;
+            if (atom != null) {
+                atoms.put(at, atom);
             }
-            // Two coordinates of one form can be one atom — a form is written over the names a
-            // rule writes, and a rule may write one of them twice.
-            coefs.merge(atom, ExactRatio.of(each.getValue()),
-                    ExactRatio::plus);
+        });
+        if (atoms.size() != form.size()) {
+            return null;
         }
+        // Two coordinates of one form can be one atom — a form is written over the names a rule
+        // writes, and a rule may write one of them twice. What that comes to is a sum, which is the
+        // same sum whichever coordinate is added first.
+        Map<FactSubject, ExactRatio> coefs = new HashMap<>();
+        form.forEach((at, weight) ->
+                coefs.merge(atoms.get(at), ExactRatio.of(weight), ExactRatio::plus));
         return constraints.numbers().boundsOf(
                 new LinearForm<>(ExactRatio.ZERO, coefs));
     }
