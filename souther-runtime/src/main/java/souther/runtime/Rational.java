@@ -290,9 +290,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                     raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
             BigInteger shared = denominator.gcd(other.denominator);
             BigInteger overThis = denominator.divide(shared);
-            BigInteger sum =
-                    here.multiply(other.denominator.divide(shared)).add(there.multiply(overThis));
-            return new Rational(sum, overThis.multiply(other.denominator), commonTwos, commonFives);
+            Summed sum = summed(
+                    here.multiply(other.denominator.divide(shared)), there.multiply(overThis));
+            return new Rational(sum.whole(), overThis.multiply(other.denominator),
+                    added(commonTwos, sum.twos()), commonFives);
         } catch (ArithmeticException e) {
             throw noRoomForIt(e);
         }
@@ -300,6 +301,39 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     public Rational minus(Rational other) {
         return plus(other.negated());
+    }
+
+    /** A sum, and the factors of two taken off it while it was formed. */
+    record Summed(BigInteger whole, int twos) {}
+
+    /**
+     * The sum of two whole numbers, with its factors of two taken off as it is formed rather than after.
+     *
+     * <p>The host holds a largest whole number, and the sum of two it holds can want one bit more than
+     * either of them — while the Rational that sum stands for holds that bit as an exponent and is an
+     * ordinary value. So what is formed is not the sum but the odd part of it, and the factors of two go
+     * where every other factor of two in this type goes. The host's largest whole number bounds this
+     * type's numerator, which is in lowest terms and holds no factor of two; it does not bound a sum on
+     * the way to one.
+     *
+     * <p>Neither side has to be made larger to halve their sum. Where both are even, both come down;
+     * where both are odd, {@code (a + b) / 2} is {@code a/2 + b/2 + 1}, which holds for two negatives as
+     * well, the halving being the one that rounds down on both. Where one is odd and the other even the
+     * sum is odd, and then it is its own odd part and as large as it is going to be.
+     */
+    static Summed summed(BigInteger a, BigInteger b) {
+        if (a.signum() != b.signum()) {
+            // The magnitudes take away from one another, so the sum is no larger than the greater of them.
+            return new Summed(a.add(b), 0);
+        }
+        int common = Math.min(a.getLowestSetBit(), b.getLowestSetBit());
+        BigInteger here = a.shiftRight(common);
+        BigInteger there = b.shiftRight(common);
+        if (here.testBit(0) && there.testBit(0)) {
+            return new Summed(
+                    here.shiftRight(1).add(there.shiftRight(1)).add(BigInteger.ONE), common + 1);
+        }
+        return new Summed(here.add(there), common);
     }
 
     /**
@@ -327,12 +361,11 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (bySign != 0) {
             return bySign;
         }
-        try {
-            int byMagnitude = compareMagnitude(other);
-            return signum() > 0 ? byMagnitude : -byMagnitude;
-        } catch (ArithmeticException e) {
-            throw noRoomForIt(e);
-        }
+        // Nothing here is translated, because nothing here reaches the host's largest whole number: every
+        // number a comparison forms is one of the working width, which is what bracketing each side
+        // whole rather than cross-multiplying the two fractions buys.
+        int byMagnitude = compareMagnitude(other);
+        return signum() > 0 ? byMagnitude : -byMagnitude;
     }
 
     /**
@@ -350,9 +383,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      */
     private int compareMagnitude(Rational other) {
         // The width stops rising where a count of bits does. Reaching that means the two values agree
-        // over more bits than a bracket is addressed in, which takes stored fractions far larger than
-        // the machine bracketing them — so this is where memory runs out rather than a value's range,
-        // and it says so instead of doubling into a negative width.
+        // over more bits than a bracket is addressed in, which takes stored fractions of that many bits
+        // themselves — so it is the host's largest whole number that is reached, by way of the bracket
+        // rather than by way of the values, and it says so instead of doubling into a negative width.
         for (int width = BRACKET_BITS; width > 0; width += width) {
             Integer decided = magnitudeFromBrackets(other, width);
             if (decided != null) {
@@ -392,27 +425,56 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * both together — and two numbers the host holds can have a product it does not.
      */
     private Bracketed bracketedMagnitude(int width) {
-        Bracketed of = quotientBracketed(numerator.abs(), denominator, width);
-        if (fives != 0) {
-            Bracketed five = fiveTo(BigInteger.valueOf(fives).abs(), width);
-            of = of.times(fives > 0 ? five : five.reciprocal(width), width);
-        }
-        return of.shiftedBy(BigInteger.valueOf(twos));
+        return bracketed(BigInteger.valueOf(twos), BigInteger.valueOf(fives), width);
     }
 
     /**
-     * {@code x / y} held between two whole numbers of {@code width} bits, {@code x} being at least
+     * The magnitude of this value with {@code byTwos} and {@code byFives} standing in for its own
+     * exponents, held between two whole numbers of about {@code width} bits.
+     *
+     * <p>Taken at other exponents by the narrowing, which asks about this value times a power of ten and
+     * so about exponents a scale has been added to. The rest is the same reading, and is one reading
+     * rather than two because the shape it has to avoid is the same in both: a stored fraction multiplied
+     * outside the bracket is a number as large as the fraction, whatever the bracket is kept to.
+     */
+    private Bracketed bracketed(BigInteger byTwos, BigInteger byFives, int width) {
+        Bracketed of = quotientBracketed(numerator.abs(), denominator, width);
+        if (byFives.signum() != 0) {
+            Bracketed five = fiveTo(byFives.abs(), width);
+            of = of.times(byFives.signum() > 0 ? five : five.reciprocal(width), width);
+        }
+        return of.shiftedBy(byTwos);
+    }
+
+    /**
+     * {@code x / y} held between two whole numbers of about {@code width} bits, {@code x} being at least
      * nought and {@code y} above it.
      *
-     * <p>One division of numbers no larger than the wider of the two, and never a product of them. The
-     * shift is where the width comes from: the numerator is moved until the quotient has the bits asked
-     * for, and the quotient a whole division answers stands between that and one more.
+     * <p>Both sides are cut to the width first and what was cut off becomes part of the shift, so nothing
+     * here is the size of either of them. A quotient's leading bits are decided by the leading bits of
+     * the two numbers, and reaching them by moving the numerator up instead asks for room above it that a
+     * stored fraction at the end of what the host holds does not have — a distance that then does not fit
+     * in the count a shift is given, and a shift of a negative count is a shift the other way. What comes
+     * of that is not a refusal but a bracket with the value outside it, which is an order answered wrongly.
      */
     private static Bracketed quotientBracketed(BigInteger x, BigInteger y, int width) {
-        long by = (long) x.bitLength() - y.bitLength() - width;
-        BigInteger lifted = by >= 0 ? x.shiftRight((int) by) : x.shiftLeft((int) -by);
-        BigInteger low = lifted.divide(y);
-        return new Bracketed(low, low.add(BigInteger.ONE), BigInteger.valueOf(by));
+        Bracketed over = leadingBits(x, width);
+        Bracketed under = leadingBits(y, width);
+        return new Bracketed(
+                over.low().shiftLeft(width).divide(under.high()),
+                over.high().shiftLeft(width).divide(under.low()).add(BigInteger.ONE),
+                over.shift().subtract(under.shift()).subtract(BigInteger.valueOf(width)));
+    }
+
+    /** A whole number's leading bits: what was cut off is the shift, and the number stands between the
+     *  bits that are left and one more of them. */
+    private static Bracketed leadingBits(BigInteger whole, int width) {
+        int over = whole.bitLength() - width;
+        if (over <= 0) {
+            return Bracketed.exactly(whole);
+        }
+        BigInteger kept = whole.shiftRight(over);
+        return new Bracketed(kept, kept.add(BigInteger.ONE), BigInteger.valueOf(over));
     }
 
     /**
@@ -728,23 +790,11 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             return roundedFrom(twice.shiftRight(1), 0, towards);
         }
         for (int width = BRACKET_BITS; width > 0; width += width) {
-            Bracketed up = Bracketed.exactly(magnitude);
-            Bracketed down = Bracketed.exactly(denominator);
-            if (byFives.signum() > 0) {
-                up = fiveTo(byFives, width).times(magnitude);
-            } else if (byFives.signum() < 0) {
-                down = fiveTo(byFives.negate(), width).times(denominator);
-            }
             // Twice the value, so that one whole number carries both which two it stands between and
             // which side of half of the way it stands: its half is the one, its last bit the other.
-            if (byTwiceTheTwos.signum() >= 0) {
-                up = up.shiftedBy(byTwiceTheTwos);
-            } else {
-                down = down.shiftedBy(byTwiceTheTwos.negate());
-            }
-            BigInteger apart = up.shift().subtract(down.shift());
-            BigInteger least = flooredQuotient(up.low(), down.high(), apart);
-            BigInteger most = flooredQuotient(up.high(), down.low(), apart);
+            Bracketed twice = bracketed(byTwiceTheTwos, byFives, width);
+            BigInteger least = flooredAt(twice.low(), twice.shift());
+            BigInteger most = flooredAt(twice.high(), twice.shift());
             if (least.equals(most)) {
                 return roundedFrom(least.shiftRight(1), least.testBit(0) ? 1 : -1, towards);
             }
@@ -789,19 +839,23 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         return whole.shiftLeft(byTwos).multiply(FIVE.pow(byFives));
     }
 
-    /** {@code floor(x × 2^byBits / y)}, {@code x} being at least nought and {@code y} above it. */
-    private static BigInteger flooredQuotient(BigInteger x, BigInteger y, BigInteger byBits) {
+    /**
+     * {@code floor(whole × 2^byBits)}, the whole number being at least nought.
+     *
+     * <p>Moved up, what is built is the answer's own digits and so is the one size a narrowing may always
+     * ask for. Moved down by more bits than the number has, it is below one and the floor is nought —
+     * which is the shape a value far nearer nought than the scale counts takes, and the distance itself is
+     * one no count of bits holds.
+     */
+    private static BigInteger flooredAt(BigInteger whole, BigInteger byBits) {
         if (byBits.signum() >= 0) {
-            return x.shiftLeft(buildable(byBits)).divide(y);
+            return whole.shiftLeft(buildable(byBits));
         }
         BigInteger down = byBits.negate();
-        // Shifted down by more bits than the numerator has, the quotient is below one whatever the
-        // denominator is — which is the shape a value far nearer nought than the scale counts takes, and
-        // the shift itself is one no machine holds.
-        if (down.compareTo(BigInteger.valueOf(x.bitLength())) > 0) {
+        if (down.compareTo(BigInteger.valueOf(whole.bitLength())) > 0) {
             return BigInteger.ZERO;
         }
-        return x.divide(y.shiftLeft(down.intValueExact()));
+        return whole.shiftRight(down.intValueExact());
     }
 
     /** The same of an exponent held wider than one of this type's own, which the sum of an exponent and

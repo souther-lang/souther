@@ -88,6 +88,56 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
     }
 
     /**
+     * A sum is formed no larger than the greater of the two numbers it is of.
+     *
+     * <p>Which is what says the host's largest whole number bounds this type's numerator and not a sum on
+     * the way to one. Two numbers the host holds can want one bit more between them, and the value that
+     * sum stands for holds that bit as an exponent: three below a power of two and three above it add to
+     * that power, whose place here is one numerator and one exponent. So the factors of two come off as
+     * the sum is formed, and what is formed never grows.
+     *
+     * <p>Stated over sizes a test can hold, because the bit past the host's own end needs a pair of
+     * numbers of hundreds of megabytes to reach — and it is this property, not that pair, that decides
+     * whether reaching it aborts.
+     */
+    @Test
+    void aSumIsFormedNoLargerThanWhatItIsASumOf() {
+        for (int bits : new int[] {8, 41, 200}) {
+            BigInteger power = BigInteger.TWO.pow(bits);
+            for (BigInteger apart : List.of(BigInteger.ONE, BigInteger.valueOf(3),
+                    BigInteger.valueOf(1023))) {
+                BigInteger below = power.subtract(apart);
+                BigInteger above = power.add(apart);
+                for (int sign : new int[] {1, -1}) {
+                    BigInteger a = below.multiply(BigInteger.valueOf(sign));
+                    BigInteger b = above.multiply(BigInteger.valueOf(sign));
+                    Rational.Summed sum = Rational.summed(a, b);
+
+                    assertEquals(a.add(b), sum.whole().shiftLeft(sum.twos()),
+                            "the sum is the value it stands for: " + a + " and " + b);
+                    assertTrue(sum.whole().abs().bitLength()
+                                    <= Math.max(a.abs().bitLength(), b.abs().bitLength()),
+                            "and is no larger than either: " + sum.whole().abs().bitLength());
+                }
+            }
+        }
+    }
+
+    /** And the value a sum answers is the exponent form, whatever was taken off it. */
+    @Test
+    void aSumThatIsAPowerOfTwoIsThatExponent() {
+        BigInteger power = BigInteger.TWO.pow(41);
+        Rational below = new Rational(power.subtract(BigInteger.valueOf(3)), BigInteger.ONE, 0, 0);
+        Rational above = new Rational(power.add(BigInteger.valueOf(3)), BigInteger.ONE, 0, 0);
+
+        Rational sum = below.plus(above);
+
+        assertEquals(new Rational(BigInteger.ONE, BigInteger.ONE, 42, 0), sum);
+        assertEquals(BigInteger.ONE, sum.numerator());
+        assertEquals(42L, sum.twos());
+    }
+
+    /**
      * And where the whole number is one the host has no room for, the abort is this language's.
      *
      * <p>A value the host cannot hold is a value this type cannot hold, so the refusal is the type's own

@@ -6,11 +6,13 @@ import java.util.Objects;
 /**
  * The {@code Rational} operators, as the runtime that owns them (ADR-0112).
  *
- * <p>Exact arithmetic has no overflow to check: the value is whatever the operands make, and what is
- * bounded is the exponent a representation holds, which {@link Rational} aborts on for itself. So what
- * is here is the one thing an operator decides that the value does not — a zero divisor, which aborts
- * the way the other zero divisors of the language do (spec §stdlib-int, §jvm-abort) — and the two
- * embeddings a heterogeneous operator performs.
+ * <p>Exact arithmetic has no overflow to check: the value is whatever the operands make. What is bounded
+ * is what a representation holds — the width of an exponent, and the largest whole number the host has a
+ * numerator or a denominator's worth of room for — and {@link Rational} aborts on both for itself, at the
+ * point a value the bound excludes is asked for rather than at a step on the way to one. So what is here
+ * is the one thing an operator decides that the value does not — a zero divisor, which aborts the way the
+ * other zero divisors of the language do (spec §stdlib-int, §jvm-abort) — and the two embeddings a
+ * heterogeneous operator performs.
  *
  * <p>The embeddings are the operator's semantics and not a conversion the language offers: an
  * {@code Int} beside a {@code Rational} is read at its exact mathematical value because that is what

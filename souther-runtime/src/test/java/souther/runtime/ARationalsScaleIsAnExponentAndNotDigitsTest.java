@@ -188,11 +188,11 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
      * numbers do.
      *
      * <p>The brackets are where every comparison is decided, including the ordinary ones, and each of
-     * them is built by a division that rounds and a shift that drops bits. So the answer over values
-     * where a second reading is possible is held against that reading: the exact one, by multiplying the
-     * powers out and cross-multiplying, which these are small enough for and no value this type holds is
-     * in general. Every pair over a grid of numerators, denominators and both exponents, in both
-     * directions.
+     * them is built by a division that rounds, a shift that drops bits, and a pair of ends cut to a
+     * width. So the answer over values where a second reading is possible is held against that reading:
+     * the exact one, by multiplying the powers out and cross-multiplying, which these are small enough
+     * for and no value this type holds is in general. Every pair over a grid of numerators, denominators
+     * and both exponents, in both directions.
      *
      * <p>Held to a time as well. A bracket that did not hold the number it is about would leave pairs it
      * never separates, and the width rising through every count of bits there is takes long enough to
@@ -215,19 +215,61 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
 
         for (Rational a : values) {
             for (Rational b : values) {
-                assertEquals(spelledOut(a).compareTo(spelledOut(b)), Integer.signum(a.compareTo(b)),
+                // the exact order, by cross-multiplying the two values spelled out as fractions
+                int exactly = up(a).multiply(down(b)).compareTo(up(b).multiply(down(a)));
+                assertEquals(Integer.signum(exactly), Integer.signum(a.compareTo(b)),
                         a + " against " + b);
             }
         }
     }
 
-    /** A value as a decimal of enough places to be exact, which only the small ones have. */
-    private static BigDecimal spelledOut(Rational r) {
-        BigInteger up = r.numerator().multiply(power(r.twos(), BigInteger.TWO))
+    /**
+     * And the rounding the brackets answer is the rounding the digits do.
+     *
+     * <p>The narrowing reads the same bracket the order does, so it is held against a second reading the
+     * same way: over values small enough to spell out, the whole number it answers is the one a decimal
+     * built from those digits and rounded by the host answers. Every policy, at scales on both sides of
+     * nought, for values above and below one and on either side of nought.
+     */
+    @Test
+    @Timeout(60)
+    void theRoundingTheBracketsAnswerIsTheRoundingTheDigitsDo() {
+        for (long n : new long[] {1, 3, 7, 25, -1, -3, -25}) {
+            for (long d : new long[] {1, 2, 3, 7}) {
+                for (long twos : new long[] {-4, -1, 0, 2}) {
+                    for (long fives : new long[] {-3, 0, 1}) {
+                        Rational r = new Rational(
+                                BigInteger.valueOf(n), BigInteger.valueOf(d), twos, fives);
+                        // Far more places than the scales asked for below. A value that stands exactly
+                        // half way at one of those scales is one that ends, and one that ends is exact
+                        // here — so the rounding of the reading is the rounding of the value.
+                        BigDecimal spelled = new BigDecimal(up(r))
+                                .divide(new BigDecimal(down(r)), 60, java.math.RoundingMode.HALF_UP);
+                        for (java.math.RoundingMode towards : java.math.RoundingMode.values()) {
+                            if (towards == java.math.RoundingMode.UNNECESSARY) {
+                                continue;
+                            }
+                            for (int scale : new int[] {-1, 0, 1, 3}) {
+                                assertEquals(spelled.setScale(scale, towards), r.asDecimal(scale, towards),
+                                        r + " at scale " + scale + " " + towards);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** The numerator of a value spelled out as one fraction, which only the small ones can be. */
+    private static BigInteger up(Rational r) {
+        return r.numerator().multiply(power(r.twos(), BigInteger.TWO))
                 .multiply(power(r.fives(), FIVE));
-        BigInteger down = r.denominator().multiply(power(-r.twos(), BigInteger.TWO))
+    }
+
+    /** And its denominator, which is above nought, so cross-multiplying keeps the order. */
+    private static BigInteger down(Rational r) {
+        return r.denominator().multiply(power(-r.twos(), BigInteger.TWO))
                 .multiply(power(-r.fives(), FIVE));
-        return new BigDecimal(up).divide(new BigDecimal(down), 40, java.math.RoundingMode.HALF_UP);
     }
 
     /** {@code of^exponent} where the exponent is above nought, and one where it is not. */
