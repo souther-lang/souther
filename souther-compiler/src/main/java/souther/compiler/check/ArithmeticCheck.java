@@ -247,7 +247,7 @@ sealed interface ArithmeticCheck {
             // Two plain numbers of one type. Every operator answers that type, and `/` is the one
             // that does not: its quotient is exact, so it leaves whichever of the two it was given
             // and answers a Rational (ADR-0116). A Rational divided by a Rational is already one.
-            return new Allowed(op == BinOp.DIV && lt == Type.INT ? Type.RATIONAL : lt);
+            return new Allowed((op == BinOp.DIV && lt == Type.INT) ? Type.RATIONAL : lt);
         }
         // Exactly one operand wears a newtype; the other is a value of the base it wraps.
         boolean newtypeOnTheLeft = ln != null;

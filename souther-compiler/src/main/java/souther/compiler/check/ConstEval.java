@@ -158,7 +158,7 @@ public final class ConstEval {
         if (eitherIsExact(a, b)) {
             ExactRatio x = exactly(a);
             ExactRatio y = exactly(b);
-            return x == null || y == null ? null : rel.holds(x.compareTo(y));
+            return (x == null || y == null) ? null : rel.holds(x.compareTo(y));
         }
         if (a instanceof Long x && b instanceof Long y) {
             return rel.holds(Long.compare(x, y));
