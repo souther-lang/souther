@@ -12,9 +12,11 @@ package souther.runtime;
  * <p>Why that distinction is worth a type of its own. A capability like being ordered is a fact about a
  * type, and it is what lets a model write {@code sort}, {@code min} and {@code max} over it. If running
  * out of room were a refusal of the value, then a type would be ordered for some pairs and not others, and
- * a {@code sort} the compiler admitted would be one whose success depended on how much room the machine
- * that ran it happened to have. The same two values compare in a run with more room. So the shortage
- * belongs to the run and is reported as the run's, the way a list longer than memory holds is (ADR-0113).
+ * what a {@code sort} over it meant — and whether the compiler admitted one at all — would depend on how
+ * much room the machine that ran it happened to have. That a given run of one may not finish for want of
+ * room is a different thing and is true of every operation there is. The same two values compare in a run
+ * with more room, so the shortage belongs to the run and is reported as the run's, the way a list longer
+ * than memory holds is (ADR-0113).
  *
  * <p>Souther code cannot catch it, as it cannot catch the other aborts. A boundary may, and should read it
  * as the platform failing rather than as anything the request asked for.

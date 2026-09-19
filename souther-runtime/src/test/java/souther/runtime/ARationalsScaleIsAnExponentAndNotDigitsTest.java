@@ -500,6 +500,163 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         }
     }
 
+    /**
+     * A pair of huge opposing exponents is written out by neither side, and is still ordered.
+     *
+     * <p>This is the pair #1795 is about, read at the reading that was its whole subject. Both values are
+     * one exponent each; the two exponents are large and pull opposite ways, so the writing that puts their
+     * difference on one side asks for a power of two of some three hundred million megabytes on the way up
+     * and a power of five of the same on the way down. Neither is a number the host holds, so both writings
+     * decline — which is the fact this asserts, and which nothing else here would notice, the order being
+     * settled for this pair by the cheap bracket before any writing is reached.
+     */
+    @Test
+    void aPairOfHugeOpposingExponentsIsWrittenOutByNeitherSide() {
+        Rational twos = aPowerOfTwo();
+        Rational fives = theNearestPowerOfFive();
+
+        assertNull(twos.magnitudeWrittenOut(fives, Long.MAX_VALUE),
+                "no writing of this pair is a number the host holds, whatever it may cost");
+        assertNull(fives.magnitudeWrittenOut(twos, Long.MAX_VALUE));
+        assertTrue(twos.compareTo(fives) > 0, "and the order is answered all the same");
+    }
+
+    /**
+     * And a pair the starting width leaves open, whose powers no writing is worth, is answered by refining —
+     * through the comparison's own readings and not by asking the last of them directly.
+     *
+     * <p>The pair has everything the shape needs but the size: compact parts, large exponents pulling
+     * opposite ways, and the two values standing far closer together than the width the comparison starts
+     * at. What it does not have is powers past what the host holds, because a pair with those has no second
+     * reading to check the answer against — so what stands in for the host's end here is the budget, the
+     * reading being told no writing is worth anything. The route is then the route the huge pair takes:
+     * bracket open, both writings declining, the refinement answering.
+     *
+     * <p>The fraction is the best one of its size standing near the power, so the two values agree over
+     * hundreds of bits — found by the walk a common measure takes, which is the same walk that orders two
+     * fractions. The answer is held against cross multiplication, which these are small enough for.
+     */
+    @Test
+    void aPairNoWritingIsWorthIsAnsweredByTheReadingsBelowIt() {
+        BigInteger power = FIVE.pow(300);
+        BigInteger[] near = theBestApproximationOf(power, BigInteger.TWO.pow(697), 135);
+        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 300);
+        Rational nearIt = new Rational(near[0], near[1], 697, 0);
+
+        assertNull(aPower.magnitudeFromBrackets(nearIt, 128),
+                "the width the comparison starts at does not separate this pair");
+        assertNull(aPower.magnitudeWrittenOut(nearIt, 0),
+                "and no writing of it is worth taking at this budget");
+
+        // the exact order, by cross-multiplying the two written out as fractions
+        int exactly = power.multiply(near[1]).compareTo(near[0].multiply(BigInteger.TWO.pow(697)));
+        assertEquals(Integer.signum(exactly), aPower.magnitudeWithAWritingWorth(nearIt, 0));
+        assertEquals(-Integer.signum(exactly), nearIt.magnitudeWithAWritingWorth(aPower, 0));
+        // and the same pair, left to work out for itself what a writing is worth, answers the same
+        assertEquals(Integer.signum(exactly), Integer.signum(aPower.compareTo(nearIt)));
+    }
+
+    /**
+     * The best approximation of {@code n/d} whose denominator is over {@code bits} bits, as a numerator
+     * beside a denominator.
+     *
+     * <p>The convergents of the walk a common measure takes, which are the closest any fraction of their
+     * size stands to what they approximate — a denominator of some many bits lands within twice that many
+     * bits of the value, which is how a fixture stands hundreds of bits from a power while staying small
+     * enough to read.
+     */
+    private static BigInteger[] theBestApproximationOf(BigInteger n, BigInteger d, int bits) {
+        BigInteger overBefore = BigInteger.ZERO;
+        BigInteger over = BigInteger.ONE;
+        BigInteger underBefore = BigInteger.ONE;
+        BigInteger under = BigInteger.ZERO;
+        BigInteger up = n;
+        BigInteger by = d;
+        while (under.bitLength() <= bits && by.signum() != 0) {
+            BigInteger[] step = up.divideAndRemainder(by);
+            BigInteger overNext = step[0].multiply(over).add(overBefore);
+            BigInteger underNext = step[0].multiply(under).add(underBefore);
+            overBefore = over;
+            over = overNext;
+            underBefore = under;
+            under = underNext;
+            up = by;
+            by = step[1];
+        }
+        return new BigInteger[] {over, under};
+    }
+
+    /**
+     * And the search for a width retreats into what the host holds where the rise has asked for too much.
+     *
+     * <p>Two searches are going on in the refinement and they are not the same search: one is for the
+     * precision the question needs, which rises, and the other is for where the host's room gives out, which
+     * is only found by asking. Read as one, the first width that asked for too much ended the whole thing —
+     * so a question needing a width between the last one that was held and the one that failed went
+     * unanswered while the room for it was there, which is the one thing a total order may not do.
+     *
+     * <p>Asked of this mechanism with a reading of its own, because for any reading of a Rational the two
+     * widths stand hundreds of megabytes apart. The rising overshoots by design, which is what the assertion
+     * below the answer says: the width that failed was tried, and the answer came from a narrower one.
+     */
+    @Test
+    void theSearchForAWidthRetreatsIntoWhatTheHostHolds() {
+        int enough = 5000;
+        int pastWhatIsHeld = 6000;
+        List<Integer> tried = new ArrayList<>();
+
+        String answered = Rational.asWideAsItTakes(width -> {
+            tried.add(width);
+            if (width >= pastWhatIsHeld) {
+                throw new OutOfRoom("no room for a width of " + width);
+            }
+            return width >= enough ? "answered" : null;
+        }, () -> "answer this");
+
+        assertEquals("answered", answered);
+        assertTrue(tried.stream().anyMatch(width -> width >= pastWhatIsHeld),
+                "the rise asked for a width the host would not hold, which is what the retreat is for");
+        assertTrue(tried.stream().anyMatch(width -> width >= enough && width < pastWhatIsHeld),
+                "and the answer came from a width between the two");
+    }
+
+    /**
+     * And where no width the host holds is wide enough, the search ends and the run has failed.
+     *
+     * <p>The control for the retreat, and what says it ends: the two widths close on one another, so the
+     * search stops rather than going round for ever. A retreat that could not end would have been the other
+     * way to lose the promise.
+     */
+    @Test
+    @Timeout(20)
+    void whereNoWidthTheHostHoldsIsEnoughTheRunHasFailed() {
+        assertThrows(OutOfRoom.class, () -> Rational.asWideAsItTakes(
+                width -> {
+                    if (width >= 6000) {
+                        throw new OutOfRoom("no room for a width of " + width);
+                    }
+                    return null;
+                },
+                () -> "answer this"));
+    }
+
+    /**
+     * And a count of bits past what the host addresses is the run's shortage, not a number.
+     *
+     * <p>A width and a bit length are both counted in an {@code int}, so a count made of two of them wraps
+     * in silence — and a wrapped count of bits does not refuse but answers, a negative shift being a shift
+     * the other way. What came of that was a bracket holding the wrong numbers, which is an order answered
+     * wrongly rather than declined. Reaching it through a comparison wants numbers of some hundreds of
+     * megabytes, so the arithmetic that every count goes through is asked directly.
+     */
+    @Test
+    void aCountOfBitsPastWhatTheHostAddressesIsTheRunsShortage() {
+        assertEquals(Integer.MAX_VALUE, Rational.bitsTheHostAddresses(Integer.MAX_VALUE));
+        assertThrows(OutOfRoom.class, () -> Rational.bitsTheHostAddresses(Integer.MAX_VALUE + 1L));
+        assertThrows(OutOfRoom.class,
+                () -> Rational.bitsTheHostAddresses((long) Integer.MAX_VALUE + Integer.MAX_VALUE));
+    }
+
     /** The numerator of a value spelled out as one fraction, which only the small ones can be. */
     private static BigInteger up(Rational r) {
         return r.numerator().multiply(power(r.twos(), BigInteger.TWO))

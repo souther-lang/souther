@@ -49,8 +49,9 @@ import java.util.function.Supplier;
  * it. Comparing builds nothing for the pairs a bracket separates, which is nearly all of them: a power
  * of two is a count of bits there and a power of five is bracketed by squaring, so {@code r < 1} does
  * not spell out a millionth. Where a bracket does not separate the pair, the two values are written out
- * as one fraction each and compared exactly — which costs what those fractions cost and is the only
- * thing that answers a pair standing closer together than any width settled on beforehand.
+ * as one fraction each and compared exactly, which costs what those fractions cost and is worth doing
+ * while it costs about what holding them does; past that the bracket is taken again wider instead, and
+ * either way a pair standing closer together than any width settled on beforehand is answered.
  *
  * <p><b>What a step is allowed to refuse.</b> An operation aborts where the answer has no
  * representation here, and not where a step on the way to it has none. The two are easy to confuse
@@ -70,7 +71,8 @@ import java.util.function.Supplier;
  * fractions have — so a comparison may want working room in proportion to what it was handed. That is what
  * it costs, and not a pair it declines: where the room runs out the run has failed and says so
  * ({@link OutOfRoom}), and the same pair compares where there is more of it. Being ordered is a fact about
- * this type, and a {@code sort} the compiler admitted does not succeed or fail by the size of a heap.
+ * this type, so what a heap's size may not decide is whether a {@code sort} over these is admitted and what
+ * it means — as against whether one run of it finishes, which is what any operation is subject to.
  *
  * <p><b>The host's own limits leave by this type's abort.</b> A whole number is held by a host that has
  * a largest one, and a number past it is one no value here is made of — so no method of this type
@@ -94,7 +96,8 @@ import java.util.function.Supplier;
  * product of two stored numbers and asks for no width. That is not conditioned on the powers happening to
  * cancel: two fractions can stand closer together than any width settled on before they arrive, whatever
  * powers stand between them, and a width is only the instrument for the pairs brought close by exponents
- * too large to write down — whose closeness is bounded by how well whole numbers approximate the log.
+ * too large to be worth writing down — whose closeness is bounded by how well whole numbers approximate the
+ * log. Which of the two ways a pair is answered is a question of cost alone, both being exact.
  *
  * <p>The sum is the one operation that forms a number larger than its answer, and it is the one whose
  * formed number is not a route to the answer but the answer's own definition: an exact sum is the sum of
@@ -125,6 +128,20 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * multiplications of numbers this size.
      */
     private static final int BRACKET_BITS = 128;
+
+    /**
+     * How many times over what a pair already takes up a cheap exact writing of it may form.
+     *
+     * <p>A cost policy and nothing else — every value it turns away is answered by the reading below it.
+     * Over the two and a third bits a factor of five takes, so that a pair whose exponents nearly cancel is
+     * written out rather than refined, and small enough that a pair brought close by exponents too large to
+     * write down is refined rather than written.
+     */
+    private static final int A_FEW_TIMES = 4;
+
+    /** More bits than a factor of five takes, which is over two and a third of them. Counted over the truth
+     *  so that the count of what a writing would cost is over it too. */
+    private static final int MORE_BITS_THAN_A_FIVE_TAKES = 3;
 
 
     /**
@@ -380,18 +397,20 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * Where this stands against {@code other} by exact mathematical value.
      *
-     * <p>Answered for every pair this type holds, and no power is ever built to answer it. What the
-     * two values are made of beyond their stored fractions is a power of two, which is a count of
-     * bits, and a power of five, which is bracketed between two whole numbers of a working width by
-     * squaring — so the work is the bits of an exponent rather than its size, and a comparison of a
-     * millionth of a millionth against one costs a few dozen multiplications of numbers that width.
+     * <p>Answered for every pair this type holds, and answered without building a power for all but the
+     * pairs where building one is the cheaper way. What the two values are made of beyond their stored
+     * fractions is a power of two, which is a count of bits, and a power of five, which is bracketed
+     * between two whole numbers of a working width by squaring — so the work is the bits of an exponent
+     * rather than its size, and a comparison of a millionth of a millionth against one costs a few dozen
+     * multiplications of numbers that width.
      *
-     * <p>Where a bracket is too wide to separate the pair it is taken again at twice the width. That
-     * ends, because two values with one canonical representation each are equal exactly where those
-     * representations are, and unequal ones stand a fixed distance apart for a bracket to get inside
-     * of. Which is the whole of why this is answered from brackets rather than from the numbers: the
-     * exponents run to sixty-four bits, so the pairs whose logs sit closest together are also the ones
-     * whose digits no machine holds.
+     * <p>Where the bracket is too wide to separate the pair, the readings under {@link #compareMagnitude}
+     * take over: the powers are written down where that costs about what the pair already does, and where
+     * it does not the bracket is taken again wider until the two come apart. The rising ends, because two
+     * values with one canonical representation each are equal exactly where those representations are, and
+     * unequal ones stand a fixed distance apart for a bracket to get inside of. Which is the whole of why
+     * this rests on brackets rather than on the numbers: the exponents run to sixty-four bits, so the pairs
+     * whose logs sit closest together are also the ones whose digits no machine holds.
      */
     @Override
     public int compareTo(Rational other) {
@@ -425,31 +444,76 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * <p><b>Four readings, and only the last one always answers.</b> The three above it are there because
      * they are cheap, and each is allowed to decline: a bracket of the starting width settles nearly every
      * pair for a few dozen multiplications of small numbers; writing both values out as one fraction each
-     * settles a pair the host has room to write, which is every pair an ordinary model holds; and the same
-     * writing with the exponents' difference on one side settles a pair whose huge exponents cancel. What
-     * is left over goes to the refinement, which asks for no width in advance and so has nothing to
-     * decline for.
+     * settles a pair whose powers are worth writing down; and the same writing with the exponents'
+     * difference on one side settles a pair whose huge exponents cancel. What is left over goes to the
+     * refinement, which asks for no width in advance and so has nothing to decline for.
      */
     private int compareMagnitude(Rational other) {
+        return magnitudeWithAWritingWorth(
+                other, bitsAWritingIsWorth(storedBits() + other.storedBits()));
+    }
+
+    /**
+     * The same, with what a writing may cost stated rather than worked out.
+     *
+     * <p>Apart from the comparison so that the readings can be asked for as a sequence — a pair the bracket
+     * leaves open, a writing that declines, and the refinement answering — which is what a fixture cannot
+     * otherwise put a question to. The pairs that reach the refinement in earnest are the ones whose powers
+     * no machine writes down, and a value carrying one of those is not something a test builds. Told that no
+     * writing is worth anything, the readings take the same route for a pair a test can check the answer of.
+     */
+    int magnitudeWithAWritingWorth(Rational other, long bitsAWritingMayForm) {
         Integer quickly = magnitudeFromBrackets(other, BRACKET_BITS);
         if (quickly != null) {
             return quickly;
         }
         // The bracket did not separate them, so they stand close. Then the pair is written out as two
         // fractions and compared exactly, at whatever closeness it happens to have.
-        Integer exactly = magnitudeWrittenOut(other);
+        Integer exactly = magnitudeWrittenOut(other, bitsAWritingMayForm);
         if (exactly != null) {
             return exactly;
         }
         // And asked the other way about, which is a different pair of fractions to write out and so a
-        // different question about room. Where one side's powers cancel the other's, only one of the two
-        // writings fits — and which of them that is has nothing to do with which value was asked about,
-        // so an order that took one writing and stopped answered one way round and refused the other.
-        Integer theOtherWayAbout = other.magnitudeWrittenOut(this);
+        // different question about cost. Where one side's powers cancel the other's, only one of the two
+        // writings is worth taking — and which of them that is has nothing to do with which value was asked
+        // about, so an order that took one writing and stopped read one pair two ways.
+        Integer theOtherWayAbout = other.magnitudeWrittenOut(this, bitsAWritingMayForm);
         if (theOtherWayAbout != null) {
             return -theOtherWayAbout;
         }
         return magnitudeByRefining(other);
+    }
+
+    /** How many bits the parts a value stores take up, which is what holding it costs. */
+    private long storedBits() {
+        return (long) numerator.abs().bitLength() + denominator.bitLength();
+    }
+
+    /**
+     * How large a whole number a writing may form before the refinement is the cheaper way to the answer,
+     * for values whose stored parts take up this many bits.
+     *
+     * <p>A cost and nothing else. Once the refinement answers every pair, what the readings above it are for
+     * is being cheap, so what they must decide is not whether the host could hold the number but whether the
+     * number is worth forming — and the two questions have different answers over a range where the second
+     * is the one that matters. A power of five of some hundreds of millions is a few hundred megabytes and
+     * minutes of work; the host holds it, and the refinement would have settled the same pair at a few
+     * thousand bits. Asked the first question, the reading spent that; asked this one, it declines and costs
+     * nothing.
+     *
+     * <p>A multiple of what the values already take up, because that is what the refinement costs. Telling
+     * two values apart takes as many bits as they agree over, and two values whose stored fractions are of
+     * some size cannot agree over much more than that size unless their exponents very nearly cancel — in
+     * which case what the writing forms is of that size too. So a writing much larger than the stored parts
+     * is one the refinement beats, and a writing near them is one it does not.
+     *
+     * <p>Declining where the writing would have done is free. It sends the pair to a reading that answers,
+     * which is why the two questions could be told apart at all: while the writing was the last word, a
+     * reading that turned away what it could have written left the order unanswered, so its test had to lean
+     * the other way — towards attempting anything the host might hold.
+     */
+    private static long bitsAWritingIsWorth(long stored) {
+        return A_FEW_TIMES * stored + BRACKET_BITS;
     }
 
     /**
@@ -475,7 +539,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     }
 
     /** A question a bracket of some width either settles or leaves open. */
-    private interface ReadFromABracket<T> {
+    interface ReadFromABracket<T> {
         @Nullable T atAWidthOf(int bits);
     }
 
@@ -489,84 +553,117 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * that how fast a width rises is not a decision sitting in the middle of what an order means, and so
      * that the next reading wanting a bracket gets the refinement rather than a third copy of it.
      *
-     * <p>Nothing is caught. A reading that declines says so by answering nothing, and a reading that
-     * cannot be taken at a width the host has no room for says so where it reaches the host — a bracket
-     * being an instrument, the shortage is the run's ({@link OutOfRoom}) and is already that by the time it
-     * arrives here. An abort of this language, from a reading that found the answer itself has no
-     * representation, is a different thing and passes through untouched.
+     * <p>The run's shortage at one width is caught, and no other thing is. A width the host has no room for
+     * says nothing about the widths below it, so the reading is not finished — what is finished is the
+     * rising, and what follows is the search for the widest width there is room for. An abort of this
+     * language, from a reading that found the answer itself has no representation, is a different thing and
+     * passes through untouched. So does an error of the host's own, running out of memory being the run
+     * failing in the way every run does and not something to be worked around.
+     *
+     * <p>Reachable to a test with a reading of its own, because the two widths this is about — the one the
+     * question needs and the one the host will not hold — are hundreds of megabytes apart for any reading
+     * here, and a fixture that put them where a test can see them would not be this mechanism.
      */
-    private static <T> T asWideAsItTakes(
+    static <T> T asWideAsItTakes(
             ReadFromABracket<T> reading, Supplier<String> theQuestion) {
-        for (WorkingWidth width = WorkingWidth.startingAt(BRACKET_BITS).wider();
-                width != null; width = width.wider()) {
-            T decided = reading.atAWidthOf(width.bits());
+        WidthsToTry widths = WidthsToTry.aboveAWidthOf(BRACKET_BITS);
+        while (widths.thereIsOneToTry()) {
+            int width = widths.next();
+            T decided;
+            try {
+                decided = reading.atAWidthOf(width);
+            } catch (OutOfRoom _) {
+                widths = widths.wasTooWide(width);
+                continue;
+            }
             if (decided != null) {
                 return decided;
             }
+            widths = widths.wasNotWideEnough(width);
         }
         throw new OutOfRoom("this run has no room to " + theQuestion.get());
     }
 
     /**
-     * A width brackets are taken at, and what the next one up is.
+     * The widths a reading is taken at: which to try next, given the widest one known to be held and the
+     * narrowest one known to be past what the host holds.
      *
-     * <p>Its own type so that the rate a width rises at is not written into the reading that rises it. A
-     * width written into a comparison is that comparison's limit rather than the machine's, which is the
-     * shape the order had to lose; a rate written there is the same mistake made about cost instead of
-     * about meaning.
+     * <p>Its own type because two searches are going on here and the reading is the subject of neither. One
+     * is for the precision the question needs, which rises; the other is for where the host's room gives
+     * out, which is found only by asking. Written as a rising alone, the second was assumed to be the first
+     * width that failed — so a width that asked for too much ended the whole thing, while a narrower one
+     * the host did hold and that would have settled the question went untried. A rate of rise is a decision
+     * about cost; treating the first failure as the frontier was a decision about the answer, made by the
+     * same arithmetic.
      *
-     * <p>Half again each turn rather than twice over. The number of turns is proportional to the log of how
-     * closely the pair stands either way, and the whole costs what its last turn costs either way — so what
-     * the gentler rise buys is asking the host for less past the width that would have done. Never by fewer
-     * than a few dozen bits, so that the rise is not slow while the width is small.
+     * <p>So the rise stops at the first failure and the search turns inward: between a width that was held
+     * and one that was not, it tries the middle, and either side of that middle tells it which half to keep.
+     * That ends, the two closing on one another, and it ends having tried a width the host holds and within
+     * a bit of the widest there is. Only then is the room genuinely out.
+     *
+     * <p>Half again each turn while it rises. The number of turns is proportional to the log of how closely
+     * the pair stands either way, and the whole costs what its last turn costs either way — so what the
+     * gentler rise buys is asking the host for less past the width that would have done. Never by fewer than
+     * a few dozen bits, so that the rise is not slow while the width is small. The widest width the host
+     * counts is tried rather than stepped over, a rise being no reason to skip it.
      */
-    private record WorkingWidth(int bits) {
+    private record WidthsToTry(int held, int past) {
 
         private static final int A_FEW_DOZEN_BITS = 64;
 
-        static WorkingWidth startingAt(int bits) {
-            return new WorkingWidth(bits);
+        /** No width is known to be past what the host holds until one has failed, and nought is no width. */
+        private static final int NONE_HAS_FAILED = 0;
+
+        static WidthsToTry aboveAWidthOf(int held) {
+            return new WidthsToTry(held, NONE_HAS_FAILED);
         }
 
-        /**
-         * The next width up, and null where there is none this run holds.
-         *
-         * <p>A host that counts the bits of a whole number in an {@code int} holds no number of more bits
-         * than one counts, so a bracket wider than that is one it has no room for whatever else is free.
-         * Short of that the host answers for itself, and running out of memory on the way is the run
-         * failing in the way every run does.
-         */
-        @Nullable WorkingWidth wider() {
-            long next = bits + Math.max(A_FEW_DOZEN_BITS, bits / 2L);
-            return next > Integer.MAX_VALUE ? null : new WorkingWidth((int) next);
+        boolean thereIsOneToTry() {
+            return past == NONE_HAS_FAILED ? held < Integer.MAX_VALUE : past - held > 1;
+        }
+
+        int next() {
+            if (past == NONE_HAS_FAILED) {
+                return (int) Math.min(
+                        held + Math.max(A_FEW_DOZEN_BITS, held / 2L), Integer.MAX_VALUE);
+            }
+            return held + (past - held) / 2;
+        }
+
+        WidthsToTry wasNotWideEnough(int width) {
+            return new WidthsToTry(width, past);
+        }
+
+        WidthsToTry wasTooWide(int width) {
+            return new WidthsToTry(held, width);
         }
     }
 
     /**
      * Where {@code |this|} stands against {@code |other|} by writing both out as one fraction each, and
-     * null where the host has no room for one of the four whole numbers that takes.
+     * null where one of the four whole numbers that takes is not worth forming.
      *
-     * <p>Each value is written out at its own exponents first, which is the writing the promise about this
-     * is made of and the only one that does not depend on which of the two was asked about. Where that has
-     * no room, the difference of the two exponents is put on this side instead and the other side is left
-     * as it stands — two values of huge but equal exponents cancel that way and are written out where
-     * their own forms could not be.
+     * <p>Each value is written out at its own exponents first, which is the writing that does not depend on
+     * which of the two was asked about. Where that is not worth it, the difference of the two exponents is
+     * put on this side instead and the other side is left as it stands — two values of huge but equal
+     * exponents cancel that way and are written out where their own forms would have cost too much.
      */
-    private @Nullable Integer magnitudeWrittenOut(Rational other) {
-        BigInteger up = writtenOut(numerator.abs(), BigInteger.valueOf(twos), BigInteger.valueOf(fives));
-        BigInteger down = writtenOut(
-                denominator, BigInteger.valueOf(twos).negate(), BigInteger.valueOf(fives).negate());
-        BigInteger thereUp = writtenOut(
-                other.numerator.abs(), BigInteger.valueOf(other.twos), BigInteger.valueOf(other.fives));
+    @Nullable Integer magnitudeWrittenOut(Rational other, long within) {
+        BigInteger up = writtenOut(
+                numerator.abs(), BigInteger.valueOf(twos), BigInteger.valueOf(fives), within);
+        BigInteger down = writtenOut(denominator,
+                BigInteger.valueOf(twos).negate(), BigInteger.valueOf(fives).negate(), within);
+        BigInteger thereUp = writtenOut(other.numerator.abs(),
+                BigInteger.valueOf(other.twos), BigInteger.valueOf(other.fives), within);
         BigInteger thereDown = writtenOut(other.denominator,
-                BigInteger.valueOf(other.twos).negate(), BigInteger.valueOf(other.fives).negate());
+                BigInteger.valueOf(other.twos).negate(), BigInteger.valueOf(other.fives).negate(), within);
         if (up != null && down != null && thereUp != null && thereDown != null) {
             return comparedAsFractions(up, down, thereUp, thereDown);
         }
         BigInteger byTwos = apart(twos, other.twos);
         BigInteger byFives = apart(fives, other.fives);
-        BigInteger relativeUp = writtenOut(numerator.abs(), byTwos, byFives);
-        BigInteger relativeDown = writtenOut(denominator, byTwos.negate(), byFives.negate());
+        BigInteger relativeUp = writtenOut(numerator.abs(), byTwos, byFives, within);
+        BigInteger relativeDown = writtenOut(denominator, byTwos.negate(), byFives.negate(), within);
         return relativeUp == null || relativeDown == null ? null
                 : comparedAsFractions(
                         relativeUp, relativeDown, other.numerator.abs(), other.denominator);
@@ -579,24 +676,32 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     }
 
     /**
-     * A whole number written out with those powers in it, or null where the host has no room for it.
+     * A whole number written out with those powers in it, or null where it would take more than
+     * {@code within} bits and the reading that needs no writing is the cheaper way to the same answer.
      *
-     * <p>The room is asked of the host and not worked out here. A count of bits made before the number is
-     * a guess about the answer to a question the host itself settles, and a guess is two-valued where the
-     * question has three sides to it: room, no room, and not known without asking. Read as the second of
-     * those, a guess that leans to safety turns away numbers the host would have held — and every one it
-     * turns away is a pair sent to a bracket, which is the instrument that cannot be made fine enough. So
-     * the guess is kept only for the side it is sound on, which is refusing what is certainly too large,
-     * and everything else is written out and let stand or not by whoever holds it.
+     * <p>The size is counted before the number is formed, and counted over the truth rather than under it —
+     * a factor of five taken as three bits when it is nearer two and a third. So the count turns away
+     * numbers that would have fitted the budget, and that is the side to be wrong on: a writing turned away
+     * costs nothing and the pair is answered by the refinement, while a writing attempted at hundreds of
+     * megabytes costs that whether or not it ends in a number.
      *
-     * <p>What that costs is what the operands already cost: a power the size of a stored denominator is
-     * the same order of work as that denominator, and a power past what the host holds is refused on
-     * sight by the count of bits rather than reached for.
+     * <p>Which is the opposite of how this had to lean while the writing was the last word. Then a count
+     * that turned away what the host would have held left the order unanswered, so the count was kept under
+     * the truth and everything else was attempted and let stand or not by whoever held it — and a power of
+     * five of some hundreds of millions passed that test, took minutes, and ended in nothing. The host's own
+     * refusal is still caught, the budget being a cost and not a promise about what fits.
      */
     private static @Nullable BigInteger writtenOut(
-            BigInteger whole, BigInteger twos, BigInteger fives) {
+            BigInteger whole, BigInteger twos, BigInteger fives, long within) {
+        BigInteger byTwos = twos.max(BigInteger.ZERO);
+        BigInteger byFives = fives.max(BigInteger.ZERO);
+        BigInteger bits = BigInteger.valueOf(whole.bitLength()).add(byTwos)
+                .add(byFives.multiply(BigInteger.valueOf(MORE_BITS_THAN_A_FIVE_TAKES)));
+        if (bits.compareTo(BigInteger.valueOf(within)) > 0) {
+            return null;
+        }
         try {
-            return builtFrom(whole, twos.max(BigInteger.ZERO), fives.max(BigInteger.ZERO));
+            return builtFrom(whole, byTwos, byFives);
         } catch (ConstraintViolation _) {
             return null;
         } catch (ArithmeticException _) {
@@ -612,17 +717,28 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * width that always overlapped would leave the comparison correct and looping, and a width that
      * always decided would leave the refinement above it unreached — a comparison is the reader that
      * cannot tell either from a bracket that works.
+     *
+     * <p>Everything this forms is an instrument, the two brackets and the numbers they are held against
+     * alike, so a width the host has no room for anywhere in here is the run's shortage. The translation is
+     * around the whole reading rather than around the step that happened to reach the host first: which step
+     * that is depends on the width and on the values, and a reading whose outcome is settled, open, or the
+     * run's has no fourth outcome to leave by.
      */
     @Nullable Integer magnitudeFromBrackets(Rational other, int width) {
-        Bracketed here = bracketedMagnitude(width);
-        Bracketed there = other.bracketedMagnitude(width);
-        if (compareShifted(here.low(), here.shift(), there.high(), there.shift()) > 0) {
-            return 1;
+        try {
+            Bracketed here = bracketedMagnitude(width);
+            Bracketed there = other.bracketedMagnitude(width);
+            if (compareShifted(here.low(), here.shift(), there.high(), there.shift()) > 0) {
+                return 1;
+            }
+            if (compareShifted(here.high(), here.shift(), there.low(), there.shift()) < 0) {
+                return -1;
+            }
+            return null;
+        } catch (ArithmeticException e) {
+            throw new OutOfRoom(
+                    "this run has no room to compare at a width of " + width + " bits: " + e.getMessage());
         }
-        if (compareShifted(here.high(), here.shift(), there.low(), there.shift()) < 0) {
-            return -1;
-        }
-        return null;
     }
 
     /**
@@ -811,9 +927,15 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
          * <p>The ends change places, the lower of the two coming from the upper of these. Nothing here is
          * larger than the width either: a one shifted up to meet an end and divided by it answers the
          * bits asked for, and the shift is the end's own size rather than anything's product.
+         *
+         * <p>The distance to shift by is a count of bits and is added as one. Added as an {@code int} — the
+         * width and a bit length both being that — it wraps where the two together run past what one
+         * counts, and a shift of a negative count is a shift the other way, so what came of it was a
+         * bracket with the value outside it rather than a refusal. That is an order answered wrongly, which
+         * is the one outcome no instrument may have.
          */
         Bracketed reciprocal(int width) {
-            int by = width + high.bitLength();
+            int by = bitsTheHostAddresses((long) width + high.bitLength());
             BigInteger over = BigInteger.ONE.shiftLeft(by);
             return new Bracketed(
                     over.divide(high), over.divide(low).add(BigInteger.ONE),
@@ -874,6 +996,27 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (bits > Integer.MAX_VALUE) {
             throw new ConstraintViolation("no Rational holds a whole number of " + bits + " bits");
         }
+    }
+
+    /**
+     * A count of bits as the host takes one, and the run's shortage where it is past what the host counts.
+     *
+     * <p>Every count of bits formed here goes through this. A bit length and a working width are both
+     * {@code int}, so a count made of two of them is an {@code int} by default and wraps in silence — and
+     * what a wrapped count does is not refuse but answer: a negative shift shifts the other way, and a
+     * bracket whose ends were built that way holds the wrong numbers. A width settled beforehand kept those
+     * counts small enough for the wrap to be unreachable; a width that rises until the host will not hold
+     * the next one does not, so the arithmetic that forms them is the arithmetic that has to say so.
+     *
+     * <p>The shortage is the run's ({@link OutOfRoom}) rather than a value refused, because what these
+     * counts are counting is an instrument. {@link #heldByTheHost} asks the same question about the parts a
+     * value is made of, where the answer is that the value has no representation.
+     */
+    static int bitsTheHostAddresses(long bits) {
+        if (bits > Integer.MAX_VALUE) {
+            throw new OutOfRoom("this run has no room for a whole number of " + bits + " bits");
+        }
+        return (int) bits;
     }
 
     /**
@@ -1087,8 +1230,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      */
     private @Nullable BigInteger roundedExactly(
             BigInteger byTwos, BigInteger byFives, java.math.RoundingMode towards) {
-        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives);
-        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate());
+        long within = bitsAWritingIsWorth(storedBits());
+        BigInteger up = writtenOut(numerator.abs(), byTwos, byFives, within);
+        BigInteger down = writtenOut(denominator, byTwos.negate(), byFives.negate(), within);
         if (up == null || down == null) {
             return null;
         }
