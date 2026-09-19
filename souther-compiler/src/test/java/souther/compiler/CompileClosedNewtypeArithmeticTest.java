@@ -16,8 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Closed newtype arithmetic (spec §newtype-arithmetic): {@code +}/{@code -} over a single-value
  * numeric newtype yield that newtype. The base op runs on the wrapped value and the result is
  * re-wrapped, re-checking the newtype's invariant at construction — so a subtraction that leaves the
- * invariant aborts, exactly as any other construction would. {@code *}/{@code /} and two different
- * newtypes stay rejected.
+ * invariant aborts, exactly as any other construction would. {@code *} stays rejected, and so do two
+ * different newtypes.
+ *
+ * <p>{@code /} is not among the closed ones. A newtype over a newtype's own units is the number its
+ * units leave, so dividing one by another of the same type answers a {@code Rational} and not the
+ * newtype — the operator that does not stay inside the wrapper is refused only where the two types
+ * differ, which is a dimension it would have had to invent.
  */
 class CompileClosedNewtypeArithmeticTest {
 

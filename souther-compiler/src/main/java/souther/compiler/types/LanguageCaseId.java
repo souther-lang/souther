@@ -18,7 +18,7 @@ import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
  *
  * <p>Whether one of these is represented by a class is a backend's question and is not asked here.
  * Two of them are not — an {@code Option} match dispatches on the runtime {@code Option} classes and
- * never on the arm's own name — and the JVM answers for the other four; both facts live in
+ * never on the arm's own name — and the JVM answers for the rest; both facts live in
  * {@code jvm.SoutherJvmAbi}.
  */
 public enum LanguageCaseId implements DelegatedEqualityIsTheCrossingAnswer {

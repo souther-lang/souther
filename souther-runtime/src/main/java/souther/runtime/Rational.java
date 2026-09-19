@@ -49,6 +49,16 @@ import java.math.BigInteger;
  * {@code r < 1} from spelling out a millionth — and falls back to exact whole numbers where they do
  * not. Powers of two and five come arbitrarily close in the log, so that fallback is reachable with
  * small numerators and is not bounded by them.
+ *
+ * <p><b>What a step is allowed to refuse.</b> An operation aborts where the answer has no
+ * representation here, and not where a step on the way to it has none. The two are easy to confuse
+ * because the shapes that separate them are at the ends of the exponent's range, which a run of
+ * squarings reaches and an ordinary model does not: a quotient's exponents are the difference of two
+ * held ones and a reciprocal's are a negation, so division that went by the reciprocal refused
+ * {@code r / r}; a decimal's scale is signed, so a narrowing that took a non-negative one built the
+ * power a compact decimal had carried as its scale; a rounding policy is asked for so that a value
+ * comes back, so reading it off the digits refused values it was named to answer. Each of those is a
+ * middle step narrower than the value it was handed.
  */
 public record Rational(BigInteger numerator, BigInteger denominator, long twos, long fives)
         implements Comparable<Rational> {
@@ -60,13 +70,21 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 0);
 
     /**
-     * Bounds on {@code log2 5}, scaled by {@link #LOG_SCALE}. The lower one is below the true value
-     * and the upper one above it, which is what makes an interval built from them hold the number it
-     * is about.
+     * A log2 is bracketed as a whole number of {@code 2^-LOG_BITS}, and this is that width.
+     *
+     * <p>Chosen against the exponents and not against a mantissa. An exponent runs to sixty-four bits
+     * and is multiplied by a bound on {@code log2 5}, so the error that multiplication makes is the
+     * exponent times the bound's own — and a width above the exponent's leaves it far below one bit
+     * however large the exponent is. A bound of a few digits is exact enough for the exponents a model
+     * writes and says nothing at all about the ones a run of squarings reaches, which is the one thing
+     * a bracket must not do: what it cannot separate it hands to a step that builds the powers.
      */
-    private static final long LOG2_FIVE_BELOW = 2321928;
-    private static final long LOG2_FIVE_ABOVE = 2321929;
-    private static final long LOG_SCALE = 1000000;
+    private static final int LOG_BITS = 96;
+    private static final BigInteger LOG_UNIT = BigInteger.ONE.shiftLeft(LOG_BITS);
+
+    /** {@code log2 5} in those units, rounded down — so the true value stands between this and one
+     *  more, which is what makes an interval built from the two hold the number it is about. */
+    private static final BigInteger LOG2_FIVE = new BigInteger("183962096448172129506858884093");
 
     /**
      * How many bits of a value {@link #toString} will spell out. A rational's plain spelling is as
@@ -207,8 +225,29 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 added(fives, other.fives));
     }
 
+    /**
+     * The quotient. The exponents subtract and are never built, and the cross factors come off before
+     * the multiplication, as they do for the product.
+     *
+     * <p>Not one over the divisor, multiplied in. A reciprocal's exponents are the divisor's negated,
+     * and the least sixty-four-bit number has no positive counterpart — so a quotient reached that way
+     * refused pairs whose own exponents are the difference of two held ones, with {@code r / r} among
+     * them. The difference is what the answer's exponents are, so it is what is computed.
+     */
     public Rational dividedBy(Rational other) {
-        return times(other.reciprocal());
+        if (other.isZero()) {
+            throw new IllegalArgumentException("nought divides nothing");
+        }
+        if (isZero()) {
+            return ZERO;
+        }
+        BigInteger acrossOne = numerator.gcd(other.numerator);
+        BigInteger acrossTwo = denominator.gcd(other.denominator);
+        return new Rational(
+                numerator.divide(acrossOne).multiply(other.denominator.divide(acrossTwo)),
+                denominator.divide(acrossTwo).multiply(other.numerator.divide(acrossOne)),
+                lessened(twos, other.twos),
+                lessened(fives, other.fives));
     }
 
     /**
@@ -232,9 +271,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         long commonTwos = Math.min(twos, other.twos);
         long commonFives = Math.min(fives, other.fives);
         BigInteger here = numerator.multiply(
-                raised(distance(twos, commonTwos), distance(fives, commonFives)));
+                raised(lessened(twos, commonTwos), lessened(fives, commonFives)));
         BigInteger there = other.numerator.multiply(
-                raised(distance(other.twos, commonTwos), distance(other.fives, commonFives)));
+                raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
         BigInteger shared = denominator.gcd(other.denominator);
         BigInteger overThis = denominator.divide(shared);
         BigInteger sum = here.multiply(other.denominator.divide(shared)).add(there.multiply(overThis));
@@ -281,10 +320,10 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         long commonFives = Math.min(fives, other.fives);
         BigInteger here = numerator.abs()
                 .multiply(other.denominator)
-                .multiply(raised(distance(twos, commonTwos), distance(fives, commonFives)));
+                .multiply(raised(lessened(twos, commonTwos), lessened(fives, commonFives)));
         BigInteger there = other.numerator.abs()
                 .multiply(denominator)
-                .multiply(raised(distance(other.twos, commonTwos), distance(other.fives, commonFives)));
+                .multiply(raised(lessened(other.twos, commonTwos), lessened(other.fives, commonFives)));
         return here.compareTo(there);
     }
 
@@ -296,48 +335,46 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * that never decided would leave every comparison correct and every one of them paying for a
      * power, and a comparison is the reader that cannot tell the two apart.
      *
-     * <p>Null as well where the bracket's own arithmetic runs off the end of a sixty-four-bit number,
-     * which exponents a run of multiplications reached can do. The exact comparison answers those,
-     * and what it costs is what building the powers costs.
+     * <p>The brackets are exact whole numbers, so the bracket itself has no range to leave: a pair
+     * whose exponents are at the ends of what this type holds is separated here as readily as a pair a
+     * model wrote. Counted in a sixty-four-bit number instead, the arithmetic of the bracket ran out
+     * before the values it was reading did, and the comparison that read a value as far from one as
+     * this type goes was handed to the step that builds the powers — for a pair it could have decided
+     * from the exponents alone.
      */
     @Nullable Integer magnitudeFromBounds(Rational other) {
-        try {
-            if (lowerLog(this) > upperLog(other)) {
-                return 1;
-            }
-            if (upperLog(this) < lowerLog(other)) {
-                return -1;
-            }
-        } catch (ArithmeticException _) {
-            return null;
+        if (lowerLog(this).compareTo(upperLog(other)) > 0) {
+            return 1;
+        }
+        if (upperLog(this).compareTo(lowerLog(other)) < 0) {
+            return -1;
         }
         return null;
     }
 
-    /** A number {@code log2 |r|} is at least, scaled by {@link #LOG_SCALE}. */
-    private static long lowerLog(Rational r) {
-        return Math.addExact(
-                Math.subtractExact(
-                        Math.multiplyExact(r.numerator.abs().bitLength() - 1L, LOG_SCALE),
-                        Math.multiplyExact((long) r.denominator.bitLength(), LOG_SCALE)),
-                Math.addExact(Math.multiplyExact(r.twos, LOG_SCALE), fivesInLog(r.fives, true)));
+    /** A number {@code log2 |r|} is at least, in units of {@code 2^-LOG_BITS}. */
+    private static BigInteger lowerLog(Rational r) {
+        return atTheseBits(r.numerator.abs().bitLength() - 1L - r.denominator.bitLength(), r.twos)
+                .add(fivesInLog(r.fives, true));
     }
 
-    /** A number {@code log2 |r|} is below, scaled by {@link #LOG_SCALE}. */
-    private static long upperLog(Rational r) {
-        return Math.addExact(
-                Math.subtractExact(
-                        Math.multiplyExact((long) r.numerator.abs().bitLength(), LOG_SCALE),
-                        Math.multiplyExact(r.denominator.bitLength() - 1L, LOG_SCALE)),
-                Math.addExact(Math.multiplyExact(r.twos, LOG_SCALE), fivesInLog(r.fives, false)));
+    /** A number {@code log2 |r|} is below, in the same units. */
+    private static BigInteger upperLog(Rational r) {
+        return atTheseBits(r.numerator.abs().bitLength() - (r.denominator.bitLength() - 1L), r.twos)
+                .add(fivesInLog(r.fives, false));
+    }
+
+    /** What a whole number of bits — the fraction's, and the power of two's — is in log units. */
+    private static BigInteger atTheseBits(long ofTheFraction, long twos) {
+        return BigInteger.valueOf(ofTheFraction).add(BigInteger.valueOf(twos)).multiply(LOG_UNIT);
     }
 
     /** What the power of five contributes to a bound on the log. Which of the two bounds on
      *  {@code log2 5} makes a number smaller depends on the sign of the exponent, so the side being
      *  built decides which is taken. */
-    private static long fivesInLog(long fives, boolean below) {
-        long bound = (fives >= 0) == below ? LOG2_FIVE_BELOW : LOG2_FIVE_ABOVE;
-        return Math.multiplyExact(fives, bound);
+    private static BigInteger fivesInLog(long fives, boolean below) {
+        BigInteger bound = (fives >= 0) == below ? LOG2_FIVE : LOG2_FIVE.add(BigInteger.ONE);
+        return BigInteger.valueOf(fives).multiply(bound);
     }
 
     /** {@code 2^twos × 5^fives}, both exponents being non-negative. */
@@ -346,10 +383,16 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         return fives == 0 ? of : of.multiply(FIVE.pow(buildable(fives)));
     }
 
-    /** How far {@code from} stands above {@code down}, which is never negative and is the size of a
-     *  power about to be built. */
-    private static long distance(long from, long down) {
-        return Math.subtractExact(from, down);
+    /** Two exponents subtracted, or the abort of a computation asking for one past what is held. The
+     *  difference of two exponents is the quotient's as much as their sum is the product's, so it is
+     *  held to the same width and leaves it the same way — and never by an exception of the arithmetic
+     *  it was computed with, which says nothing about a Rational to whoever reads it. */
+    private static long lessened(long exponent, long by) {
+        try {
+            return Math.subtractExact(exponent, by);
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Rational exponent out of range: " + exponent + " - " + by);
+        }
     }
 
     /** Two exponents added, or the abort of a computation asking for one past what is held. Sixty-four
@@ -385,15 +428,22 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * This as a decimal where it has one exactly, and null where it has none. A caller that must
      * answer with a decimal whatever the value states its rounding at the point it asks.
+     *
+     * <p>What the two exponents have in common is a power of ten and goes to the scale, whichever way
+     * it points — a decimal's scale is signed, and a value made of powers above nought is as compact a
+     * decimal as one made of powers below it. Held to a non-negative scale instead, the way out was
+     * narrower than the way in: a decimal that became one of these came back only by building the power
+     * of ten it had arrived carrying as its scale, which is the work this representation exists to
+     * avoid, and past what a machine holds it did not come back at all.
      */
     public @Nullable BigDecimal asDecimal() {
         if (!hasFiniteDecimal()) {
             return null;
         }
-        long scale = Math.max(0, Math.max(negated(twos), negated(fives)));
+        long tens = Math.min(twos, fives);
         return new BigDecimal(
-                numerator.multiply(raised(added(twos, scale), added(fives, scale))),
-                buildable(scale));
+                numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens))),
+                asAScale(tens));
     }
 
     /** This as a whole number where it is one, and null where it is not. */
@@ -415,15 +465,55 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * <p>What is left is the part ten is not made of, and it is built: the fraction that remains is
      * the size of the answer at the scale asked for.
      *
-     * <p>A scale far from the value's own is where this stops. Rounding {@code 1E-1000000000} to a
-     * whole number is a rescaling {@code BigDecimal} refuses, so the operation aborts — which is what
-     * {@code Decimal.toInt} does with the same decimal, for the same reason and at the same place.
+     * <p>A value nearer nought than the scale counts is answered without reaching any of that, because
+     * naming a policy is what buys an answer and such a value has one whatever its exponents are.
      */
     public BigDecimal asDecimal(int scale, java.math.RoundingMode towards) {
+        BigDecimal nearerNought = roundedFromInsideOnePlace(scale, towards);
+        if (nearerNought != null) {
+            return nearerNought;
+        }
         long tens = Math.min(twos, fives);
-        BigInteger up = numerator.multiply(raised(distance(twos, tens), distance(fives, tens)));
+        BigInteger up = numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens)));
         return new BigDecimal(up, asAScale(tens))
                 .divide(new BigDecimal(denominator), scale, towards);
+    }
+
+    /**
+     * The value at {@code scale} where it stands nearer nought than one place there counts, and null
+     * where the digits are what answers it.
+     *
+     * <p>A rounding policy is asked for so that a value comes back rather than a refusal, so it is
+     * answered for every value — including the ones whose own exponents no decimal of this scale holds.
+     * What such a value rounds to is nought or one place, and every policy of the seven decides between
+     * those two from the sign and from where the value stands against half a place, and from nothing
+     * else. So the answer is built from those, and the digits — hundreds of millions of them for a value
+     * at the end of the exponent's range — are never asked for. Read off the digits instead, the
+     * narrowing refused values it was named to answer.
+     */
+    private @Nullable BigDecimal roundedFromInsideOnePlace(int scale, java.math.RoundingMode towards) {
+        if (isZero()) {
+            return new BigDecimal(BigInteger.ZERO, scale);
+        }
+        long place = -(long) scale;
+        if (compareMagnitude(new Rational(BigInteger.ONE, BigInteger.ONE, place, place)) >= 0) {
+            return null;
+        }
+        int againstHalfAPlace =
+                compareMagnitude(new Rational(BigInteger.ONE, BigInteger.ONE, place - 1, place));
+        boolean awayFromNought = switch (towards) {
+            case UP -> true;
+            case DOWN -> false;
+            case CEILING -> signum() > 0;
+            case FLOOR -> signum() < 0;
+            case HALF_UP -> againstHalfAPlace >= 0;
+            // At exactly half a place the two neighbours are nought and one place, and nought is the
+            // even one — so the policy that takes the even neighbour and the one that takes the
+            // neighbour nearer nought agree here.
+            case HALF_DOWN, HALF_EVEN -> againstHalfAPlace > 0;
+            case UNNECESSARY -> throw new ArithmeticException("Rounding necessary");
+        };
+        return new BigDecimal(awayFromNought ? BigInteger.valueOf(signum()) : BigInteger.ZERO, scale);
     }
 
     /** A power of ten as the scale that holds it, which is its negation. A scale is thirty-two bits,

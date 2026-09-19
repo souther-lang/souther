@@ -4343,6 +4343,8 @@ The other two answer a value because the caller said what to do with what is dro
 
 The representation is the backend's, with one requirement on it: embedding a `+Decimal+` MUST NOT build the power of ten its scale names. A `+Decimal+` that is compact in its own representation — one digit and a scale of a million — MUST NOT become work or storage proportional to that scale by entering exact arithmetic, and multiplying or dividing two such values MUST NOT build it either.
 
+[[an-operation-refuses-only-what-its-own-answer-has-no-place-for]]*An operation refuses a value only where its own answer has no representation.* A representation may bound what it holds, and a value past that bound *aborts* as an `+Int+`'s overflow does (<<jvm-abort>>). That bound is on the value and on the answer. Where a value and the answer asked of it are both ones the representation holds, `{plus}` `+-+` `+*+` `+/+` and the narrowings MUST answer — an intermediate the backend chose to reach the answer through is not a reason to refuse, and neither is the width something was counted in on the way. So `+r / r+` is one for every `+r+`, a `+Decimal+` that became a `+Rational+` comes back as that `+Decimal+`, a narrowing whose policy is stated answers a value however small the subject is, and two values far apart are ordered without either being built.
+
 [#stdlib-list]
 === List
 
