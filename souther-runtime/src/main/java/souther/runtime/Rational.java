@@ -80,19 +80,29 @@ import java.math.BigInteger;
  * to take a finer one and never a reason to refuse.
  *
  * <p>So: the product, the quotient and both narrowings build only the answer's own parts. The order and
- * the rounding read the value through a bracket, and where the powers of five cancel or are absent they
- * read it exactly instead — by the walk a common measure takes, which forms no product of two stored
- * numbers and asks for no width, since two fractions of one size can stand closer together than any width
- * settled on before they arrived. The sum is the one operation that forms numbers larger than the answer:
- * the terms over a common denominator, and that denominator. Cancellation is only visible once they are
- * formed, so every exact rational arithmetic forms them, and a pair of stored fractions near the host's
- * own end therefore has no sum here. That is a bound on the room and is stated as one.
+ * the rounding take a bracket first, because one settles nearly every question for nothing; where it does
+ * not, the two values stand close, and then the powers between them are written down and the question is
+ * answered exactly — one fraction against another by the walk a common measure takes, which forms no
+ * product of two stored numbers and asks for no width. That is not conditioned on the powers happening to
+ * cancel: two fractions can stand closer together than any width settled on before they arrive, whatever
+ * powers stand between them, and a width is only the instrument for the pairs brought close by exponents
+ * too large to write down — whose closeness is bounded by how well whole numbers approximate the log.
+ *
+ * <p>The sum is the one operation that forms a number larger than its answer, and it is the one whose
+ * formed number is not a route to the answer but the answer's own definition: an exact sum is the sum of
+ * two numerators over a common denominator, and what cancels in it is visible only once those terms are
+ * there. So a pair of stored fractions near the host's own end has no sum here, and that is said as a
+ * limit of the operation rather than dressed up as a limit of the machine.
  */
 public record Rational(BigInteger numerator, BigInteger denominator, long twos, long fives)
         implements Comparable<Rational> {
 
     /** Declared before the two values below, which are built by a constructor that reads it. */
     private static final BigInteger FIVE = BigInteger.valueOf(5);
+
+    /** The denominator of half of one, which is what a remainder is compared against to say which side
+     *  of half way between two whole numbers a value stands. */
+    private static final BigInteger HALVES = BigInteger.valueOf(2);
 
     public static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE, 0, 0);
     public static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 0);
@@ -415,21 +425,50 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * record, and the comparison above answered those before reaching here.
      */
     private int compareMagnitude(Rational other) {
-        if (twos == other.twos && fives == other.fives) {
-            // The powers are the same on both sides and cancel, so what is left is two fractions — and a
-            // fraction against a fraction is answered exactly, with no width to choose and no bracket to
-            // be too narrow. Which is what the pairs a bracket cannot separate are: two fractions of the
-            // same powers standing a part in their own size apart.
-            return comparedAsFractions(
-                    numerator.abs(), denominator, other.numerator.abs(), other.denominator);
+        Integer quickly = magnitudeFromBrackets(other, BRACKET_BITS);
+        if (quickly != null) {
+            return quickly;
         }
-        for (int width = BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
+        // The bracket did not separate them, so they stand close. Where the powers between them can be
+        // written down, writing them down answers exactly — one fraction against another, by the walk a
+        // common measure takes, at whatever closeness the pair happens to have.
+        BigInteger byTwos = apart(twos, other.twos);
+        BigInteger byFives = apart(fives, other.fives);
+        if (writableAsPowers(byTwos, byFives)) {
+            return comparedAsFractions(
+                    withPowers(numerator.abs(), byTwos, byFives),
+                    withPowers(denominator, byTwos.negate(), byFives.negate()),
+                    other.numerator.abs(), other.denominator);
+        }
+        // Powers no machine writes down, and a pair the first bracket left undecided. Then what brings
+        // them together is the exponents rather than the fractions, and how near two powers of two and
+        // five come is bounded by how well whole numbers approximate the log — so a bracket a few
+        // doublings wider settles it, and the width is the instrument for exactly this shape.
+        for (int width = BRACKET_BITS + BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
             Integer decided = magnitudeFromBrackets(other, width);
             if (decided != null) {
                 return decided;
             }
         }
         throw new ConstraintViolation("no bracket this machine holds separates " + this + " from " + other);
+    }
+
+    /** How far one exponent stands from another, held wider than an exponent is — the difference of two
+     *  of them is not bounded by what one of them holds. */
+    private static BigInteger apart(long exponent, long from) {
+        return BigInteger.valueOf(exponent).subtract(BigInteger.valueOf(from));
+    }
+
+    /** Whether two exponents are ones a power can be written down at, which is the host's own bound on a
+     *  whole number and not a width chosen here. */
+    private static boolean writableAsPowers(BigInteger twos, BigInteger fives) {
+        return twos.abs().bitLength() < Integer.SIZE - 1 && fives.abs().bitLength() < Integer.SIZE - 2;
+    }
+
+    /** {@code whole × 2^twos × 5^fives}, each power taken only where its exponent is above nought — the
+     *  other side of a negative exponent being where the power belongs. */
+    private static BigInteger withPowers(BigInteger whole, BigInteger twos, BigInteger fives) {
+        return builtFrom(whole, twos.max(BigInteger.ZERO), fives.max(BigInteger.ZERO));
     }
 
     /**
@@ -854,36 +893,76 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     private BigInteger roundedTimesTenTo(int scale, java.math.RoundingMode towards) {
         BigInteger byTwos = atTenTo(twos, scale);
         BigInteger byFives = atTenTo(fives, scale);
+        // The two ends of the rounding come first, because a bracket cannot reach them: it says the value
+        // stands between two whole numbers and never that it is one of them, nor that it stands at exactly
+        // half of the way — and the policies part company at both. In lowest terms beside a fraction
+        // holding no two and no five, the value is a whole number exactly where the denominator is one and
+        // both exponents have reached nought, and half of one exactly where that holds of twice it.
         BigInteger magnitude = numerator.abs();
         boolean overOne = denominator.equals(BigInteger.ONE);
         if (overOne && byTwos.signum() >= 0 && byFives.signum() >= 0) {
-            // A whole number already, so there is no fraction for a policy to have an opinion about.
             return signedLike(builtFrom(magnitude, byTwos, byFives));
-        }
-        BigInteger byTwiceTheTwos = byTwos.add(BigInteger.ONE);
-        if (overOne && byTwiceTheTwos.signum() >= 0 && byFives.signum() >= 0) {
-            // Twice it is a whole number and it is not, so it stands at exactly half of one.
-            BigInteger twice = builtFrom(magnitude, byTwiceTheTwos, byFives);
-            return roundedFrom(twice.shiftRight(1), 0, towards);
         }
         // Twice the value, so that one whole number carries both which two it stands between and which
         // side of half of the way it stands: its half is the one, its last bit the other.
-        if (byFives.signum() == 0) {
-            // No power of five, so twice the value is a fraction and its whole part is exact — no width
-            // to choose, and none too narrow. Two fractions of one size stand a part in that size apart,
-            // which is nearer than any width settled on before the value arrived.
-            BigInteger twice = flooredFraction(magnitude, denominator, byTwiceTheTwos);
-            return roundedFrom(twice.shiftRight(1), twice.testBit(0) ? 1 : -1, towards);
+        BigInteger byTwiceTheTwos = byTwos.add(BigInteger.ONE);
+        if (overOne && byTwiceTheTwos.signum() >= 0 && byFives.signum() >= 0) {
+            return roundedFrom(
+                    builtFrom(magnitude, byTwiceTheTwos, byFives).shiftRight(1), 0, towards);
         }
-        for (int width = BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
-            Bracketed twice = bracketed(byTwiceTheTwos, byFives, width);
-            BigInteger least = flooredFraction(twice.low(), BigInteger.ONE, twice.shift());
-            BigInteger most = flooredFraction(twice.high(), BigInteger.ONE, twice.shift());
-            if (least.equals(most)) {
-                return roundedFrom(least.shiftRight(1), least.testBit(0) ? 1 : -1, towards);
+        BigInteger quickly = roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, BRACKET_BITS);
+        if (quickly != null) {
+            return quickly;
+        }
+        // The bracket left two whole numbers in it, so the value stands close to half of the way between
+        // them. Where the powers can be written down, writing them down answers exactly — at whatever
+        // closeness the value happens to have, which is the shape no width settled on beforehand reaches.
+        if (writableAsPowers(byTwos, byFives)) {
+            return roundedExactly(byTwos, byFives, towards);
+        }
+        // Powers no machine writes down, and a value the first bracket left undecided: then it is the
+        // exponents that bring it near half of the way, and a few doublings of the width settle that.
+        for (int width = BRACKET_BITS + BRACKET_BITS; width <= WIDEST_BRACKET; width += width) {
+            BigInteger decided = roundedFromBracketsAt(byTwiceTheTwos, byFives, towards, width);
+            if (decided != null) {
+                return decided;
             }
         }
         throw new ConstraintViolation("no bracket this machine holds rounds " + this);
+    }
+
+    /**
+     * The whole number this rounds to at those exponents, read off one division of the value written out.
+     *
+     * <p>Nothing is doubled and nothing is shifted. The whole part is the quotient, and where the value
+     * stands against half of the way is where the remainder stands against half the denominator — which is
+     * one fraction against another and is answered by the same walk the order uses. Doubling the remainder
+     * instead asks for a number a bit larger than one that is stored, which is the bit the host does not
+     * have at its own end.
+     */
+    private BigInteger roundedExactly(
+            BigInteger byTwos, BigInteger byFives, java.math.RoundingMode towards) {
+        BigInteger up = withPowers(numerator.abs(), byTwos, byFives);
+        BigInteger down = withPowers(denominator, byTwos.negate(), byFives.negate());
+        BigInteger[] whole = up.divideAndRemainder(down);
+        if (whole[1].signum() == 0) {
+            // A whole number, so there is no fraction for a policy to have an opinion about.
+            return signedLike(whole[0]);
+        }
+        return roundedFrom(whole[0],
+                comparedAsFractions(whole[1], down, BigInteger.ONE, HALVES), towards);
+    }
+
+    /** The whole number this rounds to as far as a bracket of {@code width} bits settles it, and null
+     *  where the bracket holds two of them. */
+    private @Nullable BigInteger roundedFromBracketsAt(
+            BigInteger byTwiceTheTwos, BigInteger byFives, java.math.RoundingMode towards, int width) {
+        Bracketed twice = bracketed(byTwiceTheTwos, byFives, width);
+        BigInteger least = flooredFraction(twice.low(), BigInteger.ONE, twice.shift());
+        BigInteger most = flooredFraction(twice.high(), BigInteger.ONE, twice.shift());
+        return least.equals(most)
+                ? roundedFrom(least.shiftRight(1), least.testBit(0) ? 1 : -1, towards)
+                : null;
     }
 
     /**

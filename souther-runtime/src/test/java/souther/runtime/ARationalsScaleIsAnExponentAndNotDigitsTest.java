@@ -253,6 +253,44 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
+     * And so are two whose powers differ, which is the same shape with a factor left in it.
+     *
+     * <p>Two below two, by a part in a large number, against two exactly: the exponents are not the same on
+     * the two sides, so nothing cancels, and the closeness is still the fractions' own. What answers is
+     * that the power between them can be written down — so it is written down, and what is left is one
+     * fraction against another. Gating that on the powers happening to cancel would have left this pair to
+     * a width, and no width settled on before a pair arrives reaches a pair as close as it likes.
+     */
+    @Test
+    void twoWhosePowersDifferAreOrderedByWritingThePowerDown() {
+        BigInteger odd = BigInteger.TWO.pow(700).add(BigInteger.ONE);
+        Rational justBelowTwo = Rational.of(odd.shiftLeft(1).subtract(BigInteger.ONE), odd);
+        Rational two = new Rational(BigInteger.ONE, BigInteger.ONE, 1, 0);
+        assertTrue(justBelowTwo.twos() != two.twos() || justBelowTwo.fives() != two.fives(),
+                "the powers do not cancel, which is what this is about");
+
+        assertNull(justBelowTwo.magnitudeFromBrackets(two, 128),
+                "no bracket of the width the comparison starts at separates these");
+        assertTrue(justBelowTwo.compareTo(two) < 0, "and the order is answered all the same");
+        assertTrue(two.compareTo(justBelowTwo) > 0);
+    }
+
+    /** And the rounding of such a value, a factor of five standing between it and half of one. */
+    @Test
+    void aValueAFactorOfFiveFromHalfOfOneRoundsByThePolicy() {
+        BigInteger odd = BigInteger.TWO.pow(700).add(BigInteger.ONE);
+        Rational justBelowHalf = new Rational(
+                odd, odd.multiply(BigInteger.TEN).add(BigInteger.ONE), 0, 1);
+        Rational half = new Rational(BigInteger.ONE, BigInteger.ONE, -1, 0);
+        assertEquals(1L, justBelowHalf.fives(), "a power of five stands in it");
+        assertNull(justBelowHalf.magnitudeFromBrackets(half, 128));
+        assertTrue(justBelowHalf.compareTo(half) < 0);
+
+        assertEquals(0L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowHalf));
+        assertEquals(1L, RationalMath.toInt(UP.INSTANCE, justBelowHalf));
+    }
+
+    /**
      * And a value a part in its own size below half of one rounds to whichever neighbour the policy says.
      *
      * <p>The same shape reaching the narrowing: which of two whole numbers a value rounds to is where it
