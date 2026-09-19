@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -222,8 +223,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
      * assembled one would be a second account of what the names on the way meant.
      */
     private static List<String> cutsOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = read();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -247,16 +247,50 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     /** What the report says about each rule it could not read, without the citation that differs
      *  between two spellings of one rule. */
     private static List<String> reasonsOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         Map<String, PartitionEvidence> all =
-                compilation.db().ask(new Adequacy.Coverage("example.quotient")).value();
+                measured().db().ask(new Adequacy.Coverage("example.quotient")).value();
         return all.get(behavior).notRead().stream()
                 .map(found -> found instanceof PartitionEvidence.NotRead.ARule rule
                         ? rule.finding().at() + " " + rule.finding().why() : found.toString())
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * The model, compiled once for every question put to it.
+     *
+     * <p>One source and nine behaviors, and each of the readings below asks about one of them —
+     * compiled where it is asked, the class pays for the whole model once per question. Read when a
+     * question asks rather than in an initialiser, so a model that stopped compiling fails the
+     * reading that met it instead of taking every method down with the class.
+     */
+    private static Compilation read() {
+        if (compiled == null) {
+            compiled = Compilation.ofSource(MODEL, "Main");
+            compiled.answerEverything();
+        }
+        return compiled;
+    }
+
+    /** The same, measured, which is a second compilation because the report is what it is for. */
+    private static Compilation measured() {
+        if (reported == null) {
+            reported = Compilation.ofSource(MODEL, "Main");
+            reported.measure(Adequacy.Asked.fullReport());
+            reported.answerEverything();
+        }
+        return reported;
+    }
+
+    private static Compilation compiled;
+
+    private static Compilation reported;
+
+    /** Let go at the end, so the fork's later classes do not carry this model's answers. */
+    @AfterAll
+    static void release() {
+        compiled = null;
+        reported = null;
     }
 
     private static String quantityOf(BorderQuantity quantity) {
