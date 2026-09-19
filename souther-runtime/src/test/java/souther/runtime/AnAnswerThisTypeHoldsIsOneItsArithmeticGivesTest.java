@@ -90,6 +90,36 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
     }
 
     /**
+     * A value standing just above one, made of two exponents that all but cancel, rounds.
+     *
+     * <p>The pair the order is hardest to answer for, written as one value: a power of two over the power
+     * of five nearest below it, which stands a hair above one. Neither exponent is anywhere near nought,
+     * so spelling the value out as digits asks for a number no machine holds — and the answer is one.
+     *
+     * <p>This is the shape a narrowing that rounded a decimal rather than the value refused. Standing
+     * inside one place is not what makes such a value answerable, and treating that as the case to
+     * rescue left every value above one place refused for the same reason it always was.
+     */
+    @Test
+    void aValueJustAboveOneRoundsWithoutBuildingItsPowers() {
+        Rational r = new Rational(BigInteger.ONE, BigInteger.ONE,
+                3_086_630_039_907_612_845L, -1_329_339_201_633_350_533L);
+
+        assertTrue(r.compareTo(Rational.ONE) > 0, "the value this is about stands above one");
+        assertTrue(r.compareTo(Rational.of(2)) < 0);
+
+        assertEquals(1L, RationalMath.toInt(DOWN.INSTANCE, r));
+        assertEquals(1L, RationalMath.toInt(HALF_UP.INSTANCE, r));
+        assertEquals(2L, RationalMath.toInt(UP.INSTANCE, r));
+        assertEquals(-1L, RationalMath.toInt(DOWN.INSTANCE, r.negated()));
+        assertEquals(0, BigDecimal.ONE.compareTo(
+                RationalMath.toDecimal(0, DOWN.INSTANCE, r)));
+        assertEquals(0, new BigDecimal("1.00").compareTo(
+                RationalMath.toDecimal(2, DOWN.INSTANCE, r)),
+                "and at a scale the value's own exponents are nowhere near");
+    }
+
+    /**
      * A value exactly half of what the scale counts goes to whichever neighbour the policy names.
      *
      * <p>The boundary between the two answers the rounding below one place can give, and the one where

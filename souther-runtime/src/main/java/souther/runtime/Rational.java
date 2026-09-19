@@ -317,15 +317,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * <p>The fractions are cross-multiplied, which is the size of what is stored, and what is left of
      * the two values is one power of two and one power of five — the differences of the two pairs of
      * exponents, each taken once and put on the side its sign belongs to.
+     *
+     * <p>The two magnitudes are unequal, which is what makes the refinement end. The caller has that:
+     * one canonical representation per value means two values of one magnitude and one sign are the same
+     * record, and the comparison above answered those before reaching here.
      */
     private int compareMagnitude(Rational other) {
-        // Equal magnitudes, which the refinement below would never get inside of. One canonical
-        // representation per value is what makes this a comparison of the four parts and not a sum.
-        if (twos == other.twos && fives == other.fives
-                && denominator.equals(other.denominator)
-                && numerator.abs().equals(other.numerator.abs())) {
-            return 0;
-        }
         if (fives == other.fives) {
             // No power of five between them, so the count of bits is the whole of the difference.
             return compareShifted(
@@ -526,9 +523,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             return null;
         }
         long tens = Math.min(twos, fives);
+        // The scale first, which is the question about the answer; the digits after, which are the work.
+        // A value whose exact decimal needs more places than a scale counts has no such decimal to come
+        // back as, and saying so is better than saying the power could not be built.
+        int scale = asAScale(tens);
         return new BigDecimal(
-                numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens))),
-                asAScale(tens));
+                numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens))), scale);
     }
 
     /** This as a whole number where it is one, and null where it is not. */
@@ -541,64 +541,138 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      *
      * <p>Where a caller must have a decimal whatever the value is.
      *
-     * <p><b>The power of ten stays a scale.</b> What the two exponents have in common is a power of
-     * ten, and a decimal already holds one of those as its scale — so it is moved there rather than
-     * built. Multiplied out instead, a compact decimal that entered exact arithmetic and came back out
-     * of it paid for every digit of its scale on the way, which is the cost this representation exists
-     * to keep from being paid.
+     * <p><b>The scale goes to the exponents, not the digits.</b> A decimal of {@code scale} places is a
+     * whole number over {@code 10^scale}, so what is asked for is the whole number this rounds to when
+     * multiplied by that power — and multiplying by it moves the two exponents. So the rounding is done
+     * on the factored value and the answer is that whole number beside the scale it was asked at.
      *
-     * <p>What is left is the part ten is not made of, and it is built: the fraction that remains is
-     * the size of the answer at the scale asked for.
-     *
-     * <p>A value nearer nought than the scale counts is answered without reaching any of that, because
-     * naming a policy is what buys an answer and such a value has one whatever its exponents are.
+     * <p>Not a decimal built and then rounded. What a value's own exponents say has nothing to do with
+     * how large the answer is: a value made of a power of two over a power of five that all but cancel
+     * stands near one, and spelling it out first asks for digits the answer does not have and no machine
+     * holds. Which is the same reason the order is answered from brackets, and the brackets are what
+     * this reads too.
      */
     public BigDecimal asDecimal(int scale, java.math.RoundingMode towards) {
-        BigDecimal nearerNought = roundedFromInsideOnePlace(scale, towards);
-        if (nearerNought != null) {
-            return nearerNought;
-        }
-        long tens = Math.min(twos, fives);
-        BigInteger up = numerator.multiply(raised(lessened(twos, tens), lessened(fives, tens)));
-        return new BigDecimal(up, asAScale(tens))
-                .divide(new BigDecimal(denominator), scale, towards);
+        return new BigDecimal(
+                isZero() ? BigInteger.ZERO : roundedTimesTenTo(scale, towards), scale);
     }
 
     /**
-     * The value at {@code scale} where it stands nearer nought than one place there counts, and null
-     * where the digits are what answers it.
+     * The whole number {@code this × 10^scale} rounds to by {@code towards}, which is the unscaled value
+     * of this at that scale.
      *
-     * <p>A rounding policy is asked for so that a value comes back rather than a refusal, so it is
-     * answered for every value — including the ones whose own exponents no decimal of this scale holds.
-     * What such a value rounds to is nought or one place, and every policy of the seven decides between
-     * those two from the sign and from where the value stands against half a place, and from nothing
-     * else. So the answer is built from those, and the digits — hundreds of millions of them for a value
-     * at the end of the exponent's range — are never asked for. Read off the digits instead, the
-     * narrowing refused values it was named to answer.
+     * <p>Multiplying by the power of ten adds the scale to both exponents, and the sum is held wider than
+     * an exponent is: a value whose own exponent is at the end of its range has an ordinary answer at an
+     * ordinary scale, so this is one of the places where what an intermediate holds must not be what the
+     * answer is allowed to be.
+     *
+     * <p>Two shapes are read off the exponents rather than bracketed, because a bracket can never say
+     * that a value <i>is</i> a whole number or <i>is</i> exactly half of one, and the policies part
+     * company at exactly half. In lowest terms with no two and no five left beside the fraction, the
+     * value is a whole number exactly where the denominator is one and both exponents have reached
+     * nought, and it is half of one exactly where the same holds of twice it.
      */
-    private @Nullable BigDecimal roundedFromInsideOnePlace(int scale, java.math.RoundingMode towards) {
-        if (isZero()) {
-            return new BigDecimal(BigInteger.ZERO, scale);
+    private BigInteger roundedTimesTenTo(int scale, java.math.RoundingMode towards) {
+        BigInteger byTwos = atTenTo(twos, scale);
+        BigInteger byFives = atTenTo(fives, scale);
+        BigInteger magnitude = numerator.abs();
+        boolean overOne = denominator.equals(BigInteger.ONE);
+        if (overOne && byTwos.signum() >= 0 && byFives.signum() >= 0) {
+            // A whole number already, so there is no fraction for a policy to have an opinion about.
+            return signedLike(builtFrom(magnitude, byTwos, byFives));
         }
-        long place = -(long) scale;
-        if (compareMagnitude(new Rational(BigInteger.ONE, BigInteger.ONE, place, place)) >= 0) {
-            return null;
+        BigInteger byTwiceTheTwos = byTwos.add(BigInteger.ONE);
+        if (overOne && byTwiceTheTwos.signum() >= 0 && byFives.signum() >= 0) {
+            // Twice it is a whole number and it is not, so it stands at exactly half of one.
+            BigInteger twice = builtFrom(magnitude, byTwiceTheTwos, byFives);
+            return roundedFrom(twice.shiftRight(1), 0, towards);
         }
-        int againstHalfAPlace =
-                compareMagnitude(new Rational(BigInteger.ONE, BigInteger.ONE, place - 1, place));
+        for (int width = BRACKET_BITS; width > 0; width += width) {
+            Bracketed up = Bracketed.exactly(magnitude);
+            Bracketed down = Bracketed.exactly(denominator);
+            if (byFives.signum() > 0) {
+                up = fiveTo(byFives, width).times(magnitude);
+            } else if (byFives.signum() < 0) {
+                down = fiveTo(byFives.negate(), width).times(denominator);
+            }
+            // Twice the value, so that one whole number carries both which two it stands between and
+            // which side of half of the way it stands: its half is the one, its last bit the other.
+            if (byTwiceTheTwos.signum() >= 0) {
+                up = up.shiftedBy(byTwiceTheTwos);
+            } else {
+                down = down.shiftedBy(byTwiceTheTwos.negate());
+            }
+            BigInteger apart = up.shift().subtract(down.shift());
+            BigInteger least = flooredQuotient(up.low(), down.high(), apart);
+            BigInteger most = flooredQuotient(up.high(), down.low(), apart);
+            if (least.equals(most)) {
+                return roundedFrom(least.shiftRight(1), least.testBit(0) ? 1 : -1, towards);
+            }
+        }
+        throw new ConstraintViolation("no bracket this machine holds rounds " + this);
+    }
+
+    /**
+     * Which of {@code whole} and the next one up the value rounds to, the value standing {@code
+     * againstHalf} of the way between them and neither being reached exactly.
+     *
+     * <p>Every policy of the seven reads the sign and that standing and nothing else, which is what makes
+     * the digits beside the point. At exactly half of the way the two neighbours are this whole number
+     * and the next, and the policy that takes the even one takes whichever of those is even.
+     */
+    private BigInteger roundedFrom(BigInteger whole, int againstHalf, java.math.RoundingMode towards) {
         boolean awayFromNought = switch (towards) {
             case UP -> true;
             case DOWN -> false;
             case CEILING -> signum() > 0;
             case FLOOR -> signum() < 0;
-            case HALF_UP -> againstHalfAPlace >= 0;
-            // At exactly half a place the two neighbours are nought and one place, and nought is the
-            // even one — so the policy that takes the even neighbour and the one that takes the
-            // neighbour nearer nought agree here.
-            case HALF_DOWN, HALF_EVEN -> againstHalfAPlace > 0;
+            case HALF_UP -> againstHalf >= 0;
+            case HALF_DOWN -> againstHalf > 0;
+            case HALF_EVEN -> againstHalf > 0 || (againstHalf == 0 && whole.testBit(0));
             case UNNECESSARY -> throw new ArithmeticException("Rounding necessary");
         };
-        return new BigDecimal(awayFromNought ? BigInteger.valueOf(signum()) : BigInteger.ZERO, scale);
+        return signedLike(awayFromNought ? whole.add(BigInteger.ONE) : whole);
+    }
+
+    /** An exponent with a scale added, held wider than an exponent is — the scale reaches every value
+     *  this type holds, so their sum is not bounded by what one of them is. */
+    private static BigInteger atTenTo(long exponent, int scale) {
+        return BigInteger.valueOf(exponent).add(BigInteger.valueOf(scale));
+    }
+
+    /** {@code whole × 2^twos × 5^fives}, both exponents being at least nought. What this builds is the
+     *  answer's own digits, which is the one thing a narrowing is always allowed to ask for. */
+    private static BigInteger builtFrom(BigInteger whole, BigInteger twos, BigInteger fives) {
+        return whole.shiftLeft(buildable(twos)).multiply(FIVE.pow(buildable(fives)));
+    }
+
+    /** {@code floor(x × 2^byBits / y)}, {@code x} being at least nought and {@code y} above it. */
+    private static BigInteger flooredQuotient(BigInteger x, BigInteger y, BigInteger byBits) {
+        if (byBits.signum() >= 0) {
+            return x.shiftLeft(buildable(byBits)).divide(y);
+        }
+        BigInteger down = byBits.negate();
+        // Shifted down by more bits than the numerator has, the quotient is below one whatever the
+        // denominator is — which is the shape a value far nearer nought than the scale counts takes, and
+        // the shift itself is one no machine holds.
+        if (down.compareTo(BigInteger.valueOf(x.bitLength())) > 0) {
+            return BigInteger.ZERO;
+        }
+        return x.divide(y.shiftLeft(down.intValueExact()));
+    }
+
+    /** The same of an exponent held wider than one of this type's own, which the sum of an exponent and
+     *  a scale is. */
+    private static int buildable(BigInteger exponent) {
+        if (exponent.signum() < 0 || exponent.bitLength() > Integer.SIZE - 1) {
+            throw new ConstraintViolation("no Rational is built at a power of " + exponent);
+        }
+        return exponent.intValueExact();
+    }
+
+    /** A magnitude given this value's sign. */
+    private BigInteger signedLike(BigInteger magnitude) {
+        return signum() < 0 ? magnitude.negate() : magnitude;
     }
 
     /** A power of ten as the scale that holds it, which is its negation. A scale is thirty-two bits,
