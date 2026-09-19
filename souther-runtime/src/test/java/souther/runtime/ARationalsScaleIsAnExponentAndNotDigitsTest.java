@@ -728,6 +728,25 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertTrue(Rational.of(1).compareTo(Rational.of(1000)) < 0);
     }
 
+    /**
+     * And a stored part too large to read is described too, so that what carries a value into a message is
+     * bounded whichever way the value is large.
+     *
+     * <p>The messages this reaches are aborts, and one of them is the abort for having run out of room — a
+     * message wanting millions of digits is a cost paid where there is least to pay it with. A part is as
+     * large as the representation lets one be, which is millions of digits, so bounding the powers and
+     * spelling the parts bounded nothing.
+     */
+    @Test
+    void aStoredPartTooLargeToReadIsDescribedAsWell() {
+        // Odd and no multiple of five, so what is stored is what is written here
+        BigInteger wide = BigInteger.ONE.shiftLeft(4000).subtract(BigInteger.valueOf(3));
+        String said = Rational.of(wide, BigInteger.ONE).toString();
+
+        assertEquals("(a whole number of 4000 bits)/1×2^0×5^0", said);
+        assertTrue(said.length() < 100, "a message no one reads is a cost paid for nothing");
+    }
+
     /** A value too large to read is described rather than spelled, and the description is the size of
      *  what is stored. */
     @Test

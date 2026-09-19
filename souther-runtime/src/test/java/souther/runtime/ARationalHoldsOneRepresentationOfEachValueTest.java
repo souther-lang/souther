@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import static souther.runtime.Rational.STORED_BITS;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -158,17 +160,50 @@ class ARationalHoldsOneRepresentationOfEachValueTest {
      * implementation's limit wearing the platform's name. A bound on the value instead is a bound the
      * language has a shape for, and this says out loud where it is.
      *
-     * <p>Asserted on the numerator and on the denominator both, and asked before the value is canonical:
-     * a part this size is turned away rather than run through a gcd first.
+     * <p>Asserted on the numerator and on the denominator both. The value here is odd and no multiple of
+     * five, so what is stored is what was written and the bound is reached by the value itself.
      */
     @Test
     void aPartPastWhatTheRepresentationStoresAborts() {
-        BigInteger pastIt = BigInteger.ONE.shiftLeft(Integer.MAX_VALUE / 16 + 1).subtract(BigInteger.ONE);
+        BigInteger pastIt = BigInteger.ONE.shiftLeft(STORED_BITS + 1).subtract(BigInteger.valueOf(3));
+        assertEquals(STORED_BITS + 1, pastIt.bitLength(), "one bit past the bound");
+        assertTrue(pastIt.testBit(0) && pastIt.mod(BigInteger.valueOf(5)).signum() != 0,
+                "and nothing about it comes off into an exponent");
 
         assertThrows(ConstraintViolation.class, () -> Rational.of(pastIt, BigInteger.ONE));
         assertThrows(ConstraintViolation.class, () -> Rational.of(BigInteger.ONE, pastIt));
-        // and the part one bit narrower is a value, which is the control for the bound being where it says
-        assertEquals(BigInteger.ONE, Rational.of(pastIt.shiftRight(1), BigInteger.ONE).denominator());
+        // and the value one bit narrower is held, which is the control for the bound being where it says
+        assertEquals(STORED_BITS,
+                Rational.of(pastIt.shiftRight(1).setBit(0), BigInteger.ONE).numerator().bitLength());
+    }
+
+    /**
+     * And a part past the bound whose factors come off into the exponents is a value all the same.
+     *
+     * <p>The bound is on what is stored, and what a caller wrote is one spelling of the value. A numerator
+     * of a hundred and thirty-four million bits that is a power of two is the number one here with the rest
+     * of it in an exponent; one that is five times something is that something with a five in an exponent.
+     * Read off the spelling, the bound turned away values this type holds — and turned them away for the
+     * size of a form the implementation had picked, which is the one reason nothing here may refuse for.
+     *
+     * <p>Both halves matter and only together. Without the abort above, the bound says nothing; without
+     * this, the bound is a bound on how a value may be written down.
+     */
+    @Test
+    void aPartPastTheBoundWhoseFactorsComeOffIsStillAValue() {
+        BigInteger fiveTimesSomething =
+                BigInteger.ONE.shiftLeft(STORED_BITS + 1).subtract(BigInteger.ONE);
+        assertEquals(STORED_BITS + 1, fiveTimesSomething.bitLength(), "one bit past the bound");
+        assertEquals(0, fiveTimesSomething.mod(BigInteger.valueOf(5)).signum(), "and a multiple of five");
+
+        Rational held = Rational.of(fiveTimesSomething, BigInteger.ONE);
+        assertEquals(1L, held.fives(), "the five went to an exponent");
+        assertTrue(held.numerator().bitLength() <= STORED_BITS, "and what is left is stored");
+
+        // and the same of a power of two, which is the shape an exact Decimal arrives in (ADR-0116)
+        Rational widened = Rational.of(new BigDecimal(BigInteger.ONE.shiftLeft(STORED_BITS + 1), 0));
+        assertEquals(BigInteger.ONE, widened.numerator());
+        assertEquals(STORED_BITS + 1L, widened.twos());
     }
 
     /**

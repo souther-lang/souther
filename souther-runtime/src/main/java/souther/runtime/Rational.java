@@ -82,12 +82,14 @@ import java.util.function.Supplier;
  * caught what it never called would have left the fold answering the other way.
  *
  * <p><b>Which bound each operation rests on.</b> Three bounds stand behind everything here, and they are
- * not the same kind of thing. The exponent's width and a decimal's scale are <i>this language's</i>, and
- * a value past them has no representation, so an operation reaching one refuses a value rather than a
- * step. The host's largest whole number is the <i>room this runs in</i>, and it bounds what this type
- * stores — a numerator and a denominator — and not every number formed on the way to one. A bracket's
- * width is neither: it is an <i>instrument</i>, and an instrument too coarse for a question is a reason
- * to take a finer one and never a reason to refuse.
+ * not the same kind of thing. The exponent's width, a decimal's scale and how large a part this stores
+ * ({@link #STORED_BITS}) are <i>this representation's</i>: a value past them has none here, so an operation
+ * reaching one refuses a value rather than a step — and refuses the value, which is why the last of them is
+ * read off what is stored and not off the numbers a caller wrote. The platform's own largest whole number
+ * is the <i>room this runs in</i>, and it bounds what is formed on the way to a value rather than which
+ * values there are; the bound above is set so that nothing a comparison forms reaches it. A bracket's width
+ * is neither: it is an <i>instrument</i>, and an instrument too coarse for a question is a reason to take a
+ * finer one and never a reason to refuse.
  *
  * <p>So: the product, the quotient and both narrowings build only the answer's own parts. The order and
  * the rounding take a bracket first, because one settles nearly every question for nothing; where it does
@@ -161,22 +163,37 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * §stdlib-rational). It is a bound on the value, in one place, said out loud — as against a limit on
      * which pairs can be ordered, which is a bound on the operation and one the order may not carry.
      *
-     * <p><b>Why a sixteenth.</b> Two values the starting bracket leaves open are brought close either by
-     * their exponents or by their parts. By their exponents alone the closest they come is a power of two
-     * against a power of five, and whole numbers of sixty-four bits put those logarithms some sixty bits
-     * apart — which the starting width settles. So closer than that is the parts' doing, and a fraction of
-     * so many bits closes on what it is approximating to about twice that many. The width ever wanted is
-     * therefore a few times what the parts take up, and a bracket of some width forms numbers of about
-     * twice it. A sixteenth leaves every number a comparison forms inside what the platform holds with a
-     * factor of two over the estimate — and where the estimate is wrong the outcome is a shortage reported
-     * as one, never a wrong answer, a bracket holding the value it was taken for however it was reached.
+     * <p><b>What the number has to keep true.</b> Two things, and whoever changes it has to keep both:
+     *
+     * <pre>{@code
+     * the width a pair of parts of S bits can want    W ≤ k · S + C
+     * the largest number a bracket of width W forms   2 · W + C' ≤ what the platform builds
+     * }</pre>
+     *
+     * <p>The second is a fact about the code below: a bracket of some width squares its ends and shifts a
+     * numerator up by the width, so what it forms is about twice the width and nothing here is worse than
+     * that. The first is where the reasoning is. Two values the starting bracket leaves open are brought
+     * close either by their exponents or by their parts. By their exponents alone the closest they come is a
+     * power of two against a power of five, and whole numbers of sixty-four bits put those logarithms some
+     * sixty bits apart — which the starting width settles, so this is not the case that sets {@code k}.
+     * Closer than that is the parts' doing, and a fraction of so many bits closes on what it approximates
+     * to about twice that many, whence {@code k} of about four over the two parts.
+     *
+     * <p>That last step is an estimate and is said to be one. "About twice that many" is how well a
+     * fraction of a size <i>can</i> approximate, not a floor on how close any particular target lies: a
+     * partial quotient out of the ordinary in the right place puts a closer one there, and the exponents
+     * offer many targets to look through. So the number carries a factor of two over the estimate — a
+     * sixteenth where an eighth is what the two lines above ask for — and the estimate is only ever load
+     * bearing for how far the refinement climbs. Where it is wrong the outcome is a shortage reported as
+     * one, never a wrong answer: a bracket holds the value it was taken for however wide it was taken, so
+     * no reading here can be made to answer by having too little room, only to stop.
      *
      * <p>What it costs is values no operator here builds. An {@code Int} is sixty-four bits and a
      * {@code Decimal}'s unscaled value is a whole number the platform holds; what reaches this is a sum
      * across distant exponents, which builds the difference between them — so a fold of values whose scales
      * are spread over a hundred million places aborts here, where before it aborted at the platform's end.
      */
-    private static final int STORED_BITS = Integer.MAX_VALUE / 16;
+    static final int STORED_BITS = Integer.MAX_VALUE / 16;
 
 
     /**
@@ -193,10 +210,9 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             throw new IllegalArgumentException("a rational is two whole numbers and two exponents");
         }
         if (denominator.signum() == 0) {
-            throw new IllegalArgumentException("a rational has no zero denominator: " + numerator + "/0");
+            throw new IllegalArgumentException(
+                    "a rational has no zero denominator: " + spelled(numerator) + "/0");
         }
-        heldByTheRepresentation(numerator);
-        heldByTheRepresentation(denominator);
         if (numerator.signum() == 0) {
             denominator = BigInteger.ONE;
             twos = 0;
@@ -244,6 +260,13 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
                 fives = added(fives, -1);
             }
         }
+        // Last, and of what is stored rather than of what arrived. The bound is on the value, and the parts
+        // a caller wrote are one spelling of it: a numerator of a hundred and thirty-four million bits that
+        // is a power of two is the number one here, with the rest of it in an exponent. Asked of the spelling
+        // instead, this turned away values it holds — and turned them away for the size of a form it had
+        // chosen itself, which is the one reason nothing here may refuse for.
+        heldByTheRepresentation(numerator);
+        heldByTheRepresentation(denominator);
     }
 
     /** The rational a whole number is. */
@@ -1441,6 +1464,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
     /**
      * The value, spelled as one fraction where it is small enough to read and as the factored form
      * where it is not.
+     *
+     * <p>Bounded whichever way it goes, the parts as much as the powers. A part is as large as this
+     * representation lets one be, which is millions of digits, and a spelling of one is a cost paid where
+     * it may be least affordable: what carries these is an abort, and the abort the room ran out on is one
+     * whose message would want more of it. So a part past what anyone reads is described by its size, as
+     * the value itself is.
      */
     @Override
     public String toString() {
@@ -1450,7 +1479,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         if (twos > SPELLED_BITS || twos < -SPELLED_BITS
                 || fives > SPELLED_BITS || fives < -SPELLED_BITS
                 || (long) numerator.abs().bitLength() + denominator.bitLength() > SPELLED_BITS) {
-            return numerator + "/" + denominator + "×2^" + twos + "×5^" + fives;
+            return spelled(numerator) + "/" + spelled(denominator) + "×2^" + twos + "×5^" + fives;
         }
         BigInteger up = numeratorWithItsPowers();
         BigInteger down = denominatorWithItsPowers();
@@ -1460,5 +1489,13 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             down = down.divide(common);
         }
         return down.equals(BigInteger.ONE) ? up.toString() : up + "/" + down;
+    }
+
+    /** A stored part as it is written into a message: its digits where those are worth reading, and its
+     *  size where they are not. */
+    private static String spelled(BigInteger part) {
+        return part.bitLength() > SPELLED_BITS
+                ? "(a whole number of " + part.bitLength() + " bits)"
+                : part.toString();
     }
 }
