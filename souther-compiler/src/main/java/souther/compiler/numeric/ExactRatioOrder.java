@@ -73,9 +73,9 @@ final class ExactRatioOrder {
      * left either side. A whole number is where they would not, and is the caller's to answer — it
      * has the value already.
      */
-    static BigInteger flooredMagnitude(ExactRatio of) {
+    static BigInteger flooredMagnitude(ExactRatio of, BigInteger byTwos, BigInteger byFives) {
         for (int width = FIRST_WIDTH; ; width += width >> 1) {
-            Bracketed held = magnitude(of, width);
+            Bracketed held = magnitude(of, byTwos, byFives, width);
             BigInteger below = flooredEnd(held.low, held.shift);
             if (below.equals(flooredEnd(held.high, held.shift))) {
                 return below;
@@ -128,20 +128,32 @@ final class ExactRatioOrder {
      * larger of the two, where a numerator multiplied by the other value's denominator is the size
      * of both together.
      *
+     * <p><b>Taken at exponents given rather than at the value's own</b>, because a rounding asks
+     * about this value times a power of ten and the tens it asks for are the caller's scale. Made
+     * into a value of the ratio's own type first, that scale would have had to fit the exponents a
+     * ratio holds — and a value whose powers all but cancel sits well inside them while either
+     * exponent alone stands at the end. The answer was never out of reach; only a step on the way to
+     * it would have been. So the exponents are whole numbers here and nothing is formed from them.
+     *
      * <p>Reachable to a test, because what makes an order taken from brackets right is that each
      * bracket holds the value it was taken for — and a bracket that had slipped off the value by a
      * bit would answer nearly every pair the same way regardless. So the thing to put a question to
      * is this, and not the answers it goes on to give.
      */
-    static Bracketed magnitude(ExactRatio of, int width) {
+    static Bracketed magnitude(ExactRatio of, BigInteger byTwos, BigInteger byFives, int width) {
         Bracketed fraction = quotient(of.numeratorWithoutUnits().abs(),
                 of.denominatorWithoutUnits(), width);
-        long fives = of.fives();
-        if (fives != 0) {
-            Bracketed five = fiveTo(Math.abs(fives), width);
-            fraction = fraction.times(fives > 0 ? five : five.reciprocal(width), width);
+        if (byFives.signum() != 0) {
+            Bracketed five = fiveTo(byFives.abs(), width);
+            fraction = fraction.times(
+                    byFives.signum() > 0 ? five : five.reciprocal(width), width);
         }
-        return fraction.shiftedBy(BigInteger.valueOf(of.twos()));
+        return fraction.shiftedBy(byTwos);
+    }
+
+    /** The same at the value's own exponents, which is what the order asks for. */
+    static Bracketed magnitude(ExactRatio of, int width) {
+        return magnitude(of, BigInteger.valueOf(of.twos()), BigInteger.valueOf(of.fives()), width);
     }
 
     /**
@@ -172,11 +184,11 @@ final class ExactRatioOrder {
 
     /** {@code 5^exponent} bracketed to {@code width} bits, {@code exponent} being above nought.
      *  Reached by the bits of the exponent, so the work is their count and never the power itself. */
-    private static Bracketed fiveTo(long exponent, int width) {
+    private static Bracketed fiveTo(BigInteger exponent, int width) {
         Bracketed of = Bracketed.exactly(BigInteger.ONE);
-        for (int bit = 63 - Long.numberOfLeadingZeros(exponent); bit >= 0; bit--) {
+        for (int bit = exponent.bitLength() - 1; bit >= 0; bit--) {
             of = of.squared(width);
-            if ((exponent >>> bit & 1L) == 1L) {
+            if (exponent.testBit(bit)) {
                 of = of.times(FIVE).keptTo(width);
             }
         }

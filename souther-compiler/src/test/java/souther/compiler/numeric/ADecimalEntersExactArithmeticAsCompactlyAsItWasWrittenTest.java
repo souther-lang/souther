@@ -354,6 +354,67 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     }
 
     /**
+     * A value rounded at a place, its own exponents standing at the end of what this type holds.
+     *
+     * <p>About a half, so the answer is one digit at either end of the rounding — while one of its
+     * exponents is the largest a long counts. A step that made the caller's scale into a value of
+     * this type first would have had to add the two, and refused a value and an answer both of
+     * which are small over a sum on the way between them.
+     */
+    @Test
+    void aValueRoundsAtAPlaceWithItsOwnExponentsAtTheEndOfTheirRange() {
+        ExactRatio aHalfish = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                Long.MAX_VALUE, -3_972_290_122_662_995_402L);
+        assertTrue(aHalfish.compareTo(ExactRatio.of(BigInteger.ONE, BigInteger.TWO)) > 0);
+        assertTrue(aHalfish.compareTo(ExactRatio.ONE) < 0);
+
+        assertEquals(new BigDecimal("0.5"), aHalfish.asDecimal(RoundingMode.FLOOR, 1));
+        assertEquals(new BigDecimal("0.6"), aHalfish.asDecimal(RoundingMode.CEILING, 1));
+        assertEquals(new BigDecimal("0.588"), aHalfish.asDecimal(RoundingMode.HALF_UP, 3));
+        assertEquals(BigInteger.ZERO, aHalfish.floor());
+        assertEquals(BigInteger.ONE, aHalfish.ceiling());
+    }
+
+    /**
+     * A sum of exponents no long holds is refused, and never quietly written at some other one.
+     *
+     * <p>The scale a value is written at and the exponents its unscaled value then carries are added
+     * together, and at the end of a long's range that sum is one no long holds. Wrapped, it comes
+     * out below nought and the digits it asks for are a different number entirely — which is the one
+     * outcome a value handed back may not be.
+     */
+    @Test
+    void aSumOfExponentsPastALongIsRefusedAndNotWrapped() {
+        ExactRatio wide = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, -1);
+        assertTrue(wide.fitsWrittenDecimal(), "a whole number times a power of two is a decimal");
+        assertThrows(ArithmeticException.class, wide::asWrittenDecimal);
+    }
+
+    /**
+     * Taking a power of two in costs what reading a number's bits costs.
+     *
+     * <p>A canonical form that holds the twos apart has to find them, and every value made here goes
+     * through that. Found one division at a time, holding a whole number becomes work proportional
+     * to the number — so a form adopted to stop work proportional to a scale would have started work
+     * proportional to a value. A power of two is where a number's bits stop, and that is one reading.
+     */
+    @Test
+    void takingAPowerOfTwoInCostsWhatReadingItsBitsCosts() {
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            for (int bits : new int[] {1_000_000, 4_000_000}) {
+                ExactRatio held = ExactRatio.of(BigInteger.ONE.shiftLeft(bits));
+                assertEquals(bits, held.twos());
+                assertEquals(BigInteger.ONE, held.numeratorWithoutUnits());
+            }
+            // And a sum whose answer is one, which is where the work is not the input's own size.
+            ExactRatio summed = ExactRatio.of(
+                    BigInteger.ONE.shiftLeft(2_000_000).subtract(BigInteger.ONE))
+                    .plus(ExactRatio.ONE);
+            assertEquals(2_000_000, summed.twos());
+        });
+    }
+
+    /**
      * And the rounding is the rounding, for values a machine can hold either way.
      *
      * <p>Rewriting it to read the factors is a change to how the answer is reached and to nothing
