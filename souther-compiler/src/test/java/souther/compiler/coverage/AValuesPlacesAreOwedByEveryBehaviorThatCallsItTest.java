@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,6 +54,26 @@ class AValuesPlacesAreOwedByEveryBehaviorThatCallsItTest {
         assertEquals(4, plan.arms("f").size(), "the arms of `big`'s fork are owed by `f`");
     }
 
+    /**
+     * One probe and two items owed: what a row that passes the arm answers for is the behavior it
+     * was written for, and not every behavior that shares the value.
+     */
+    @Test
+    void twoCallersOweTheSameArmAsTwoObligationsOverOneProbe() {
+        CoverageSites.Plan plan = plan();
+
+        CoverageSites.ArmSite ofF = plan.arms("f").stream()
+                .filter(arm -> arm.body().equals("big")).findFirst().orElseThrow();
+        CoverageSites.ArmSite ofG = plan.arms("g").stream()
+                .filter(arm -> arm.body().equals("big")).findFirst().orElseThrow();
+
+        assertEquals(ofF.place(), ofG.place(), "one place, and so one probe");
+        assertEquals("f", ofF.obligation().behavior());
+        assertEquals("g", ofG.obligation().behavior());
+        assertNotEquals(ofF.obligation(), ofG.obligation(),
+                "and two items owed, which nothing that deduplicates them may treat as one");
+    }
+
     @Test
     void aBehaviorThatCallsNoValueOwesOnlyItsOwn() {
         CoverageSites.Plan plan = plan();
@@ -72,7 +93,7 @@ class AValuesPlacesAreOwedByEveryBehaviorThatCallsItTest {
         // What each writes for itself differs, and what `big` writes is the same probe in both.
         long shared = ofF.stream().filter(ofG::contains).count();
         assertEquals(1, shared, "one comparison of `big`, numbered once and owed by both callers");
-        assertTrue(plan.sites().stream().filter(site -> site.behavior().equals("big")).count() > 0,
+        assertTrue(plan.sites().stream().filter(site -> site.body().equals("big")).count() > 0,
                 "and it is numbered as the places of a body of its own");
     }
 }

@@ -74,7 +74,6 @@ public final class Lower {
         // references rather than the sum of what the source wrote (ADR-0072).
         inliner.sharingOneMaterialisationPerRegion();
         inliner.callingValuesAsMethodsWhereEmitted();
-        inliner.leavingValuesOnTheirSettledSignatureWhereAnalysed();
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
@@ -91,7 +90,6 @@ public final class Lower {
     public static Expansion<Hir.FnDef> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
         inliner.sharingOneMaterialisationPerRegion();
         inliner.callingValuesAsMethodsWhereEmitted();
-        inliner.leavingValuesOnTheirSettledSignatureWhereAnalysed();
         Hir.FnDef method = inliner.valueMethod(fn);
         return new Expansion<>(method.withBody(new Hir.FnBody.Written(desugar(method.writtenBody()))),
                 inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());

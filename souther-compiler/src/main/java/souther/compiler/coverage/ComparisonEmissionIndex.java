@@ -85,11 +85,19 @@ public final class ComparisonEmissionIndex {
         return new ComparisonEmissionIndex(copy(emitted));
     }
 
-    /** The same over one body, for a reader that holds one rather than the module's. */
+    /**
+     * The same over one body, for a reader that holds one rather than the module's.
+     *
+     * <p>Of the body and of the methods it calls, which is what a behavior emits: a comparison the
+     * model states is in the body it was written in, and a value's is in the value's method.
+     */
     public static ComparisonEmissionIndex ofBody(Core body, CoverageSites.Plan plan) {
         Map<ModelOccurrence, Map<ConstructOccurrence, EmittedComparison>> emitted =
                 new LinkedHashMap<>();
         walk(body, plan, emitted);
+        for (Core method : plan.methods().calledFrom(body)) {
+            walk(method, plan, emitted);
+        }
         return new ComparisonEmissionIndex(copy(emitted));
     }
 

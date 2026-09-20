@@ -463,10 +463,7 @@ public final class SpecChecker {
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                                 .withCallees(calleeSigs)
-                                .withDependencies(dependsOn)
-                                .preserving(Preserved
-                                        .byTheLanguagesOwnOperationsAndTheValuesSettled(
-                                                settledValues)), output);
+                                .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = discharge == null
                 ? InvariantChecker.Findings.notRun()
                 : InvariantChecker.analyze(dischargeBody, discharge.reading(),

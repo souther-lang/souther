@@ -208,18 +208,6 @@ public final class Preserved {
     }
 
     /**
-     * The language's own operations, and a reference to each value of {@code settled} standing under
-     * the signature its check settled.
-     *
-     * <p>What the analysis reads: an operation it has rules for stays as itself, and a value it has
-     * the answer to is not copied to every place it is named.
-     */
-    public static Preserved byTheLanguagesOwnOperationsAndTheValuesSettled(SettledValues settled) {
-        return new Preserved(byTheLanguagesOwnOperations().operations, Settling.over(settled),
-                false);
-    }
-
-    /**
      * Built on the first ask and not before. What is required of these signatures is required of a
      * representation that keeps them standing, so a checker that keeps none must not be held to it —
      * and a class is initialized whole, so building this beside {@link #NONE} would raise the

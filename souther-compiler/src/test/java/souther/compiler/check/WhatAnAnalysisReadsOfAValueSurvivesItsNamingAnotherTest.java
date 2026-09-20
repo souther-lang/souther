@@ -7,16 +7,15 @@ import souther.compiler.query.Bodies;
 import souther.compiler.types.WrittenOwner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the tree an analysis reads holds of a value is what the value says, however it is built.
+ * What the tree an analysis reads holds of a value is what the value says, however many values it
+ * is written through.
  *
- * <p>A value that names another is not a value an analysis can be given as a reference: the
- * comparison it writes is what a threshold and a predicate are read off, and a tree that dropped it
- * would leave those readers a value they know the type of and nothing else. What is bounded is how
- * far that goes — a chain of values each naming the last, which is what a copy multiplies — and it
- * is bounded by how deep the chain is and by nothing that depends on the order anything was walked.
+ * <p>A threshold and a predicate are read off the comparison a value writes, so a tree that dropped
+ * it would leave those readers a value they know the type of and nothing else. And an alias — a
+ * value that is another value and nothing more — is no change to what is meant, so one more of them
+ * must not change what an analysis reads.
  */
 class WhatAnAnalysisReadsOfAValueSurvivesItsNamingAnotherTest {
 
@@ -38,15 +37,6 @@ class WhatAnAnalysisReadsOfAValueSurvivesItsNamingAnotherTest {
         return held[0];
     }
 
-    private static int nodes(Hir.Expr e) {
-        if (e == null) {
-            return 0;
-        }
-        int[] held = {1};
-        Hir.forEachChild(e, child -> held[0] += nodes(child));
-        return held[0];
-    }
-
     @Test
     void aValueNamingAnotherKeepsWhatItComparesWhereAnAnalysisReadsIt() {
         Hir.Expr body = analysed("""
@@ -64,26 +54,26 @@ class WhatAnAnalysisReadsOfAValueSurvivesItsNamingAnotherTest {
                 "the comparison `enough` writes is what a predicate reading `f` is read off");
     }
 
-    private static String chain(int links) {
-        StringBuilder source = new StringBuilder(
-                "module m exposing (f)\n\nlet a0 = List.length([1, 2, 3])\n");
-        for (int i = 1; i <= links; i++) {
-            String previous = "a" + (i - 1);
-            source.append("let a").append(i).append(" = (if List.length([1]) > 0 then ")
-                    .append(previous).append(" else 0) + (if List.length([1, 2]) > 1 then ")
-                    .append(previous).append(" else 0)\n");
-        }
-        return source.append("\nbehavior f : (n: Int) -> Int\nlet f (n) = a")
-                .append(links).append('\n').toString();
-    }
-
     @Test
-    void aLongChainOfValuesIsNoLargerToAnAnalysisForBeingLonger() {
-        int shorter = nodes(analysed(chain(12), "f"));
-        int longer = nodes(analysed(chain(20), "f"));
+    void anAliasOfAValueIsNoChangeToWhatAnAnalysisReadsOfIt() {
+        Hir.Expr body = analysed("""
+                module m exposing (f)
 
-        assertTrue(longer <= shorter,
-                "a chain that is longer is read as one that is: past the depth a copy is worth, a "
-                        + "value is one reference (" + shorter + " and " + longer + ")");
+                let a0 = List.length([1, 2, 3]) > 2
+
+                let a1 = a0
+
+                let a2 = a1
+
+                let a3 = a2
+
+                let a4 = a3
+
+                behavior f : (n: Int) -> Int
+                let f (n) = if a4 then n else 0
+                """, "f");
+
+        assertEquals(1, comparisonsWrittenBy(body, "a0"),
+                "however many values `a0` is written through, its comparison is what is read");
     }
 }

@@ -7140,10 +7140,10 @@ public final class Adequacy {
                         };
                         case About.AnArmNoRowGoesThrough(var arm) ->
                                 new ExampleMessage.NoRowGoesThroughThatArm(
-                                        phraseFor(arm), arm.behavior());
+                                        phraseFor(arm), arm.obligation().behavior());
                         case About.ARowAtAnArmAwaitsItsAnswer(var arm) ->
                                 new ExampleMessage.ARowAtThatArmAwaitsItsAnswer(
-                                        phraseFor(arm), arm.behavior());
+                                        phraseFor(arm), arm.obligation().behavior());
                         // The row's own name where it wrote one, which is what says which row is
                         // meant from outside the file. An unnamed row is pointed at instead: the
                         // report is anchored where the row is written, and an ordinal is not words

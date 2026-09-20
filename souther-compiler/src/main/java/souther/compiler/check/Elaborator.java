@@ -252,7 +252,7 @@ public final class Elaborator {
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
                         ctx.preserved().valuesAreMethods()
-                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v, ctx)
+                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v)
                                 : keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(),
                                         v.pos());
                 default -> throw notAValue(v, env);
@@ -1552,8 +1552,7 @@ public final class Elaborator {
      * <p>Nobody applied anything at the reference, so the call is no construct of the author's: it is
      * this representation's, in no copy, and there is nothing for a reader to be sent to.
      */
-    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v,
-                                    CheckContext ctx) {
+    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v) {
         ReachName.Declaration declaration = v.reachesADeclaration();
         if (declaration == null) {
             throw new IllegalStateException("`" + v.written() + "` is a value called as a method and"

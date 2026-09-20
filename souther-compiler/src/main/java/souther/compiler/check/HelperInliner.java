@@ -105,12 +105,8 @@ public final class HelperInliner {
     private ValueAtAReference reading = ValueAtAReference.COPIED;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
-    /** Whether a value that is not a constant stays a reference, for a reader that has its answer. */
-    private boolean valuesStandOnTheirSettledSignature = false;
     /** Which values are constants as they are written, by what each is reached by. */
     private final Map<ReachName.Declaration, Boolean> constantValues = new HashMap<>();
-    /** How many values deep the chain each value starts is, by what the value is reached by. */
-    private final Map<ReachName.Declaration, Integer> valueDepths = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
     private final Map<ReachName.Declaration, List<Hir.Var.Denoting>> handedTo = new HashMap<>();
     /**
@@ -416,15 +412,6 @@ public final class HelperInliner {
      */
     public HelperInliner callingValuesAsMethodsWhereEmitted() {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
-        return this;
-    }
-
-    /**
-     * In the tree an analysis reads, a value is left as a reference under the signature its own
-     * check settled, and its body is not copied to where it is named.
-     */
-    public HelperInliner leavingValuesOnTheirSettledSignatureWhereAnalysed() {
-        this.valuesStandOnTheirSettledSignature = table.policy() == InliningPolicy.DISCHARGE;
         return this;
     }
 
@@ -2357,17 +2344,6 @@ public final class HelperInliner {
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
-        if (standsOnItsSettledSignature(named)) {
-            // The reference stays a reference, read under the signature the value's own check
-            // settled, and what the value is stands once beside it.
-            Hir.Binder standing = writing.binders()
-                    .binder("$v" + next() + "_" + named.name(), named.pos());
-            here.put(reached, standing);
-            order.add(standing);
-            values.add(new Hir.Materialised(named.denotes(), where, named, named.pos(),
-                    named.region()));
-            return;
-        }
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
             materialise(each, here, order, values, site);
         }
@@ -2421,80 +2397,6 @@ public final class HelperInliner {
         order.add(called);
         values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
                 named.pos(), named.region()));
-    }
-
-    /**
-     * How long a chain of values may be before a copy of one is not worth what it multiplies by.
-     *
-     * <p>A value built in each of several regions carries a copy of the value it names into each, so
-     * what a chain of them holds is the product of how many regions name each link. Up to this depth
-     * that product is bounded by a number that does not grow with the source, and what an analysis
-     * reads — a threshold, a predicate — is the body it is given. Past it a value is one reference,
-     * read under the signature its own check settled.
-     *
-     * <p>The depth is a fact about the module's values and nothing else: not which was walked first,
-     * nor how many regions any of them was built in, so two builds of one module agree on it.
-     */
-    private static final int A_CHAIN_OF_VALUES_A_COPY_IS_WORTH = 3;
-
-    /**
-     * Whether {@code named} is a value the tree an analysis reads leaves as a reference.
-     *
-     * <p>A value this module declared, that is not written out as a constant, and that stands at the
-     * head of a chain of values as long as a copy is worth.
-     */
-    private boolean standsOnItsSettledSignature(Hir.Var.Denoting named) {
-        if (!valuesStandOnTheirSettledSignature) {
-            return false;
-        }
-        ReachName.Declaration reaches = named.reachesADeclaration();
-        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
-        return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
-                && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody())
-                && valueDepth(reaches) >= A_CHAIN_OF_VALUES_A_COPY_IS_WORTH;
-    }
-
-    /**
-     * How many values deep the chain a value starts is: none for a value that names no other, and one
-     * more than the deepest of the values it names otherwise.
-     *
-     * <p>Read off what is written, and once for each value.
-     */
-    private int valueDepth(ReachName.Declaration reaches) {
-        Integer known = valueDepths.get(reaches);
-        if (known != null) {
-            return known;
-        }
-        // A value that reaches itself is refused before a body is expanded, so this is only for a
-        // walk that was handed one: it ends there and does not go round.
-        valueDepths.put(reaches, 0);
-        Hir.FnDef value = table.reached(reaches);
-        Set<ReachName.Declaration> named = new LinkedHashSet<>();
-        if (value != null) {
-            valuesNamedIn(value.writtenBody(), named);
-        }
-        int depth = 0;
-        for (ReachName.Declaration each : named) {
-            depth = Math.max(depth, 1 + valueDepth(each));
-        }
-        valueDepths.put(reaches, depth);
-        return depth;
-    }
-
-    /** The values of this module that {@code e} names anywhere in it. */
-    private void valuesNamedIn(Hir.Expr e, Set<ReachName.Declaration> out) {
-        if (e == null) {
-            return;
-        }
-        if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
-            ReachName.Declaration reaches = v.reachesADeclaration();
-            Hir.FnDef value = reaches == null ? null : table.reached(reaches);
-            if (value != null && value.params().isEmpty() && value.body() != null
-                    && !graph.recurses(reaches)) {
-                out.add(reaches);
-            }
-        }
-        Hir.forEachChild(e, child -> valuesNamedIn(child, out));
     }
 
     /**
