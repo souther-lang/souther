@@ -50,14 +50,12 @@ class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
      * is not followed. What stops there is stated: a field added to this is a value that left
      * without anybody having said where it went. The first two are the numbers of a condition and
      * of a rule a report is written from, and are read where the report is made. The third holds
-     * the direction of a quantity as the coefficients of a form, and is read where forms are. The
-     * last holds the terms a step moves, and is only asked whether a term is among them.
+     * the direction of a quantity as the coefficients of a form, and is read where forms are.
      */
     private static final Set<String> WHERE_ITS_VALUES_LEAVE = Set.of(
             "souther.compiler.query.Coverages$Partitioned.conditionsMet",
             "souther.compiler.query.Coverages$Partitioned.rulesReachedAt",
-            "souther.compiler.numeric.LinearForm.coefs",
-            "souther.compiler.query.AnotherLineTheRowsAllow$Reaches.moved");
+            "souther.compiler.numeric.LinearForm.coefs");
 
     private static final String HANDED_ON = "handed on to a field outside what is read: ";
 

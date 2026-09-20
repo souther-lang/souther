@@ -1,11 +1,17 @@
 package souther.bench.readings.orders;
 
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.CompositionBudget;
+
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -249,6 +255,81 @@ public final class WalkedIntoAnAnswer {
 
     public static Object[] aCopyOfTheArrayTheSetMade(Held held) {
         return held.figures().toArray().clone();
+    }
+
+    public static ObjectNode membersInTheOrderTheWalkMetThem(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        for (CompositionBudget each : held.figures()) {
+            out.put(each.name(), 1);
+        }
+        return out;
+    }
+
+    public static ArrayNode anArrayInTheOrderTheWalkMetThem(Held held) {
+        ArrayNode out = JsonNodeFactory.instance.arrayNode();
+        for (CompositionBudget each : held.figures()) {
+            out.add(each.name());
+        }
+        return out;
+    }
+
+    public static ObjectNode theOneTheWalkChoseUnderAKey(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        out.put("first", held.figures().stream().findFirst().orElseThrow().name());
+        return out;
+    }
+
+    public static List<CompositionBudget> filledByAMethodReferenceToAdd(Held held) {
+        List<CompositionBudget> out = new ArrayList<>();
+        held.figures().forEach(out::add);
+        return out;
+    }
+
+    public static void writtenByAMethodReferenceToPrintln(Held held) {
+        held.figures().forEach(System.out::println);
+    }
+
+    public static void theFirstOneWrittenStraightToTheOutput(Held held) {
+        System.out.println(held.figures().stream().findFirst().orElseThrow());
+    }
+
+    public static void everyOneWrittenAsTheWalkMeetsIt(Held held) {
+        for (CompositionBudget each : held.figures()) {
+            System.out.println(each);
+        }
+    }
+
+    public static ClassOfAPosition theLeastByADeclaredOrderOfOneTheWalkChose(HeldClasses held) {
+        ClassOfAPosition chosen = held.classes().stream().findFirst().orElseThrow();
+        return Set.of(chosen).stream().min(ClassOfAPosition.steadyOrder()).orElseThrow();
+    }
+
+    public static List<ClassOfAPosition> sortedInPlaceAListOfOneTheWalkChose(HeldClasses held) {
+        List<ClassOfAPosition> out = new ArrayList<>();
+        out.add(held.classes().stream().findFirst().orElseThrow());
+        out.sort(ClassOfAPosition.steadyOrder());
+        return out;
+    }
+
+    public static Set<ClassOfAPosition> keptInATreeOfADeclaredOrderAfterTheWalkChose(
+            HeldClasses held) {
+        Set<ClassOfAPosition> tree = new TreeSet<>(ClassOfAPosition.steadyOrder());
+        tree.add(held.classes().stream().findFirst().orElseThrow());
+        return tree;
+    }
+
+    public static Object[] theOneCopiedFromAPlaceTheOrderChose(Held held, CompositionBudget one,
+                                                              Object[] source) {
+        int from = new ArrayList<>(held.figures()).indexOf(one);
+        Object[] out = new Object[1];
+        System.arraycopy(source, from, out, 0, 1);
+        return out;
+    }
+
+    public static String anOrderWrittenIntoABitSet(Held held, CompositionBudget one) {
+        BitSet bits = new BitSet();
+        bits.set(new ArrayList<>(held.figures()).indexOf(one));
+        return bits.toString();
     }
 
     public static CompositionBudget theLeastByAKeyTwoOfThemCanShare(Held held) {

@@ -7,6 +7,9 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.WeakeningSet;
 
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -173,6 +176,32 @@ public final class AskedOrNamedInOrder {
 
     public static void printedHowManyThereAre(Held held) {
         System.out.println(held.figures().size());
+    }
+
+    public static long eachDescribedByANodeOfItsOwn(Held held) {
+        return held.figures().stream().map(AskedOrNamedInOrder::describing).count();
+    }
+
+    private static ObjectNode describing(CompositionBudget each) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        out.put("name", each.name());
+        return out;
+    }
+
+    public static void theOnlyOneWritten(Held held) {
+        if (held.figures().size() != 1) {
+            throw new IllegalStateException("not one figure but " + held.figures().size());
+        }
+        System.out.println(held.figures().iterator().next());
+    }
+
+    public static void inADeclaredOrderThenWritten(HeldClasses held) {
+        System.out.println(held.classes().stream().sorted(ClassOfAPosition.steadyOrder()).toList());
+    }
+
+    public static void theLeastByADeclaredOrderThenWritten(HeldClasses held) {
+        System.out.println(held.classes().stream().min(ClassOfAPosition.steadyOrder())
+                .orElseThrow());
     }
 
     public static boolean askedWhetherTheyShareOneWithAnother(Held held,

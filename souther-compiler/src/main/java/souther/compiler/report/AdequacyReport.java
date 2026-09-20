@@ -4030,9 +4030,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Sorted by what each is written as here, which is every field of it. What a run has to
         // have done is a set, so the order a walk met them is no part of the identity — and two
         // documents of one model have to write it the same way round for a consumer to join on it.
-        settled.stream().map(AdequacyReport::decisionId)
-                .sorted(java.util.Comparator.comparing(Object::toString))
-                .forEach(decisions::add);
+        PublicationOrders.DECISIONS_OF_A_COMBINATION
+                .arrange(settled.stream().map(AdequacyReport::decisionId).toList())
+                .written().forEach(decisions::add);
     }
 
     /**
