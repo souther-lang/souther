@@ -9,6 +9,7 @@ import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.EtaOrigin;
 import souther.compiler.types.ExpansionLineage;
@@ -33,6 +34,7 @@ import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.QuotedFrom;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -105,6 +107,8 @@ public final class HelperInliner {
     private boolean valuesAreMethods = false;
     /** Whether a value that is not a constant stays a reference, for a reader that has its answer. */
     private boolean valuesStandOnTheirSettledSignature = false;
+    /** Which values are constants as they are written, by what each is reached by. */
+    private final Map<ReachName.Declaration, Boolean> constantValues = new HashMap<>();
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -1368,6 +1372,9 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
+            // A build that is a call of the method its value is emitted as holds a reference and the
+            // bindings it is handed, and there is no body in it to walk.
+            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
@@ -2343,12 +2350,17 @@ public final class HelperInliner {
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
         boolean standsAsAReference = standsOnItsSettledSignature(named, calls);
-        boolean isCalled = !standsAsAReference && under.isEmpty() && emittedAsAMethod(named);
+        boolean isCalled = !standsAsAReference && emittedAsAMethod(named);
         if (standsAsAReference || isCalled) {
             // A value the region binds is one reference to it, and what the value is stands once
             // beside it. Read under the signature the value's own check settled, it is what an
             // analysis reads; where the tree is emitted it is the call of the method the value is
-            // emitted as, so that method is required wherever this tree ends up.
+            // emitted as, so that method is required wherever this tree ends up. The values that
+            // method takes are built here first, and handed to it.
+            List<Hir.Var.Denoting> handed = isCalled ? takenByTheMethod(under) : List.of();
+            for (Hir.Var.Denoting each : handed) {
+                materialise(each, here, order, values, site);
+            }
             if (isCalled) {
                 ReachName.Declaration reaches = named.reachesADeclaration();
                 leftStanding.add(reaches);
@@ -2360,8 +2372,8 @@ public final class HelperInliner {
                     .binder("$v" + next() + "_" + named.name(), named.pos());
             here.put(reached, called);
             order.add(called);
-            values.add(new Hir.Materialised(named.denotes(), where, named, named.pos(),
-                    named.region()));
+            values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
+                    named.pos(), named.region()));
             return;
         }
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
@@ -2429,28 +2441,131 @@ public final class HelperInliner {
      * takes nothing.
      */
     private boolean emittedAsAMethod(Hir.Var.Denoting named) {
-        if (!valuesAreMethods) {
-            return false;
-        }
+        return valuesAreMethods && isAMethodValue(named);
+    }
+
+    /** Whether {@code named} is a value this module declared that is not a constant as written,
+     *  which is the kind a method can be emitted for. */
+    private boolean isAMethodValue(Hir.Var.Denoting named) {
         ReachName.Declaration reaches = named.reachesADeclaration();
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
                 && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody());
     }
 
+    /** Whether {@code build} is a call of the method its value is emitted as, which is a reference to
+     *  the value and not a copy of its body. */
+    private static boolean isACallOfItsValue(Hir.Materialised build) {
+        Hir.Expr called = build.body() instanceof Hir.Apply call ? call.function() : build.body();
+        return called instanceof Hir.Var.Denoting named && named.denotes().equals(build.value());
+    }
+
     /**
-     * Whether {@code e} is a constant as it is written: a literal, or an operator over such.
+     * The reference to {@code named} that stands for a build of it: the name alone where the method
+     * takes nothing, and the name applied to the bindings that hold what it takes where it does.
+     */
+    private Hir.Expr callOf(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed) {
+        if (handed.isEmpty()) {
+            return named;
+        }
+        List<Hir.Expr> arguments = new ArrayList<>();
+        for (Hir.Var.Denoting each : handed) {
+            arguments.add(Hir.Var.local(readAt(each.reaches()), named.pos()));
+        }
+        return Hir.Apply.synthetic(named, arguments,
+                new ApplicationOrigin.Derived(
+                        new ApplicationDerivationCause.NameReadAsAValue(named.origin()), 0),
+                named.pos(), named.region());
+    }
+
+    /** What a method emitted for a value takes: the values its root region demands that are
+     *  themselves emitted as methods, in the order of the names they are reached by. */
+    private List<Hir.Var.Denoting> takenByTheMethod(Map<String, Hir.Var.Denoting> demanded) {
+        List<Hir.Var.Denoting> taken = new ArrayList<>();
+        for (Hir.Var.Denoting each : demanded.values()) {
+            if (isAMethodValue(each)) {
+                taken.add(each);
+            }
+        }
+        taken.sort(Comparator.comparing(Hir.Var.Denoting::reaches));
+        return taken;
+    }
+
+    /** What every parameter a value's method takes is named under, so that what it stands for can be
+     *  read back off the name. */
+    private static final String VALUE_PARAMETER = "$dep_";
+
+    /** The name of the value that {@code parameter} carries into a method emitted for a value, or
+     *  null where it is no such parameter. */
+    public static String valueCarriedBy(Hir.FnParam parameter) {
+        String name = parameter.name();
+        return name.startsWith(VALUE_PARAMETER) ? name.substring(VALUE_PARAMETER.length()) : null;
+    }
+
+    /**
+     * The body of the value {@code fn} as the method it is emitted as: what its root region demands
+     * of other values is what the method takes, and what only a region inside it demands is built
+     * there.
+     *
+     * <p>Nothing the value names at its root is built inside it. A region that builds the value has
+     * built those already, and hands them over, so two values that name one value are handed the
+     * same one.
+     */
+    public Hir.FnDef valueMethod(Hir.FnDef fn) {
+        List<Hir.FnParam> parameters = new ArrayList<>();
+        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            Hir.Expr calls = inline(fn.writtenBody());
+            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
+            demandedHere(calls, demanded);
+            Map<String, Hir.Binder> handed = new LinkedHashMap<>();
+            for (Hir.Var.Denoting each : takenByTheMethod(demanded)) {
+                Hir.Binder binder = writing.binders()
+                        .binder(VALUE_PARAMETER + each.name(), each.pos());
+                handed.put(each.reaches(), binder);
+                parameters.add(new Hir.FnParam(binder, null));
+            }
+            materialised.add(handed);
+            try {
+                return region(calls, rootSite());
+            } finally {
+                materialised.remove(materialised.size() - 1);
+            }
+        });
+        return fn.withParams(parameters).withBody(new Hir.FnBody.Written(body));
+    }
+
+    /**
+     * Whether {@code e} is a constant as it is written: a literal, an operator over such, or the name
+     * of a value of this module that is.
      *
      * <p>A value like that is what every reader that asks whether an expression is known at compile
      * time folds, and it folds a tree rather than resolving a name. Its body stands where it is named
-     * for that reason; a call to a method would hide the constant from all of them.
+     * for that reason; a call to a method would hide the constant from all of them. The values
+     * of a module are well founded, so following a name ends.
      */
-    private static boolean writtenOutAsAConstant(Hir.Expr e) {
+    private boolean writtenOutAsAConstant(Hir.Expr e) {
         return switch (e) {
             case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _ -> true;
             case Hir.Neg neg -> writtenOutAsAConstant(neg.operand());
             case Hir.Binary bin ->
                     writtenOutAsAConstant(bin.left()) && writtenOutAsAConstant(bin.right());
+            case Hir.Var.Denoting named when named.denotes() instanceof ValueName.Helper -> {
+                ReachName.Declaration reaches = named.reachesADeclaration();
+                Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+                if (value == null || !value.params().isEmpty() || value.body() == null
+                        || graph.recurses(reaches)) {
+                    yield false;
+                }
+                // Once per value: a value naming another twice would otherwise be followed twice,
+                // and a chain of them once per path through it.
+                Boolean known = constantValues.get(reaches);
+                if (known == null) {
+                    known = writtenOutAsAConstant(value.writtenBody());
+                    constantValues.put(reaches, known);
+                }
+                yield known;
+            }
             default -> false;
         };
     }
@@ -2654,6 +2769,7 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
                         ex.pos(), ex.region());
             }
+            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
                     m.region());

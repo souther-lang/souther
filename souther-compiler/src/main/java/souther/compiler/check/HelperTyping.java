@@ -100,6 +100,24 @@ public final class HelperTyping {
                 }
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
             }
+            // What a value emitted as a method takes: the values its root region demands, each a
+            // binding of the type that value's own check settled. Those are checked first, so the
+            // answer is here.
+            List<Hir.FnParam> taken = elaborated.valueParams.get(h.name());
+            if (taken != null) {
+                List<Type> takenTypes = new ArrayList<>();
+                for (Hir.FnParam p : taken) {
+                    CompleteSignature carried = standing.valueKept(
+                            new ValueName.Helper(inliner.moduleName(), HelperInliner.valueCarriedBy(p)));
+                    if (carried == null) {
+                        throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
+                                + "`, whose value was not settled before it");
+                    }
+                    env = env.with(p.binder(), carried.result());
+                    takenTypes.add(carried.result());
+                }
+                elaborated.valueParamTypes.put(h.name(), takenTypes);
+            }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
             // A definition the lowered module carries is one the backend emits — a recursive helper,
             // and a row's operand — so it is typed on the tree the backend emits from, and the Core

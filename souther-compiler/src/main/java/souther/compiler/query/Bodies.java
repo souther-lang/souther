@@ -2008,6 +2008,15 @@ public final class Bodies {
             try {
                 HelperInliner inliner = HelperInliner.over(against.value().table(),
                         against.value().graph());
+                // A value the backend emits a method for, as opposed to a behavior's implementation
+                // that takes no inputs: what tells them apart is whether a behavior declares it.
+                boolean aValue = !recursive && def.value().params().isEmpty()
+                        && def.value().standsAt() == null
+                        && !db.ask(new Spec(module, fn.text())).present();
+                if (aValue) {
+                    return Answer.of(Lower.valueMethod(def.value(),
+                            inliner.namingBehaviors(behaviors.value())));
+                }
                 return Answer.of(Lower.body(def.value(),
                         inliner.namingBehaviors(behaviors.value()),
                         recursive, dependencyParams(db, module, fn.text())));
@@ -2740,7 +2749,8 @@ public final class Bodies {
          *                checked against
          */
         public record Of(Map<String, Core> emittedHelpers, boolean sound, boolean stopped,
-                         Preserved.SettledValues settledValues) {}
+                         Preserved.SettledValues settledValues,
+                         Map<String, List<Type>> valueParamTypes) {}
 
         @Override
         public String module() {
@@ -2823,7 +2833,8 @@ public final class Bodies {
             reported.emittedHelpers().forEach((h, core) ->
                     helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
             return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped(),
-                    reported.settledValues().snapshot()), reports);
+                    reported.settledValues().snapshot(), Map.copyOf(reported.valueParamTypes())),
+                    reports);
         }
     }
 
@@ -2891,6 +2902,7 @@ public final class Bodies {
         private final Map<String, AnalysisBody> analysed;
         private final CoverageSites.Plan plan;
         private final Set<String> emits;
+        private final Map<String, List<Type>> valueParamTypes;
 
         private Elaborated(ModuleBodies of,
                            Map<String, Core> emittedHelpers,
@@ -2900,7 +2912,9 @@ public final class Bodies {
                            SuppliedRules supplied,
                            Map<String, AnalysisBody> analysed,
                            CoverageSites.Plan plan,
-                           Set<String> emits) {
+                           Set<String> emits,
+                           Map<String, List<Type>> valueParamTypes) {
+            this.valueParamTypes = valueParamTypes;
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
@@ -2965,13 +2979,19 @@ public final class Bodies {
                     // elaborations holding one set of bodies and entitling different classes are
                     // two programs, and a check that came to the second would be taken for the
                     // first.
-                    && emits.equals(that.emits);
+                    && emits.equals(that.emits)
+                    && valueParamTypes.equals(that.valueParamTypes);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(of, emittedHelpers, claims, elements,
-                    decisions, supplied, emits);
+                    decisions, supplied, emits, valueParamTypes);
+        }
+
+        /** The types of what each value emitted as a method takes, by the name of the value. */
+        public Map<String, List<Type>> valueParamTypes() {
+            return valueParamTypes;
         }
 
         /** Whose module these are the bodies of. */
@@ -3586,7 +3606,7 @@ public final class Bodies {
         CoverageSites.Plan plan =
                 CoverageSites.of(of, read, handed);
         return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
-                read, handed, analysed, plan, emits);
+                read, handed, analysed, plan, emits, module.valueParamTypes());
     }
 
     /**

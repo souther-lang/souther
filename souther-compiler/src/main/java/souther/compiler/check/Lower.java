@@ -84,6 +84,19 @@ public final class Lower {
                 inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
     }
 
+    /**
+     * The body of the value {@code fn} as the method it is emitted as, which takes the values its
+     * root region demands.
+     */
+    public static Expansion<Hir.FnDef> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
+        inliner.sharingOneMaterialisationPerRegion();
+        inliner.callingValuesAsMethodsWhereEmitted();
+        inliner.leavingValuesOnTheirSettledSignatureWhereAnalysed();
+        Hir.FnDef method = inliner.valueMethod(fn);
+        return new Expansion<>(method.withBody(new Hir.FnBody.Written(desugar(method.writtenBody()))),
+                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+    }
+
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A
      * name in the body is one of them only when it was answered with that binding — a binding in force
      * wins over the declaration it shadows (spec §fn-rules), so the spelling alone does not say. */

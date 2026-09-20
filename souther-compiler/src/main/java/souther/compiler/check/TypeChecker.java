@@ -47,6 +47,10 @@ public final class TypeChecker {
          * readers that stand a call to the value's method where the value was named, which are
          * typed by it. */
         final Preserved.Settling settledValues = new Preserved.Settling();
+        /** What each value emitted as a method takes, by the name of the value. */
+        final Map<String, List<Hir.FnParam>> valueParams = new LinkedHashMap<>();
+        /** The types of what each such method takes, once they are settled. */
+        final Map<String, List<Type>> valueParamTypes = new LinkedHashMap<>();
     }
 
     /**
@@ -68,10 +72,13 @@ public final class TypeChecker {
      * @param emittedHelpers the recursive helper bodies it elaborated, which the backend emits as
      *                         methods
      * @param settledValues what each value of the module was settled as
+     * @param valueParamTypes the types of what each value emitted as a method takes, by the name of
+     *                        the value
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
                            boolean stopped, Map<String, Core> emittedHelpers,
-                           Preserved.Settling settledValues) {}
+                           Preserved.Settling settledValues,
+                           Map<String, List<Type>> valueParamTypes) {}
 
     /**
      * Everything the check has to say about a module that is not one behavior's body: its
@@ -123,7 +130,7 @@ public final class TypeChecker {
             stopped = true;
         }
         return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers,
-                elaborated.settledValues);
+                elaborated.settledValues, elaborated.valueParamTypes);
     }
 
     /**
@@ -262,6 +269,11 @@ public final class TypeChecker {
         toCheck.putAll(HelperInliner.takenOnBy(lowered));
         for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
+            // A value emitted as a method takes the values its root region demands, and its check
+            // reads them as bindings of the types those values were settled as.
+            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
+                elaborated.valueParams.put(fn.name(), fn.params());
+            }
         }
         for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
