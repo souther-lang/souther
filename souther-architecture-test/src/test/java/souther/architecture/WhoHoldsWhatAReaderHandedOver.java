@@ -112,8 +112,10 @@ final class WhoHoldsWhatAReaderHandedOver {
      *  apart. */
     private final Map<String, MethodModel> byWhatItIs = new HashMap<>();
 
-    /** What each of them calls, as the methods compiled here that could answer each call. */
-    private final Map<String, Set<String>> calls = new HashMap<>();
+    /** What each of them calls, as the methods compiled here that could answer each call — of the
+     *  ones a walk arrived at, which is what {@link #whatIsCalledBy} fills. Held against whichever
+     *  rules of this fork share the reading. */
+    private final Map<String, Set<String>> calls = new ConcurrentHashMap<>();
 
     private final Set<String> canBeHandedAWalk = new HashSet<>();
 
@@ -127,8 +129,9 @@ final class WhoHoldsWhatAReaderHandedOver {
     private final Map<String, Set<String>> knownAs = new HashMap<>();
 
     /** What each name is as a loaded class, or empty where nothing here can load it. Remembered
-     *  because the question is asked of the same few names at every method. */
-    private final Map<String, Optional<Class<?>>> asLoaded = new HashMap<>();
+     *  because the question is asked of the same few names at every method, and held against
+     *  whichever rules of this fork share the reading. */
+    private final Map<String, Optional<Class<?>>> asLoaded = new ConcurrentHashMap<>();
 
     /**
      * The reading of each population, kept for as long as the fork that built it.
@@ -150,18 +153,22 @@ final class WhoHoldsWhatAReaderHandedOver {
     /** Every method compiled in {@code where}, with what each of them calls. */
     private WhoHoldsWhatAReaderHandedOver(CompiledOutputs where) {
         List<ClassModel> read = where.all();
+        // What each name is, taken once. Reading up from a class is a walk from one name to the
+        // next, so the walk needs every class under the name a superclass or an interface is
+        // written as, and building that from the classes at each of them is building it as many
+        // times as there are classes.
+        Map<String, ClassModel> byName = new HashMap<>();
+        for (ClassModel each : read) {
+            byName.put(each.thisClass().name().stringValue(), each);
+        }
         for (ClassModel each : read) {
             String owner = each.thisClass().name().stringValue();
-            Set<String> named = everythingItIs(each, read);
+            Set<String> named = everythingItIs(each, byName);
             knownAs.put(owner, named);
             for (String one : named) {
                 standingInFor.computeIfAbsent(one, _ -> new HashSet<>()).add(owner);
             }
         }
-        // Every method first and what each of them calls afterwards. A call is followed to the
-        // methods compiled here that could answer it, so answering one before they have all been
-        // read is answering it against however much of this had been built — which is an edge that
-        // depends on the order the classes were walked in, in a reading about exactly that.
         for (ClassModel each : read) {
             String owner = each.thisClass().name().stringValue();
             for (MethodModel method : each.methods()) {
@@ -173,7 +180,6 @@ final class WhoHoldsWhatAReaderHandedOver {
                 }
             }
         }
-        byWhatItIs.forEach((what, method) -> calls.put(what, whatItCalls(method)));
     }
 
     /**
@@ -192,7 +198,7 @@ final class WhoHoldsWhatAReaderHandedOver {
             }
         });
         while (!toFollow.isEmpty()) {
-            for (String called : calls.getOrDefault(toFollow.remove(), Set.of())) {
+            for (String called : whatIsCalledBy(toFollow.remove())) {
                 if (canBeHandedAWalk.contains(called) && !stopsAt(called)
                         && holding.add(called)) {
                     toFollow.add(called);
@@ -200,6 +206,26 @@ final class WhoHoldsWhatAReaderHandedOver {
             }
         }
         return holding;
+    }
+
+    /**
+     * What {@code what} calls, worked out the first time a walk arrives at it.
+     *
+     * <p>Reading it is decoding that method's code and looking each call up, and a walk follows
+     * what it reaches rather than every method there is: most of this repository is never on the
+     * far side of a call from anything these rules ask about, and reading all of it up front is
+     * paying for the answer to a question no walk puts.
+     *
+     * <p>Every method and every name it may be reached by is already read by the time any walk
+     * starts, so what a call is followed to does not turn on when the question was asked. That is
+     * what the reading is for: answered while the methods were still being gathered, a call would
+     * be answered against however much of this had been built, and the edge would depend on the
+     * order the classes were walked in — in a reading about exactly that.
+     */
+    private Set<String> whatIsCalledBy(String what) {
+        MethodModel method = byWhatItIs.get(what);
+        return method == null ? Set.of()
+                : calls.computeIfAbsent(what, _ -> whatItCalls(method));
     }
 
     /** The method this is of, for a rule that reads what it does. */
@@ -331,10 +357,11 @@ final class WhoHoldsWhatAReaderHandedOver {
     }
 
     /** Every name this class may be reached by: itself, what it extends and what it implements, as
-     *  far as any of those are compiled here. */
-    private static Set<String> everythingItIs(ClassModel of, List<ClassModel> here) {
-        Map<String, ClassModel> byName = new HashMap<>();
-        here.forEach(each -> byName.put(each.thisClass().name().stringValue(), each));
+     *  far as any of those are compiled here.
+     *
+     *  @param byName every class compiled here under the name a superclass or an interface is
+     *                written as, which is how the walk reads from one name up to the next */
+    private static Set<String> everythingItIs(ClassModel of, Map<String, ClassModel> byName) {
         Set<String> out = new HashSet<>();
         Deque<ClassModel> toRead = new ArrayDeque<>(List.of(of));
         while (!toRead.isEmpty()) {
