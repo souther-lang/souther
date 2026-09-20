@@ -109,6 +109,10 @@ public final class HelperInliner {
     private boolean valuesStandOnTheirSettledSignature = false;
     /** Which values are constants as they are written, by what each is reached by. */
     private final Map<ReachName.Declaration, Boolean> constantValues = new HashMap<>();
+    /** How many values deep the chain each value starts is, by what the value is reached by. */
+    private final Map<ReachName.Declaration, Integer> valueDepths = new HashMap<>();
+    /** What the method emitted for each value takes, by what the value is reached by. */
+    private final Map<ReachName.Declaration, List<Hir.Var.Denoting>> handedTo = new HashMap<>();
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -2341,6 +2345,10 @@ public final class HelperInliner {
         if (readAt(reached) != null) {
             return;
         }
+        if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
+            materialiseAsACall(named, here, order, values, site);
+            return;
+        }
         Hir.Expr body = materialisable(named);
         if (body == null) {
             return;
@@ -2349,31 +2357,15 @@ public final class HelperInliner {
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
-        boolean standsAsAReference = standsOnItsSettledSignature(named, calls);
-        boolean isCalled = !standsAsAReference && emittedAsAMethod(named);
-        if (standsAsAReference || isCalled) {
-            // A value the region binds is one reference to it, and what the value is stands once
-            // beside it. Read under the signature the value's own check settled, it is what an
-            // analysis reads; where the tree is emitted it is the call of the method the value is
-            // emitted as, so that method is required wherever this tree ends up. The values that
-            // method takes are built here first, and handed to it.
-            List<Hir.Var.Denoting> handed = isCalled ? takenByTheMethod(under) : List.of();
-            for (Hir.Var.Denoting each : handed) {
-                materialise(each, here, order, values, site);
-            }
-            if (isCalled) {
-                ReachName.Declaration reaches = named.reachesADeclaration();
-                leftStanding.add(reaches);
-                for (SequencedSet<ReachName.Declaration> asked : standingHere) {
-                    asked.add(reaches);
-                }
-            }
-            Hir.Binder called = writing.binders()
+        if (standsOnItsSettledSignature(named)) {
+            // The reference stays a reference, read under the signature the value's own check
+            // settled, and what the value is stands once beside it.
+            Hir.Binder standing = writing.binders()
                     .binder("$v" + next() + "_" + named.name(), named.pos());
-            here.put(reached, called);
-            order.add(called);
-            values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
-                    named.pos(), named.region()));
+            here.put(reached, standing);
+            order.add(standing);
+            values.add(new Hir.Materialised(named.denotes(), where, named, named.pos(),
+                    named.region()));
             return;
         }
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
@@ -2390,15 +2382,68 @@ public final class HelperInliner {
     }
 
     /**
-     * Whether {@code named} is a value the tree an analysis reads leaves as a reference, given
-     * {@code calls}, its body with the helpers it calls expanded.
+     * Binds {@code named} in the region being written as the call of the method it is emitted as.
      *
-     * <p>A value this module declared, that names another value and is not written out as a
-     * constant. A value naming none is small and closed, and an analysis reads what it says — a
-     * threshold, a case — so it stays where it is named. One naming another is what a copy multiplies:
-     * built in each of several regions, it carries a copy of the value it names into each.
+     * <p>The values that method takes are built here first, and handed to it. Which they are is a fact
+     * about the value and not about the build, so it is worked out the first time the value is built
+     * and not again: a value built in each of several regions would otherwise have its body expanded
+     * in each of them to learn the same thing.
+     *
+     * <p>The method is required wherever this tree ends up, so it is recorded as left standing.
      */
-    private boolean standsOnItsSettledSignature(Hir.Var.Denoting named, Hir.Expr calls) {
+    private void materialiseAsACall(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                    List<Hir.Binder> order, List<Hir.Expr> values,
+                                    Supplier<MaterialisationSite> site) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        MaterialisationSite where = site.get();
+        List<Hir.Var.Denoting> handed = handedTo.get(reaches);
+        if (handed == null) {
+            Hir.Expr body = materialisable(named);
+            if (body == null) {
+                return;
+            }
+            Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+            Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
+            demandedHere(calls, under);
+            handed = takenByTheMethod(under);
+            handedTo.put(reaches, handed);
+        }
+        for (Hir.Var.Denoting each : handed) {
+            materialise(each, here, order, values, site);
+        }
+        leftStanding.add(reaches);
+        for (SequencedSet<ReachName.Declaration> asked : standingHere) {
+            asked.add(reaches);
+        }
+        Hir.Binder called = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), called);
+        order.add(called);
+        values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
+                named.pos(), named.region()));
+    }
+
+    /**
+     * How long a chain of values may be before a copy of one is not worth what it multiplies by.
+     *
+     * <p>A value built in each of several regions carries a copy of the value it names into each, so
+     * what a chain of them holds is the product of how many regions name each link. Up to this depth
+     * that product is bounded by a number that does not grow with the source, and what an analysis
+     * reads — a threshold, a predicate — is the body it is given. Past it a value is one reference,
+     * read under the signature its own check settled.
+     *
+     * <p>The depth is a fact about the module's values and nothing else: not which was walked first,
+     * nor how many regions any of them was built in, so two builds of one module agree on it.
+     */
+    private static final int A_CHAIN_OF_VALUES_A_COPY_IS_WORTH = 3;
+
+    /**
+     * Whether {@code named} is a value the tree an analysis reads leaves as a reference.
+     *
+     * <p>A value this module declared, that is not written out as a constant, and that stands at the
+     * head of a chain of values as long as a copy is worth.
+     */
+    private boolean standsOnItsSettledSignature(Hir.Var.Denoting named) {
         if (!valuesStandOnTheirSettledSignature) {
             return false;
         }
@@ -2406,18 +2451,39 @@ public final class HelperInliner {
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
                 && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody())
-                && namesAValue(calls);
+                && valueDepth(reaches) >= A_CHAIN_OF_VALUES_A_COPY_IS_WORTH;
     }
 
-    /** Whether {@code e} names a value of this module anywhere in it. */
-    private boolean namesAValue(Hir.Expr e) {
-        boolean[] found = {false};
-        scanForAValue(e, found);
-        return found[0];
+    /**
+     * How many values deep the chain a value starts is: none for a value that names no other, and one
+     * more than the deepest of the values it names otherwise.
+     *
+     * <p>Read off what is written, and once for each value.
+     */
+    private int valueDepth(ReachName.Declaration reaches) {
+        Integer known = valueDepths.get(reaches);
+        if (known != null) {
+            return known;
+        }
+        // A value that reaches itself is refused before a body is expanded, so this is only for a
+        // walk that was handed one: it ends there and does not go round.
+        valueDepths.put(reaches, 0);
+        Hir.FnDef value = table.reached(reaches);
+        Set<ReachName.Declaration> named = new LinkedHashSet<>();
+        if (value != null) {
+            valuesNamedIn(value.writtenBody(), named);
+        }
+        int depth = 0;
+        for (ReachName.Declaration each : named) {
+            depth = Math.max(depth, 1 + valueDepth(each));
+        }
+        valueDepths.put(reaches, depth);
+        return depth;
     }
 
-    private void scanForAValue(Hir.Expr e, boolean[] found) {
-        if (e == null || found[0]) {
+    /** The values of this module that {@code e} names anywhere in it. */
+    private void valuesNamedIn(Hir.Expr e, Set<ReachName.Declaration> out) {
+        if (e == null) {
             return;
         }
         if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
@@ -2425,11 +2491,10 @@ public final class HelperInliner {
             Hir.FnDef value = reaches == null ? null : table.reached(reaches);
             if (value != null && value.params().isEmpty() && value.body() != null
                     && !graph.recurses(reaches)) {
-                found[0] = true;
-                return;
+                out.add(reaches);
             }
         }
-        Hir.forEachChild(e, child -> scanForAValue(child, found));
+        Hir.forEachChild(e, child -> valuesNamedIn(child, out));
     }
 
     /**

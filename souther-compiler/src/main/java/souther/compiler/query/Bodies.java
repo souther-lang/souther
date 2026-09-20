@@ -90,6 +90,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
 
@@ -3563,12 +3564,15 @@ public final class Bodies {
         }
         // A value emitted as a method of its own is a body a run passes through, and what it
         // compares and forks on is among the places of this module however many behaviors call it.
+        // Held apart from the behaviors: it declares no rows and states no answer, and the places of
+        // a behavior are its own and those of the methods it calls.
+        SequencedMap<String, Core> methods = new LinkedHashMap<>();
         Set<String> behaviorNames = Names.behaviorNames(settled);
         for (Hir.FnDef fn : settled.fns()) {
             Core method = module.emittedHelpers().get(fn.name());
             if (method != null && fn.params().isEmpty() && fn.standsAt() == null
                     && !behaviorNames.contains(fn.name())) {
-                bodies.put(fn.name(), method);
+                methods.put(fn.name(), method);
             }
         }
         // What each body declares cannot arrive, held against what its input's own declarations
@@ -3586,7 +3590,7 @@ public final class Bodies {
         // its trees are both in hand for the first and only time, and everything below takes
         // the pair rather than two things to put together again.
         ModuleBodies of =
-                new ModuleBodies(name, bodies);
+                new ModuleBodies(name, bodies, methods);
         // Where the places of these bodies are, walked here and once. What it is an answer
         // about is the module this check holds, so this is where there is a module to walk;
         // and the claims below name arms of it, so they are addresses of the plan this answer

@@ -79,6 +79,9 @@ public final class ComparisonEmissionIndex {
         for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk(body.getValue(), plan, emitted);
         }
+        for (Map.Entry<String, Core> method : of.methods().entrySet()) {
+            walk(method.getValue(), plan, emitted);
+        }
         return new ComparisonEmissionIndex(copy(emitted));
     }
 

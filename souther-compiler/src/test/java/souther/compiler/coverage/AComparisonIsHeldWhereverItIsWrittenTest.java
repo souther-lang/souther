@@ -65,14 +65,18 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         return out;
     }
 
+    private static ModuleBodies bodiesOfAModule(String module, Map<String, Core> bodies) {
+        return HandBuiltBodies.ofBehaviors(module, bodies);
+    }
+
     private static ComparisonCatalog catalogOf(Checked checked) {
-        return ComparisonCatalog.of(new ModuleBodies(checked.module(),
+        return ComparisonCatalog.of(bodiesOfAModule(checked.module(),
                 new LinkedHashMap<>(checked.bodies())));
     }
 
     /** The plan of the same bodies, under the same name. */
     private static CoverageSites.Plan planOf(Checked checked) {
-        return CoverageSites.of(new ModuleBodies(checked.module(),
+        return CoverageSites.of(bodiesOfAModule(checked.module(),
                         new LinkedHashMap<>(checked.bodies())),
                 DecisionSources.NONE, SuppliedRules.NONE);
     }
@@ -284,9 +288,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let check (a) = if a > 10 then 1 else 2
                 """;
         ComparisonCatalog here = ComparisonCatalog.of(
-                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())));
+                bodiesOfAModule("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())));
         ComparisonCatalog there = ComparisonCatalog.of(
-                new ModuleBodies("two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies())));
+                bodiesOfAModule("two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies())));
 
         assertEquals(1, here.all().size(), "each module writes one comparison");
         assertEquals(1, there.all().size(), "each module writes one comparison");
@@ -312,9 +316,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let check (a) = if a > 10 then 1 else 2
                 """;
         CoverageSites.Plan here = CoverageSites.of(
-                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())),
+                bodiesOfAModule("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())),
                 DecisionSources.NONE, SuppliedRules.NONE);
-        ConstructOccurrence there = ComparisonCatalog.of(new ModuleBodies(
+        ConstructOccurrence there = ComparisonCatalog.of(bodiesOfAModule(
                 "two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies()))).all().get(0).which();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
@@ -345,7 +349,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
                         numbered, new IdentityHashMap<>(), java.util.Set.of(),
-                        new LinkedHashMap<>(), catalogOf(checked), numbering));
+                        new LinkedHashMap<>(), catalogOf(checked), numbering, Map.of()));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }
@@ -371,8 +375,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         }
 
         assertNotEquals(
-                new ModuleBodies(checked.module(), new LinkedHashMap<>(checked.bodies())),
-                new ModuleBodies(checked.module(), reversed),
+                bodiesOfAModule(checked.module(), new LinkedHashMap<>(checked.bodies())),
+                bodiesOfAModule(checked.module(), reversed),
                 "one order is what the numbering is of, so the other is another value");
     }
 
@@ -393,7 +397,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         both.put("two", shared);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> ComparisonCatalog.of(new ModuleBodies("example", both)));
+                () -> ComparisonCatalog.of(bodiesOfAModule("example", both)));
         assertTrue(refused.getMessage().contains("one comparison of two bodies"),
                 refused.getMessage());
     }

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What the invariant-discharge check names a value by — the identity two writings of one value
@@ -293,7 +294,7 @@ final class Term {
         if (java.util.Set.class.isAssignableFrom(type)) {
             return Rule.ITS_UNORDERED_ELEMENTS;
         }
-        if (type == java.util.Optional.class) {
+        if (type == Optional.class) {
             return Rule.ITS_ELEMENT_IF_ANY;
         }
         // Asked before the question about records, because a value that keeps the number it is
@@ -413,7 +414,7 @@ final class Term {
             case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentsOf(value, type);
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
-            case ITS_ELEMENT_IF_ANY -> elementsOf(((java.util.Optional<?>) value).stream().toList());
+            case ITS_ELEMENT_IF_ANY -> optionalOf((Optional<?>) value);
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
@@ -469,8 +470,7 @@ final class Term {
             case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentTextOf(value, type);
             case ITS_ELEMENTS -> elementTextOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
-            case ITS_ELEMENT_IF_ANY ->
-                    elementTextOf(((java.util.Optional<?>) value).stream().toList());
+            case ITS_ELEMENT_IF_ANY -> optionalTextOf((Optional<?>) value);
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term carrying a " + type.getName() + " is walked by");
         };
@@ -531,6 +531,18 @@ final class Term {
             }
         }
         return h;
+    }
+
+    /** What {@link #elementsOf} gives the list of the one element {@code value} holds, or of none,
+     *  without making the list. */
+    private static int optionalOf(Optional<?> value) {
+        return value.isPresent() ? MIX + hashOf(value.get()) : 0;
+    }
+
+    /** What {@link #elementTextOf} gives the list of the one element {@code value} holds, or of
+     *  none, without making the list. */
+    private static String optionalTextOf(Optional<?> value) {
+        return value.isPresent() ? "[" + textOf(value.get()) + ";]" : "[]";
     }
 
     private static int elementsOf(List<?> values) {

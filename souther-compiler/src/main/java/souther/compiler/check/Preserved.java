@@ -5,7 +5,6 @@ import souther.compiler.core.CompleteSignature;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -51,83 +50,47 @@ public final class Preserved {
     public static final class Settling {
 
         private final Map<ValueName, CompleteSignature> settled = new LinkedHashMap<>();
-        private final Map<ValueName, Constant> constants = new LinkedHashMap<>();
+        /** What was settled before this was made, read as it stands and not copied into this. */
+        private final SettledValues already;
+
+        public Settling() {
+            this.already = null;
+        }
+
+        private Settling(SettledValues already) {
+            this.already = already;
+        }
+
+        /** A table that answers with what {@code settled} holds, and holds nothing itself. */
+        static Settling over(SettledValues settled) {
+            return new Settling(settled);
+        }
 
         /** Records what a value's own check settled it as. */
         public void settled(CompleteSignature signature) {
             settled.put(signature.declaring().operation(), signature);
         }
 
-        /** Records what {@code value} is a constant of, where its body folds to one of the four. */
-        public void constant(ValueName value, Object folded) {
-            Constant constant = Constant.of(folded);
-            if (constant != null) {
-                constants.put(value, constant);
-            }
-        }
-
-        private void constant(ValueName value, Constant constant) {
-            constants.put(value, constant);
-        }
-
         /** What has been settled so far, as an answer. */
         public SettledValues snapshot() {
-            return new SettledValues(settled, constants);
+            return already != null ? already : new SettledValues(settled);
         }
 
         private CompleteSignature settledAs(ValueName name) {
-            return settled.get(name);
-        }
-
-        private Constant constantOf(ValueName name) {
-            return constants.get(name);
+            return already != null ? already.signatures().get(name) : settled.get(name);
         }
     }
 
     /**
-     * What a value's body folds to, for the four kinds of value a fold arrives at.
-     *
-     * <p>Named by kind rather than held as the object the fold answered with, so that what a module's
-     * check answers with says what it holds.
-     */
-    public sealed interface Constant {
-
-        /** A whole number. */
-        record OfWhole(long value) implements Constant { }
-
-        /** A decimal. */
-        record OfDecimal(BigDecimal value) implements Constant { }
-
-        /** A string. */
-        record OfText(String value) implements Constant { }
-
-        /** A truth value. */
-        record OfFlag(boolean value) implements Constant { }
-
-        /** {@code folded} as one of these, or null where it is none of the four. */
-        static Constant of(Object folded) {
-            return switch (folded) {
-                case Long i -> new OfWhole(i);
-                case BigDecimal d -> new OfDecimal(d);
-                case String s -> new OfText(s);
-                case Boolean b -> new OfFlag(b);
-                case null, default -> null;
-            };
-        }
-    }
-
-    /**
-     * What each value of a module was settled as, and what each is a constant of, as an answer.
+     * What each value of a module was settled as, as an answer.
      *
      * <p>A value and not the {@link Settling} it is read off: what a module's check answers with has
      * to be the same answer when it is asked twice, and a table that is still being filled is not.
      */
-    public record SettledValues(Map<ValueName, CompleteSignature> signatures,
-                                Map<ValueName, Constant> constants) {
+    public record SettledValues(Map<ValueName, CompleteSignature> signatures) {
 
         public SettledValues {
             signatures = Map.copyOf(signatures);
-            constants = Map.copyOf(constants);
         }
     }
 
@@ -198,12 +161,7 @@ public final class Preserved {
 
     /** The same, over values a module's check has already settled. */
     public static Preserved valuesCalledAsMethods(SettledValues settled) {
-        Settling values = new Settling();
-        settled.signatures().values().forEach(values::settled);
-        for (Map.Entry<ValueName, Constant> each : settled.constants().entrySet()) {
-            values.constant(each.getKey(), each.getValue());
-        }
-        return new Preserved(Map.of(), values, true);
+        return new Preserved(Map.of(), Settling.over(settled), true);
     }
 
     /** Whether a value this keeps standing is a call to the method it is emitted as. */
@@ -224,17 +182,6 @@ public final class Preserved {
      */
     public CompleteSignature valueKept(ValueName name) {
         return name == null ? null : values.settledAs(name);
-    }
-
-    /**
-     * What {@code name} is a constant of, or null where its body does not fold.
-     *
-     * <p>A reader that stands a call where a value was named would hide the constant from everything
-     * that asks whether an expression is known at compile time, so it writes the constant out as a
-     * literal instead.
-     */
-    public Constant valueConstant(ValueName name) {
-        return name == null ? null : values.constantOf(name);
     }
 
     /** What this keeps standing, for a reader that wants to say something of all of them. */
@@ -268,12 +215,8 @@ public final class Preserved {
      * the answer to is not copied to every place it is named.
      */
     public static Preserved byTheLanguagesOwnOperationsAndTheValuesSettled(SettledValues settled) {
-        Settling values = new Settling();
-        settled.signatures().values().forEach(values::settled);
-        for (Map.Entry<ValueName, Constant> each : settled.constants().entrySet()) {
-            values.constant(each.getKey(), each.getValue());
-        }
-        return new Preserved(byTheLanguagesOwnOperations().operations, values, false);
+        return new Preserved(byTheLanguagesOwnOperations().operations, Settling.over(settled),
+                false);
     }
 
     /**

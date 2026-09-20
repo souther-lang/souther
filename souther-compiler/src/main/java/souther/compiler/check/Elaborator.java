@@ -1554,11 +1554,6 @@ public final class Elaborator {
      */
     private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v,
                                     CheckContext ctx) {
-        Core folded = constantOf(ctx.preserved().valueConstant(v.denotes()), settled.result(),
-                v.pos());
-        if (folded != null) {
-            return folded;
-        }
         ReachName.Declaration declaration = v.reachesADeclaration();
         if (declaration == null) {
             throw new IllegalStateException("`" + v.written() + "` is a value called as a method and"
@@ -1566,18 +1561,6 @@ public final class Elaborator {
         }
         return new Core.Call(new Core.Reached.OfDeclaration(declaration), List.of(),
                 ConstructOccurrence.unwritten(), settled.result(), v.pos());
-    }
-
-    /** {@code constant} as the literal of {@code type} it is written out as, or null for a value no
-     *  literal spells. */
-    private static Core constantOf(Preserved.Constant constant, Type type, SourcePos pos) {
-        return switch (constant) {
-            case Preserved.Constant.OfWhole i -> new Core.Int(i.value(), type, pos);
-            case Preserved.Constant.OfDecimal d -> new Core.Decimal(d.value(), type, pos);
-            case Preserved.Constant.OfText s -> new Core.Str(s.value(), type, pos);
-            case Preserved.Constant.OfFlag b -> new Core.Bool(b.value(), type, pos);
-            case null -> null;
-        };
     }
 
     /**
