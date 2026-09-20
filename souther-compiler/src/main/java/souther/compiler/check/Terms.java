@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -168,11 +169,10 @@ final class Terms {
 
     /** The subject each evaluation this could not name is, made once per occurrence. Identity-keyed:
      * an occurrence is a node, and two nodes are two evaluations however alike they are written. */
-    private final java.util.IdentityHashMap<Core, EvaluationId> evaluations =
-            new java.util.IdentityHashMap<>();
+    private final IdentityHashMap<Core, EvaluationId> evaluations = new IdentityHashMap<>();
 
     /** What each node a rewrite built stands for, so an occurrence keeps its identity through one. */
-    private final java.util.IdentityHashMap<Core, Core> builtFrom = new java.util.IdentityHashMap<>();
+    private final IdentityHashMap<Core, Core> builtFrom = new IdentityHashMap<>();
 
     /**
      * What this knows about {@code atom}, which is never null: an atom nothing was recorded about is
@@ -660,15 +660,45 @@ final class Terms {
         if (at.valueOf(li.binder().binding()) == li.value()) {
             return at;
         }
+        Map<Denotations, Denotations> under =
+                entered.computeIfAbsent(li, _ -> new IdentityHashMap<>());
+        Denotations had = under.get(at);
+        if (had != null) {
+            return had;
+        }
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
         FactSubject about = subjectOf(li.value(), at);
-        return at.binding(li.binder().binding(), li.value(),
+        Denotations made = at.binding(li.binder().binding(), li.value(),
                 about != null ? about : placeSubject(li.binder().binding()),
                 locationOf(li.value(), at), bodyKey(li.value(), at),
                 numericMeaningOf(li.value(), at));
+        under.put(at, made);
+        return made;
     }
+
+    /**
+     * What each binding this has entered means, under each environment it was entered in.
+     *
+     * <p>One binding under one environment means one thing. Which value the name is about, where it
+     * is, what the term grammar calls it and which arithmetic it is are all decided by the binder,
+     * its initializer and what the names around it mean — so the second reader to enter it is
+     * asking a question that already has an answer rather than asking for a second one.
+     *
+     * <p>Which is what keeps an initializer from being read once per reader of the binding. Naming
+     * a {@code let} reads the initializer to name it and then enters the binding, and entering it
+     * reads the initializer twice over — once for which value it is and once for what the term
+     * grammar calls it. Where an initializer holds a binding of its own, each of those three
+     * readings reaches the inner one and starts the three again, so a chain of bindings would be
+     * read three times to the length of the chain.
+     *
+     * <p>Held by identity on both. Two environments equal to each other are two answers to one
+     * question and either will do; what this holds is the one environment the three readings of a
+     * binding are handed, which arrives as the object the walk above them stands in.
+     */
+    private final IdentityHashMap<Core.LetIn, Map<Denotations, Denotations>> entered =
+            new IdentityHashMap<>();
 
     /**
      * What {@code e} folds to where every part of it is written out, or {@code null} where any part
@@ -2129,8 +2159,20 @@ final class Terms {
      */
     private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                          Leaf leaf) {
+        long[] counting = COUNTING_WALKS;
+        if (counting != null) {
+            counting[0]++;
+        }
         return naming(raw, at, bound, depth, leaf).term();
     }
+
+    /** Where a test in this package counts the walks this reading started, and null everywhere else.
+     *  Beside {@link #FOLLOWED} and for the same reason: what a reading answers says nothing about
+     *  how many times it read the tree to answer it, so a reader that goes over an expression once
+     *  and a reader that goes over it once per name above it compile alike, and what separates them
+     *  has nowhere else to be read. Counted where a walk begins, which is every canonical key
+     *  whatever asked for it. */
+    static long[] COUNTING_WALKS;
 
     /**
      * What a walk over an expression does where the term grammar runs out.
