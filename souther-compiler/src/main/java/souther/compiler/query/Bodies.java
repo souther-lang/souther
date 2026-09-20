@@ -1993,7 +1993,8 @@ public final class Bodies {
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new BehaviorAritiesForBody(module, fn.text(), InliningPolicy.FULL));
-            if (!def.present() || !against.present() || !behaviors.present()) {
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            if (!def.present() || !against.present() || !behaviors.present() || !scope.present()) {
                 return Answer.absent();
             }
             // Whether this body is a recursion, asked of the graph rather than of the set the module
@@ -2008,7 +2009,8 @@ public final class Bodies {
                     && against.value().graph().recurses(held.reachedAs());
             try {
                 HelperInliner inliner = HelperInliner.over(against.value().table(),
-                        against.value().graph());
+                        against.value().graph())
+                        .callingValuesAsMethodsWhereEmitted(scope.value());
                 // A value the backend emits a method for, as opposed to a behavior's implementation
                 // that takes no inputs: what tells them apart is whether a behavior declares it.
                 boolean aValue = !recursive && def.value().params().isEmpty()

@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -105,10 +106,12 @@ public final class HelperInliner {
     private ValueAtAReference reading = ValueAtAReference.COPIED;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
-    /** Which values are constants as they are written, by what each is reached by. */
-    private final Map<ReachName.Declaration, Boolean> constantValues = new HashMap<>();
+    /** What each value folds to, empty where it is not a constant, by what it is reached by. */
+    private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
-    private final Map<ReachName.Declaration, List<Hir.Var.Denoting>> handedTo = new HashMap<>();
+    private final Map<ReachName.Declaration, Handover> handovers = new HashMap<>();
+    /** The fold that says which values are constants, the one every reader of a constant asks. */
+    private ConstEval constEval = null;
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -410,8 +413,9 @@ public final class HelperInliner {
      * that runs asks for: the representation an analysis reads has no method to call and keeps the
      * body where the value was named.
      */
-    public HelperInliner callingValuesAsMethodsWhereEmitted() {
+    public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
+        this.constEval = ConstEval.against(symbols, this::constantOf);
         return this;
     }
 
@@ -2333,8 +2337,11 @@ public final class HelperInliner {
             return;
         }
         if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
-            materialiseAsACall(named, here, order, values, site);
-            return;
+            Handover handover = handoverOf(named, site.get());
+            if (handover.callable()) {
+                materialiseAsACall(named, handover.taken(), here, order, values, site);
+                return;
+            }
         }
         Hir.Expr body = materialisable(named);
         if (body == null) {
@@ -2367,23 +2374,11 @@ public final class HelperInliner {
      *
      * <p>The method is required wherever this tree ends up, so it is recorded as left standing.
      */
-    private void materialiseAsACall(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
-                                    List<Hir.Binder> order, List<Hir.Expr> values,
-                                    Supplier<MaterialisationSite> site) {
+    private void materialiseAsACall(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed,
+                                    Map<String, Hir.Binder> here, List<Hir.Binder> order,
+                                    List<Hir.Expr> values, Supplier<MaterialisationSite> site) {
         ReachName.Declaration reaches = named.reachesADeclaration();
         MaterialisationSite where = site.get();
-        List<Hir.Var.Denoting> handed = handedTo.get(reaches);
-        if (handed == null) {
-            Hir.Expr body = materialisable(named);
-            if (body == null) {
-                return;
-            }
-            Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
-            Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
-            demandedHere(calls, under);
-            handed = takenByTheMethod(under);
-            handedTo.put(reaches, handed);
-        }
         for (Hir.Var.Denoting each : handed) {
             materialise(each, here, order, values, site);
         }
@@ -2411,13 +2406,72 @@ public final class HelperInliner {
         return valuesAreMethods && isAMethodValue(named);
     }
 
-    /** Whether {@code named} is a value this module declared that is not a constant as written,
+    /** Whether {@code named} is a value this module declared that does not fold to a constant,
      *  which is the kind a method can be emitted for. */
     private boolean isAMethodValue(Hir.Var.Denoting named) {
         ReachName.Declaration reaches = named.reachesADeclaration();
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
-                && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody());
+                && !graph.recurses(reaches) && constantOf(named).isEmpty();
+    }
+
+    /**
+     * What {@code named} folds to, or empty where it is not a constant.
+     *
+     * <p>Asked of {@link ConstEval}, which is what every reader that asks whether an expression is
+     * known at compile time asks, so what stands as a value here is what they all find. A constant
+     * stands where it is named for that reason: a call to a method would hide it from all of them.
+     * Once per value, since a value naming another twice would otherwise be folded twice and a chain
+     * of them once per path through it.
+     */
+    private Optional<Object> constantOf(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        if (value == null || !value.params().isEmpty() || value.body() == null
+                || graph.recurses(reaches)) {
+            return Optional.empty();
+        }
+        Optional<Object> known = constantOfValues.get(reaches);
+        if (known == null) {
+            // Put before the fold as "not a constant", so a value that reaches itself answers.
+            constantOfValues.put(reaches, Optional.empty());
+            known = constEval.eval(value.writtenBody());
+            constantOfValues.put(reaches, known);
+        }
+        return known;
+    }
+
+    /**
+     * What a value's method takes, and whether it can be called at all.
+     *
+     * <p>A method is called only where everything the value demands at its root can be handed to it
+     * or folded in it: a value of this module that is emitted as a method is handed, a constant is
+     * folded. Anything else it demands — a value another module declared — is built by the region
+     * that builds the value, and if the method were to build it instead, two values that name it
+     * would each build it, which is what one region sharing it is for.
+     */
+    private record Handover(boolean callable, List<Hir.Var.Denoting> taken) { }
+
+    private Handover handoverOf(Hir.Var.Denoting named, MaterialisationSite where) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Handover known = handovers.get(reaches);
+        if (known == null) {
+            Hir.Expr body = materialisable(named);
+            if (body == null) {
+                known = new Handover(false, List.of());
+            } else {
+                Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+                Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
+                demandedHere(calls, under);
+                boolean callable = true;
+                for (Hir.Var.Denoting each : under.values()) {
+                    callable &= isAMethodValue(each) || constantOf(each).isPresent();
+                }
+                known = new Handover(callable, takenByTheMethod(under));
+            }
+            handovers.put(reaches, known);
+        }
+        return known;
     }
 
     /** Whether {@code build} is a call of the method its value is emitted as, which is a reference to
@@ -2500,41 +2554,6 @@ public final class HelperInliner {
             }
         });
         return fn.withParams(parameters).withBody(new Hir.FnBody.Written(body));
-    }
-
-    /**
-     * Whether {@code e} is a constant as it is written: a literal, an operator over such, or the name
-     * of a value of this module that is.
-     *
-     * <p>A value like that is what every reader that asks whether an expression is known at compile
-     * time folds, and it folds a tree rather than resolving a name. Its body stands where it is named
-     * for that reason; a call to a method would hide the constant from all of them. The values
-     * of a module are well founded, so following a name ends.
-     */
-    private boolean writtenOutAsAConstant(Hir.Expr e) {
-        return switch (e) {
-            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _ -> true;
-            case Hir.Neg neg -> writtenOutAsAConstant(neg.operand());
-            case Hir.Binary bin ->
-                    writtenOutAsAConstant(bin.left()) && writtenOutAsAConstant(bin.right());
-            case Hir.Var.Denoting named when named.denotes() instanceof ValueName.Helper -> {
-                ReachName.Declaration reaches = named.reachesADeclaration();
-                Hir.FnDef value = reaches == null ? null : table.reached(reaches);
-                if (value == null || !value.params().isEmpty() || value.body() == null
-                        || graph.recurses(reaches)) {
-                    yield false;
-                }
-                // Once per value: a value naming another twice would otherwise be followed twice,
-                // and a chain of them once per path through it.
-                Boolean known = constantValues.get(reaches);
-                if (known == null) {
-                    known = writtenOutAsAConstant(value.writtenBody());
-                    constantValues.put(reaches, known);
-                }
-                yield known;
-            }
-            default -> false;
-        };
     }
 
     /**
