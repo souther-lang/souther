@@ -5,6 +5,7 @@ import souther.compiler.core.CompleteSignature;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -50,23 +51,99 @@ public final class Preserved {
     public static final class Settling {
 
         private final Map<ValueName, CompleteSignature> settled = new LinkedHashMap<>();
+        private final Map<ValueName, Constant> constants = new LinkedHashMap<>();
 
         /** Records what a value's own check settled it as. */
         public void settled(CompleteSignature signature) {
             settled.put(signature.declaring().operation(), signature);
         }
 
+        /** Records what {@code value} is a constant of, where its body folds to one of the four. */
+        public void constant(ValueName value, Object folded) {
+            Constant constant = Constant.of(folded);
+            if (constant != null) {
+                constants.put(value, constant);
+            }
+        }
+
+        private void constant(ValueName value, Constant constant) {
+            constants.put(value, constant);
+        }
+
+        /** What has been settled so far, as an answer. */
+        public SettledValues snapshot() {
+            return new SettledValues(settled, constants);
+        }
+
         private CompleteSignature settledAs(ValueName name) {
             return settled.get(name);
+        }
+
+        private Constant constantOf(ValueName name) {
+            return constants.get(name);
+        }
+    }
+
+    /**
+     * What a value's body folds to, for the four kinds of value a fold arrives at.
+     *
+     * <p>Named by kind rather than held as the object the fold answered with, so that what a module's
+     * check answers with says what it holds.
+     */
+    public sealed interface Constant {
+
+        /** A whole number. */
+        record OfWhole(long value) implements Constant { }
+
+        /** A decimal. */
+        record OfDecimal(BigDecimal value) implements Constant { }
+
+        /** A string. */
+        record OfText(String value) implements Constant { }
+
+        /** A truth value. */
+        record OfFlag(boolean value) implements Constant { }
+
+        /** {@code folded} as one of these, or null where it is none of the four. */
+        static Constant of(Object folded) {
+            return switch (folded) {
+                case Long i -> new OfWhole(i);
+                case BigDecimal d -> new OfDecimal(d);
+                case String s -> new OfText(s);
+                case Boolean b -> new OfFlag(b);
+                case null, default -> null;
+            };
+        }
+    }
+
+    /**
+     * What each value of a module was settled as, and what each is a constant of, as an answer.
+     *
+     * <p>A value and not the {@link Settling} it is read off: what a module's check answers with has
+     * to be the same answer when it is asked twice, and a table that is still being filled is not.
+     */
+    public record SettledValues(Map<ValueName, CompleteSignature> signatures,
+                                Map<ValueName, Constant> constants) {
+
+        public SettledValues {
+            signatures = Map.copyOf(signatures);
+            constants = Map.copyOf(constants);
         }
     }
 
     private final Map<ValueName, CompleteSignature> operations;
     private final Settling values;
+    private final boolean valuesAreMethods;
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values) {
+        this(operations, values, false);
+    }
+
+    private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
+                      boolean valuesAreMethods) {
         this.operations = Map.copyOf(operations);
         this.values = values;
+        this.valuesAreMethods = valuesAreMethods;
     }
 
     /** Every representation that keeps nothing standing — the tree the backend emits from, and every
@@ -108,6 +185,33 @@ public final class Preserved {
     }
 
     /**
+     * A representation the backend emits from, where a value left standing is a method the emitted
+     * tree calls.
+     *
+     * <p>The same references {@link #valuesAlreadySettled} keeps, read differently: there the
+     * reference is for a reader that needs nothing from the body and emits nothing, and here it is
+     * the call the emitted tree makes, typed by the signature the value's own check settled.
+     */
+    public static Preserved valuesCalledAsMethods(Settling settled) {
+        return new Preserved(Map.of(), settled, true);
+    }
+
+    /** The same, over values a module's check has already settled. */
+    public static Preserved valuesCalledAsMethods(SettledValues settled) {
+        Settling values = new Settling();
+        settled.signatures().values().forEach(values::settled);
+        for (Map.Entry<ValueName, Constant> each : settled.constants().entrySet()) {
+            values.constant(each.getKey(), each.getValue());
+        }
+        return new Preserved(Map.of(), values, true);
+    }
+
+    /** Whether a value this keeps standing is a call to the method it is emitted as. */
+    public boolean valuesAreMethods() {
+        return valuesAreMethods;
+    }
+
+    /**
      * The signature {@code name} was settled with, or null where this representation does not keep a
      * reference to it standing.
      *
@@ -120,6 +224,17 @@ public final class Preserved {
      */
     public CompleteSignature valueKept(ValueName name) {
         return name == null ? null : values.settledAs(name);
+    }
+
+    /**
+     * What {@code name} is a constant of, or null where its body does not fold.
+     *
+     * <p>A reader that stands a call where a value was named would hide the constant from everything
+     * that asks whether an expression is known at compile time, so it writes the constant out as a
+     * literal instead.
+     */
+    public Constant valueConstant(ValueName name) {
+        return name == null ? null : values.constantOf(name);
     }
 
     /** What this keeps standing, for a reader that wants to say something of all of them. */

@@ -73,6 +73,7 @@ public final class Lower {
         // Copying it at every reference instead makes what a body holds the product of its
         // references rather than the sum of what the source wrote (ADR-0072).
         inliner.sharingOneMaterialisationPerRegion();
+        inliner.callingValuesAsMethodsWhereEmitted();
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));

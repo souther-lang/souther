@@ -194,7 +194,16 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, recConstructs);
             }
             // A build constructs what the value's body does, and being a build adds nothing.
-            case Hir.Materialised m -> collectConstructs(m.body(), out, symbols, recConstructs);
+            case Hir.Materialised m -> {
+                // A build that is a call to the method its value is emitted as constructs what that
+                // method does, as a value's construction always is: carried by the value.
+                Constructs viaValue = m.body() instanceof Hir.Var.Denoting named
+                        ? recConstructs.get(named.reaches()) : null;
+                if (viaValue != null) {
+                    out.absorb(viaValue.allCarried());
+                }
+                collectConstructs(m.body(), out, symbols, recConstructs);
+            }
             // An expansion builds what its arguments build and what the callee's body builds. What a
             // function argument builds is counted from the body, where the callee applies it; counted
             // here as well, one lambda's construction would be recorded twice.

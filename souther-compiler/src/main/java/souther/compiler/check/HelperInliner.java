@@ -40,6 +40,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
@@ -100,6 +101,8 @@ public final class HelperInliner {
      * and not the arm.
      */
     private ValueAtAReference reading = ValueAtAReference.COPIED;
+    /** Whether a value that needs nothing from its region is called as a method, not copied. */
+    private boolean valuesAreMethods = false;
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -390,6 +393,19 @@ public final class HelperInliner {
      */
     public HelperInliner sharingOneMaterialisationPerRegion() {
         this.reading = ValueAtAReference.SHARED_PER_REGION;
+        return this;
+    }
+
+    /**
+     * In the tree the backend emits from, a value that needs nothing from the region around it is
+     * emitted as a method of its own, and a reference to it is a call.
+     *
+     * <p>Said apart from {@link #sharingOneMaterialisationPerRegion}, which every representation
+     * that runs asks for: the representation an analysis reads has no method to call and keeps the
+     * body where the value was named.
+     */
+    public HelperInliner callingValuesAsMethodsWhereEmitted() {
+        this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
         return this;
     }
 
@@ -2315,6 +2331,24 @@ public final class HelperInliner {
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
+        if (under.isEmpty() && emittedAsAMethod(named)) {
+            // A value the region binds is the call of the method it is emitted as: what the tree
+            // holds is one reference, and what the value is stands once beside it. The reference
+            // is a call the backend has a method for, so the method is required wherever this tree
+            // ends up.
+            ReachName.Declaration reaches = named.reachesADeclaration();
+            leftStanding.add(reaches);
+            for (SequencedSet<ReachName.Declaration> asked : standingHere) {
+                asked.add(reaches);
+            }
+            Hir.Binder called = writing.binders()
+                    .binder("$v" + next() + "_" + named.name(), named.pos());
+            here.put(reached, called);
+            order.add(called);
+            values.add(new Hir.Materialised(named.denotes(), where, named, named.pos(),
+                    named.region()));
+            return;
+        }
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
             materialise(each, here, order, values, site);
         }
@@ -2326,6 +2360,41 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * Whether {@code named} is a value this tree calls the method of rather than copying.
+     *
+     * <p>Only in the tree the backend emits from, and only for a value this module declared: the
+     * signature a call to it is typed by is settled by the check of the module that wrote it. A
+     * value that names no other value at its root region has nothing to be handed, so the method
+     * takes nothing.
+     */
+    private boolean emittedAsAMethod(Hir.Var.Denoting named) {
+        if (!valuesAreMethods) {
+            return false;
+        }
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
+                && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody());
+    }
+
+    /**
+     * Whether {@code e} is a constant as it is written: a literal, or an operator over such.
+     *
+     * <p>A value like that is what every reader that asks whether an expression is known at compile
+     * time folds, and it folds a tree rather than resolving a name. Its body stands where it is named
+     * for that reason; a call to a method would hide the constant from all of them.
+     */
+    private static boolean writtenOutAsAConstant(Hir.Expr e) {
+        return switch (e) {
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _ -> true;
+            case Hir.Neg neg -> writtenOutAsAConstant(neg.operand());
+            case Hir.Binary bin ->
+                    writtenOutAsAConstant(bin.left()) && writtenOutAsAConstant(bin.right());
+            default -> false;
+        };
     }
 
     /**

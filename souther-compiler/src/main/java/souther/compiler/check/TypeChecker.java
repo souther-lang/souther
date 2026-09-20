@@ -43,6 +43,10 @@ public final class TypeChecker {
          * names something it does not build. A definition that returns a function has none: there is
          * no application here to settle the lambda from (spec §blocks). */
         final Map<String, Type> definitionTypes = new LinkedHashMap<>();
+        /** What each value of the module was settled as, by the check of its own body. Kept for the
+         * readers that stand a call to the value's method where the value was named, which are
+         * typed by it. */
+        final Preserved.Settling settledValues = new Preserved.Settling();
     }
 
     /**
@@ -63,9 +67,11 @@ public final class TypeChecker {
      *                the same reports being unable to see what was already reported missing.
      * @param emittedHelpers the recursive helper bodies it elaborated, which the backend emits as
      *                         methods
+     * @param settledValues what each value of the module was settled as
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
-                           boolean stopped, Map<String, Core> emittedHelpers) {}
+                           boolean stopped, Map<String, Core> emittedHelpers,
+                           Preserved.Settling settledValues) {}
 
     /**
      * Everything the check has to say about a module that is not one behavior's body: its
@@ -116,7 +122,8 @@ public final class TypeChecker {
             errors.add(e);
             stopped = true;
         }
-        return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers);
+        return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers,
+                elaborated.settledValues);
     }
 
     /**
@@ -135,10 +142,12 @@ public final class TypeChecker {
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
-                                     Map<String, DataChecker.Constructs> recHelperConstructs) {
+                                     Map<String, DataChecker.Constructs> recHelperConstructs,
+                                     Preserved.SettledValues settledValues) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, published, kinds,
                 inners, fieldTypes, layout, policy,
-                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs);
+                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
+                settledValues);
     }
 
     /**

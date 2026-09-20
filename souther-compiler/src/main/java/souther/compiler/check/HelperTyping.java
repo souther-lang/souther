@@ -55,7 +55,7 @@ public final class HelperTyping {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Preserved.Settling settledSignatures = new Preserved.Settling();
+        Preserved.Settling settledSignatures = elaborated.settledValues;
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
@@ -167,7 +167,9 @@ public final class HelperTyping {
                             NewtypeInners.asWritten(symbols),
                             EffectiveFieldTypes.asWritten(symbols),
                             FieldLayout.asWritten(symbols), null, reachable)
-                            .preserving(reading ? standing : Preserved.NONE),
+                            .preserving(emitted != null
+                                    ? Preserved.valuesCalledAsMethods(settledSignatures)
+                                    : reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
@@ -197,7 +199,10 @@ public final class HelperTyping {
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
                 ConstEval.against(symbols).eval(body)
-                        .ifPresent(c -> settledConstants.put(settled, c));
+                        .ifPresent(c -> {
+                            settledConstants.put(settled, c);
+                            settledSignatures.constant(settled, c);
+                        });
             }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
@@ -844,6 +849,11 @@ public final class HelperTyping {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && names.contains(call.answered().reaches())) {
             out.add(call.answered().reaches());
+        }
+        // A build that is a call to the method its value is emitted as is an edge of the same graph.
+        if (e instanceof Hir.Materialised build && build.body() instanceof Hir.Var.Denoting named
+                && names.contains(named.reaches())) {
+            out.add(named.reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

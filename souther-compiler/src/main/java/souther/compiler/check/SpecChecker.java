@@ -263,7 +263,8 @@ public final class SpecChecker {
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
-                                    Map<String, DataChecker.Constructs> recHelperConstructs) {
+                                    Map<String, DataChecker.Constructs> recHelperConstructs,
+                                    Preserved.SettledValues settledValues) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(Diagnostic
                             .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
@@ -348,7 +349,8 @@ public final class SpecChecker {
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
                 new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                         .withCallees(calleeSigs)
-                        .withDependencies(dependsOn), output);
+                        .withDependencies(dependsOn)
+                        .preserving(Preserved.valuesCalledAsMethods(settledValues)), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, published)) {
             throw CompileException.of(Diagnostic

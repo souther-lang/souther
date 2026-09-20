@@ -90,11 +90,17 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
                 """);
     }
 
+    /**
+     * A value that needs another at its root region is copied where it is built, so the calls in its
+     * body are expanded there, once per build.
+     */
     @Test
     void theTwoExpansionsStandInsideTwoBuilds() {
         String source = HEAD + """
+                let dependent = same(viaCall)
+
                 behavior f : (n: Int) -> Int
-                let f (n) = (if n > 0 then viaCall else 0) + (if n > 1 then viaCall else 0)
+                let f (n) = (if n > 0 then dependent else 0) + (if n > 1 then dependent else 0)
                 """;
         Set<BindingOwner> owners = new LinkedHashSet<>();
         collect(Compiler.compiled(source, "m").db()
