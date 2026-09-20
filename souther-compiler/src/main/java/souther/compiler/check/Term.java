@@ -254,6 +254,8 @@ final class Term {
         ITS_ELEMENTS,
         /** Each of its elements, in no order — what a set's own equality reads. */
         ITS_UNORDERED_ELEMENTS,
+        /** The one element it holds, or that it holds none. */
+        ITS_ELEMENT_IF_ANY,
         /** The value it says stands for it ({@link SaysWhatStandsForIt}). */
         THE_PARTS_IT_NAMES,
         /** Nothing here takes a value of this class. */
@@ -290,6 +292,9 @@ final class Term {
         }
         if (java.util.Set.class.isAssignableFrom(type)) {
             return Rule.ITS_UNORDERED_ELEMENTS;
+        }
+        if (type == java.util.Optional.class) {
+            return Rule.ITS_ELEMENT_IF_ANY;
         }
         // Asked before the question about records, because a value that keeps the number it is
         // asked for is a class here and may hold its parts in a record all the same: what it says
@@ -408,6 +413,7 @@ final class Term {
             case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentsOf(value, type);
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
+            case ITS_ELEMENT_IF_ANY -> elementsOf(((java.util.Optional<?>) value).stream().toList());
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
@@ -463,6 +469,8 @@ final class Term {
             case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentTextOf(value, type);
             case ITS_ELEMENTS -> elementTextOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
+            case ITS_ELEMENT_IF_ANY ->
+                    elementTextOf(((java.util.Optional<?>) value).stream().toList());
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term carrying a " + type.getName() + " is walked by");
         };

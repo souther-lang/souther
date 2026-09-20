@@ -163,6 +163,7 @@ class WhereAComparisonStandsIsNotWhatTellsItFromAnotherReadingTest {
             at = switch (at) {
                 case BindingOwner.Expansion it -> it.within();
                 case BindingOwner.Synthesized it -> it.within();
+                case BindingOwner.Build it -> it.within();
                 default -> null;
             };
         }

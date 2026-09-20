@@ -2313,7 +2313,8 @@ public final class HelperInliner {
         if (body == null) {
             return;
         }
-        Hir.Expr calls = inline(body);
+        MaterialisationSite where = site.get();
+        Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
@@ -2323,9 +2324,23 @@ public final class HelperInliner {
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(reached, binder);
         order.add(binder);
-        Hir.Expr built = HelperNames.carriedByValue(read(calls));
-        values.add(new Hir.Materialised(named.denotes(), site.get(), built, built.pos(),
+        Hir.Expr built = HelperNames.carriedByValue(
+                insideThisBuild(named.denotes(), where, () -> read(calls)));
+        values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * {@code work} done with the calls it expands belonging to the build of {@code value} for
+     * {@code where}.
+     *
+     * <p>A build is not a copy made through a call, so the lineage stays as it is: what changes is
+     * only which owner the expansions written from here stand inside.
+     */
+    private Hir.Expr insideThisBuild(ValueName value, MaterialisationSite where,
+                                     Supplier<Hir.Expr> work) {
+        BindingOwner build = new BindingOwner.Build(writing.enclosing(), value, where);
+        return insideThisCopy(build, writing.lineage(), Map.of(), work);
     }
 
     /**
@@ -2709,6 +2724,8 @@ public final class HelperInliner {
                         new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
                 case BindingOwner.Synthesized it ->
                         new BindingOwner.Synthesized(ownerOf(it.within()), it.pass(), it.ordinal());
+                case BindingOwner.Build it ->
+                        new BindingOwner.Build(ownerOf(it.within()), it.value(), it.site());
                 // The body's own. What it was called where it was written says nothing here: the
                 // copy is this expansion's, so what its bindings belong to is this expansion.
                 default -> root;
