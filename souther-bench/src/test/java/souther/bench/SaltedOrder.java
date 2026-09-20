@@ -67,7 +67,17 @@ final class SaltedOrder {
         UNORDERED_COLLECTOR,
 
         /** A function, named by the method that is its body, which is what a call on it runs. */
-        FUNCTION
+        FUNCTION,
+
+        /**
+         * A comparator that ties no two elements that differ: the natural order of a type whose
+         * ordering agrees with its equality, or a chain that ends in one. A sort by any other
+         * comparator leaves what it ties in the order the walk gave.
+         */
+        TOTAL_ORDER,
+
+        /** A tree kept by a comparator that is not one of those, which orders only what it separates. */
+        TIES_LEFT_TO_THE_WALK
     }
 
     /**
@@ -79,6 +89,10 @@ final class SaltedOrder {
      */
     record Tag(Kind kind, String origin, String site) {
 
+        private static final String THE_ONLY = "the only one";
+
+        private static final String MADE_OF = "made of one";
+
         Tag(Kind kind, String origin) {
             this(kind, origin, "");
         }
@@ -86,6 +100,34 @@ final class SaltedOrder {
         /** The same tag, made an answer at {@code where} unless it already was one somewhere. */
         Tag madeAt(String where) {
             return isAnAnswer() && site.isEmpty() ? new Tag(kind, origin, where) : this;
+        }
+
+        /** The element of a plurality that holds exactly one, which no order has a say in. */
+        static Tag theOnly(String origin) {
+            return new Tag(Kind.PICKED, origin, THE_ONLY);
+        }
+
+        /** What is made of the element a walk is at, which two different elements can share. */
+        Tag madeOfTheElement() {
+            return kind == Kind.PICKED && site.isEmpty() ? new Tag(kind, origin, MADE_OF) : this;
+        }
+
+        /** Whether this is the element itself, which no other element of the same walk is. */
+        boolean isTheElementItself() {
+            return kind == Kind.PICKED && site.isEmpty();
+        }
+
+        /** Whether this is the only element there was, as against one a walk happens to be at. */
+        boolean isTheOnly() {
+            return kind == Kind.PICKED && site.equals(THE_ONLY);
+        }
+
+        /**
+         * What an element a walk is at becomes once it leaves the walk: the one the walk was at
+         * when it left, which is the first or the last or any, as the order says.
+         */
+        Tag leavingTheWalkAt(String where) {
+            return kind == Kind.PICKED && !isTheOnly() ? new Tag(Kind.CHOSEN, origin, where) : this;
         }
 
         /** Whether an order the run decided is in this value already. */
@@ -115,6 +157,12 @@ final class SaltedOrder {
      */
     record Val(Set<Tag> tags, boolean wide, int alloc, String made, String home) {
 
+        /**
+         * What {@code made} says of a value taken out of a map: the object it was held in, so that
+         * what is put into it is put into the map. Whether it is one is settled by what it is cast to.
+         */
+        static final String HELD_IN_A_MAP = "held in a map";
+
         static final Val CLEAN = new Val(Set.of(), false, -1, null, null);
 
         static final Val CLEAN_WIDE = new Val(Set.of(), true, -1, null, null);
@@ -139,6 +187,15 @@ final class SaltedOrder {
 
         boolean isClean() {
             return tags.isEmpty();
+        }
+
+        boolean isHeldInAMap() {
+            return HELD_IN_A_MAP.equals(made);
+        }
+
+        /** The same, as an object of no place in particular. */
+        Val apartFromAnyPlace() {
+            return new Val(tags, wide, -1, null, null);
         }
 
         Val withTags(Set<Tag> other) {
@@ -218,6 +275,30 @@ final class SaltedOrder {
                 }
             }
             return false;
+        }
+
+        /** The same, with every element itself made something made of an element. */
+        Val madeOfTheElement() {
+            boolean any = false;
+            Set<Tag> out = new LinkedHashSet<>();
+            for (Tag each : tags) {
+                Tag made = each.madeOfTheElement();
+                any |= made != each;
+                out.add(made);
+            }
+            return any ? withTags(out) : this;
+        }
+
+        /** The same, with every element a walk is at made the one it was at when it left. */
+        Val leavingTheWalkAt(String where) {
+            boolean any = false;
+            Set<Tag> out = new LinkedHashSet<>();
+            for (Tag each : tags) {
+                Tag left = each.leavingTheWalkAt(where);
+                any |= left != each;
+                out.add(left);
+            }
+            return any ? withTags(out) : this;
         }
 
         /** The same, once the walk the elements were of has ended. */

@@ -786,12 +786,7 @@ public final class GeneratedRows {
             // The two classes, which is the whole of what one of these is and is something a
             // reader can act on: where a value has to fall at each of two positions.
             case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
-                    combination.classes().stream()
-                            .sorted(java.util.Comparator
-                                    .comparing((souther.compiler.partition.ClassOfAPosition each) ->
-                                            each.at().toString())
-                                    .thenComparing(
-                                            souther.compiler.partition.ClassOfAPosition::classId))
+                    combination.inOrder().stream()
                             .map(each -> each.classId() + " at " + each.at())
                             .collect(java.util.stream.Collectors.joining(" with "));
             // Both lines, which is what a row here would settle between. What is printed beside

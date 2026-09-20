@@ -19,7 +19,6 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,8 +40,9 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
 
     private static final String FIXTURES = "souther.bench.readings.orders";
 
-    private static final Predicate<String> COPIES_MADE_IN_THE_FIXTURES =
-            name -> name.startsWith("souther/bench/readings/orders/");
+    private static boolean madeInTheFixtures(String className) {
+        return className.startsWith("souther/bench/readings/orders/");
+    }
 
     @Test
     void everyWayOfTakingTheOrderOffACopyIsFoundInTheReaderThatDoesIt() {
@@ -129,8 +129,10 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 readersOfHeld(after, ReadersAfter.class),
                 "the two are meant to have as many readers, or the swap says nothing about counts");
 
-        Reading quiet = SaltedOrderFlow.read(before, COPIES_MADE_IN_THE_FIXTURES);
-        Reading named = SaltedOrderFlow.read(after, COPIES_MADE_IN_THE_FIXTURES);
+        Reading quiet = SaltedOrderFlow.read(before,
+                TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);
+        Reading named = SaltedOrderFlow.read(after,
+                TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);
 
         assertEquals(List.of(), quiet.described(), "the readers that put a copy in order were"
                 + " refused");
@@ -154,7 +156,8 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
     }
 
     private static Reading readingOver(Class<?> readers) {
-        return SaltedOrderFlow.read(fixtures(Held.class, readers), COPIES_MADE_IN_THE_FIXTURES);
+        return SaltedOrderFlow.read(fixtures(Held.class, readers),
+                TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);
     }
 
     /** The classes, as they were compiled, of the ones named. */

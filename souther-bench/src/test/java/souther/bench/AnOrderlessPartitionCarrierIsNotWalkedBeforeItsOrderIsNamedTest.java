@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,8 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
 
-    private static final Predicate<String> COPIES_THE_PARTITION_MAKES =
-            name -> name.startsWith("souther/compiler/partition/");
+    private static boolean copiedInThePartition(String className) {
+        return className.startsWith("souther/compiler/partition/");
+    }
 
     /**
      * Where a value the partition copied is handed to a field of a class outside it.
@@ -49,13 +49,15 @@ class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
      * stops where one is stored in another package's class, because which object that is a field of
      * is not followed. What stops there is stated: a field added to this is a value that left
      * without anybody having said where it went. The first two are the numbers of a condition and
-     * of a rule a report is written from, and are read where the report is made. The other holds
-     * the direction of a quantity as the coefficients of a form, and is read where forms are.
+     * of a rule a report is written from, and are read where the report is made. The third holds
+     * the direction of a quantity as the coefficients of a form, and is read where forms are. The
+     * last holds the terms a step moves, and is only asked whether a term is among them.
      */
     private static final Set<String> WHERE_ITS_VALUES_LEAVE = Set.of(
             "souther.compiler.query.Coverages$Partitioned.conditionsMet",
             "souther.compiler.query.Coverages$Partitioned.rulesReachedAt",
-            "souther.compiler.numeric.LinearForm.coefs");
+            "souther.compiler.numeric.LinearForm.coefs",
+            "souther.compiler.query.AnotherLineTheRowsAllow$Reaches.moved");
 
     private static final String HANDED_ON = "handed on to a field outside what is read: ";
 
@@ -63,7 +65,9 @@ class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
 
     private static Reading thePartition() {
         if (read == null) {
-            read = SaltedOrderFlow.read(Reactor.classes(), COPIES_THE_PARTITION_MAKES);
+            read = SaltedOrderFlow.read(Reactor.classes(),
+                    AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest
+                            ::copiedInThePartition);
         }
         return read;
     }

@@ -4,6 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -214,7 +215,8 @@ public sealed interface ObligationIdentity
      * to ask which kind it had before it knew what evidence to look for.
      *
      * <p>The two classes, unordered. A combination is between two positions and neither of them is
-     * the first one.
+     * the first one. A reader that has to walk them, or word them, takes them from
+     * {@link #inOrder}.
      */
     record OfAFallbackPairCell(String behavior, Set<ClassOfAPosition> classes)
             implements ObligationIdentity {
@@ -232,6 +234,11 @@ public sealed interface ObligationIdentity
                 throw new IllegalArgumentException(
                         "a combination is between two positions: " + classes);
             }
+        }
+
+        /** The two classes in the one order classes are named in. */
+        public List<ClassOfAPosition> inOrder() {
+            return classes.stream().sorted().toList();
         }
     }
 }

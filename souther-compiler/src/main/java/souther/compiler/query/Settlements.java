@@ -770,7 +770,7 @@ public record Settlements(List<ObligationIdentity> requested,
         private Settlement inBothClasses(RowAsRead asRead,
                                          ObligationIdentity.OfAFallbackPairCell owed) {
             Settlement answer = new Settlement.Settles();
-            for (ClassOfAPosition each : owed.classes()) {
+            for (ClassOfAPosition each : owed.inOrder()) {
                 Settlement here = inClass(asRead, each);
                 if (here instanceof Settlement.DoesNotSettle) {
                     return here;

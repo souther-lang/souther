@@ -10,6 +10,8 @@ import souther.compiler.query.WeakeningSet;
 
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -32,9 +34,19 @@ import java.util.Set;
  * harmless — {@link Outcome#unmodeled} — so that a reader using a call nobody classified is refused
  * rather than passed.
  *
- * <p><b>A sort is a crossing exactly as far as its comparator leaves no two things tied.</b> What
- * the comparator is is not read here: a reader that sorts by a key two elements can share puts them
- * in the order the run gave, and this passes it.
+ * <p><b>Nothing is safe for where it ends up.</b> A walk's order reaches an answer through what it
+ * leaves standing when many elements meet in one place: the one a walk was at when it left, the
+ * value a key is left holding, what a fold of them comes to, what a sort leaves first among the
+ * things it ties. None of those is settled by the kind of container or the name of the call. Each
+ * is settled by what the operation itself promises: a key that no two elements share, a fold that
+ * gives the same whichever comes first, a comparator that ties nothing that differs. The ones
+ * below that promise are named; every other is an answer.
+ *
+ * <p>A fold is one of the declared commutative operations, found as the crossings are. A
+ * comparator is total where it is the natural order, which a type gives what it equates, or a chain
+ * that ends in one; a comparator built from a key is not, because two elements can share a key.
+ * The element a walk is at leaves the walk as an answer when it is returned or stored, unless the
+ * method asked for exactly one.
  */
 final class SaltedOrderVocabulary {
 
@@ -83,7 +95,7 @@ final class SaltedOrderVocabulary {
         Outcome feeding(List<Feed> more, boolean returns) {
             List<Feed> all = new ArrayList<>(feeds);
             for (Feed each : more) {
-                all.add(new Feed(each.functions(), each.elements(), returns));
+                all.add(new Feed(each.functions(), each.elements(), returns, each.keptBy()));
             }
             return new Outcome(result, pushes, clears, all, crossedBy, unmodeled, endsAs);
         }
@@ -98,8 +110,14 @@ final class SaltedOrderVocabulary {
      * @param functions the functions
      * @param elements  what each argument after the ones they captured is
      * @param returns   whether what they return is part of what the call returns
+     * @param keptBy    what holds what they return, where the call stores it, or null
      */
-    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns) {}
+    record Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns, Val keptBy) {
+
+        Feed(Set<Tag> functions, List<Set<Tag>> elements, boolean returns) {
+            this(functions, elements, returns, null);
+        }
+    }
 
     /** One call: what it was made on, with what, and what it says it returns. */
     record Call(String owner, String name, String descriptor, Val receiver, List<Val> args,
@@ -110,8 +128,15 @@ final class SaltedOrderVocabulary {
          * What taking one of a plurality by where it stands makes of it: the first of many is the
          * order's to say, and the first of one is the one there is.
          */
-        Kind whatSelectingOneMakes() {
-            return asksForExactlyOne ? Kind.PICKED : Kind.CHOSEN;
+        Set<Tag> selectingOneFrom(Val walked) {
+            if (!asksForExactlyOne) {
+                return walked.as(Kind.CHOSEN);
+            }
+            Set<Tag> out = new LinkedHashSet<>();
+            for (String origin : walked.origins()) {
+                out.add(Tag.theOnly(origin));
+            }
+            return out;
         }
 
         List<Val> everything() {
@@ -159,6 +184,54 @@ final class SaltedOrderVocabulary {
         Set<Signature> out = new LinkedHashSet<>();
         out.add(Signature.of(method(WeakeningSet.class, "ofAll", Collection.class)));
         return out;
+    }
+
+    private static final Set<Signature> COMMUTATIVE_FOLDS = commutativeFolds();
+
+    /**
+     * Binary operations whose result is the same whichever operand comes first and however the
+     * operands are grouped, so that folding a plurality with one does not depend on its order.
+     * Floating-point sums are not among them, nor is a maximum of decimals that differ in scale
+     * and compare equal.
+     */
+    private static Set<Signature> commutativeFolds() {
+        Set<Signature> out = new LinkedHashSet<>();
+        for (String name : List.of("sum", "max", "min")) {
+            out.add(Signature.of(method(Integer.class, name, int.class, int.class)));
+            out.add(Signature.of(method(Long.class, name, long.class, long.class)));
+        }
+        for (String name : List.of("max", "min")) {
+            out.add(Signature.of(method(Math.class, name, int.class, int.class)));
+            out.add(Signature.of(method(Math.class, name, long.class, long.class)));
+        }
+        for (String name : List.of("logicalAnd", "logicalOr", "logicalXor")) {
+            out.add(Signature.of(method(Boolean.class, name, boolean.class, boolean.class)));
+        }
+        for (String name : List.of("add", "multiply", "gcd", "max", "min")) {
+            out.add(Signature.of(method(BigInteger.class, name, BigInteger.class)));
+        }
+        out.add(Signature.of(method(BigDecimal.class, "add", BigDecimal.class)));
+        out.add(Signature.of(method(BigDecimal.class, "multiply", BigDecimal.class)));
+        return out;
+    }
+
+    /** Whether a method handle names an operation that folds without regard to order. */
+    static boolean foldsInAnyOrder(Signature handle) {
+        return COMMUTATIVE_FOLDS.contains(handle);
+    }
+
+    /** What a function value is when it is one of those. */
+    static Tag commutativeFunction(Signature handle) {
+        return new Tag(Kind.FUNCTION, handle.owner() + "#" + handle.name() + handle.descriptor());
+    }
+
+    private static boolean allFoldInAnyOrder(Val function) {
+        Set<Tag> functions = function.functions();
+        Set<Tag> known = new LinkedHashSet<>();
+        for (Signature each : COMMUTATIVE_FOLDS) {
+            known.add(commutativeFunction(each));
+        }
+        return !functions.isEmpty() && known.containsAll(functions);
     }
 
     private static Method method(Class<?> owner, String name, Class<?>... parameters) {
@@ -258,6 +331,9 @@ final class SaltedOrderVocabulary {
             "removeIf", "replaceAll", "anyMatch", "allMatch", "noneMatch", "computeIfAbsent",
             "computeIfPresent", "compute", "merge");
 
+    private static final Set<String> MERGES_INTO = Set.of(
+            "merge", "compute", "computeIfAbsent", "computeIfPresent");
+
     private static final Set<String> PUTS_ONE_IN = Set.of(
             "add", "put", "putIfAbsent", "addFirst", "addLast", "push", "offer", "offerFirst",
             "offerLast", "set", "replace", "append", "insert");
@@ -273,6 +349,10 @@ final class SaltedOrderVocabulary {
     static Outcome of(Call call) {
         Set<Tag> came = call.tainted();
         String name = call.name();
+        Outcome comparator = comparatorOf(call);
+        if (comparator != null) {
+            return comparator;
+        }
         if (name.equals("<init>")) {
             return constructed(call, came);
         }
@@ -290,14 +370,74 @@ final class SaltedOrderVocabulary {
                     came.isEmpty() ? List.of() : List.of(call.owner().replace('/', '.')), false);
         }
         if (came.isEmpty()) {
-            return Outcome.returning(Val.CLEAN);
+            return Outcome.returning(takesAValueOutOfAMap(call) ? heldIn(call.receiver())
+                    : Val.CLEAN);
         }
         return over(call, came);
+    }
+
+    /**
+     * Whether a call hands back what a map holds under a key, which may be a plurality that is then
+     * filled: the way a map of lists is built by hand.
+     */
+    private static boolean takesAValueOutOfAMap(Call call) {
+        String name = call.name();
+        return inTheCollectionsLibrary(call.owner()) && isAMap(call)
+                && (MERGES_INTO.contains(name) || name.equals("getOrDefault")
+                        || (name.equals("get") && call.descriptor().startsWith("(Ljava/lang/Object;)")));
+    }
+
+    /**
+     * A comparator made or derived, which is total when it is the natural order or a chain that
+     * ends in one. Anything built from a key is not: two elements can share the key.
+     */
+    private static Outcome comparatorOf(Call call) {
+        String owner = call.owner();
+        String name = call.name();
+        boolean natural = call.isStatic() && call.descriptor().startsWith("()")
+                && ((owner.equals("java/util/Comparator")
+                        && (name.equals("naturalOrder") || name.equals("reverseOrder")))
+                || (owner.equals("java/util/Collections") && name.equals("reverseOrder"))
+                || (owner.equals("java/util/Map$Entry") && name.equals("comparingByKey")));
+        if (natural) {
+            return Outcome.returning(Val.of(new Tag(Kind.TOTAL_ORDER, "")));
+        }
+        boolean derives = owner.equals("java/util/Comparator") && !call.isStatic()
+                && (name.equals("reversed") || name.startsWith("thenComparing"));
+        if (derives) {
+            return Outcome.returning(hasATotalOrder(call.everything())
+                    ? Val.of(new Tag(Kind.TOTAL_ORDER, "")) : Val.CLEAN);
+        }
+        return null;
+    }
+
+    private static boolean hasATotalOrder(List<Val> values) {
+        for (Val each : values) {
+            if (each.has(Kind.TOTAL_ORDER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a call orders by a comparator it is given, as against the natural order. */
+    private static boolean byAComparator(Call call) {
+        return call.descriptor().contains("Ljava/util/Comparator;");
+    }
+
+    /** Whether what a call sorts by leaves no two elements that differ tied. */
+    private static boolean tiesNothing(Call call) {
+        return !byAComparator(call) || hasATotalOrder(call.args());
     }
 
     private static Outcome constructed(Call call, Set<Tag> came) {
         Val made = call.receiver();
         String type = call.owner();
+        if (putsInItsOwnOrder(type) && !tiesNothing(call)) {
+            Set<Tag> held = new LinkedHashSet<>(unorderedFrom(call.args()));
+            held.add(new Tag(Kind.TIES_LEFT_TO_THE_WALK, ""));
+            return pushing(made, held);
+        }
         if (came.isEmpty()) {
             return Outcome.returning(Val.CLEAN);
         }
@@ -383,6 +523,12 @@ final class SaltedOrderVocabulary {
     }
 
     private static Outcome sorted(Call call, Set<Tag> came) {
+        if (!tiesNothing(call)) {
+            // A stable sort leaves what it ties as the walk gave it, so what comes out is still the
+            // walk's order and is not put in one.
+            return Outcome.returning(call.returnsAValue() ? Val.of(call.receiver().tags())
+                    : Val.CLEAN);
+        }
         List<Val> clears = new ArrayList<>();
         if (!call.returnsAValue()) {
             clears.add(call.receiver().isClean() && !call.args().isEmpty()
@@ -398,13 +544,35 @@ final class SaltedOrderVocabulary {
         for (Val each : call.args()) {
             tags.addAll(each.functions());
         }
-        Kind kind = switch (call.name()) {
-            case "toList", "toUnmodifiableList", "joining", "toCollection" ->
-                    Kind.ORDERED_COLLECTOR;
-            default -> Kind.UNORDERED_COLLECTOR;
-        };
-        tags.add(new Tag(kind, call.name()));
+        tags.add(new Tag(collectorKind(call), call.name()));
         return Outcome.returning(Val.of(tags));
+    }
+
+    /**
+     * Whether what a collector makes depends on the order it is given the elements in. A collector
+     * that groups without a downstream one lists what it groups; one that keeps a key's value when
+     * two collide is as good as the merge it is given; one that composes others is as ordered as
+     * the most ordered of them.
+     */
+    private static Kind collectorKind(Call call) {
+        List<Val> args = call.args();
+        boolean downstreamIsOrdered = false;
+        for (Val each : args) {
+            downstreamIsOrdered |= each.has(Kind.ORDERED_COLLECTOR);
+        }
+        boolean ordered = switch (call.name()) {
+            case "toList", "toUnmodifiableList", "joining", "toCollection", "minBy", "maxBy",
+                 "summingDouble", "averagingDouble", "summarizingDouble" -> true;
+            case "groupingBy", "groupingByConcurrent", "partitioningBy" ->
+                    args.size() < 2 || downstreamIsOrdered;
+            case "collectingAndThen", "mapping", "filtering", "flatMapping", "teeing" ->
+                    downstreamIsOrdered;
+            case "toMap", "toUnmodifiableMap", "toConcurrentMap" ->
+                    (args.size() >= 3 && !allFoldInAnyOrder(args.get(2))) || args.size() > 3;
+            case "reducing" -> !allFoldInAnyOrder(args.get(args.size() - 1));
+            default -> false;
+        };
+        return ordered ? Kind.ORDERED_COLLECTOR : Kind.UNORDERED_COLLECTOR;
     }
 
     private static Outcome collected(Call call) {
@@ -454,31 +622,47 @@ final class SaltedOrderVocabulary {
         }
         if (name.equals("get") && call.descriptor().startsWith("(I)")
                 && walked.cameOutOfACopy()) {
-            return Outcome.returning(Val.of(walked.as(call.whatSelectingOneMakes())));
+            return Outcome.returning(Val.of(call.selectingOneFrom(walked)));
+        }
+        if (library && isAMap(call) && MERGES_INTO.contains(name)) {
+            return merged(call);
         }
         if (name.equals("get") && call.descriptor().startsWith("(Ljava/lang/Object;)")) {
+            return Outcome.returning(library && isAMap(call) ? heldIn(receiver) : Val.CLEAN)
+                    .endingAs("asked what it holds");
+        }
+        if (library && isAMap(call) && name.equals("getOrDefault")) {
+            return Outcome.returning(heldIn(receiver)).endingAs("asked what it holds");
+        }
+        if (library && call.owner().startsWith("java/util/stream/Double")
+                && (name.equals("sum") || name.equals("average"))) {
+            return Outcome.returning(Val.of(walked.as(Kind.SEQUENCE)));
+        }
+        if (library && call.owner().startsWith("java/util/stream/")
+                && !call.owner().equals("java/util/stream/Stream")
+                && (name.equals("min") || name.equals("max")) && call.args().isEmpty()) {
             return Outcome.returning(Val.CLEAN).endingAs("asked what it holds");
         }
         if (name.equals("get") && call.descriptor().startsWith("()")) {
             return Outcome.returning(call.returnsAReference() ? everything : Val.CLEAN);
         }
         if (STEPS.contains(name) && walked.cameOutOfACopy()) {
-            // The element a walk is at. A single step taken and no more is the first or the last,
-            // and reads the same in the bytecode as the only one of a set of one — which is why it
-            // is not told apart here from a step of a walk that goes on.
-            return Outcome.returning(Val.of(walked.as(Kind.PICKED)));
+            // The element a walk is at, which is the only one where the method asked for exactly
+            // one. What leaves the walk with it is the first or the last there is, as the order says.
+            return Outcome.returning(call.asksForExactlyOne()
+                    ? Val.of(call.selectingOneFrom(walked)) : Val.of(walked.as(Kind.PICKED)));
         }
         if (name.equals("toString") && call.descriptor().startsWith("()")
                 && walked.cameOutOfACopy()) {
             return Outcome.returning(Val.of(walked.as(Kind.SEQUENCE)));
         }
         if (SELECTS_ONE.contains(name) && walked.cameOutOfACopy()) {
-            return Outcome.returning(Val.of(walked.as(call.whatSelectingOneMakes())))
+            return Outcome.returning(Val.of(call.selectingOneFrom(walked)))
                     .feeding(feeds, false);
         }
         if (name.equals("remove")) {
             return Outcome.returning(call.descriptor().startsWith("()") && walked.cameOutOfACopy()
-                    ? Val.of(walked.as(call.whatSelectingOneMakes())) : Val.CLEAN);
+                    ? Val.of(call.selectingOneFrom(walked)) : Val.CLEAN);
         }
         if (ASKS_ONLY.contains(name) || VISITS.contains(name)) {
             return Outcome.returning(Val.CLEAN).feeding(feeds, false)
@@ -517,7 +701,7 @@ final class SaltedOrderVocabulary {
      * Whether a call is on something that holds a plurality, as against something that happens to
      * share a method name with one: {@code add} is a put into a list and is arithmetic on a number.
      */
-    private static boolean inTheCollectionsLibrary(String owner) {
+    static boolean inTheCollectionsLibrary(String owner) {
         return owner.startsWith("java/util/") && !owner.startsWith("java/util/function/")
                 || owner.equals("java/lang/Iterable") || owner.equals("java/lang/StringBuilder")
                 || owner.equals("java/lang/StringBuffer") || owner.equals("java/lang/Appendable")
@@ -590,19 +774,20 @@ final class SaltedOrderVocabulary {
     /** A put into something, which keeps what it is given in an order or does not. */
     private static Outcome filled(Call call, List<Feed> feeds) {
         Val target = call.receiver();
+        // What a value taken out of a map is made of is not known from where it was taken.
+        String made = target.isHeldInAMap() ? null : target.made();
         // Text put into a builder is the whole of what it says of what it is given, which for a
         // plurality is every element in the order it iterates.
         boolean many = PUTS_MANY_IN.contains(call.name())
                 || call.name().equals("append") || call.name().equals("insert");
-        boolean ownOrder = putsInItsOwnOrder(target.made());
-        boolean keepsOrder = target.made() != null
-                ? IN_ORDER.contains(target.made())
+        boolean ownOrder = putsInItsOwnOrder(made) && !target.has(Kind.TIES_LEFT_TO_THE_WALK);
+        boolean keepsOrder = made != null
+                ? IN_ORDER.contains(made)
                 : IN_ORDER_BY_INTERFACE.contains(call.owner());
         // What a map answers in the order of is its keys, and a value put beside a key is that key's
         // and takes no place of its own.
         boolean keyed = !many && call.args().size() == 2
-                && (call.owner().endsWith("Map")
-                        || (target.made() != null && target.made().endsWith("Map")));
+                && (call.owner().endsWith("Map") || (made != null && made.endsWith("Map")));
         Set<Tag> into;
         if (ownOrder) {
             into = Set.of();
@@ -611,8 +796,18 @@ final class SaltedOrderVocabulary {
         } else {
             into = many ? unorderedFrom(call.args()) : elementsKept(call.args());
         }
+        if (keyed) {
+            // A value put beside a key is that key's and takes no place of its own, but a key two
+            // elements can share is left holding the last of them, or the first.
+            Set<Tag> left = survivors(call.args().get(1).tags(),
+                    isTheElementItself(call.args().get(0)));
+            if (!left.isEmpty()) {
+                into = new LinkedHashSet<>(into);
+                into.addAll(left);
+            }
+        }
         List<String> crossed = ownOrder && !call.tainted().isEmpty()
-                ? List.of(target.made().replace('/', '.')) : List.of();
+                ? List.of(made.replace('/', '.')) : List.of();
         Val result = call.name().equals("append") || call.name().equals("insert")
                 ? target.plus(into) : Val.CLEAN;
         List<Push> pushes = into.isEmpty() ? List.of() : List.of(new Push(target, into));
@@ -621,6 +816,90 @@ final class SaltedOrderVocabulary {
         String ends = !many && !call.args().isEmpty() && hasAPlurality(call.args())
                 ? "held as one element of another" : "";
         return new Outcome(result, pushes, List.of(), feeds, crossed, false, ends);
+    }
+
+    /**
+     * Whether a call hands back the very element it is given, or takes the one a walk is at, as
+     * against making something of it that another element could also make.
+     */
+    static boolean keepsTheElement(String name) {
+        return STEPS.contains(name) || name.equals("getKey") || name.equals("cast")
+                || name.equals("requireNonNull") || name.equals("requireNonNullElse")
+                || name.equals("requireNonNullElseGet") || name.equals("ofNullable")
+                || name.equals("orElse") || name.equals("orElseGet") || name.equals("orElseThrow")
+                || name.equals("or") || name.equals("get");
+    }
+
+    /**
+     * What is left standing where many elements meet in one place, and which of them it is is the
+     * walk's to say: the element a walk was at, and any answer that is kept as a value.
+     *
+     * @param distinctKeys whether what they are kept under is the element itself, so that no two
+     *                     of them meet and only what is already an answer is kept
+     */
+    static Set<Tag> survivors(Set<Tag> tags, boolean distinctKeys) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag tag : tags) {
+            if (tag.isAnAnswer()) {
+                out.add(tag);
+            } else if (tag.kind() == Kind.PICKED && !tag.isTheOnly() && !distinctKeys) {
+                out.add(new Tag(Kind.CHOSEN, tag.origin()));
+            }
+        }
+        return out;
+    }
+
+    /** Whether a key is the element itself, and so is shared by no other element of the walk. */
+    private static boolean isTheElementItself(Val key) {
+        boolean any = false;
+        for (Tag each : key.tags()) {
+            if (each.cameOutOfACopy()) {
+                if (!each.isTheElementItself()) {
+                    return false;
+                }
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    /**
+     * What taking a value out of a map is: the same object the map holds it in, so that what is put
+     * into it is put into the map, and any answer the map keeps as a value.
+     */
+    private static Val heldIn(Val map) {
+        Set<Tag> answers = new LinkedHashSet<>();
+        for (Tag each : map.tags()) {
+            if (each.isAnAnswer()) {
+                answers.add(each);
+            }
+        }
+        return new Val(answers, false, map.alloc(), Val.HELD_IN_A_MAP, map.home());
+    }
+
+    private static boolean isAMap(Call call) {
+        return call.owner().endsWith("Map");
+    }
+
+    /**
+     * A key that is given a value more than once: the value it is left holding is the last, or
+     * the first, or what a function of them comes to, and only a fold that gives the same whichever
+     * comes first leaves the walk's order out of it.
+     */
+    private static Outcome merged(Call call) {
+        Val target = call.receiver();
+        List<Val> args = call.args();
+        Val function = args.get(args.size() - 1);
+        boolean folds = call.name().equals("merge") && allFoldInAnyOrder(function);
+        boolean distinct = isTheElementItself(args.get(0));
+        Set<Tag> left = new LinkedHashSet<>();
+        if (call.name().equals("merge") && !folds) {
+            left.addAll(survivors(args.get(1).tags(), distinct));
+        }
+        List<Feed> keeps = function.functions().isEmpty() || folds ? List.of()
+                : List.of(new Feed(function.functions(), List.of(), false, target));
+        List<Push> pushes = left.isEmpty() ? List.of() : List.of(new Push(target, left));
+        return new Outcome(heldIn(target), pushes, List.of(), keeps, List.of(), false, "visited");
     }
 
     private static boolean hasAPlurality(List<Val> values) {
@@ -640,7 +919,7 @@ final class SaltedOrderVocabulary {
         Set<Tag> out = new LinkedHashSet<>();
         for (Val each : given) {
             for (Tag tag : each.tags()) {
-                if (tag.kind() == Kind.CHOSEN) {
+                if (tag.isAnAnswer()) {
                     out.add(tag);
                 }
                 if (tag.cameOutOfACopy() && tag.kind() != Kind.COLLECTION

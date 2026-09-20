@@ -75,7 +75,9 @@ import java.util.function.Predicate;
  *
  * <p><b>What it does not see.</b> A reader that returns one constant for the first of them to
  * match and another for the next kind chooses by position through control flow alone. So does one
- * that leaves the last element it met in a variable, or steps once and no more. The element a walk
+ * that leaves the last element it met in a variable. A number made of an element is not followed
+ * either: a sum is the same in any order, and a number left standing where two collide is not told
+ * from it. The element a walk
  * is at belongs to the method that is walking: it is not handed to what that method calls, and it
  * is let go where the loop ends, because what a loop leaves behind is a fold of all the elements
  * as often as it is the last of them and the bytecode does not say which. An object made of one
@@ -85,6 +87,16 @@ import java.util.function.Predicate;
  * order of the set the objects were made from. What is followed is what a walk makes of the
  * elements itself — a list, a text, an array, the first one a stream reaches, the one at an
  * index — which is where an order becomes an answer.
+ *
+ * <p><b>Where many elements meet in one place, the order says which is left.</b> The element a walk
+ * is at becomes an answer when it leaves the walk by being returned or stored, unless the method
+ * asked whether there is exactly one. A value put under a key is left holding the last, or the
+ * first, unless the key is the element itself; a merge is as good as the function it is given, and
+ * only the declared commutative ones are good; a collector that groups lists what it groups. A
+ * sort ties what its comparator does not separate, so only the natural order, or a chain ending in
+ * it, is total. A crossing puts the elements in an order and does not change which of several was
+ * left standing. And an object taken out of a map is the one the map holds, so a list filled there
+ * is filled in the map, when it is cast to something that holds a plurality.
  *
  * <p><b>A call is read where it is made.</b> What a method is handed by a call that hands it
  * something from a copy is read as that call's own, so a helper used from two places does not
@@ -714,6 +726,11 @@ final class SaltedOrderFlow {
                 } else {
                     Val value = state.pop();
                     String cast = check.type().asInternalName();
+                    // What is taken out of a map is an object to fill only where it is cast to
+                    // something that holds a plurality; cast to anything else it is a value.
+                    if (value.isHeldInAMap() && !SaltedOrderVocabulary.inTheCollectionsLibrary(cast)) {
+                        value = value.apartFromAnyPlace();
+                    }
                     state.push(narrowed(value, cast.startsWith("[") ? cast : "L" + cast + ";"));
                 }
             }
@@ -729,6 +746,11 @@ final class SaltedOrderFlow {
                           MethodTypeDesc type, int slots) {
         if (ret.typeKind() != TypeKind.VOID) {
             Val value = narrowed(state.pop(), type.returnType().descriptorString());
+            // What a function's body returns is handed back to the walk that runs it. Anything else
+            // that returns the element a walk is at has taken the first, the last or any of them.
+            if (!unit.method().name().startsWith("lambda$")) {
+                value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at");
+            }
             joinFact("R:" + unit, value.tags());
             for (Tag each : value.tags()) {
                 if (each.kind() == Kind.COLLECTION) {
@@ -926,7 +948,8 @@ final class SaltedOrderFlow {
                 state.push(new Val(narrowed(tags, type.descriptorString()), wide, -1, null, fact));
             }
             default -> {
-                Val value = narrowed(state.pop(), type.descriptorString());
+                Val value = narrowed(state.pop(), type.descriptorString())
+                        .leavingTheWalkAt(unit.method() + " stores an element a walk was at");
                 if (field.opcode() == Opcode.PUTFIELD) {
                     state.pop();
                 }
@@ -1046,7 +1069,16 @@ final class SaltedOrderFlow {
             reach(originsOf(given), (crosses ? "put in an order by " : "folded by ")
                     + signature.spelled());
             if (returnsAValue) {
-                state.push(Val.clean(isWide(type.returnType())));
+                // What is put in an order is the elements. Which of several was left standing where
+                // they met is not something an order among them changes.
+                Set<Tag> left = new LinkedHashSet<>();
+                for (Tag each : given) {
+                    if (each.kind() == Kind.CHOSEN) {
+                        left.add(each);
+                    }
+                }
+                state.push(new Val(narrowed(left, returns), isWide(type.returnType()), -1, null,
+                        null));
             }
             return;
         }
@@ -1133,14 +1165,23 @@ final class SaltedOrderFlow {
                     if (feed.returns()) {
                         result.addAll(back);
                     }
+                    if (feed.keptBy() != null) {
+                        place(state, feed.keptBy(), madeAt(SaltedOrderVocabulary.survivors(back,
+                                false), here));
+                    }
                     handBackWhatItFilled(unit, state, function.origin());
                 }
             }
         }
         if (returnsAValue) {
             Set<Tag> kept = returnsAReference || keepsPositionInAnInt(name) ? result : Set.of();
-            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), -1,
-                    made == null ? null : made.made(), null));
+            if (!SaltedOrderVocabulary.keepsTheElement(name)) {
+                kept = Val.of(kept).madeOfTheElement().tags();
+            }
+            boolean heldInAMap = made != null && made.isHeldInAMap();
+            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()),
+                    heldInAMap ? made.alloc() : -1, made == null ? null : made.made(),
+                    heldInAMap ? made.home() : null));
         }
     }
 
@@ -1331,6 +1372,11 @@ final class SaltedOrderFlow {
                 } else {
                     for (Val each : args) {
                         result.addAll(each.tags());
+                    }
+                    Signature handle = new Signature(bodyOwner, body.methodName(),
+                            body.lookupDescriptor());
+                    if (SaltedOrderVocabulary.foldsInAnyOrder(handle)) {
+                        result.add(SaltedOrderVocabulary.commutativeFunction(handle));
                     }
                 }
             }

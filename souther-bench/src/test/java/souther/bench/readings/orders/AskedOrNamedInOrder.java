@@ -87,8 +87,52 @@ public final class AskedOrNamedInOrder {
 
     public static List<CompositionBudget> madeAListAndThenSortedIt(Held held) {
         List<CompositionBudget> out = new ArrayList<>(held.figures());
-        out.sort(Comparator.comparing(Enum::name));
+        out.sort(Comparator.naturalOrder());
         return out;
+    }
+
+    public static List<CompositionBudget> sortedByTheNaturalOrder(Held held) {
+        return held.figures().stream().sorted().toList();
+    }
+
+    public static List<CompositionBudget> sortedByAKeyAndThenByTheNaturalOrder(Held held) {
+        return held.figures().stream()
+                .sorted(Comparator.comparingInt((CompositionBudget each) -> each.ordinal() / 2)
+                        .thenComparing(Comparator.naturalOrder()))
+                .toList();
+    }
+
+    public static CompositionBudget theOnlyOneOfASetThatHoldsOne(Held held) {
+        if (held.figures().size() != 1) {
+            throw new IllegalStateException("not one figure but " + held.figures().size());
+        }
+        return held.figures().iterator().next();
+    }
+
+    public static Map<CompositionBudget, String> keyedByTheElementItself(Held held) {
+        Map<CompositionBudget, String> out = new HashMap<>();
+        for (CompositionBudget each : held.figures()) {
+            out.put(each, each.name());
+        }
+        return out;
+    }
+
+    public static Map<String, CompositionBudget> keyedByTheKeyOfTheEntryItCameFrom(Held held) {
+        Map<String, CompositionBudget> out = new HashMap<>();
+        for (Map.Entry<String, CompositionBudget> each : held.named().entrySet()) {
+            out.put(each.getKey(), each.getValue());
+        }
+        return out;
+    }
+
+    public static Map<String, CompositionBudget> collectedByAKeyThatTwoOfThemCannotShare(
+            Held held) {
+        return held.figures().stream().collect(Collectors.toMap(Enum::name, each -> each));
+    }
+
+    public static Map<Integer, Long> countedInGroups(Held held) {
+        return held.figures().stream().collect(
+                Collectors.groupingBy(each -> each.ordinal() % 2, Collectors.counting()));
     }
 
     public static List<CompositionBudget> handedToAHelperThatPutsThemInOrder(Held held) {
