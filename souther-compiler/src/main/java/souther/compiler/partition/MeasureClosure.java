@@ -7,7 +7,7 @@ import souther.compiler.inputs.RulesLeftUnread;
 import souther.compiler.inputs.StandingQuestion;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -140,7 +140,7 @@ public final class MeasureClosure {
                 // Copied and not held to being non-empty. That rule is the open arm's: something
                 // has to have been found for a reading to have stopped, and here the readings that
                 // were made may well have found nothing while the body was still not read.
-                besides = Collections.unmodifiableSet(new LinkedHashSet<>(besides));
+                besides = Set.copyOf(besides);
             }
 
             @Override
@@ -201,7 +201,7 @@ public final class MeasureClosure {
                 // Copied and not held to being non-empty. That rule is the open arm's: something
                 // has to have been found for a reading to have stopped, and here the readings that
                 // were made may well have found nothing while the body was still not read.
-                besides = Collections.unmodifiableSet(new LinkedHashSet<>(besides));
+                besides = Set.copyOf(besides);
             }
 
             @Override
@@ -347,13 +347,12 @@ public final class MeasureClosure {
      * readers is one gap carrying both — and what makes two of these one is
      * {@link ClosureGap#fact()}, asked of the gap rather than decided here.
      *
-     * <p>Kept in the order each fact was first found, which is the order the readers found them in
-     * and the one an open closure carries ({@link OfThePartition.Open}). Nothing says which gap
-     * comes before which; what is kept is that two runs over one model come to the same value.
+     * <p>Keyed and not ordered. Nothing here says which gap comes before which, and a reader that
+     * puts them in a sequence says which order it means.
      */
     private static final class Gathering {
 
-        private final Map<Object, ClosureGap> byFact = new LinkedHashMap<>();
+        private final Map<Object, ClosureGap> byFact = new HashMap<>();
 
         void add(ClosureGap gap) {
             byFact.merge(gap.fact(), gap, ClosureGap::merged);
@@ -364,7 +363,7 @@ public final class MeasureClosure {
         }
 
         Set<ClosureGap> gaps() {
-            return Collections.unmodifiableSet(new LinkedHashSet<>(byFact.values()));
+            return Set.copyOf(byFact.values());
         }
     }
 
