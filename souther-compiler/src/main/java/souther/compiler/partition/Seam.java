@@ -171,13 +171,13 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
-     * This division written out, for somewhere a person reads it: the last value on one side and the
-     * first on the other, each written the way the quantity writes its values.
+     * This division's coordinates written out in digits: the last value on one side and the first
+     * on the other.
      *
-     * <p>The same three cases {@link #key()} has, because what divides a quantity is what a reader
-     * is being shown and the two questions differ in the writing and not in what is read. Each end
-     * is written as a level is ({@link Level#spelled}). An end the order names no value at is
-     * written as nothing, the way it is named as nothing.
+     * <p>The same three cases {@link #key()} has, because the two questions differ in the writing
+     * and not in what is read. Each end is spelled as a level is ({@link Level#spelled}), so a
+     * division of the days is two day counts and never two dates. An end the order names no value
+     * at is written as nothing, the way it is named as nothing.
      */
     public String spelled() {
         if (below == null && above == null) {

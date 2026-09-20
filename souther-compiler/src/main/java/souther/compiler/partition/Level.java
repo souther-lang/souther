@@ -265,7 +265,7 @@ public sealed interface Level {
     }
 
     /**
-     * This level with its place spelled the one way, for an identity to be built from.
+     * This level with its place in the one representation, for an identity to be built from.
      *
      * <p>{@link #key()} answers the same question and answers it about the place alone: a level of a
      * carrier and a number the quantity counts to have the same key where the number is the same,

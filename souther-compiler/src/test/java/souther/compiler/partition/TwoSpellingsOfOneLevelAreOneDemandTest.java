@@ -233,6 +233,45 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                 "a level of no carrier is the number in both");
     }
 
+    /**
+     * A level of an enumeration is written as the case it is and spelled as the place the case
+     * stands at, so the report shows a name a model contains and not a count it does not.
+     */
+    @Test
+    void aLevelOfAnEnumerationIsWrittenAsItsCase() {
+        Carrier colours = new Carrier.Ordinal(
+                TypeSymbols.declared(new TypeKey("demo", "Colour")),
+                List.of(TypeSymbols.declared(new TypeKey("demo", "Red")),
+                        TypeSymbols.declared(new TypeKey("demo", "Blue"))));
+        Level blue = new Level.OnACarrier(colours, Count.of(1));
+
+        assertEquals("1", blue.spelled(), "the coordinate is the place the case stands at");
+        assertEquals(colours.written(Count.of(1)), blue.written(), "and what an author reads is");
+        assertNotEquals(blue.spelled(), blue.written(), "the case, which is not a number");
+    }
+
+    /**
+     * Where a division is written for a report, and what a name of it costs, is the same whichever
+     * way the quantity counts.
+     *
+     * <p>Spelled from the ratio's own decimal where it has one, as every other number a report
+     * writes is, and as a fraction where it has none.
+     */
+    @Test
+    void aDivisionOfNumbersThatCarryNoOrderIsSpelledAsTheNumbers() {
+        CutPosition half = CutPosition.at(new Level.OfTheQuantity(
+                ExactRatio.of(new BigDecimal("0.5"))));
+        Seam belowOnly = new Seam(half, new Level.OfTheQuantity(ExactRatio.of(new BigDecimal("0.5"))),
+                null);
+        Seam nowhere = new Seam(new CutPosition(new Level.OfTheQuantity(ExactRatio.of(1)),
+                ExactRatio.of(3)), null, null);
+
+        assertEquals("0.5|", belowOnly.spelled(), "a half is written as the decimal it is");
+        assertEquals("@1/3", nowhere.spelled(), "a third has no decimal and is written as one over three");
+        assertNotEquals(belowOnly.spelled(), belowOnly.key(), "and neither is the name");
+        assertNotEquals(nowhere.spelled(), nowhere.key());
+    }
+
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */
     private static Criterion run(String from, String to) {
         return new Criterion.Within(band(from, to), null, Towards.ABOVE);

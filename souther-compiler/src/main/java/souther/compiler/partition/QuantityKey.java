@@ -66,13 +66,13 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
      *
      * <p>In an order the coefficients settle rather than the one they were recorded in, so that a
      * form written {@code 6 * b + 3 * a} and one written {@code 3 * a + 6 * b} are one name. The
-     * coefficients themselves need no spelling rule: an exact ratio is kept in lowest terms, so two
-     * writings of one number are one value — the same thing {@link Level#key()} answers for a place
-     * on a carrier, where the representation does not settle it.
+     * coefficients are named by the ratio's own name ({@link ExactRatio#key}): an exact ratio is
+     * kept in lowest terms, so two writings of one number are one value, and the name costs what
+     * its parts cost rather than what writing the number out would.
      */
     public String key() {
         Map<String, String> named = new TreeMap<>();
-        direction.forEach((term, coef) -> named.put(term.toString(), coef.toString()));
+        direction.forEach((term, coef) -> named.put(term.toString(), coef.key()));
         StringBuilder out = new StringBuilder();
         named.forEach((term, coef) -> out.append(coef).append('*').append(term).append(' '));
         return out.toString().trim();
