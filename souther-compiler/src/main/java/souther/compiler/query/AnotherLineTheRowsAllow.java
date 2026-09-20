@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
@@ -815,8 +816,7 @@ public sealed interface AnotherLineTheRowsAllow {
     private static List<NumericTerm> named(QuantityKey wrote, QuantityKey other) {
         Set<NumericTerm> terms = new LinkedHashSet<>(wrote.direction().keySet());
         terms.addAll(other.direction().keySet());
-        return terms.stream().sorted(Comparator.comparing(NumericTerm::toString))
-                .toList();
+        return NumericTerms.inOrder(terms);
     }
 
     private static ExactRatio weight(QuantityKey of, NumericTerm term) {

@@ -7,11 +7,17 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.WeakeningSet;
 
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -129,6 +135,82 @@ public final class AskedOrNamedInOrder {
     public static Map<String, CompositionBudget> collectedByAKeyThatTwoOfThemCannotShare(
             Held held) {
         return held.figures().stream().collect(Collectors.toMap(Enum::name, each -> each));
+    }
+
+    public static Set<CompositionBudget> retainedByWhatTheCopyHolds(Held held,
+                                                                    Set<CompositionBudget> other) {
+        Set<CompositionBudget> out = new HashSet<>(other);
+        out.retainAll(held.figures());
+        return out;
+    }
+
+    public static List<CompositionBudget> clearedAfterTheWalk(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.clear();
+        return out;
+    }
+
+    public static Set<String> theTextOfEachElementStripped(Held held) {
+        Set<String> out = new HashSet<>();
+        for (CompositionBudget each : held.figures()) {
+            out.add(each.name().stripTrailing());
+        }
+        return out;
+    }
+
+    public static Set<BigDecimal> decimalsMadeOfTheNameOfEachElement(Held held) {
+        Set<BigDecimal> out = new HashSet<>();
+        for (CompositionBudget each : held.figures()) {
+            out.add(new BigDecimal(each.name().length()));
+        }
+        return out;
+    }
+
+    public static int whereAColonStandsInTheNameOfEachElement(Held held) {
+        int total = 0;
+        for (CompositionBudget each : held.figures()) {
+            total += each.name().indexOf('_');
+        }
+        return total;
+    }
+
+    public static void printedHowManyThereAre(Held held) {
+        System.out.println(held.figures().size());
+    }
+
+    public static long eachDescribedByANodeOfItsOwn(Held held) {
+        return held.figures().stream().map(AskedOrNamedInOrder::describing).count();
+    }
+
+    private static ObjectNode describing(CompositionBudget each) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        out.put("name", each.name());
+        return out;
+    }
+
+    public static void theOnlyOneWritten(Held held) {
+        if (held.figures().size() != 1) {
+            throw new IllegalStateException("not one figure but " + held.figures().size());
+        }
+        System.out.println(held.figures().iterator().next());
+    }
+
+    public static void inADeclaredOrderThenWritten(HeldClasses held) {
+        System.out.println(held.classes().stream().sorted(ClassOfAPosition.steadyOrder()).toList());
+    }
+
+    public static void theLeastByADeclaredOrderThenWritten(HeldClasses held) {
+        System.out.println(held.classes().stream().min(ClassOfAPosition.steadyOrder())
+                .orElseThrow());
+    }
+
+    public static boolean askedWhetherTheyShareOneWithAnother(Held held,
+                                                              Set<CompositionBudget> other) {
+        return Collections.disjoint(held.figures(), other);
+    }
+
+    public static ClassOfAPosition theLeastByADeclaredOrder(HeldClasses held) {
+        return held.classes().stream().min(ClassOfAPosition.steadyOrder()).orElseThrow();
     }
 
     public static Map<Integer, Long> countedInGroups(Held held) {

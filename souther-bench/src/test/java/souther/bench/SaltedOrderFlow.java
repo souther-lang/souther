@@ -400,8 +400,9 @@ final class SaltedOrderFlow {
                 || type.equals("java/lang/StringBuilder")) {
             return tag.isPositional();
         }
-        boolean aLibraryCollection = type.startsWith("java/util/")
-                && !type.startsWith("java/util/function/");
+        boolean aLibraryCollection = (type.startsWith("java/util/")
+                && !type.startsWith("java/util/function/"))
+                || type.startsWith("tools/jackson/databind/node/");
         if (aLibraryCollection || type.startsWith("java/util/stream/")) {
             return true;
         }
@@ -589,7 +590,11 @@ final class SaltedOrderFlow {
     }
 
     private Val seeded(Unit unit, int parameter, String home, boolean wide, String descriptor) {
-        Set<Tag> tags = narrowed(readFact("P:" + unit + "#" + parameter, unit), descriptor);
+        Set<Tag> tags = new LinkedHashSet<>();
+        for (Tag each : narrowed(readFact("P:" + unit + "#" + parameter, unit), descriptor)) {
+            // What a walk hands a method is the one element that call is made for.
+            tags.add(each.handedToACall());
+        }
         return new Val(tags, wide, -1, null, home);
     }
 
@@ -749,7 +754,10 @@ final class SaltedOrderFlow {
             // What a function's body returns is handed back to the walk that runs it. Anything else
             // that returns the element a walk is at has taken the first, the last or any of them.
             if (!unit.method().name().startsWith("lambda$")) {
-                value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at");
+                // An element handed to this method is the one it was made for, and is what it hands
+                // back; the walk is the caller's.
+                value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at",
+                        true);
             }
             joinFact("R:" + unit, value.tags());
             for (Tag each : value.tags()) {
@@ -949,7 +957,7 @@ final class SaltedOrderFlow {
             }
             default -> {
                 Val value = narrowed(state.pop(), type.descriptorString())
-                        .leavingTheWalkAt(unit.method() + " stores an element a walk was at");
+                        .leavingTheWalkAt(unit.method() + " stores an element a walk was at", false);
                 if (field.opcode() == Opcode.PUTFIELD) {
                     state.pop();
                 }
@@ -1101,8 +1109,15 @@ final class SaltedOrderFlow {
         Set<Tag> functions = receiver.functions();
         boolean runsAFunction = !functions.isEmpty() && !isStatic && !isDerivingFunction(name);
         if (runsAFunction) {
+            List<Set<Tag>> handed = new ArrayList<>();
+            for (Val each : args) {
+                handed.add(each.tags());
+            }
+            String ran = where + ":" + index + " " + owner.replace('/', '.') + "." + name;
             for (Tag function : functions) {
-                result.addAll(callFunction(unit, function.origin(), args));
+                result.addAll(function.origin().startsWith("ref|")
+                        ? runLibraryRef(state, function.origin(), handed, where, ran)
+                        : callFunction(unit, function.origin(), args));
             }
         }
 
@@ -1138,34 +1153,15 @@ final class SaltedOrderFlow {
         if ((isJava(owner) || !handled) && !runsAFunction) {
             Call jdk = new Call(owner, name, descriptor, receiver, args, isStatic, returnsAValue,
                     returnsAReference, asksForExactlyOne.contains(key));
-            Outcome outcome = SaltedOrderVocabulary.of(jdk);
-            Set<String> origins = originsOf(jdk.tainted());
-            if (outcome.unmodeled()) {
-                Set<String> sites = sitesOf(Val.of(jdk.tainted()));
-                note(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
-                        + owner.replace('/', '.') + "." + name
-                        + (isJava(owner) ? " on what came out of a copy, and nothing says what that"
-                                + " does with its order" : ", which is not read here")
-                        + (sites.isEmpty() ? "" : "; an order made at " + sites), origins);
-            }
-            for (String by : outcome.crossedBy()) {
-                reach(origins, "put in an order by " + by);
-            }
-            if (!outcome.endsAs().isEmpty()) {
-                reach(origins, "read as " + outcome.endsAs());
-            }
             String here = where + ":" + index + " " + owner.replace('/', '.') + "." + name;
-            for (Push each : outcome.pushes()) {
-                place(state, each.into(), madeAt(each.tags(), here));
-            }
-            for (Val each : outcome.clears()) {
-                clear(state, each);
-            }
+            Outcome outcome = effectsOf(state, jdk, where, here);
             result.addAll(madeAt(outcome.result().tags(), here));
             made = outcome.result();
             for (Feed feed : outcome.feeds()) {
                 for (Tag function : feed.functions()) {
-                    Set<Tag> back = feedFunction(unit, function.origin(), feed.elements());
+                    Set<Tag> back = function.origin().startsWith("ref|")
+                            ? runLibraryRef(state, function.origin(), feed.elements(), where, here)
+                            : feedFunction(unit, function.origin(), feed.elements());
                     if (feed.returns()) {
                         result.addAll(back);
                     }
@@ -1183,10 +1179,120 @@ final class SaltedOrderFlow {
                 kept = Val.of(kept).madeOfTheElement().tags();
             }
             boolean heldInAMap = made != null && made.isHeldInAMap();
-            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()),
-                    heldInAMap ? made.alloc() : -1, made == null ? null : made.made(),
-                    heldInAMap ? made.home() : null));
+            int object = heldInAMap ? made.alloc()
+                    : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
+            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
+                    made == null ? null : made.made(), heldInAMap ? made.home() : null));
         }
+    }
+
+    /**
+     * What a call of the library does with what it is handed: the findings it makes, where it ends an
+     * order, and what it puts in the objects it was given. The same whether the call is written as a
+     * call or is run by a function that is a reference to it.
+     */
+    private Outcome effectsOf(State state, Call call, String where, String here) {
+        Outcome outcome = SaltedOrderVocabulary.of(call);
+        String owner = call.owner();
+        String name = call.name();
+        Set<String> origins = originsOf(call.tainted());
+        if (SaltedOrderVocabulary.writesOut(owner, name)) {
+            // A write is a sink whatever else is known of the call: what is written is written
+            // in the order it has, and only the one there is has none.
+            Set<Tag> written = new LinkedHashSet<>();
+            for (Tag each : call.tainted()) {
+                if (!each.isTheOnly()) {
+                    written.add(each);
+                }
+            }
+            if (!written.isEmpty()) {
+                Set<String> sites = sitesOf(Val.of(written));
+                note(where, "writes what came out of a copy to " + owner.replace('/', '.')
+                        + "." + name + ", where it is written in the order the run gave"
+                        + (sites.isEmpty() ? "" : "; an order made at " + sites),
+                        originsOf(written));
+            }
+        } else if (outcome.unmodeled()) {
+            Set<String> sites = sitesOf(Val.of(call.tainted()));
+            note(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
+                    + owner.replace('/', '.') + "." + name
+                    + (isJava(owner) ? " on what came out of a copy, and nothing says what that"
+                            + " does with its order" : ", which is not read here")
+                    + (sites.isEmpty() ? "" : "; an order made at " + sites), origins);
+        }
+        for (String by : outcome.crossedBy()) {
+            reach(origins, "put in an order by " + by);
+        }
+        if (!outcome.endsAs().isEmpty()) {
+            reach(origins, "read as " + outcome.endsAs());
+        }
+        // What is cleared is what the object held before the call, so what the call then puts in
+        // is put in after it.
+        for (Val each : outcome.clears()) {
+            clear(state, each);
+        }
+        for (Push each : outcome.pushes()) {
+            place(state, each.into(), madeAt(each.tags(), here));
+        }
+        return outcome;
+    }
+
+    /** What is a reference to a method of the library, and the values it was made over. */
+    private record LibraryRef(Signature method, boolean isStatic, boolean isConstructor,
+                              List<Val> captured) {}
+
+    private final Map<String, LibraryRef> libraryRefs = new HashMap<>();
+
+    /**
+     * What a reference to a method of the library does when a walk runs it over elements: the call
+     * it stands for, made with those. {@code out::add} run over the elements of a copy is the
+     * adds of them in the order the walk met them, and is read as that.
+     */
+    private Set<Tag> runLibraryRef(State state, String function, List<Set<Tag>> elements,
+                                   String where, String here) {
+        LibraryRef ref = libraryRefs.get(function);
+        if (ref == null) {
+            return Set.of();
+        }
+        List<Val> given = new ArrayList<>();
+        for (Set<Tag> each : elements) {
+            given.add(Val.of(each));
+        }
+        if (ref.isConstructor()) {
+            // What a constructor reference hands back is the object it made, holding what the
+            // constructor put in it of what it was given.
+            Val made = Val.CLEAN.withMade(ref.method().owner());
+            Call built = new Call(ref.method().owner(), "<init>", ref.method().descriptor(), made,
+                    given, false, false, false, false);
+            Outcome outcome = effectsOf(state, built, where, here);
+            Set<Tag> holding = new LinkedHashSet<>(outcome.result().tags());
+            for (Push each : outcome.pushes()) {
+                if (each.into() == made) {
+                    holding.addAll(each.tags());
+                }
+            }
+            return holding;
+        }
+        Val receiver;
+        List<Val> args;
+        if (ref.isStatic()) {
+            receiver = Val.CLEAN;
+            args = given;
+        } else if (!ref.captured().isEmpty()) {
+            receiver = ref.captured().get(0);
+            args = given;
+        } else if (!given.isEmpty()) {
+            receiver = given.get(0);
+            args = given.subList(1, given.size());
+        } else {
+            return Set.of();
+        }
+        MethodTypeDesc described = MethodTypeDesc.ofDescriptor(ref.method().descriptor());
+        String returns = described.returnType().descriptorString();
+        Call call = new Call(ref.method().owner(), ref.method().name(), ref.method().descriptor(),
+                receiver, args, ref.isStatic(), !returns.equals("V"),
+                returns.startsWith("L") || returns.startsWith("["), false);
+        return effectsOf(state, call, where, here).result().tags();
     }
 
     private static boolean keepsPositionInAnInt(String name) {
@@ -1382,6 +1488,16 @@ final class SaltedOrderFlow {
                     if (SaltedOrderVocabulary.foldsInAnyOrder(handle)) {
                         result.add(SaltedOrderVocabulary.commutativeFunction(handle));
                     }
+                    // A reference to a method nothing here reads is the call it stands for, run
+                    // over whatever it is handed.
+                    DirectMethodHandleDesc.Kind kind = body.kind();
+                    String refKey = "ref|" + bodyOwner + "#" + body.methodName()
+                            + body.lookupDescriptor() + "|" + unit.method() + ":" + index;
+                    libraryRefs.put(refKey, new LibraryRef(handle,
+                            kind == DirectMethodHandleDesc.Kind.STATIC
+                                    || kind == DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
+                            kind == DirectMethodHandleDesc.Kind.CONSTRUCTOR, args));
+                    result.add(new Tag(Kind.FUNCTION, refKey));
                 }
             }
         } else if (owner.equals("StringConcatFactory")) {

@@ -14,6 +14,8 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 
+import tools.jackson.databind.node.ObjectNode;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -207,6 +209,17 @@ public final class PublicationOrders {
                     .thenComparing(PublishedIncompleteness::at,
                             Comparator.comparing(at -> at.orElse(null),
                                     Comparator.nullsFirst(PLACES))));
+
+    /**
+     * The decisions the identity of a combination writes, by what each is written as.
+     *
+     * <p>Every field of a decision is in what it is written as, so two that compare equal are the
+     * same decision, and two documents of one model write the set the same way round for a
+     * consumer to join on. Arranged here and not sorted where it is written, so that a tie is
+     * refused rather than left to the order a walk met the decisions in.
+     */
+    public static final CanonicalArrangement.Order<ObjectNode> DECISIONS_OF_A_COMBINATION =
+            CanonicalArrangement.Order.by(Comparator.comparing(Object::toString));
 
     /**
      * What a reading of a number met instead of one.
