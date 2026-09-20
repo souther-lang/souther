@@ -107,7 +107,10 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      *  whether there is a boundary of this kind to build at all. */
     public static Set<NumericTerm> weighedByANumber(BorderQuantity of) {
         Set<NumericTerm> out = new LinkedHashSet<>();
-        for (NumericTerm term : QuantityKey.of(of.direction()).direction().keySet()) {
+        // A linked set answers in the order it was filled, so it is filled in the terms' own order
+        // and not in whatever order the direction happens to walk its keys.
+        Set<NumericTerm> named = QuantityKey.of(of.direction()).direction().keySet();
+        for (NumericTerm term : NumericTerms.inOrder(named)) {
             Carrier on = of.carrierOf(term);
             if (on != null && on.canBeWeighed()) {
                 out.add(term);
