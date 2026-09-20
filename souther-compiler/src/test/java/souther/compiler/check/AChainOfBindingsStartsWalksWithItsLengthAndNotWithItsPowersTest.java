@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * first's binding, the third's holds the second's, and so on down. Naming an initializer computes
  * what its own initializer denotes and what the term grammar calls it, each a fresh walk of it
  * ({@link Terms#inside}) — so where an initializer holds a binding of its own, walking it starts the
- * two again, and a chain nested this deep would be walked a number of times growing with its depth
- * rather than a number growing with its length.
+ * two again, and a chain nested this deep would be walked a number of times that is a power of its
+ * depth.
  *
  * <p>Built directly against {@link Terms} rather than through a compiled program, so what is
  * measured is this reading and nothing that parsing, typing or lowering do around it — and held as a
@@ -86,8 +86,8 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
     }
 
     /**
-     * Doubling the depth of the chain, and the reading starts about twice the walks at every step —
-     * not a number growing with the depth.
+     * Doubling the depth of the chain, and the reading starts about twice the walks at every
+     * step — not a power of the depth.
      */
     @Test
     void doublingTheDepthAboutDoublesTheWalks() {
@@ -98,5 +98,22 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
         assertTrue(walks.get(40) <= walks.get(20) * 3, "depth 40: " + walks);
         assertTrue(walks.get(80) <= walks.get(40) * 3, "depth 80: " + walks);
         assertTrue(walks.get(160) <= walks.get(80) * 3, "depth 160: " + walks);
+    }
+
+    /**
+     * Equal steps of depth cost equal walks — the stronger property the doublings above stop short
+     * of, asked directly rather than through a ratio loose enough to let a milder polynomial pass.
+     */
+    @Test
+    void equalStepsOfDepthCostEqualWalks() {
+        Map<Integer, Long> walks = new LinkedHashMap<>();
+        for (int depth : new int[] {20, 40, 60, 80}) {
+            walks.put(depth, walksOver(depth));
+        }
+        long first = walks.get(40) - walks.get(20);
+        long second = walks.get(60) - walks.get(40);
+        long third = walks.get(80) - walks.get(60);
+        assertTrue(Math.abs(second - first) <= first / 4 + 2, "steps 1,2: " + walks);
+        assertTrue(Math.abs(third - second) <= second / 4 + 2, "steps 2,3: " + walks);
     }
 }
