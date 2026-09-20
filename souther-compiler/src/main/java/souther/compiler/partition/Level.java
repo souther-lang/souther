@@ -81,7 +81,7 @@ public sealed interface Level {
 
         @Override
         public String toString() {
-            return at.key();
+            return at.spelled();
         }
     }
 
@@ -222,17 +222,50 @@ public sealed interface Level {
 
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
-     *  past it for the place inside. An exact ratio is in lowest terms already, so it is its own
-     *  key. */
+     *  past it for the place inside. Either side names itself from its own canonical parts, so a
+     *  name costs what those parts cost and never what writing the number out would. */
     default String key() {
         return switch (this) {
             case OnACarrier on -> on.at().key();
-            case OfTheQuantity counted -> counted.at().toString();
+            case OfTheQuantity counted -> counted.at().key();
         };
     }
 
     /**
-     * This level with its place spelled the one way, for an identity to be built from.
+     * This level's coordinate written out as text.
+     *
+     * <p>Three questions are asked of a level. {@link #key()} names it, this writes the number the
+     * algebra holds — a level of the days is a day count — and {@link #written()} writes it as the
+     * thing it is a level of writes it. A division of a quantity is spelled from these coordinates
+     * ({@link Seam#spelled}); a report's level is written.
+     *
+     * <p>A number the quantity counts to is a level of no carrier, so it is written as the number it
+     * is ({@link ExactRatio#spelled}) in both.
+     */
+    default String spelled() {
+        return switch (this) {
+            case OnACarrier on -> on.at().spelled();
+            case OfTheQuantity counted -> counted.at().spelled();
+        };
+    }
+
+    /**
+     * This level as an author reads it: a date for a level of the days, and the number for one that
+     * is a level of no carrier.
+     *
+     * <p>The carrier's own account of a value ({@link Carrier#written}), so a report that shows a
+     * level and a row that carries one say the same thing. A report that read the place under the
+     * level instead named a line at a count nobody wrote.
+     */
+    default String written() {
+        return switch (this) {
+            case OnACarrier on -> on.of().written(on.at());
+            case OfTheQuantity counted -> counted.at().spelled();
+        };
+    }
+
+    /**
+     * This level with its place in the one representation, for an identity to be built from.
      *
      * <p>{@link #key()} answers the same question and answers it about the place alone: a level of a
      * carrier and a number the quantity counts to have the same key where the number is the same,

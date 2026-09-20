@@ -261,16 +261,16 @@ class EveryPointOwedIsInOneAccountTest {
             """;
 
     /**
-     * A view shown some of a module's behaviors carries nothing a hidden one went without.
+     * A view shown some of a module's behaviors says of a debt it keeps what the module says.
      *
-     * <p>A debt is what its readings came to together, so the account a reader is shown has to be
-     * made again from the readings that reader can see. Filtered by dropping debts nobody shown
-     * carries — and keeping the ones somebody does whole — a view carries the hidden behavior's
-     * evidence inside the debt it kept: undecided, for a reason naming a position that is not on
-     * the page and a row its reader cannot write.
+     * <p>A line an {@code invariant} drew is owed once and is met by a row written for any behavior
+     * carrying the type, so what became of it is the module's answer and the evidence for it is the
+     * module's readings. A view that kept the debt and answered it again from the readings it shows
+     * would be reporting the selection: here, a debt the rows leave undecided coming back settled
+     * because the behavior whose row did not come back is off the page.
      */
     @Test
-    void aViewOfSomeBehaviorsCarriesNothingAHiddenOneWentWithout() {
+    void aViewOfSomeBehaviorsKeepsWhatTheModuleAnsweredAboutTheDebtsItShows() {
         // The row of `stalls` is not read at all, which is what bears on a line an `invariant`
         // drew: meeting one of those takes writing the value and no comparison has to have run, so
         // a row that was read and stopped leaves it settled and a row nobody read does not.
@@ -286,16 +286,36 @@ class EveryPointOwedIsInOneAccountTest {
         assertFalse(account.owed().isEmpty(), "the clause draws a line both behaviors carry");
 
         // Over both behaviors the debt is undecided, because one of the rows that would settle it
-        // never came back. Asserted so that what the filtered view drops is something it had.
+        // never came back. Asserted so that the view below is held to an answer that says something.
         assertFalse(account.weakening().isEmpty(),
                 () -> "a row of `stalls` did not come back, so the debt is not settled: "
                         + account.owed().stream().map(each -> each.said()).toList());
 
-        Adequacy.DeclaredBoundaries shown = account.keptFor(java.util.Set.of("seen"));
-        assertFalse(shown.owed().isEmpty(), "`seen` carries the line, so the debt is still work");
-        assertTrue(shown.weakening().isEmpty(),
-                () -> "a view of `seen` carries what `stalls` went without: "
-                        + shown.weakening().causes());
+        Adequacy.DeclaredBoundaries shown = account.keptFor(Set.of("seen"));
+        assertEquals(account.owed(), shown.owed(),
+                "`seen` carries the line, so the debt is still work and is still the module's");
+    }
+
+    /**
+     * And a debt none of the behaviors shown carries is not in the view at all.
+     *
+     * <p>The other half of what narrowing does to the debts, so that keeping their answers is not
+     * read as keeping all of them. A line nobody on the page carries is work nobody reading it can
+     * do.
+     */
+    @Test
+    void aViewOfSomeBehaviorsDropsTheDebtsNoneOfThemCarries() {
+        Compilation compilation = Compilation.ofSource(ONE_ROW_STOPS, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        Adequacy.DeclaredBoundaries account =
+                compilation.db().ask(new Adequacy.DeclaredBorders("example.stopped")).value();
+        assertNotNull(account, "the model under test compiles");
+        assertFalse(account.owed().isEmpty(), "the clause draws a line both behaviors carry");
+
+        assertEquals(List.of(), account.keptFor(Set.of("neither")).owed(),
+                "a behavior of this module reads every one of these lines");
     }
 
     /**

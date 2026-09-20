@@ -69,8 +69,28 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
-     * This line written the one way {@link #key()} names it: the fraction reduced, and the place
-     * spelled as the order spells it.
+     * This line's coordinate written out as text.
+     *
+     * <p>A rule that wrote the whole of the quantity drew its line at one of the quantity's own
+     * levels, which is spelled as a level is ({@link Level#spelled}). A rule that wrote a multiple
+     * drew it where the quantity stands at no level of its own, so what is left to write is the
+     * number ({@link ExactRatio#spelled}).
+     *
+     * <p>Apart from {@link #key()}, which tells two lines apart and writes neither: a line on a
+     * quantity written at a millionth has a name of a few characters and takes a million to write.
+     */
+    public String spelled() {
+        ExactRatio at = exactly();
+        if (at == null) {
+            return written.spelled();
+        }
+        Level itself = asALevelOfTheQuantity();
+        return itself == null ? at.spelled() : itself.spelled();
+    }
+
+    /**
+     * This line in the one representation {@link #key()} names: the fraction reduced, and the place
+     * in the form the order holds it.
      *
      * <p>So that a value holding a position and compared as a value answers what {@link #key()}
      * would. A third and two sixths come back the same, and so do a line at {@code 0} and one at

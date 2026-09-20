@@ -3,14 +3,22 @@ package souther.compiler.numeric;
 import java.math.BigInteger;
 
 /**
- * Where one {@link ExactRatio} stands against another, for the pairs their powers set far apart.
+ * Where one {@link ExactRatio} stands against another.
  *
  * <p>Cross-multiplying two of these writes out the difference between their exponents, and those run
  * to the width of a long — so a decimal written at one end of the scale a model may write, held
  * against one written at the other, asks for a number no machine builds. The order between them
  * exists all the same, and a type that is {@link Comparable} owes it.
  *
- * <p>So neither value is written out. Each magnitude is held between two whole numbers of a working
+ * <p>There are two ways to it, and which answers is a matter of cost and never of what is answered.
+ * Where the exponents of two and of five each differ by no more than {@link #NEAR_TWOS} and
+ * {@link #NEAR_FIVES}, both values are written over one denominator and compared, which is a few
+ * words of arithmetic ({@link #fromWritingBothOut}). Where they differ by more, or by more than a
+ * difference of two exponents can hold, neither value is written out, and the rest of this is how.
+ * {@code TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest} holds the two to
+ * one order on both sides of each edge.
+ *
+ * <p>Each magnitude is held between two whole numbers of a working
  * width times a power of two, every step rounding the two ends away from the value so that the
  * bracket holds by how it was built. Where the two brackets do not overlap the order is settled
  * exactly; where they do, the width rises and they are taken again. That ends, because one canonical
@@ -50,12 +58,65 @@ final class ExactRatioOrder {
      * pair no width ever separates.
      */
     static int compareMagnitudes(ExactRatio a, ExactRatio b) {
+        Integer written = fromWritingBothOut(a, b);
+        if (written != null) {
+            return written;
+        }
         for (int width = FIRST_WIDTH; ; width += width >> 1) {
             Integer decided = fromBrackets(a, b, width);
             if (decided != null) {
                 return decided;
             }
         }
+    }
+
+    /** The most the two values' powers of two may stand apart for both to be written over one
+     *  denominator, which is a shift of this many bits. */
+    static final long NEAR_TWOS = 512;
+
+    /** The same for five, which is a multiplication by a number of about two and a third times
+     *  this many bits. */
+    static final long NEAR_FIVES = 256;
+
+    /**
+     * Which magnitude is the larger, settled by writing both over one denominator, or null where
+     * their powers stand too far apart for that to stay small.
+     *
+     * <p>Exact, and the same answer the brackets come to: what the brackets are for is the pair whose
+     * powers no machine writes down. Most pairs are not that, and for those the difference between
+     * the exponents is a shift and a small power of five, so the two products are a few words wide
+     * and no width has to be tried.
+     *
+     * <p>Declined for a pair whose exponents cannot be subtracted without leaving what a long
+     * holds, however small the difference would come out as: a difference that wrapped round is a
+     * small number that says nothing about the pair.
+     */
+    static Integer fromWritingBothOut(ExactRatio a, ExactRatio b) {
+        boolean subtractable = Math.abs(a.twos()) <= Integer.MAX_VALUE
+                && Math.abs(b.twos()) <= Integer.MAX_VALUE
+                && Math.abs(a.fives()) <= Integer.MAX_VALUE
+                && Math.abs(b.fives()) <= Integer.MAX_VALUE;
+        if (!subtractable) {
+            return null;
+        }
+        long twos = a.twos() - b.twos();
+        long fives = a.fives() - b.fives();
+        if (Math.abs(twos) > NEAR_TWOS || Math.abs(fives) > NEAR_FIVES) {
+            return null;
+        }
+        BigInteger left = a.numeratorWithoutUnits().abs().multiply(b.denominatorWithoutUnits());
+        BigInteger right = b.numeratorWithoutUnits().abs().multiply(a.denominatorWithoutUnits());
+        if (twos > 0) {
+            left = left.shiftLeft((int) twos);
+        } else if (twos < 0) {
+            right = right.shiftLeft((int) -twos);
+        }
+        if (fives > 0) {
+            left = left.multiply(FIVE.pow((int) fives));
+        } else if (fives < 0) {
+            right = right.multiply(FIVE.pow((int) -fives));
+        }
+        return left.compareTo(right);
     }
 
     /**

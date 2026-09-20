@@ -166,8 +166,8 @@ public sealed interface Criterion {
      * The same demand on a row, with every level written the one way.
      *
      * <p>What an identity built out of a criterion is built from, and what two of them are compared
-     * through. A level keeps the spelling the rule was written in, because that is what a report
-     * writes back ({@link Level#canonical()}), so two readings of one line can arrive here holding
+     * through. A level keeps the representation the rule was written with
+     * ({@link Level#canonical()}), so two readings of one line can arrive here holding
      * {@code 0} and {@code 0.00} — which is one demand and was two values.
      */
     default Criterion canonical() {

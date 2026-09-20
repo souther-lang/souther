@@ -170,6 +170,23 @@ public record Seam(CutPosition at, Level below, Level above) {
         return (below == null ? "" : below.key()) + "|" + (above == null ? "" : above.key());
     }
 
+    /**
+     * This division's coordinates written out as text: the last value on one side and the first on
+     * the other.
+     *
+     * <p>The same three cases {@link #key()} has, because the two questions differ in the writing
+     * and not in what is read. Each end is spelled as a level is ({@link Level#spelled}), so a
+     * division of the days is two day counts and never two dates. An end the order names no value
+     * at is written as nothing, the way it is named as nothing.
+     */
+    public String spelled() {
+        if (below == null && above == null) {
+            return "@" + at.spelled();
+        }
+        return (below == null ? "" : below.spelled()) + "|"
+                + (above == null ? "" : above.spelled());
+    }
+
     /** The same division with every level written the one way, for an identity to be built from.
      *  What {@link #key()} answers, kept as the seam rather than as a word. */
     public Seam canonical() {

@@ -98,7 +98,7 @@ class WhatARowAwayFromALineIsOwedForTest {
         FarEnd end = onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN);
 
         assertInstanceOf(FarEnd.AtALine.class, end, "the run stops at a line somebody wrote");
-        assertEquals("100", ((FarEnd.AtALine) end).where().at().written().key(),
+        assertEquals("100", ((FarEnd.AtALine) end).where().at().written().spelled(),
                 "which is the comparison's, at a hundred");
     }
 

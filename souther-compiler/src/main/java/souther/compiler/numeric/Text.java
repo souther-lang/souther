@@ -70,6 +70,13 @@ public record Text(String at) implements Place {
         return at;
     }
 
+    /** The string, which is what a reader of one is shown and what tells two of them apart both. A
+     *  string is its own name, so there is nothing here the other question does not already ask. */
+    @Override
+    public String spelled() {
+        return at;
+    }
+
     /** Itself, there being no second spelling of a string to fold. */
     @Override
     public Text canonical() {

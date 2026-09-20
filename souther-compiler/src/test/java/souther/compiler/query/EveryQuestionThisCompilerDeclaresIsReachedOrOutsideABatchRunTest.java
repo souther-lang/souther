@@ -11,6 +11,7 @@ import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -114,11 +115,19 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                     + " reached from the editor's snapshot, and no answer of a batch compilation"
                     + " reads it");
 
+    /** What the scan counted, worked out when a test first asks and kept for the rest: nothing it
+     *  reads changes while the tests run, and each of them would otherwise scan again. */
+    private static Set<String> declaredOnce;
+
     /** What the scan counted, whether or not it read everything it found. */
-    private static Set<String> declared() throws Exception {
-        Set<String> out = new TreeSet<>();
-        DeclaredQuestions.found(DeclaredQuestions.scan()).forEach(each -> out.add(each.getName()));
-        return out;
+    private static synchronized Set<String> declared() throws Exception {
+        if (declaredOnce == null) {
+            Set<String> out = new TreeSet<>();
+            DeclaredQuestions.found(DeclaredQuestions.scan())
+                    .forEach(each -> out.add(each.getName()));
+            declaredOnce = Collections.unmodifiableSet(out);
+        }
+        return declaredOnce;
     }
 
     /** Where the query vocabulary is kept. */
@@ -163,8 +172,19 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                         + " one that is there");
     }
 
+    /** What the operations below reached, worked out when a test first asks and kept for the rest:
+     *  three tests read it, and each would otherwise run every operation over every corpus. */
+    private static Set<String> reachedOnce;
+
+    private static synchronized Set<String> reached() {
+        if (reachedOnce == null) {
+            reachedOnce = Collections.unmodifiableSet(workedOutWhatIsReached());
+        }
+        return reachedOnce;
+    }
+
     /** And every question this project's own operations put over the corpus. */
-    private static Set<String> reached() {
+    private static Set<String> workedOutWhatIsReached() {
         Set<String> out = new TreeSet<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             // Analysing a corpus and writing the report, which is `souther examples`.

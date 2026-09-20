@@ -129,8 +129,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         Seam scaled = Seam.of(LevelSpace.steppingBy(two), count("9"), Towards.BELOW,
                 new Seam.Scale(two, new Carrier.Whole()));
 
-        assertEquals("4", scaled.below().key(), "eight of a doubled position is four of it");
-        assertEquals("5", scaled.above().key());
+        assertEquals("4", scaled.below().spelled(), "eight of a doubled position is four of it");
+        assertEquals("5", scaled.above().spelled());
         assertEquals(plain.key(), scaled.key(), "and the two rules part the values in one place");
     }
 

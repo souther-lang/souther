@@ -141,8 +141,7 @@ class TheDeclarationsHoldingAnEndAreTheOnesWhoseEndSurvivedTest {
     /**
      * One place written two ways is one end, and both readings are holding it.
      *
-     * <p>What a rule wrote is what a report writes back, so a reading keeps the spelling it was
-     * handed and two readings of one end can hold two of them. Told apart by what they hold rather
+     * <p>A reading keeps the representation it was handed, so two readings of one end can hold two of them. Told apart by what they hold rather
      * than by where they stop, whichever spelling the meet happened to keep would decide which
      * declaration is named — and the answer would turn on the order the two were met in.
      */

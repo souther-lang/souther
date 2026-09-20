@@ -47,4 +47,10 @@ public record Cut(Carrier carrier, Place at, List<LineOrigin> origins) {
     public String key() {
         return at.key();
     }
+
+    /** The line's coordinate written out ({@link Place#spelled}). The pair {@link #key()} is: one
+     *  tells two lines apart and the other says where this one is. */
+    public String spelled() {
+        return at.spelled();
+    }
 }

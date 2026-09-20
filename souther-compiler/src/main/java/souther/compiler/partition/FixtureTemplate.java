@@ -207,7 +207,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                             ? unitCase(written) : null;
             // A string stands for itself, so what a row carries is the string, escaped the way the
             // language reads one back.
-            case Carrier.Text _ -> string(at.key());
+            case Carrier.Text _ -> string(at.spelled());
         };
     }
 

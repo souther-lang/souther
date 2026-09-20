@@ -17,6 +17,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Two spellings of one number are one level, so they are one demand and one debt.
  *
- * <p>A level keeps the spelling the rule was written in, because that is what a report writes back:
- * {@code 0} and {@code 0.00} are two values and one place on the order. Everything that compares
+ * <p>A level keeps the representation the rule was written with, so {@code 0} and {@code 0.00} are
+ * two values and one place on the order. Everything that compares
  * levels goes through the order, and a value that <em>holds</em> a level and is compared as a value
  * cannot — a map keyed on a debt asks {@link Object#equals}, and a check that two readings ask the
  * same thing asks it of two criteria. Those readers hold the level written the one way.
@@ -146,12 +148,11 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
      */
     @Test
     void aLineAtAThirdOfAMillionthIsNamedAndMeasuredWithoutBeingWrittenOut() {
-        ExactRatio aMillionth = ExactRatio.of(new java.math.BigDecimal(
-                java.math.BigInteger.ONE, 1_000_000));
+        ExactRatio aMillionth = ExactRatio.of(new BigDecimal(BigInteger.ONE, 1_000_000));
         CutPosition line = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(3));
         CutPosition beside = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(6));
 
-        assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
             assertNotEquals(line.key(), beside.key(), "two lines, two names");
             assertEquals(line.key(), new CutPosition(
@@ -160,6 +161,115 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
             assertTrue(line.digitsToTellApartFrom(beside) > 1_000_000,
                     "a sixth of a millionth apart takes about that many places to name");
         });
+    }
+
+    /**
+     * A line at a decimal written at a wide scale is named, and so is the division it makes, without
+     * either writing the number out.
+     *
+     * <p>A carrier hands back a count that holds the scale the model wrote and a single digit under
+     * it, and what a name is asked for is which of two lines this is — which the parts the count is
+     * already held as answer. Built by writing the number instead, a name is a character per place,
+     * and a name is wanted wherever two lines meet.
+     *
+     * <p>What a reader is shown is the other question, and it still writes every place. Asserted
+     * here, because a name that stopped costing them by no longer being able to say them is not what
+     * this asks for.
+     */
+    @Test
+    void aLineAtADecimalWrittenAtAWideScaleIsNamedWithoutBeingWrittenOut() {
+        BigDecimal wide = new BigDecimal(BigInteger.ONE, 1_000_000);
+        Level line = new Level.OnACarrier(DECIMALS, new Count(wide));
+        Level beside = new Level.OnACarrier(DECIMALS, new Count(wide.add(wide)));
+        Level counted = new Level.OfTheQuantity(ExactRatio.of(wide));
+
+        assertEquals("1;1000000", line.key(), "the name is the two parts of the decimal");
+        assertNotEquals(line.key(), beside.key(), "two lines, two names");
+        assertEquals(line.key(), new Level.OnACarrier(DECIMALS, new Count(wide)).key(),
+                "and one line, one name");
+        assertEquals(ExactRatio.of(wide).key(), counted.key(),
+                "a number the quantity counts to is named by the ratio's own name");
+        assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+                        .key().length() < 128,
+                "and the division that line makes is named from the same parts");
+
+        assertEquals(1_000_002, line.spelled().length(),
+                "while what a reader is shown is the number, every place of it");
+    }
+
+    /** Two spellings of one number are one name, which is the whole of what a name is for here. */
+    @Test
+    void twoSpellingsOfOneNumberAreOneName() {
+        assertEquals(new Count(new BigDecimal("1.0")).key(), new Count(new BigDecimal("1.00")).key(),
+                "1.0 and 1.00 are one place and one name for it");
+        assertEquals(new Count(new BigDecimal("0.00")).key(), new Count(BigDecimal.ZERO).key());
+        assertNotEquals(new Count(BigDecimal.ONE).key(), new Count(BigDecimal.TEN).key(),
+                "and two places are two names");
+        assertEquals("1;-1000000", new Count(new BigDecimal(BigInteger.ONE, -1_000_000)).key(),
+                "a decimal written as a multiple of a wide power of ten is named the same way");
+    }
+
+    /**
+     * A level is asked three questions and answers each one its own way: a name, its coordinate,
+     * and what an author reads.
+     *
+     * <p>A division of a quantity is spelled from coordinates, which is the column a report has
+     * always carried for it; a level a report shows is written as its carrier writes it, which is
+     * what the report's schema says of one.
+     */
+    @Test
+    void aLevelIsNamedSpelledAndWrittenAsThreeDifferentQuestions() {
+        Carrier days = new Carrier.Days();
+        Level day = new Level.OnACarrier(days, Count.of(20454));
+
+        assertEquals("20454", day.spelled(), "the coordinate is the day count");
+        assertEquals("2026-01-01", day.written(), "and what an author reads is the date");
+        assertEquals(days.written(Count.of(20454)), day.written(),
+                "which is what the carrier says of that place");
+        assertEquals("20454|20455", Seam.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
+                        .spelled(),
+                "and the division of the days is spelled from the counts either side of it");
+        assertEquals("7", Level.OfTheQuantity.of(7).written(),
+                "a level of no carrier is the number in both");
+    }
+
+    /**
+     * A level of an enumeration is written as the case it is and spelled as the place the case
+     * stands at, so the report shows a name a model contains and not a count it does not.
+     */
+    @Test
+    void aLevelOfAnEnumerationIsWrittenAsItsCase() {
+        Carrier colours = new Carrier.Ordinal(
+                TypeSymbols.declared(new TypeKey("demo", "Colour")),
+                List.of(TypeSymbols.declared(new TypeKey("demo", "Red")),
+                        TypeSymbols.declared(new TypeKey("demo", "Blue"))));
+        Level blue = new Level.OnACarrier(colours, Count.of(1));
+
+        assertEquals("1", blue.spelled(), "the coordinate is the place the case stands at");
+        assertEquals(colours.written(Count.of(1)), blue.written(), "and what an author reads is");
+        assertNotEquals(blue.spelled(), blue.written(), "the case, which is not a number");
+    }
+
+    /**
+     * Where a division is written for a report, and what a name of it costs, is the same whichever
+     * way the quantity counts.
+     *
+     * <p>Spelled from the ratio's own decimal where it has one, as every other number a report
+     * writes is, and as a fraction where it has none.
+     */
+    @Test
+    void aDivisionOfNumbersThatCarryNoOrderIsSpelledAsTheNumbers() {
+        CutPosition half = CutPosition.at(new Level.OfTheQuantity(
+                ExactRatio.of(new BigDecimal("0.5"))));
+        Seam belowOnly = new Seam(half, new Level.OfTheQuantity(ExactRatio.of(new BigDecimal("0.5"))),
+                null);
+        Seam nowhere = new Seam(new CutPosition(new Level.OfTheQuantity(ExactRatio.of(1)),
+                ExactRatio.of(3)), null, null);
+
+        assertEquals("0.5|", belowOnly.spelled(), "a half is written as the decimal it is");
+        assertEquals("@1/3", nowhere.spelled(), "a third has no decimal and is written as one over three");
+        assertNotEquals(belowOnly.spelled(), belowOnly.key(), "and neither is the name");
+        assertNotEquals(nowhere.spelled(), nowhere.key());
     }
 
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */

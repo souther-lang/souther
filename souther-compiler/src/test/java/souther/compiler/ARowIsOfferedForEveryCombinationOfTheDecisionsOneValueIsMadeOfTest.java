@@ -3,8 +3,11 @@ package souther.compiler;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.AdequacyPolicy;
+import souther.compiler.partition.Budgets;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.UnderABudget;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.Map;
@@ -63,7 +66,19 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             Pattern.compile("Total\\((\\d+)\\),\\s*Standard,\\s*Express");
 
     private static String block(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return block(Compilation.ofSource(source, "Main"));
+    }
+
+    /** The same, with the offering held to {@code rowLimit} rows and nothing else about the budget
+     *  changed. */
+    private static String block(String source, int rowLimit) {
+        return block(UnderABudget.of(Compilation.ofSource(source, "Main"),
+                new AdequacyPolicy(Budgets.measures(),
+                        new AdequacyPolicy.OfTheGeneration(rowLimit,
+                                Budgets.generation().cellsPerGroup()))));
+    }
+
+    private static String block(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
@@ -91,13 +106,17 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
                         + "there: " + block);
     }
 
-    /** Five three-way decisions summed, whose full product is 243 combinations. */
-    private static final String FIVE = """
-            module example.five
+    /** How many rows the offering here is held to, which is fewer than the product of the decisions
+     *  below has combinations and so is the limit a group of them would reach. */
+    private static final int ROWS_ALLOWED = 20;
+
+    /** Three three-way decisions summed, whose full product is 27 combinations. */
+    private static final String THREE = """
+            module example.three
 
             data Tier = Bronze | Silver | Gold
 
-            behavior fee : (a: Tier, b: Tier, c: Tier, d: Tier, e: Tier) -> Int
+            behavior fee : (a: Tier, b: Tier, c: Tier) -> Int
 
             let rate (tier: Tier): Int =
                 match tier with
@@ -105,7 +124,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
                     | Silver -> 1
                     | Gold -> 2
 
-            let fee (a, b, c, d, e) = rate(a) + rate(b) + rate(c) + rate(d) + rate(e)
+            let fee (a, b, c) = rate(a) + rate(b) + rate(c)
             """;
 
     /** Two decisions whose conditions the reading cannot say a position for. */
@@ -147,9 +166,10 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
      */
     @Test
     void aGroupCostsRowsOnlyWhereAnArmIsOwedOne() {
-        String block = block(FIVE);
+        String block = block(THREE, ROWS_ALLOWED);
 
-        assertTrue(rows(block) <= 200, "the rows offered stay inside the row limit: " + rows(block));
+        assertTrue(rows(block) <= ROWS_ALLOWED,
+                "the rows offered stay inside the row limit: " + rows(block));
         assertFalse(block.contains("generation stopped"),
                 "and the search does not run out, the combinations costing nothing of their own: "
                         + block);
