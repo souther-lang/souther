@@ -692,7 +692,11 @@ public final class Backend {
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.
-                        Type pt = TypeOps.resolveParamType(h.params().get(i).type());
+                        // A value emitted as a method takes what its check settled the values it is
+                        // handed as; every other helper declares its parameters' types.
+                        List<Type> handed = checked.valueParamTypes().get(h.name());
+                        Type pt = handed != null ? handed.get(i)
+                                : TypeOps.resolveParamType(h.params().get(i).type());
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);

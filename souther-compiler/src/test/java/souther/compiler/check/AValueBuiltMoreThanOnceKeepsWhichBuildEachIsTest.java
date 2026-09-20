@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,9 +48,14 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
             """;
 
     private static Hir.Expr lowered(String tail) {
+        return loweredDefinition(tail, "f");
+    }
+
+    /** The body the backend emits for {@code name}: a behavior, or a value emitted as a method. */
+    private static Hir.Expr loweredDefinition(String tail, String name) {
         Compilation compilation = Compilation.ofSource(HEAD + tail, "m");
         return compilation.db()
-                .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
+                .ask(new Bodies.LoweredBody("m", new DefinitionName(name)))
                 .value().value().writtenBody();
     }
 
@@ -99,18 +105,20 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
     }
 
     @Test
-    void aValueBuiltInsideAnotherValuesForkIsNestedInThatValuesBuild() {
-        List<Hir.Materialised> all = builds(lowered("""
+    void aValueBuiltInsideAnotherValuesForkIsBuiltInThatValuesOwnBody() {
+        String source = """
                 behavior f : (n: Int) -> Bool
                 let f (n) = if n > 0 then outer else false
-                """));
+                """;
+        List<Hir.Materialised> all = builds(lowered(source));
 
-        List<Hir.Materialised> outer = buildsOf("outer", all);
-        assertEquals(1, outer.size());
-        // Inside the body of the value that built it, and nowhere beside it.
-        List<Hir.Materialised> insideOuter = buildsOf("inner", builds(outer.get(0).body()));
+        // The behavior calls the method `outer` is emitted as, and holds no build of `inner`: that
+        // one is built where `outer` names it, inside `outer`'s own body.
+        assertEquals(1, buildsOf("outer", all).size());
+        assertEquals(0, buildsOf("inner", all).size());
+        List<Hir.Materialised> insideOuter =
+                buildsOf("inner", builds(loweredDefinition(source, "outer")));
         assertEquals(1, insideOuter.size());
-        assertEquals(1, buildsOf("inner", all).size());
         MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
                 insideOuter.get(0).site());
         assertInstanceOf(RegionSlot.IfThen.class, site.slot());
@@ -118,36 +126,37 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
 
     /**
      * Two builds of one value are two nodes, and what tells them apart is the region each was built
-     * for. What a build of a value it names inside its own fork is built for is that fork, the same
-     * in both — which is why the outer chain of builds has to be kept and a region alone would not do.
+     * for. What the value builds inside its own fork is built once, in the value's own body, and is
+     * the same for both.
      */
     @Test
-    void twoBuildsOfOneValueAreToldApartByTheRegionAndTheirInnerBuildsAreNot() {
-        List<Hir.Materialised> all = builds(lowered("""
+    void twoBuildsOfOneValueAreToldApartByTheRegionAndTheirInnerBuildIsOne() {
+        String source = """
                 behavior f : (n: Int) -> Bool
                 let f (n) = (if n > 0 then outer else false) || (if n > 1 then outer else false)
-                """));
+                """;
+        List<Hir.Materialised> all = builds(lowered(source));
 
         List<Hir.Materialised> outer = buildsOf("outer", all);
         assertEquals(2, outer.size());
         assertNotEquals(outer.get(0).site(), outer.get(1).site());
-        List<Hir.Materialised> first = buildsOf("inner", builds(outer.get(0).body()));
-        List<Hir.Materialised> second = buildsOf("inner", builds(outer.get(1).body()));
-        assertEquals(1, first.size());
-        assertEquals(1, second.size());
-        assertEquals(first.get(0).site(), second.get(0).site());
+        assertEquals(0, buildsOf("inner", all).size());
+        assertEquals(1, buildsOf("inner", builds(loweredDefinition(source, "outer"))).size());
     }
 
     @Test
-    void aValueWhoseBodyCallsAHelperHoldsTheCallInsideItsBuild() {
-        List<Hir.Materialised> all = builds(lowered("""
+    void aValueWhoseBodyCallsAHelperHoldsTheCallInItsOwnBody() {
+        String source = """
                 behavior f : (n: Int) -> Bool
                 let f (n) = viaCall
-                """));
+                """;
+        List<Hir.Materialised> all = builds(lowered(source));
 
         assertEquals(1, all.size());
-        assertTrue(holdsAnExpansion(all.get(0).body()),
-                "the call of the helper stands inside the build of the value that made it");
+        assertFalse(holdsAnExpansion(lowered(source)),
+                "the behavior calls the value's method and holds no call of the helper");
+        assertTrue(holdsAnExpansion(loweredDefinition(source, "viaCall")),
+                "the call of the helper stands in the body of the value that makes it");
     }
 
     private static boolean holdsAnExpansion(Hir.Expr e) {

@@ -131,7 +131,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     private static ComparisonEmissionSite comparisonAt(CoverageSites.Plan plan, String behavior,
                                                      int line) {
         List<CoverageSites.ComparisonSite> found = plan.sites().stream()
-                .filter(site -> site.behavior().equals(behavior))
+                .filter(site -> site.body().equals(behavior))
                 .filter(site -> site instanceof CoverageSites.ComparisonSite)
                 .map(CoverageSites.ComparisonSite.class::cast)
                 .filter(site -> site.at() instanceof souther.compiler.diag.Citation.Written written

@@ -94,6 +94,9 @@ public final class ComparisonCatalog {
         for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk(body.getValue(), body.getKey(), byOccurrence, met);
         }
+        for (Map.Entry<String, Core> method : of.methods().entrySet()) {
+            walk(method.getValue(), method.getKey(), byOccurrence, met);
+        }
         return new ComparisonCatalog(byOccurrence);
     }
 

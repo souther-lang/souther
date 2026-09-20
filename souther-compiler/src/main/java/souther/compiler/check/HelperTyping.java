@@ -55,7 +55,7 @@ public final class HelperTyping {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Preserved.Settling settledSignatures = new Preserved.Settling();
+        Preserved.Settling settledSignatures = elaborated.settledValues;
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
@@ -99,6 +99,24 @@ public final class HelperTyping {
                     continue;
                 }
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
+            }
+            // What a value emitted as a method takes: the values its root region demands, each a
+            // binding of the type that value's own check settled. Those are checked first, so the
+            // answer is here.
+            List<Hir.FnParam> taken = elaborated.valueParams.get(h.name());
+            if (taken != null) {
+                List<Type> takenTypes = new ArrayList<>();
+                for (Hir.FnParam p : taken) {
+                    CompleteSignature carried = standing.valueKept(
+                            new ValueName.Helper(inliner.moduleName(), HelperInliner.valueCarriedBy(p)));
+                    if (carried == null) {
+                        throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
+                                + "`, whose value was not settled before it");
+                    }
+                    env = env.with(p.binder(), carried.result());
+                    takenTypes.add(carried.result());
+                }
+                elaborated.valueParamTypes.put(h.name(), takenTypes);
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
             // A definition the lowered module carries is one the backend emits — a recursive helper,
@@ -167,7 +185,9 @@ public final class HelperTyping {
                             NewtypeInners.asWritten(symbols),
                             EffectiveFieldTypes.asWritten(symbols),
                             FieldLayout.asWritten(symbols), null, reachable)
-                            .preserving(reading ? standing : Preserved.NONE),
+                            .preserving(emitted != null
+                                    ? Preserved.valuesCalledAsMethods(settledSignatures)
+                                    : reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
@@ -844,6 +864,11 @@ public final class HelperTyping {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && names.contains(call.answered().reaches())) {
             out.add(call.answered().reaches());
+        }
+        // A build that is a call to the method its value is emitted as is an edge of the same graph.
+        if (e instanceof Hir.Materialised build && build.body() instanceof Hir.Var.Denoting named
+                && names.contains(named.reaches())) {
+            out.add(named.reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

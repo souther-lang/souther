@@ -104,7 +104,7 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
         bodies.put("b", sharedFork());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> CoverageSites.of(new ModuleBodies("demo", new LinkedHashMap<>(bodies)),
+                () -> CoverageSites.of(HandBuiltBodies.ofBehaviors("demo", bodies),
                         DecisionSources.NONE, SuppliedRules.NONE));
 
         assertTrue(refused.getMessage().contains("twice"),

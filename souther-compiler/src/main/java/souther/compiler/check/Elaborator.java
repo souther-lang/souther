@@ -20,7 +20,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.DerivedReferenceOrigin;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ReferenceDerivationCause;
 import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.ValueName;
@@ -249,7 +251,10 @@ public final class Elaborator {
                 // the reference where the reference is written, so nothing downstream of this has
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
-                        keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(), v.pos());
+                        ctx.preserved().valuesAreMethods()
+                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v)
+                                : keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(),
+                                        v.pos());
                 default -> throw notAValue(v, env);
             };
             case Hir.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
@@ -1539,6 +1544,22 @@ public final class Elaborator {
             return value;
         }
         return new Core.OptionSome(value, expected, value.pos());
+    }
+
+    /**
+     * A value the emitted tree reads by calling the method it is emitted as.
+     *
+     * <p>Nobody applied anything at the reference, so the call is no construct of the author's: it is
+     * this representation's, in no copy, and there is nothing for a reader to be sent to.
+     */
+    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v) {
+        ReachName.Declaration declaration = v.reachesADeclaration();
+        if (declaration == null) {
+            throw new IllegalStateException("`" + v.written() + "` is a value called as a method and"
+                    + " reaches no declaration");
+        }
+        return new Core.Call(new Core.Reached.OfDeclaration(declaration), List.of(),
+                ConstructOccurrence.unwritten(), settled.result(), v.pos());
     }
 
     /**

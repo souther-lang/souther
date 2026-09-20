@@ -67,8 +67,7 @@ class CoverageSitesTest {
 
     private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(
-                new ModuleBodies(checked.module(),
-                        new java.util.LinkedHashMap<>(checked.bodies())),
+                HandBuiltBodies.ofBehaviors(checked.module(), checked.bodies()),
                 souther.compiler.coverage.DecisionSources.NONE,
                 souther.compiler.coverage.SuppliedRules.NONE);
     }

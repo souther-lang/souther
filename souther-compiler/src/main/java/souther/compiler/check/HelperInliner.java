@@ -9,6 +9,7 @@ import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.EtaOrigin;
 import souther.compiler.types.ExpansionLineage;
@@ -33,13 +34,16 @@ import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.QuotedFrom;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
@@ -100,6 +104,14 @@ public final class HelperInliner {
      * and not the arm.
      */
     private ValueAtAReference reading = ValueAtAReference.COPIED;
+    /** Whether a value that needs nothing from its region is called as a method, not copied. */
+    private boolean valuesAreMethods = false;
+    /** What each value folds to, empty where it is not a constant, by what it is reached by. */
+    private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
+    /** What the method emitted for each value takes, by what the value is reached by. */
+    private final Map<ReachName.Declaration, Handover> handovers = new HashMap<>();
+    /** The fold that says which values are constants, the one every reader of a constant asks. */
+    private ConstEval constEval = null;
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -390,6 +402,20 @@ public final class HelperInliner {
      */
     public HelperInliner sharingOneMaterialisationPerRegion() {
         this.reading = ValueAtAReference.SHARED_PER_REGION;
+        return this;
+    }
+
+    /**
+     * In the tree the backend emits from, a value that needs nothing from the region around it is
+     * emitted as a method of its own, and a reference to it is a call.
+     *
+     * <p>Said apart from {@link #sharingOneMaterialisationPerRegion}, which every representation
+     * that runs asks for: the representation an analysis reads has no method to call and keeps the
+     * body where the value was named.
+     */
+    public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
+        this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
+        this.constEval = ConstEval.against(symbols, this::constantOf);
         return this;
     }
 
@@ -1341,6 +1367,9 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
+            // A build that is a call of the method its value is emitted as holds a reference and the
+            // bindings it is handed, and there is no body in it to walk.
+            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
@@ -2307,6 +2336,13 @@ public final class HelperInliner {
         if (readAt(reached) != null) {
             return;
         }
+        if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
+            Handover handover = handoverOf(named, site.get());
+            if (handover.callable()) {
+                materialiseAsACall(named, handover.taken(), here, order, values, site);
+                return;
+            }
+        }
         Hir.Expr body = materialisable(named);
         if (body == null) {
             return;
@@ -2326,6 +2362,195 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * Binds {@code named} in the region being written as the call of the method it is emitted as.
+     *
+     * <p>The values that method takes are built here first, and handed to it. Which they are is a fact
+     * about the value and not about the build, so it is worked out the first time the value is built
+     * and not again: a value built in each of several regions would otherwise have its body expanded
+     * in each of them to learn the same thing.
+     *
+     * <p>The method is required wherever this tree ends up, so it is recorded as left standing.
+     */
+    private void materialiseAsACall(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed,
+                                    Map<String, Hir.Binder> here, List<Hir.Binder> order,
+                                    List<Hir.Expr> values, Supplier<MaterialisationSite> site) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        MaterialisationSite where = site.get();
+        for (Hir.Var.Denoting each : handed) {
+            materialise(each, here, order, values, site);
+        }
+        leftStanding.add(reaches);
+        for (SequencedSet<ReachName.Declaration> asked : standingHere) {
+            asked.add(reaches);
+        }
+        Hir.Binder called = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), called);
+        order.add(called);
+        values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
+                named.pos(), named.region()));
+    }
+
+    /**
+     * Whether {@code named} is a value this tree calls the method of rather than copying.
+     *
+     * <p>Only in the tree the backend emits from, and only for a value this module declared: the
+     * signature a call to it is typed by is settled by the check of the module that wrote it. A
+     * value that names no other value at its root region has nothing to be handed, so the method
+     * takes nothing.
+     */
+    private boolean emittedAsAMethod(Hir.Var.Denoting named) {
+        return valuesAreMethods && isAMethodValue(named);
+    }
+
+    /** Whether {@code named} is a value this module declared that does not fold to a constant,
+     *  which is the kind a method can be emitted for. */
+    private boolean isAMethodValue(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
+                && !graph.recurses(reaches) && constantOf(named).isEmpty();
+    }
+
+    /**
+     * What {@code named} folds to, or empty where it is not a constant.
+     *
+     * <p>Asked of {@link ConstEval}, which is what every reader that asks whether an expression is
+     * known at compile time asks, so what stands as a value here is what they all find. A constant
+     * stands where it is named for that reason: a call to a method would hide it from all of them.
+     * Once per value, since a value naming another twice would otherwise be folded twice and a chain
+     * of them once per path through it.
+     */
+    private Optional<Object> constantOf(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        if (value == null || !value.params().isEmpty() || value.body() == null
+                || graph.recurses(reaches)) {
+            return Optional.empty();
+        }
+        Optional<Object> known = constantOfValues.get(reaches);
+        if (known == null) {
+            // Put before the fold as "not a constant", so a value that reaches itself answers.
+            constantOfValues.put(reaches, Optional.empty());
+            known = constEval.eval(value.writtenBody());
+            constantOfValues.put(reaches, known);
+        }
+        return known;
+    }
+
+    /**
+     * What a value's method takes, and whether it can be called at all.
+     *
+     * <p>A method is called only where everything the value demands at its root is what the method
+     * takes, {@link #takenByTheMethod}. Anything else it demands — a constant, a value another
+     * module declared — would be built inside the method, and two values that name it would each
+     * build it, which is what one region sharing it is for. Such a value is built by the region
+     * that names it instead.
+     */
+    private record Handover(boolean callable, List<Hir.Var.Denoting> taken) { }
+
+    private Handover handoverOf(Hir.Var.Denoting named, MaterialisationSite where) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Handover known = handovers.get(reaches);
+        if (known == null) {
+            Hir.Expr body = materialisable(named);
+            if (body == null) {
+                known = new Handover(false, List.of());
+            } else {
+                Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+                Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
+                demandedHere(calls, under);
+                List<Hir.Var.Denoting> taken = takenByTheMethod(under);
+                known = new Handover(taken.size() == under.size(), taken);
+            }
+            handovers.put(reaches, known);
+        }
+        return known;
+    }
+
+    /** Whether {@code build} is a call of the method its value is emitted as, which is a reference to
+     *  the value and not a copy of its body. */
+    private static boolean isACallOfItsValue(Hir.Materialised build) {
+        Hir.Expr called = build.body() instanceof Hir.Apply call ? call.function() : build.body();
+        return called instanceof Hir.Var.Denoting named && named.denotes().equals(build.value());
+    }
+
+    /**
+     * The reference to {@code named} that stands for a build of it: the name alone where the method
+     * takes nothing, and the name applied to the bindings that hold what it takes where it does.
+     */
+    private Hir.Expr callOf(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed) {
+        if (handed.isEmpty()) {
+            return named;
+        }
+        List<Hir.Expr> arguments = new ArrayList<>();
+        for (Hir.Var.Denoting each : handed) {
+            arguments.add(Hir.Var.local(readAt(each.reaches()), named.pos()));
+        }
+        return Hir.Apply.synthetic(named, arguments,
+                new ApplicationOrigin.Derived(
+                        new ApplicationDerivationCause.NameReadAsAValue(named.origin()), 0),
+                named.pos(), named.region());
+    }
+
+    /** What a method emitted for a value takes: the values its root region demands that are
+     *  themselves emitted as methods, in the order of the names they are reached by. */
+    private List<Hir.Var.Denoting> takenByTheMethod(Map<String, Hir.Var.Denoting> demanded) {
+        List<Hir.Var.Denoting> taken = new ArrayList<>();
+        for (Hir.Var.Denoting each : demanded.values()) {
+            if (isAMethodValue(each)) {
+                taken.add(each);
+            }
+        }
+        taken.sort(Comparator.comparing(Hir.Var.Denoting::reaches));
+        return taken;
+    }
+
+    /** What every parameter a value's method takes is named under, so that what it stands for can be
+     *  read back off the name. */
+    private static final String VALUE_PARAMETER = "$dep_";
+
+    /** The name of the value that {@code parameter} carries into a method emitted for a value, or
+     *  null where it is no such parameter. */
+    public static String valueCarriedBy(Hir.FnParam parameter) {
+        String name = parameter.name();
+        return name.startsWith(VALUE_PARAMETER) ? name.substring(VALUE_PARAMETER.length()) : null;
+    }
+
+    /**
+     * The body of the value {@code fn} as the method it is emitted as: what its root region demands
+     * of other values is what the method takes, and what only a region inside it demands is built
+     * there.
+     *
+     * <p>Nothing the value names at its root is built inside it. A region that builds the value has
+     * built those already, and hands them over, so two values that name one value are handed the
+     * same one.
+     */
+    public Hir.FnDef valueMethod(Hir.FnDef fn) {
+        List<Hir.FnParam> parameters = new ArrayList<>();
+        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            Hir.Expr calls = inline(fn.writtenBody());
+            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
+            demandedHere(calls, demanded);
+            Map<String, Hir.Binder> handed = new LinkedHashMap<>();
+            for (Hir.Var.Denoting each : takenByTheMethod(demanded)) {
+                Hir.Binder binder = writing.binders()
+                        .binder(VALUE_PARAMETER + each.name(), each.pos());
+                handed.put(each.reaches(), binder);
+                parameters.add(new Hir.FnParam(binder, null));
+            }
+            materialised.add(handed);
+            try {
+                return region(calls, rootSite());
+            } finally {
+                materialised.remove(materialised.size() - 1);
+            }
+        });
+        return fn.withParams(parameters).withBody(new Hir.FnBody.Written(body));
     }
 
     /**
@@ -2527,6 +2752,7 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
                         ex.pos(), ex.region());
             }
+            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
                     m.region());

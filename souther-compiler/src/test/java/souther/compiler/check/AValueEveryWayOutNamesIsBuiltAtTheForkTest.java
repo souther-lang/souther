@@ -6,7 +6,6 @@ import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.WrittenOwner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -25,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * enumeration of a module's comparisons refuses the pair rather than answer either reader with the
  * other's.
  *
- * <p>Counted over the tree the backend emits from: the comparison the value writes stands once in
- * it, whichever of these the body is.
+ * <p>Counted over the tree the backend emits from: the build of the value stands once in it,
+ * whichever of these the body is.
  */
 class AValueEveryWayOutNamesIsBuiltAtTheForkTest {
 
@@ -59,10 +58,10 @@ class AValueEveryWayOutNamesIsBuiltAtTheForkTest {
         return held[0];
     }
 
+    /** A build of `over`: the body the backend emits from calls the method the value is emitted as,
+     *  so what stands in it is one reference per build and not the value's comparison. */
     private static boolean written(Hir.Expr e) {
-        return e instanceof Hir.Binary b && b.origin() != null && b.origin().isWritten()
-                && b.origin().owner() instanceof WrittenOwner.Body owner
-                && owner.definition().equals("over");
+        return e instanceof Hir.Materialised build && build.value().toString().endsWith("over");
     }
 
     @Test

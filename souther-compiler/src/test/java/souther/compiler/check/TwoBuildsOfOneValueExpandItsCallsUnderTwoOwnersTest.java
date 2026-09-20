@@ -11,7 +11,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value built for two regions expands the helpers its body calls once per build, and each
@@ -90,21 +89,28 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
                 """);
     }
 
+    /**
+     * A value that needs another at its root region is emitted as a method taking it, so the calls in
+     * its body are expanded once, in that body, and not once per build of it.
+     */
     @Test
-    void theTwoExpansionsStandInsideTwoBuilds() {
+    void theCallsInAValuesBodyAreExpandedOnceInThatBody() {
         String source = HEAD + """
-                behavior f : (n: Int) -> Int
-                let f (n) = (if n > 0 then viaCall else 0) + (if n > 1 then viaCall else 0)
-                """;
-        Set<BindingOwner> owners = new LinkedHashSet<>();
-        collect(Compiler.compiled(source, "m").db()
-                .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody(), owners);
+                let dependent = same(viaCall)
 
-        assertEquals(2, owners.size(), owners::toString);
-        assertTrue(owners.stream().allMatch(each ->
-                each instanceof BindingOwner.Expansion it && it.within() instanceof BindingOwner.Build),
-                owners::toString);
+                behavior f : (n: Int) -> Int
+                let f (n) = (if n > 0 then dependent else 0) + (if n > 1 then dependent else 0)
+                """;
+        var db = Compiler.compiled(source, "m").db();
+        Set<BindingOwner> inTheBehavior = new LinkedHashSet<>();
+        collect(db.ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
+                .value().value().writtenBody(), inTheBehavior);
+        Set<BindingOwner> inTheValue = new LinkedHashSet<>();
+        collect(db.ask(new Bodies.LoweredBody("m", new DefinitionName("dependent")))
+                .value().value().writtenBody(), inTheValue);
+
+        assertEquals(0, inTheBehavior.size(), inTheBehavior::toString);
+        assertEquals(1, inTheValue.size(), inTheValue::toString);
     }
 
     /** What each expansion of {@code same} in {@code e} is owned by. */

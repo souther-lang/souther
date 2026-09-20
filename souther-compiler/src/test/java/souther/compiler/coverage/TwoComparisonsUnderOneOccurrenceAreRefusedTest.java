@@ -66,7 +66,7 @@ class TwoComparisonsUnderOneOccurrenceAreRefusedTest {
     }
 
     private static ComparisonCatalog catalogue(Map<String, Core> bodies) {
-        return ComparisonCatalog.of(new ModuleBodies("demo", new LinkedHashMap<>(bodies)));
+        return ComparisonCatalog.of(HandBuiltBodies.ofBehaviors("demo", bodies));
     }
 
     @Test

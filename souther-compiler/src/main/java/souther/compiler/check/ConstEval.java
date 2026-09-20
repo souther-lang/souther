@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Folds a compile-time-constant expression to its value ({@code Long} / {@code BigDecimal} /
@@ -56,13 +57,23 @@ public final class ConstEval {
      *  whichever the reader happened to reach. */
     private final Symbols symbols;
 
-    private ConstEval(Symbols symbols) {
+    /** What a name of a value of the module folds to, for a reader that resolves those; empty for
+     *  every name otherwise. */
+    private final Function<Hir.Var.Denoting, Optional<Object>> values;
+
+    private ConstEval(Symbols symbols, Function<Hir.Var.Denoting, Optional<Object>> values) {
         this.symbols = symbols;
+        this.values = values;
     }
 
     /** Folding against the library {@code symbols} names. */
     public static ConstEval against(Symbols symbols) {
-        return new ConstEval(symbols);
+        return new ConstEval(symbols, _ -> Optional.empty());
+    }
+
+    /** The same, reading a name of a value of the module as what {@code values} says it folds to. */
+    static ConstEval against(Symbols symbols, Function<Hir.Var.Denoting, Optional<Object>> values) {
+        return new ConstEval(symbols, values);
     }
 
     /**
@@ -113,6 +124,7 @@ public final class ConstEval {
             case Hir.LetIn li -> eval(li.body(), env.binding(li.binder(), li.value()));
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
                     given(local.id(), env);
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper -> values.apply(v);
             default -> Optional.empty();
         };
     }

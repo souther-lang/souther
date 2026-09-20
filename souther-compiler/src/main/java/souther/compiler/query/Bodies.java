@@ -30,6 +30,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.SignatureDeclarations;
 import souther.compiler.check.HelperEntry;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.Preserved;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -89,6 +90,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
 
@@ -1454,11 +1456,17 @@ public final class Bodies {
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Set<ReachName.Declaration>> reached =
                     db.ask(new StandingRecursionsOfBody(module, behavior, InliningPolicy.FULL));
-            if (!constructs.present() || !reached.present()) {
+            // What the expansion of this body left standing as well, which is a value the tree calls
+            // the method of: a value is on no cycle, so what the graph says stands is not it.
+            Answer<Expansion<Hir.FnDef>> lowered =
+                    db.ask(new LoweredBody(module, new DefinitionName(behavior)));
+            if (!constructs.present() || !reached.present() || !lowered.present()) {
                 return Answer.absent();
             }
+            Set<ReachName.Declaration> standing = new LinkedHashSet<>(reached.value());
+            standing.addAll(lowered.value().standing());
             Map<String, DataChecker.Constructs> out = new LinkedHashMap<>();
-            for (String each : heldAt(reached.value())) {
+            for (String each : heldAt(standing)) {
                 DataChecker.Constructs built = constructs.value().get(each);
                 if (built != null) {
                     out.put(each, built);
@@ -1985,7 +1993,8 @@ public final class Bodies {
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new BehaviorAritiesForBody(module, fn.text(), InliningPolicy.FULL));
-            if (!def.present() || !against.present() || !behaviors.present()) {
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            if (!def.present() || !against.present() || !behaviors.present() || !scope.present()) {
                 return Answer.absent();
             }
             // Whether this body is a recursion, asked of the graph rather than of the set the module
@@ -2000,7 +2009,17 @@ public final class Bodies {
                     && against.value().graph().recurses(held.reachedAs());
             try {
                 HelperInliner inliner = HelperInliner.over(against.value().table(),
-                        against.value().graph());
+                        against.value().graph())
+                        .callingValuesAsMethodsWhereEmitted(scope.value());
+                // A value the backend emits a method for, as opposed to a behavior's implementation
+                // that takes no inputs: what tells them apart is whether a behavior declares it.
+                boolean aValue = !recursive && def.value().params().isEmpty()
+                        && def.value().standsAt() == null
+                        && !db.ask(new Spec(module, fn.text())).present();
+                if (aValue) {
+                    return Answer.of(Lower.valueMethod(def.value(),
+                            inliner.namingBehaviors(behaviors.value())));
+                }
                 return Answer.of(Lower.body(def.value(),
                         inliner.namingBehaviors(behaviors.value()),
                         recursive, dependencyParams(db, module, fn.text())));
@@ -2238,6 +2257,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             HelperGraph graph = against.value().graph();
+            HelperTable table = against.value().table();
             Set<ReachName.Declaration> required = new LinkedHashSet<>();
             Deque<ReachName.Declaration> pending = new ArrayDeque<>();
             Set<ReachName.Declaration> processed = new HashSet<>();
@@ -2247,7 +2267,7 @@ public final class Bodies {
             // use. Its body still goes through the walk below — being required is not being read.
             for (HelperEntry declared : against.value().table().declarations().values()) {
                 if (graph.recurses(declared.reachedAs())) {
-                    require(graph, required, pending, declared.reachedAs());
+                    require(graph, table, required, pending,declared.reachedAs());
                 }
             }
             // The trees that survive to run: a behavior's implementation, a row's operand, and the
@@ -2256,7 +2276,7 @@ public final class Bodies {
             // helper nothing reaches leaves nothing standing anywhere, which is why one that folds
             // and is never called asks for no fold.
             for (ReachName.Declaration standing :settling.value().standingRecursiveCalls()) {
-                require(graph, required, pending, standing);
+                require(graph, table, required, pending,standing);
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
             Set<String> roots = new LinkedHashSet<>(rows.value());
@@ -2273,7 +2293,7 @@ public final class Bodies {
                     return Answer.absent();
                 }
                 for (ReachName.Declaration standing :body.value().standing()) {
-                    require(graph, required, pending, standing);
+                    require(graph, table, required, pending,standing);
                 }
             }
             // A required definition is emitted as a method, so its own body is expanded on its own
@@ -2296,7 +2316,7 @@ public final class Bodies {
                     return Answer.absent();
                 }
                 for (ReachName.Declaration standing :body.value().standing()) {
-                    require(graph, required, pending, standing);
+                    require(graph, table, required, pending,standing);
                 }
             }
             // In the graph's order, which is declaration order: a check reporting one member of a
@@ -2308,14 +2328,23 @@ public final class Bodies {
                     ordered.add(recursive);
                 }
             }
+            // What is required without being on a cycle — a value emitted as a method — follows, in
+            // the order it was met.
+            ordered.addAll(required);
             return Answer.of(Collections.unmodifiableSequencedSet(ordered));
         }
 
         /** Takes {@code standing} on, and queues its body to be expanded the first time. */
-        private static void require(HelperGraph graph, Set<ReachName.Declaration> required,
+        private static void require(HelperGraph graph, HelperTable table,
+                                    Set<ReachName.Declaration> required,
                                     Deque<ReachName.Declaration> pending,
                                     ReachName.Declaration standing) {
-            if (!graph.recurses(standing)) {
+            // A value the emitted tree calls the method of is left standing without being on a cycle:
+            // what makes a call a call here is that a method is emitted for it, and a value is emitted
+            // as one wherever a tree that runs names it from a region that needs nothing else.
+            Hir.FnDef held = table.reached(standing);
+            boolean aValue = held != null && held.params().isEmpty();
+            if (!graph.recurses(standing) && !aValue) {
                 // An expansion answers with what it left standing, and a call is left standing
                 // because its callee recurses. One that does not is this compiler disagreeing with
                 // itself about why the call is still a call, and nothing here can be right about it.
@@ -2512,6 +2541,9 @@ public final class Bodies {
                     db.ask(new RecursiveHelperConstructsForBody(module, behavior));
             Answer<Expansion<Hir.FnDef>> discharge =
                     db.ask(new BodyForInvariantDischarge(module, behavior));
+            // What each value of the module was settled as: a reference to one that the emitted tree
+            // calls the method of is typed by it.
+            Answer<ModuleCheck.Of> valuesChecked = db.ask(new ModuleCheck(module));
             // What the behaviors this body reaches state about their answers, and only those: a
             // relation declared by a behavior it does not call is no part of what it is checked
             // against, and depending on one would re-check this body whenever that one was edited.
@@ -2519,7 +2551,7 @@ public final class Bodies {
                     db.ask(new ContractsForBody(module, behavior));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
-                    || !sigs.present() || !constructs.present()) {
+                    || !sigs.present() || !constructs.present() || !valuesChecked.present()) {
                 return Answer.absent();
             }
             ReadingPolicy policy = db.ask(new Front.Reading()).value();
@@ -2565,7 +2597,8 @@ public final class Bodies {
                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
                         Shapes.effectiveFieldTypes(db), Shapes.fieldLayout(db),
                         calleeSigs.value(), reqSigs.value(),
-                        inliner.value(), sigs.value(), constructs.value());
+                        inliner.value(), sigs.value(), constructs.value(),
+                        valuesChecked.value().settledValues());
                 Core core = checked.emitted();
                 // The last thing done to a body before it is emitted, and the only one that is not a
                 // check: a fold that only grows a list is turned into a build (see GrowingFold).
@@ -2718,7 +2751,9 @@ public final class Bodies {
          * @param stopped whether it stopped rather than finished, leaving the bodies nothing to be
          *                checked against
          */
-        public record Of(Map<String, Core> emittedHelpers, boolean sound, boolean stopped) {}
+        public record Of(Map<String, Core> emittedHelpers, boolean sound, boolean stopped,
+                         Preserved.SettledValues settledValues,
+                         Map<String, List<Type>> valueParamTypes) {}
 
         @Override
         public String module() {
@@ -2800,7 +2835,9 @@ public final class Bodies {
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) ->
                     helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
-            return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped()), reports);
+            return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped(),
+                    reported.settledValues().snapshot(), Map.copyOf(reported.valueParamTypes())),
+                    reports);
         }
     }
 
@@ -2868,6 +2905,7 @@ public final class Bodies {
         private final Map<String, AnalysisBody> analysed;
         private final CoverageSites.Plan plan;
         private final Set<String> emits;
+        private final Map<String, List<Type>> valueParamTypes;
 
         private Elaborated(ModuleBodies of,
                            Map<String, Core> emittedHelpers,
@@ -2877,7 +2915,9 @@ public final class Bodies {
                            SuppliedRules supplied,
                            Map<String, AnalysisBody> analysed,
                            CoverageSites.Plan plan,
-                           Set<String> emits) {
+                           Set<String> emits,
+                           Map<String, List<Type>> valueParamTypes) {
+            this.valueParamTypes = valueParamTypes;
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
@@ -2942,13 +2982,19 @@ public final class Bodies {
                     // elaborations holding one set of bodies and entitling different classes are
                     // two programs, and a check that came to the second would be taken for the
                     // first.
-                    && emits.equals(that.emits);
+                    && emits.equals(that.emits)
+                    && valueParamTypes.equals(that.valueParamTypes);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(of, emittedHelpers, claims, elements,
-                    decisions, supplied, emits);
+                    decisions, supplied, emits, valueParamTypes);
+        }
+
+        /** The types of what each value emitted as a method takes, by the name of the value. */
+        public Map<String, List<Type>> valueParamTypes() {
+            return valueParamTypes;
         }
 
         /** Whose module these are the bodies of. */
@@ -3518,6 +3564,19 @@ public final class Bodies {
             decisions.putAll(core.value().decisions().byFork());
             supplied.putAll(core.value().supplied().byExpansion());
         }
+        // A value emitted as a method of its own is a body a run passes through, and what it
+        // compares and forks on is among the places of this module however many behaviors call it.
+        // Held apart from the behaviors: it declares no rows and states no answer, and the places of
+        // a behavior are its own and those of the methods it calls.
+        SequencedMap<String, Core> methods = new LinkedHashMap<>();
+        Set<String> behaviorNames = Names.behaviorNames(settled);
+        for (Hir.FnDef fn : settled.fns()) {
+            Core method = module.emittedHelpers().get(fn.name());
+            if (method != null && fn.params().isEmpty() && fn.standsAt() == null
+                    && !behaviorNames.contains(fn.name())) {
+                methods.put(fn.name(), method);
+            }
+        }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the
         // module's, and a body's own answer must not move when the one beside it is edited.
@@ -3533,7 +3592,7 @@ public final class Bodies {
         // its trees are both in hand for the first and only time, and everything below takes
         // the pair rather than two things to put together again.
         ModuleBodies of =
-                new ModuleBodies(name, bodies);
+                new ModuleBodies(name, bodies, methods);
         // Where the places of these bodies are, walked here and once. What it is an answer
         // about is the module this check holds, so this is where there is a module to walk;
         // and the claims below name arms of it, so they are addresses of the plan this answer
@@ -3553,7 +3612,7 @@ public final class Bodies {
         CoverageSites.Plan plan =
                 CoverageSites.of(of, read, handed);
         return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
-                read, handed, analysed, plan, emits);
+                read, handed, analysed, plan, emits, module.valueParamTypes());
     }
 
     /**

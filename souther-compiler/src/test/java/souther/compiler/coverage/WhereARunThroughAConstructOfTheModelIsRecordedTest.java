@@ -12,7 +12,6 @@ import souther.compiler.types.WrittenOwner;
 import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -161,7 +160,7 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
                 continue;
             }
             out.add(new Compiled(
-                    new ModuleBodies(module, new LinkedHashMap<>(checked.behaviorBodies())),
+                    HandBuiltBodies.ofBehaviors(module, checked.behaviorBodies()),
                     checked.plan()));
         }
     }

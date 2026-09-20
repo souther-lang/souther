@@ -842,6 +842,12 @@ public interface Hir {
                     role, pos);
         }
 
+        /** The same definition taking {@code replacement} as its parameters. */
+        public FnDef withParams(List<FnParam> replacement) {
+            return new FnDef(written, declaredIn, replacement, declaredReturn, body, modifiers,
+                    role, pos);
+        }
+
         /**
          * The position this definition stands at, or null where it stands at none.
          *

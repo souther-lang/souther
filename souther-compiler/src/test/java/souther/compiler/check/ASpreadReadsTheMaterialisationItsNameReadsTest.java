@@ -36,9 +36,6 @@ class ASpreadReadsTheMaterialisationItsNameReadsTest {
             let f (n) = Point { ...origin, x = origin.y }
             """;
 
-    /** Both constructions: the one the body writes, and the one the value writes, once. */
-    private static final int BUILT = 2;
-
     @Test
     void aValueSpreadAndNamedInOneRegionIsBuiltOnce() {
         Compilation compiled = Compiler.compiled(SOURCE, "m");
@@ -47,9 +44,19 @@ class ASpreadReadsTheMaterialisationItsNameReadsTest {
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().writtenBody();
-        assertEquals(BUILT, constructions(body),
+        assertEquals(1, builds(body),
                 "a value spread in one place and named in another was built once per place, so a"
                         + " spread is answered apart from every other reference of the name");
+        assertEquals(1, constructions(body), "the one the body writes; the value's is its own");
+    }
+
+    private static int builds(Hir.Expr e) {
+        if (e == null) {
+            return 0;
+        }
+        int[] held = {e instanceof Hir.Materialised ? 1 : 0};
+        Hir.forEachChild(e, child -> held[0] += builds(child));
+        return held[0];
     }
 
     private static int constructions(Hir.Expr e) {

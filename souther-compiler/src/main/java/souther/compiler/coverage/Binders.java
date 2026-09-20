@@ -56,6 +56,13 @@ final class Binders {
         if (signature.equals(read.owner())) {
             return new BinderAddress.Parameter(behavior, read.ordinal());
         }
+        // A value emitted as a method takes what its root region demands, and those parameters are
+        // written by the pass that expanded its body, into the value's own definition.
+        if (read.owner() instanceof BindingOwner.Synthesized written
+                && written.pass() == BindingOwner.Pass.INLINER
+                && signature.equals(written.within())) {
+            return new BinderAddress.Parameter(behavior, read.ordinal());
+        }
         throw new IllegalStateException("`" + behavior + "` reads " + read
                 + ", which nothing in its body binds and its signature does not name");
     }

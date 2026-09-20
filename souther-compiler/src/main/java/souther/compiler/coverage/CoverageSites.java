@@ -148,6 +148,11 @@ public final class CoverageSites {
             WrittenOwner.theBodyThatWrote(origin.owner());
         }
 
+        /** The same construct, owed by {@code behavior}: the behavior whose row answers for it. */
+        public Obligation ownedBy(String behavior) {
+            return new Obligation(behavior, origin, part, decided);
+        }
+
         /** The definition whose body wrote the construct. */
         public WrittenOwner.Body writtenIn() {
             return WrittenOwner.theBodyThatWrote(origin.owner());
@@ -183,7 +188,15 @@ public final class CoverageSites {
      */
     public sealed interface Site permits ArmSite, ComparisonSite {
 
-        String behavior();
+        /**
+         * The body the probe is physically in: a behavior's, or a value emitted as a method of its
+         * own.
+         *
+         * <p>Not who owes it. A method is one body however many behaviors call it, so this says where
+         * the code is and {@link #obligation()} says whose row is owed for it; the two are the same
+         * name only for a place in a behavior's own body.
+         */
+        String body();
 
         /** What this way through the construct means, in the source's terms. */
         SourceOutcome outcome();
@@ -219,7 +232,7 @@ public final class CoverageSites {
      * words a report writes for one — takes one of these, and a comparison cannot be handed where
      * one is wanted.
      */
-    public record ArmSite(String behavior, SourceOutcome.Arm outcome,
+    public record ArmSite(String body, SourceOutcome.Arm outcome,
                           ControlPlace.Arm place, int ordinal,
                           Obligation obligation) implements Site {
 
@@ -256,6 +269,11 @@ public final class CoverageSites {
         public ArmReportAnchor anchor() {
             return place.anchor();
         }
+
+        /** The same place, owed by {@code behavior}. */
+        public ArmSite ownedBy(String behavior) {
+            return new ArmSite(body, outcome, place, ordinal, obligation.ownedBy(behavior));
+        }
     }
 
     /**
@@ -265,12 +283,18 @@ public final class CoverageSites {
      * arm a row landed in does not say which comparison ran — and a measure over arms that took one
      * of these would be counting a place its denominator was never about.
      */
-    public record ComparisonSite(String behavior, SourceOutcome.Compared outcome, Citation at,
+    public record ComparisonSite(String body, SourceOutcome.Compared outcome, Citation at,
                                  ComparisonEmissionSite index, int ordinal, Obligation obligation)
             implements Site {
 
         public ComparisonSite {
             OutcomeName.of(obligation.origin().kind(), outcome);
+        }
+
+        /** The same place, owed by {@code behavior}. */
+        public ComparisonSite ownedBy(String behavior) {
+            return new ComparisonSite(body, outcome, at, index, ordinal,
+                    obligation.ownedBy(behavior));
         }
     }
 
@@ -326,6 +350,8 @@ public final class CoverageSites {
         private final Map<ConstructOccurrence, ComparisonEmissionSite> byComparison;
         private final IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode;
         private final java.util.Set<Core> mayRepeat;
+        /** The values emitted as a method of their own, and which behavior calls which. */
+        private final Methods methods;
         private final Map<Integer, Citation> reachedAt;
         private final ComparisonCatalog comparisons;
         private final SiteNumbering numbering;
@@ -350,7 +376,8 @@ public final class CoverageSites {
              java.util.Set<Core> mayRepeat,
              Map<Integer, Citation> reachedAt,
              ComparisonCatalog comparisons,
-             SiteNumbering numbering) {
+             SiteNumbering numbering,
+             Methods methods) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -384,6 +411,7 @@ public final class CoverageSites {
             this.reachedAt = reachedAt;
             this.comparisons = comparisons;
             this.numbering = numbering;
+            this.methods = methods;
         }
 
         /** Every place of this module, in the order they were numbered. */
@@ -444,6 +472,12 @@ public final class CoverageSites {
             return mayRepeat;
         }
 
+        /** The methods of the module, for the two indexes over what a behavior emits — which are
+         *  made here in this package, so what holds a way into these trees is not handed out. */
+        Methods methods() {
+            return methods;
+        }
+
         /** What this plan is a numbering of, as two builds can be held against each other by. */
         public NumberingIdentity identity() {
             return numbering.identity();
@@ -462,7 +496,7 @@ public final class CoverageSites {
                 new LinkedHashMap<>(), new IdentityHashMap<>(),
                 java.util.Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
-                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()));
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE);
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -587,11 +621,21 @@ public final class CoverageSites {
                             + "; a line is read off a comparison this plan does not instrument"));
         }
 
-        /** The arms of one behavior, which is what a branch measure counts. */
+        /**
+         * The arms of one behavior, which is what a branch measure counts: those in its own body and
+         * those in the methods it calls, each as owed by this behavior.
+         *
+         * <p>A method is one body with one set of probes however many behaviors call it, so a place
+         * in it is physically once and is owed by each of them. What is handed back is the place with
+         * its obligation made this behavior's, so two behaviors that call one method owe two items
+         * over one probe, and a row that passes the arm answers for the behavior it was written for
+         * and not for every behavior that shares it.
+         */
         public List<ArmSite> arms(String behavior) {
             return sites.stream()
-                    .filter(site -> site.behavior().equals(behavior))
+                    .filter(site -> methods.owes(behavior, site.body()))
                     .filter(ArmSite.class::isInstance).map(ArmSite.class::cast)
+                    .map(site -> site.ownedBy(behavior))
                     .toList();
         }
 
@@ -604,8 +648,9 @@ public final class CoverageSites {
          */
         public List<ComparisonSite> comparisons(String behavior) {
             return sites.stream()
-                    .filter(site -> site.behavior().equals(behavior))
+                    .filter(site -> methods.owes(behavior, site.body()))
                     .filter(ComparisonSite.class::isInstance).map(ComparisonSite.class::cast)
+                    .map(site -> site.ownedBy(behavior))
                     .toList();
         }
     }
@@ -636,7 +681,8 @@ public final class CoverageSites {
      * classes could see, and who may decide a numbering is held by reading them.
      */
     private record Walked(ComparisonCatalog comparisons, Walk walk,
-                          Map<String, ExecutableIdentity> executable) { }
+                          Map<String, ExecutableIdentity> executable,
+                          Methods methods) { }
 
     private static Walked walked(ModuleBodies of, DecisionSources decisions,
                                  SuppliedRules supplied) {
@@ -657,7 +703,15 @@ public final class CoverageSites {
             executable.put(body.getKey(), ExecutableIdentity.of(body.getValue(),
                     Binders.of(of.module(), walk.places)));
         }
-        return new Walked(comparisons, walk, executable);
+        // The methods after the behaviors, so what a behavior's numbers are does not move with which
+        // values it happens to call. A method is walked as a body of its own, and which behaviors
+        // owe its places is settled below, off who calls it.
+        for (Map.Entry<String, Core> method : of.methods().entrySet()) {
+            walk.behavior(method.getKey(), method.getValue());
+            executable.put(method.getKey(), ExecutableIdentity.of(method.getValue(),
+                    Binders.of(of.module(), walk.places)));
+        }
+        return new Walked(comparisons, walk, executable, Methods.of(of));
     }
 
     /**
@@ -704,7 +758,7 @@ public final class CoverageSites {
         });
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, walk.mayRepeat, Map.copyOf(walk.reachedAt),
-                comparisons, numbering);
+                comparisons, numbering, found.methods());
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */

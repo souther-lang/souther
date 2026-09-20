@@ -29,17 +29,27 @@ import java.util.SequencedMap;
  * recording made by an earlier build would be reading somebody else's places. An unordered copy
  * loses that silently: the map still holds every body, and only the numbers move.
  *
+ * <p><b>Methods are apart from behaviors.</b> A value the backend emits as a method of its own is a
+ * body a run passes through, and what it compares and forks on is a place the numbering counts. It is
+ * no behavior: nothing declares rows for it, and it has no answer of its own to state. So it is held
+ * beside the behaviors, and the places of a behavior are its own and those of every method it calls.
+ *
  * @param module whose module the bodies are of
  * @param bodies each behavior of that module, by name, in the order the module declares them
+ * @param methods each value of that module emitted as a method, by name, in the order the module
+ *                declares them
  */
-public record ModuleBodies(String module, SequencedMap<String, Core> bodies) {
+public record ModuleBodies(String module, SequencedMap<String, Core> bodies,
+                           SequencedMap<String, Core> methods) {
 
     public ModuleBodies {
         if (module == null) {
             throw new IllegalArgumentException("bodies are somebody's module's bodies");
         }
         bodies = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(bodies));
+        methods = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(methods));
     }
+
 
     /**
      * Two of these are one where they are the same module's, and the same bodies in the same order.
@@ -55,16 +65,18 @@ public record ModuleBodies(String module, SequencedMap<String, Core> bodies) {
     @Override
     public boolean equals(Object other) {
         return other instanceof ModuleBodies that && module.equals(that.module)
-                && List.copyOf(bodies.entrySet()).equals(List.copyOf(that.bodies.entrySet()));
+                && List.copyOf(bodies.entrySet()).equals(List.copyOf(that.bodies.entrySet()))
+                && List.copyOf(methods.entrySet()).equals(List.copyOf(that.methods.entrySet()));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(module, List.copyOf(bodies.entrySet()));
+        return Objects.hash(module, List.copyOf(bodies.entrySet()),
+                List.copyOf(methods.entrySet()));
     }
 
     /** A module with nothing in it, which is what a check that did not finish leaves. */
     public static ModuleBodies none() {
-        return new ModuleBodies("", new LinkedHashMap<>());
+        return new ModuleBodies("", new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 }
