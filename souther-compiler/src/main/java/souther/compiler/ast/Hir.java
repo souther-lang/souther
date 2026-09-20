@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.SourceConstructOrigin;
@@ -1575,7 +1576,7 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, Block, Tuple, TupleGet, Unreachable {
     }
 
     /**
@@ -1649,6 +1650,49 @@ public interface Hir {
          * and is not answered here. */
         public RetType annotation() {
             return annotated ? declaredType : null;
+        }
+    }
+
+    /**
+     * One build of a value's body, kept as evidence of which build it is.
+     *
+     * <p>What a value bound by the region that demands it is made of: the body, and the reason this
+     * build stands for the region and not for another ({@link MaterialisationSite}). The pass that
+     * shares builds knows the region and does not know which copy of a body it is walking in, and a
+     * walk that knows the copy does not know the region. So the first leaves what it settled in the
+     * tree, and the second reads it back as it descends.
+     *
+     * <p>Wraps the value a binding is given and not the binding: what belongs to this build is what
+     * computes the value, and what reads the binding belongs to the region around it. A value
+     * naming another builds that one inside its own body when a fork of the body demands it, and
+     * beside its own when the body itself does — the nesting says which.
+     *
+     * <p>It is no evaluation region of its own and no call: it adds nothing to what stands under it
+     * except which build that is.
+     *
+     * @param value which value's body this is a build of
+     * @param site  the region it was built for
+     */
+    record Materialised(ValueName value, MaterialisationSite site, Expr body, SourcePos pos,
+                        Region region) implements Expr {
+
+        public Materialised {
+            if (value == null || site == null || body == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region: " + value + " for " + site);
+            }
+        }
+
+        /**
+         * {@code e} as the value it computes, for a reader whose question is about what the value
+         * is and not about which build of it stands here.
+         */
+        public static Expr stripped(Expr e) {
+            Expr at = e;
+            while (at instanceof Materialised build) {
+                at = build.body();
+            }
+            return at;
         }
     }
 
@@ -2792,6 +2836,7 @@ public interface Hir {
             case Expansion x -> new Expansion(x.callee(), x.application(), x.at(), x.bound(),
                     x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
+            case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
             case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
@@ -2888,6 +2933,11 @@ public interface Hir {
                 yield bound == ex.bound() && body == ex.body() ? ex
                         : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                                 ex.declaredReturn(), body, ex.pos(), ex.region());
+            }
+            case Materialised m -> {
+                Expr body = atExpr.apply(m.body());
+                yield body == m.body() ? m
+                        : new Materialised(m.value(), m.site(), body, m.pos(), m.region());
             }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());

@@ -201,6 +201,9 @@ public final class Elaborator {
                 yield new Core.LetIn(CoreBinders.of(li.binder()), value, body, body.type(), li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
+            // A build of a value elaborates as the value does. Which build it is, is what the walk
+            // that knows which copy it is in reads back off this node.
+            case Hir.Materialised m -> elaborate(m.body(), env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec §blocks)

@@ -60,8 +60,11 @@ public final class BoundValues {
      * binds under that spelling.
      */
     public BoundValues binding(Hir.Binder binder, Hir.Expr value, BoundValues definedAt) {
+        // What a name was given is the value it computes: which build of it was bound is no part of
+        // what a reader that folds it asks.
         return binder == null || value == null ? this
-                : new BoundValues(binder.id(), new Bound(value, definedAt), this);
+                : new BoundValues(binder.id(),
+                        new Bound(Hir.Materialised.stripped(value), definedAt), this);
     }
 
     /** What {@code binding} was given and where to read it, or null where nothing in force is

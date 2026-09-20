@@ -1,0 +1,208 @@
+package souther.compiler.check;
+
+import org.junit.jupiter.api.Test;
+import souther.compiler.ast.DefinitionName;
+import souther.compiler.ast.Hir;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.types.MaterialisationSite;
+import souther.compiler.types.RegionSlot;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The tree keeps which build of a value each one is, so that a walk that knows which copy it is in
+ * can say it.
+ *
+ * <p>The pass that shares builds knows the region a value is built for and not the copy of a body
+ * it is walking in. What it settled is left in the tree as a {@link Hir.Materialised} around the
+ * value it binds, and the order builds nest in is the order a later walk meets them: a value built
+ * inside another's body sits inside that node, one built beside it sits beside it, and the call of a
+ * helper is a node of its own that opens no region.
+ *
+ * <p>Read off the lowered body and nothing later, because what these are about is what the tree
+ * holds and not what a reader made of it.
+ */
+class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
+
+    private static final String HEAD = """
+            module m exposing (f, Kind)
+
+            data Kind = Yes | No
+
+            let inner = List.length([1, 2, 3]) > 2
+
+            let outer = if List.length([1]) > 0 then inner else false
+
+            let same (n: Int) : Bool = n > 0
+
+            let viaCall = same(1)
+
+            """;
+
+    private static Hir.Expr lowered(String tail) {
+        Compilation compilation = Compilation.ofSource(HEAD + tail, "m");
+        return compilation.db()
+                .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
+                .value().value().writtenBody();
+    }
+
+    /** Every build in the tree, outermost first and left to right. */
+    private static List<Hir.Materialised> builds(Hir.Expr e) {
+        List<Hir.Materialised> out = new ArrayList<>();
+        collect(e, out);
+        return out;
+    }
+
+    private static void collect(Hir.Expr e, List<Hir.Materialised> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Hir.Materialised built) {
+            out.add(built);
+        }
+        Hir.forEachChild(e, child -> collect(child, out));
+    }
+
+    private static List<Hir.Materialised> buildsOf(String value, List<Hir.Materialised> all) {
+        return all.stream().filter(each -> each.value().toString().endsWith(value)).toList();
+    }
+
+    @Test
+    void aValueBuiltForTheBodyIsBuiltForTheDefinitionThatIsWritten() {
+        List<Hir.Materialised> all = builds(lowered("""
+                behavior f : (n: Int) -> Bool
+                let f (n) = inner
+                """));
+
+        assertEquals(1, all.size());
+        assertInstanceOf(MaterialisationSite.Body.class, all.get(0).site());
+    }
+
+    @Test
+    void aValueBuiltInAnArmIsBuiltForThatArm() {
+        List<Hir.Materialised> all = builds(lowered("""
+                behavior f : (n: Int) -> Bool
+                let f (n) = if n > 0 then inner else false
+                """));
+
+        assertEquals(1, all.size());
+        MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
+                all.get(0).site());
+        assertInstanceOf(RegionSlot.IfThen.class, site.slot());
+    }
+
+    @Test
+    void aValueBuiltInsideAnotherValuesForkIsNestedInThatValuesBuild() {
+        List<Hir.Materialised> all = builds(lowered("""
+                behavior f : (n: Int) -> Bool
+                let f (n) = if n > 0 then outer else false
+                """));
+
+        List<Hir.Materialised> outer = buildsOf("outer", all);
+        assertEquals(1, outer.size());
+        // Inside the body of the value that built it, and nowhere beside it.
+        List<Hir.Materialised> insideOuter = buildsOf("inner", builds(outer.get(0).body()));
+        assertEquals(1, insideOuter.size());
+        assertEquals(1, buildsOf("inner", all).size());
+        MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
+                insideOuter.get(0).site());
+        assertInstanceOf(RegionSlot.IfThen.class, site.slot());
+    }
+
+    /**
+     * Two builds of one value are two nodes, and what tells them apart is the region each was built
+     * for. What a build of a value it names inside its own fork is built for is that fork, the same
+     * in both — which is why the outer chain of builds has to be kept and a region alone would not do.
+     */
+    @Test
+    void twoBuildsOfOneValueAreToldApartByTheRegionAndTheirInnerBuildsAreNot() {
+        List<Hir.Materialised> all = builds(lowered("""
+                behavior f : (n: Int) -> Bool
+                let f (n) = (if n > 0 then outer else false) || (if n > 1 then outer else false)
+                """));
+
+        List<Hir.Materialised> outer = buildsOf("outer", all);
+        assertEquals(2, outer.size());
+        assertNotEquals(outer.get(0).site(), outer.get(1).site());
+        List<Hir.Materialised> first = buildsOf("inner", builds(outer.get(0).body()));
+        List<Hir.Materialised> second = buildsOf("inner", builds(outer.get(1).body()));
+        assertEquals(1, first.size());
+        assertEquals(1, second.size());
+        assertEquals(first.get(0).site(), second.get(0).site());
+    }
+
+    @Test
+    void aValueWhoseBodyCallsAHelperHoldsTheCallInsideItsBuild() {
+        List<Hir.Materialised> all = builds(lowered("""
+                behavior f : (n: Int) -> Bool
+                let f (n) = viaCall
+                """));
+
+        assertEquals(1, all.size());
+        assertTrue(holdsAnExpansion(all.get(0).body()),
+                "the call of the helper stands inside the build of the value that made it");
+    }
+
+    private static boolean holdsAnExpansion(Hir.Expr e) {
+        boolean[] found = {false};
+        walk(e, found);
+        return found[0];
+    }
+
+    private static void walk(Hir.Expr e, boolean[] found) {
+        if (e == null || found[0]) {
+            return;
+        }
+        if (e instanceof Hir.Expansion) {
+            found[0] = true;
+            return;
+        }
+        Hir.forEachChild(e, child -> walk(child, found));
+    }
+
+    /**
+     * A region written inside a helper is one region of the source however many copies of the helper
+     * there are, so its builds carry the same site in every copy. Which copy is the call's to say,
+     * and the site says nothing of it.
+     */
+    @Test
+    void aRegionWrittenInsideAHelperIsTheSameSiteInEveryCopy() {
+        List<Hir.Materialised> all = builds(lowered("""
+                let named (n: Int) : Bool = n > 0 && inner
+
+                behavior f : (n: Int) -> Bool
+                let f (n) = named(n) || named(n + 1)
+                """));
+
+        List<Hir.Materialised> inner = buildsOf("inner", all);
+        assertEquals(2, inner.size());
+        MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
+                inner.get(0).site());
+        assertInstanceOf(RegionSlot.ShortCircuitRight.class, site.slot());
+        assertEquals(inner.get(0).site(), inner.get(1).site());
+    }
+
+    /**
+     * The body of a call is no region: a value the copy names outside any region of its own is
+     * demanded by the region the call stands in, so two calls of one helper build it once there.
+     */
+    @Test
+    void theBodyOfACallOpensNoRegion() {
+        List<Hir.Materialised> all = builds(lowered("""
+                let named (n: Int) : Bool = inner
+
+                behavior f : (n: Int) -> Bool
+                let f (n) = named(n) || named(n + 1)
+                """));
+
+        assertEquals(1, all.size());
+        assertInstanceOf(MaterialisationSite.Body.class, all.get(0).site());
+    }
+}
