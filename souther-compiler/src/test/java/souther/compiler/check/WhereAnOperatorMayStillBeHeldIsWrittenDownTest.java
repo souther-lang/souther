@@ -188,6 +188,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "copies it into the node it is rebuilding"),
             new Held("souther.compiler.check.HelperInliner.inline",
                     "copies it into the node a spliced helper becomes"),
+            new Held("souther.compiler.check.HelperInliner.isShortCircuit",
+                    "asks whether what stands on the right of an operator is reached only for some"
+                            + " of what reaches the left, which is what bounds where a value may be"
+                            + " materialised"),
+            new Held("souther.compiler.check.HelperInliner.read",
+                    "copies it into the node it is rebuilding, and asks the question above of a"
+                            + " binary so that the right of a short-circuit is written as a region"
+                            + " of its own"),
             new Held("souther.compiler.check.HelperInliner.rename",
                     "the same, under a renaming of what the body bound"),
             new Held("souther.compiler.check.NewtypeDesugar.go",

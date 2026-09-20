@@ -66,42 +66,6 @@ public final class ConstEval {
     }
 
     /**
-     * What a name in force stands for: the expression it was given, and the environment that
-     * expression is read in.
-     *
-     * <p>The environment travels with the value because a value stands for the name in the
-     * environment the binding was made in, which is not always the one the name was read in
-     * (ADR-0111). Answered without it, each reader supplies one, and two readers that supply
-     * different ones are two accounts of what the name means.
-     */
-    private record Bound(Hir.Expr value, Env at) {}
-
-    /**
-     * The bindings in force, innermost first.
-     *
-     * <p>Its own thing and not {@link Scope}. That one answers what type a name has, and a
-     * typing environment carrying a second answer — what the name was given — is one environment
-     * answering two questions, which is what ADR-0106 took apart.
-     */
-    private record Env(BindingId binding, Bound bound, Env outer) {
-
-        static final Env NONE = new Env(null, null, null);
-
-        Env with(BindingId id, Hir.Expr value, Env at) {
-            return new Env(id, new Bound(value, at), this);
-        }
-
-        Bound read(BindingId id) {
-            for (Env each = this; each != null; each = each.outer()) {
-                if (id.equals(each.binding())) {
-                    return each.bound();
-                }
-            }
-            return null;
-        }
-    }
-
-    /**
      * What each binding read so far came to.
      *
      * <p>On the reading and not in the environment. An environment answers what a name denotes; what
@@ -118,16 +82,24 @@ public final class ConstEval {
      * The string {@code e} evaluates to at compile time, or empty when it does not evaluate to one:
      * what a position accepting a written string but not a computed one is asking about.
      */
-    public Optional<String> evalString(Hir.Expr e) {
+    public Optional<String> evalString(BoundExpr e) {
         return eval(e).filter(String.class::isInstance).map(String.class::cast);
     }
 
-    /** Folds {@code e} to its constant value, or empty when it is not a compile-time constant. */
-    Optional<Object> eval(Hir.Expr e) {
-        return eval(e, Env.NONE);
+    /** Folds {@code e} to its constant value under the bindings it is read beneath, or empty when
+     *  it is not a compile-time constant. */
+    Optional<Object> eval(BoundExpr e) {
+        return eval(e.expr(), e.at());
     }
 
-    private Optional<Object> eval(Hir.Expr e, Env env) {
+    /** The same, for an expression no binding stands over. A caller that has bindings in force and
+     *  hands over a part of what it is reading takes {@link #eval(BoundExpr)}: dropping them reads
+     *  every name they gave as a name standing for nothing. */
+    Optional<Object> eval(Hir.Expr root) {
+        return eval(root, BoundValues.NONE);
+    }
+
+    private Optional<Object> eval(Hir.Expr e, BoundValues env) {
         return switch (e) {
             case Hir.IntLit i -> Optional.of(i.value());
             case Hir.DecimalLit d -> Optional.of(d.value());
@@ -138,7 +110,7 @@ public final class ConstEval {
             case Hir.Apply call -> call(call, env);
             // A binding is an edge of the expression: the body is folded under it, and what it was
             // given is folded where the binder is read.
-            case Hir.LetIn li -> eval(li.body(), env.with(li.binder().id(), li.value(), env));
+            case Hir.LetIn li -> eval(li.body(), env.binding(li.binder(), li.value()));
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
                     given(local.id(), env);
             default -> Optional.empty();
@@ -146,8 +118,8 @@ public final class ConstEval {
     }
 
     /** What the binding {@code id} was given comes to, folded once however often it is read. */
-    private Optional<Object> given(BindingId id, Env env) {
-        Bound bound = env.read(id);
+    private Optional<Object> given(BindingId id, BoundValues env) {
+        BoundValues.Bound bound = env.read(id);
         if (bound == null) {
             return Optional.empty();
         }
@@ -163,7 +135,7 @@ public final class ConstEval {
         return answer;
     }
 
-    private Optional<Object> binary(Hir.Binary bin, Env env) {
+    private Optional<Object> binary(Hir.Binary bin, BoundValues env) {
         Optional<Object> l = eval(bin.left(), env);
         // Where the left operand settles it, the right one is not read at all — a right operand this
         // cannot fold would otherwise take a settled condition down with it.
@@ -195,7 +167,7 @@ public final class ConstEval {
         return ConstantAlgebra.equal(a, b);
     }
 
-    private Optional<Object> call(Hir.Apply call, Env env) {
+    private Optional<Object> call(Hir.Apply call, BoundValues env) {
         // Applying a name nothing declares is not a constant. There is no operation to fold it to,
         // and the name is reported where it is written.
         if (call.answered() == null) {

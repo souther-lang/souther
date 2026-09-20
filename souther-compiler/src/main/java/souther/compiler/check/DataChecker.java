@@ -66,21 +66,29 @@ public final class DataChecker {
     public static List<ConstCheck> constNewtypeChecks(List<Desugared.Fn> fns, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
         for (Desugared.Fn fn : fns) {
-            collectConstChecks(fn.read().writtenBody(), symbols, out);
+            collectConstChecks(fn.read().writtenBody(), symbols, BoundValues.NONE, out);
         }
         return out;
     }
 
-    private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
+    /** Walked under what each name in force was given: a construction's argument is a
+     *  sub-expression, and a name in it stands for what the bindings above it gave. */
+    private static void collectConstChecks(Hir.Expr e, Symbols symbols, BoundValues at,
+                                           List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
                 && nd.typeName() instanceof Hir.Name.Denoting built
                 && built.type() instanceof TypeSymbol.AtModule constructed
                 && symbols.declaredNode(constructed) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(constructed, symbols)) {
-            CallElaborator.newtypeConstantArg(nd, symbols).ifPresent(v ->
+            CallElaborator.newtypeConstantArg(nd, symbols, at).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), constructed, v, nd.pos())));
         }
-        TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
+        if (e instanceof Hir.LetIn li) {
+            collectConstChecks(li.value(), symbols, at, out);
+            collectConstChecks(li.body(), symbols, at.binding(li.binder(), li.value()), out);
+            return;
+        }
+        TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, at, out));
     }
 
     public static boolean isInvariantBearing(TypeSymbol.AtModule typeName, Symbols symbols) {
