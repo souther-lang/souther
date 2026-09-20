@@ -60,7 +60,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
                         between(low == null ? null : Bound.at(at(low), true),
                                 high == null ? null : Bound.at(at(high), true)))
-                .bands().stream().map(Band::key).toList();
+                .bands().stream().map(Band::spelled).toList();
     }
 
     /**
@@ -236,7 +236,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
             assertEquals(List.of("|", "0.5|0.5", "|"),
                     QuantityArrangement.of(decimals,
                                     byItsOwnRule(order.toArray(new Seam[0]))).bands().stream()
-                            .map(Band::key).toList(),
+                            .map(Band::spelled).toList(),
                     "read in either order, the number itself is a run of its own: " + order);
         }
     }
@@ -260,7 +260,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         assertEquals(1, arranged.partings().size(), "the values part once");
         assertEquals(List.of(aLine(0), aLine(1)), arranged.partings().get(0).alternatives(),
                 "and each of the two lines is against that place");
-        assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::key).toList(),
+        assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::spelled).toList(),
                 "so there are two runs and not three");
     }
 

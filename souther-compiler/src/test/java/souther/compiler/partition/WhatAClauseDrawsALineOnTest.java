@@ -58,7 +58,7 @@ class WhatAClauseDrawsALineOnTest {
 
     private static List<String> valuesOf(EnsuresThresholds.Clauses clauses) {
         return clauses.thresholds().stream()
-                .map(each -> each.path() + " = " + each.value().key()).toList();
+                .map(each -> each.path() + " = " + each.value().spelled()).toList();
     }
 
     @Test

@@ -98,8 +98,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     /**
      * Two spellings of the place a line is at are one place, so the two readings are one.
      *
-     * <p>A level keeps the spelling its rule was written in, because that is what a report writes
-     * back. Asked of the records, the border's own place would have told two readings of one line
+     * <p>A level keeps the representation its rule was written with. Asked of the records, the border's own place would have told two readings of one line
      * apart over a trailing zero — which is the mistake this comparison exists to stop being made
      * about everything else it holds.
      */

@@ -1520,7 +1520,7 @@ public sealed interface Carrier extends ValueOrder {
             case SecondsOfDay _ -> new ObservedValue.Temporal(Times.written(count));
             case Nanos _ -> new ObservedValue.Temporal(Instants.written(count));
             case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
-            case Text _ -> new ObservedValue.Text(count.key());
+            case Text _ -> new ObservedValue.Text(count.spelled());
         };
     }
 
@@ -1529,14 +1529,17 @@ public sealed interface Carrier extends ValueOrder {
      * itself would name a line at a number nobody wrote.
      *
      * <p>The number and not how many places it was written to, which is the same thing that makes
-     * two cuts one cut ({@link Count#key()}). A line an invariant and a {@code guard} both draw is
+     * two cuts one cut ({@link Place#key()}). A line an invariant and a {@code guard} both draw is
      * one line recorded once, and the spelling it keeps is whichever rule reached it first — so a
      * label that preserved places would print one line two ways depending on the order the rules
      * were read in.
+     *
+     * <p>Written through {@link Place#spelled}, which is that same number in digits. Naming a line
+     * and writing one are two questions, and a reader here is asking the second.
      */
     default String written(Place count) {
         return switch (this) {
-            case Whole _, Dense _ -> count.key();
+            case Whole _, Dense _ -> count.spelled();
             case Days _ -> Dates.written(count);
             case Seconds _ -> DateTimes.written(count);
             case SecondsOfDay _ -> Times.written(count);
@@ -1546,7 +1549,7 @@ public sealed interface Carrier extends ValueOrder {
             case Ordinal ordinal -> ordinal.caseAt(count).name();
             // Bare, as a date and a case are. A row's own description is quoted text, so a quote
             // here ends it early and the rest of the line lands where the input goes.
-            case Text _ -> count.key();
+            case Text _ -> count.spelled();
         };
     }
 }

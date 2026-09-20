@@ -75,7 +75,7 @@ public final class PointContributions {
      * The declarations that took in where a position stops, read off the end they took in.
      *
      * <p>The end and not the names. This is where they stop being held against one and start being
-     * what a report writes back, and it is the last step of the way they came: a reading answered
+     * what a report names, and it is the last step of the way they came: a reading answered
      * that they are about that end, the lowering kept which end it was, and the caller has just
      * found that the run stops at the place it lowers onto. Taking the names instead would let a
      * caller that skipped any of those write them down all the same.

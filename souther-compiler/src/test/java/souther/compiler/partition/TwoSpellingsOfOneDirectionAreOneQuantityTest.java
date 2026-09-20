@@ -8,11 +8,13 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a rule cuts, told from how much of it the rule happened to write.
@@ -73,6 +75,26 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
     void twoDirectionsAreTwoQuantities() {
         assertNotEquals(QuantityKey.of(form("a", "1", "b", "1")).key(),
                 QuantityKey.of(form("a", "1", "b", "2")).key());
+    }
+
+    /**
+     * A quantity is named from the parts of its coefficients and never from their digits.
+     *
+     * <p>A form whose two coefficients stand a million places apart keeps that ratio however it is
+     * scaled, and a name that wrote it out was a character per place for telling two quantities
+     * apart.
+     */
+    @Test
+    void aQuantityWhoseCoefficientsStandFarApartIsNamedWithoutWritingThemOut() {
+        BigDecimal far = new BigDecimal(BigInteger.ONE, 1_000_000);
+        LinearForm<NumericTerm> wide = new LinearForm<>(ExactRatio.ZERO, new LinkedHashMap<>(
+                Map.of(term("a"), ExactRatio.ONE, term("b"), ExactRatio.of(far))));
+
+        String key = QuantityKey.of(wide).key();
+
+        assertTrue(key.length() < 256, () -> "a name of " + key.length());
+        assertNotEquals(key, QuantityKey.of(form("a", "1", "b", "1")).key(),
+                "and it is still not the quantity it would be at a coefficient of one");
     }
 
     /**
