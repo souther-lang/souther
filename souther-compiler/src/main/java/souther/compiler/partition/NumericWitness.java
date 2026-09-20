@@ -9,9 +9,11 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.function.Function;
 
 /**
@@ -87,7 +89,7 @@ final class NumericWitness {
         if (within.emptiness().isPresent() || leavesNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
-        Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
+        SequencedMap<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         return walk(within, terms, 0, on, looking, standing, stoppedBy)
@@ -124,11 +126,17 @@ final class NumericWitness {
      */
     sealed interface Standing {
 
-        /** Where each position stands, which is an assignment the region admits. */
-        record Found(Map<NumericTerm.FromOnePosition, Place> at) implements Standing {
+        /**
+         * Where each position stands, which is an assignment the region admits.
+         *
+         * <p>In the order the walk fixed the positions in, which is the order a reader tells the
+         * region of them in: the region is told one position at a time, and what it is told after
+         * one is fixed is asked of a region that already knows it.
+         */
+        record Found(SequencedMap<NumericTerm.FromOnePosition, Place> at) implements Standing {
 
             public Found {
-                at = Map.copyOf(at);
+                at = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(at));
             }
         }
 

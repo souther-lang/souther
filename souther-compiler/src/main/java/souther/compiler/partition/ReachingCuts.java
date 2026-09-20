@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
@@ -18,6 +19,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -54,12 +56,12 @@ import java.util.Map;
  * the list is what lets a report say a condition is unaccounted for; it is not what the region is
  * built from.
  */
-public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
+public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison) {
 
-    public static final ReachingCuts NONE = new ReachingCuts(Map.of());
+    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }));
 
     public ReachingCuts {
-        byComparison = Map.copyOf(byComparison);
+        Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
     }
 
     /**
@@ -73,7 +75,8 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * are looking at.
      */
     public WayToTheBorder wayTo(ModelOccurrence states) {
-        return new WayToTheBorder(byComparison.getOrDefault(states, List.of()));
+        List<OnTheWay> found = byComparison.get(states);
+        return new WayToTheBorder(found == null ? List.of() : found);
     }
 
     /**
@@ -313,7 +316,7 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
         }
 
         ReachingCuts made() {
-            return new ReachingCuts(byComparison);
+            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)));
         }
     }
 

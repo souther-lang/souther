@@ -9,7 +9,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.partition.Generator;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -72,8 +71,8 @@ class AValueTheModuleStatesIsOneHoweverItsLetWasWrittenTest {
     }
 
     private static Generator.Baseline originAt(String parameter, String value) {
-        return new Generator.Baseline(Map.of(parameter,
-                new Generator.Baseline.Named("example.member", value)));
+        return Generator.Baseline.stating(parameter,
+                new Generator.Baseline.Named("example.member", value));
     }
 
     /** The origins the module states for the behavior under test, one per value of a parameter's

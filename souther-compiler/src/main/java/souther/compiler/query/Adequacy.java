@@ -5067,9 +5067,9 @@ public final class Adequacy {
                     continue;
                 }
                 for (Hir.ExampleRow row : block.rows()) {
-                    Generator.Baseline named = namesIn(spec, row.inputs());
-                    if (!named.isEmpty() && !out.contains(named)) {
-                        out.add(named);
+                    Optional<Generator.Baseline> named = namesIn(spec, row.inputs());
+                    if (named.isPresent() && !out.contains(named.get())) {
+                        out.add(named.get());
                     }
                 }
             }
@@ -5082,8 +5082,10 @@ public final class Adequacy {
         }
 
         /** The parameters a row names a module-level value at, which is the only thing a spread can
-         *  be written over: a row writing the value out has no name for this to reach it by. */
-        private static Generator.Baseline namesIn(Hir.SpecBehavior spec, List<Hir.Expr> inputs) {
+         *  be written over: a row writing the value out has no name for this to reach it by.
+         *  Nothing where the row names none, which is a row and not an origin. */
+        private static Optional<Generator.Baseline> namesIn(Hir.SpecBehavior spec,
+                                                            List<Hir.Expr> inputs) {
             Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
             for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
                 if (inputs.get(p) instanceof Hir.Var.Denoting denoting
@@ -5092,7 +5094,9 @@ public final class Adequacy {
                             new Generator.Baseline.Named(helper.module(), denoting.name()));
                 }
             }
-            return new Generator.Baseline(at);
+            return at.isEmpty() ? Optional.empty()
+                    : Optional.of(new Generator.Baseline(
+                            Lookup.built(put -> at.forEach(put::put))));
         }
 
         /**
@@ -5157,8 +5161,8 @@ public final class Adequacy {
                     continue;
                 }
                 for (String value : stated.getOrDefault(of, List.of())) {
-                    Generator.Baseline origin = new Generator.Baseline(Map.of(
-                            takes.get(p).name(), new Generator.Baseline.Named(module, value)));
+                    Generator.Baseline origin = Generator.Baseline.stating(takes.get(p).name(),
+                            new Generator.Baseline.Named(module, value));
                     if (!out.contains(origin)) {
                         out.add(origin);
                     }
