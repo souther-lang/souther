@@ -34,9 +34,12 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test
-        # Two, because that is what the runner has. The number in the pom is a ceiling for a
-        # machine somebody is also working on, and a runner is nobody's.
-        run: mvn -B --no-transfer-progress verify -DforkCount=2
+        # As many as the runner has, and printed so that a run says how many it was given. The
+        # number in the pom is a ceiling for a machine somebody is also working on, and a runner
+        # is nobody's.
+        run: |
+          echo "forks: $(nproc)"
+          mvn -B --no-transfer-progress verify -DforkCount=$(nproc)
 
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
@@ -64,4 +67,6 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test ${{ matrix.branch }}, the slow tests included
-        run: mvn -B --no-transfer-progress verify -DforkCount=2 -Dtest.excluded.groups=
+        run: |
+          echo "forks: $(nproc)"
+          mvn -B --no-transfer-progress verify -DforkCount=$(nproc) -Dtest.excluded.groups=
