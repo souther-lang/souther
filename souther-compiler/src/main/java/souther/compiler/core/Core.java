@@ -602,8 +602,8 @@ public sealed interface Core {
     /**
      * {@code occurrence} is which fork of the model this is: the fork the source wrote it as,
      * carried from the AST so that the copies an expansion made of one fork are one coverage
-     * obligation ({@link SourceConstructOrigin}), and the copy of the body it stands in
-     * ({@link souther.compiler.types.ExpansionLineage}).
+     * obligation ({@link SourceConstructOrigin}), and the copy of the body it stands in — a call's,
+     * a build's, or both nested — ({@link souther.compiler.types.OccurrenceLineage}).
      *
      * <p>{@code expansion} is what a copy is called where the rules a call supplied are looked up,
      * innermost first, empty where the fork stands in the body as written. What settles a fork can
