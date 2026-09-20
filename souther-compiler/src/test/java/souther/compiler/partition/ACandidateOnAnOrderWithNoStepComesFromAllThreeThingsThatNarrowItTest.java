@@ -60,11 +60,11 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
      */
     @Test
     void aSetTheDeclarationsLeaveNarrowsTheSearchAndNotWhatCameBackFromIt() {
-        Map<NumericTerm.FromOnePosition, Place> stood = standing(
+        NumericWitness.Standing.Found stood = standing(
                 new ARunWithHoles(NumericDomain.Bounds.OPEN, PlacesApart.NONE, null),
                 ValueSet.allBut(Value.text("")));
 
-        assertNotEquals(LEAST, stood.get(NAME),
+        assertNotEquals(LEAST, stood.placeOf(NAME),
                 "the declarations refuse the empty string, so it is not what is offered at the"
                         + " position");
     }
@@ -80,11 +80,11 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
      */
     @Test
     void aPlaceTheWayHoldsThePositionAwayFromIsNarrowedBySoNothingIsOfferedThere() {
-        Map<NumericTerm.FromOnePosition, Place> stood = standing(
+        NumericWitness.Standing.Found stood = standing(
                 new ARunWithHoles(NumericDomain.Bounds.OPEN, PlacesApart.of(List.of(LEAST)), null),
                 ValueSet.ANY);
 
-        assertNotEquals(LEAST, stood.get(NAME),
+        assertNotEquals(LEAST, stood.placeOf(NAME),
                 "the way holds the position away from the empty string, so it is not what is"
                         + " offered at it");
     }
@@ -102,7 +102,7 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
                 Endpoint.inclusive(Text.of("m")), null);
 
         Place at = standing(new ARunWithHoles(above, PlacesApart.NONE, null), ValueSet.ANY)
-                .get(NAME);
+                .placeOf(NAME);
 
         assertEquals(Text.of("m"), at,
                 "an end the run holds is the place taken, so the run is what the search runs"
@@ -110,13 +110,12 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
     }
 
     /** Where the position stands, of a search that found somewhere for it. */
-    private static Map<NumericTerm.FromOnePosition, Place> standing(SearchRegion within,
-                                                                    ValueSet admits) {
+    private static NumericWitness.Standing.Found standing(SearchRegion within, ValueSet admits) {
         return assertInstanceOf(NumericWitness.Standing.Found.class,
                 NumericWitness.of(within, List.of(NAME), _ -> Carrier.TEXT,
                         new WitnessSearch(_ -> new AdmittedValues.Admitted.Values(admits),
                                 PatternPlan.Budget.OF_A_WITNESS::meter)),
-                "the region leaves the position somewhere to stand").at();
+                "the region leaves the position somewhere to stand");
     }
 
     /**

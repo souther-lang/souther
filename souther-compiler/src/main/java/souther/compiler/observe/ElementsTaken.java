@@ -3,7 +3,10 @@ package souther.compiler.observe;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Which element was taken at each step inside a sequence to reach one value, outermost step first.
@@ -31,10 +34,26 @@ public record ElementsTaken(List<Taken> outermostFirst) {
     public static final ElementsTaken NONE = new ElementsTaken(List.of());
 
     /** One step inside a sequence and the element taken at it. */
-    public record Taken(TermPath step, int element) {}
+    public record Taken(TermPath step, int element) {
 
+        public Taken {
+            Objects.requireNonNull(step, "an element is taken at a step");
+        }
+    }
+
+    /**
+     * A step is taken once. Two elements at one step would be two readings of the row in one value,
+     * and {@link #agreesWith} — which asks each step of one against the other — would answer
+     * differently from either side.
+     */
     public ElementsTaken {
         outermostFirst = List.copyOf(outermostFirst);
+        Set<TermPath> seen = new HashSet<>();
+        for (Taken each : outermostFirst) {
+            if (!seen.add(each.step())) {
+                throw new IllegalArgumentException("a step is taken once: " + each.step());
+            }
+        }
     }
 
     /** These, and one step more taken inside them. */

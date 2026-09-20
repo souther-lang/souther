@@ -3599,19 +3599,19 @@ public final class Generator {
             // found them would leave a case chosen on the way to a cut that came to nothing.
             switch (placing(subject, looking, here, out, assumed, cut)) {
                 case Placed.AtNone(ReachabilityGap why) -> gaps.add(why);
-                case Placed.AtAll(Map<NumericTerm.FromOnePosition, Place> standing,
+                case Placed.AtAll(NumericWitness.Standing.Found standing,
                                   Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                                   Requirements taken) -> {
                     assumed = taken;
                     routed.putAll(routes);
-                    for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
-                        here = here.given(each.getKey(), each.getValue());
+                    for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
+                        here = here.given(each.position(), each.place());
                         // The target this cut's number was routed to, and never one built from the
                         // number again. Built here a second time, the place the row writes would be
                         // worked out twice — once where the cut was read and once where its answer
                         // is filed — and the two would part at exactly the name this routing exists
                         // for.
-                        out.put(routes.get(each.getKey()), each.getValue());
+                        out.put(routes.get(each.position()), each.place());
                     }
                 }
             }
@@ -3734,9 +3734,9 @@ public final class Generator {
         //
         // And where a budget of this compiler's is why the walk found nothing, that rather than
         // the word for a walk that had everything and reached none of it.
-        Map<NumericTerm.FromOnePosition, Place> standing = switch (found) {
+        NumericWitness.Standing.Found standing = switch (found) {
             case null -> null;
-            case NumericWitness.Standing.Found it -> it.at();
+            case NumericWitness.Standing.Found it -> it;
             case NumericWitness.Standing.ProvedImpossible _, NumericWitness.Standing.NotFound _
                     -> null;
         };
@@ -3774,7 +3774,7 @@ public final class Generator {
          *                 number of this row was filed under
          * @param assumed  what the row is taken to be now that these are written
          */
-        record AtAll(Map<NumericTerm.FromOnePosition, Place> standing,
+        record AtAll(NumericWitness.Standing.Found standing,
                      Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                      Requirements assumed) implements Placed {}
 
