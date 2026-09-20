@@ -97,35 +97,29 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     /**
      * What the analysis came to does not depend on where the reader is standing.
      *
-     * <p>A report narrowed to a module works its entries out again from the parts it kept, and
+     * <p>A report narrowed to a selection works its entries out again from the parts it kept, and
      * what is held is that doing so invents nothing: an entry it holds is one the whole report
      * holds. The other direction — that a selection keeps every entry belonging to it — is not
      * asked, because which subject belongs to which selection is the selection's answer and is
      * written down nowhere to hold it against.
      *
-     * <p><b>At the module and not at the behavior, which is a defect and not a choice.</b>
-     * Narrowed to one behavior, a report keeps a line an {@code invariant} drew whenever the
-     * behavior shown carries the type — and drops the rows of every other behavior, which are what
-     * showed a row can be written at the points of that line. The same obligation is then answered
-     * again from strictly less than it was answered from, and comes back undecided: an entry the
-     * whole report does not hold. The debt is the module's and its evidence is the module's, and
-     * only one of the two narrows.
-     *
-     * <p>Not asserted here in either direction. Held, this would fail; pinned the other way, a
-     * defect would become the contract.
+     * <p>Held at every grain a selection has. A behavior's rows are what showed a row can be
+     * written at the points of a line an {@code invariant} drew, and a selection that answered such
+     * a line again from the behaviors it shows would come back undecided at a point the module has
+     * a row for — an entry of the narrowed report and of nothing it was narrowed from.
      */
     @Test
-    void narrowingToAModuleInventsNothing() {
+    void narrowingInventsNothing() {
         for (Compilation compilation : RepositoryModels.all()) {
             AdequacyReport whole = AdequacyReport.of(compilation);
             Set<AdequacyUncertainty> ofTheWhole =
                     new HashSet<>(whole.assessment().uncertainties());
-            for (AdequacyReport.ModuleReport module : whole.modules()) {
-                for (AdequacyUncertainty each
-                        : whole.only(module.module(), null).assessment().uncertainties()) {
+            for (ReportScopes scope : ReportScopes.of(
+                    String.valueOf(compilation.modules()), whole)) {
+                for (AdequacyUncertainty each : scope.report().assessment().uncertainties()) {
 
                     assertTrue(ofTheWhole.contains(each),
-                            () -> module.module() + " holds " + each + " and the report it was"
+                            () -> scope.name() + " holds " + each + " and the report it was"
                                     + " narrowed from does not");
                 }
             }

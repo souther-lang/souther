@@ -315,33 +315,6 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 places);
     }
 
-    /**
-     * The same point as a reader shown only {@code behaviors} is owed it, or null where none of
-     * them reads it.
-     *
-     * <p>What a debt came to is what its readings came to together, so a view that shows some of
-     * them is owed what those came to and not what the rest did: a row that was not read in a
-     * behavior the reader cannot see leaves this debt undecided for a reader who cannot act on it,
-     * and the reason it is undecided names a position that is not on the page.
-     *
-     * <p>Made again from the readings that are left rather than trimmed, because everything about a
-     * debt but its identity follows from them — what it asks of a row, what became of it, which
-     * behaviors carry it. Trimming the ones a reader can name and keeping the answer folded from
-     * all of them is how a filtered view came to carry a hidden behavior's evidence.
-     *
-     * <p>Who owes it is not re-derived. A declaration owes a line wherever the type is carried, and
-     * which behaviors this reader is shown is no part of that.
-     */
-    public BorderObligationPointAssessment keptFor(java.util.Set<String> behaviors) {
-        java.util.SequencedMap<Reading, BorderAssessment> kept = new LinkedHashMap<>();
-        met.forEach((where, reading) -> {
-            if (behaviors.contains(where.behavior())) {
-                kept.put(where, reading);
-            }
-        });
-        return kept.isEmpty() ? null : of(point, attribution, kept);
-    }
-
     /** Every reading of the line that owes this point, in the order they were made. */
     public List<BorderAssessment> readings() {
         return List.copyOf(met.values());

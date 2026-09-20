@@ -14,8 +14,8 @@ import java.util.Set;
  * behavior named without a module, which a run allows and which is its own report: a name two
  * modules both declare gathers into one there and into neither of the others.
  *
- * <p>In one place because two laws are held over these. Enumerated where each is asked, the two
- * populations drift, and a projection added later is remembered for one of them.
+ * <p>In one place because several laws are held over these. Enumerated where each is asked, the
+ * populations drift, and a projection added later is remembered for some of them.
  *
  * @param name what to call this one when a law fails on it
  * @param report the report itself

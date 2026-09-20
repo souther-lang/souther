@@ -6025,24 +6025,30 @@ public final class Adequacy {
         /**
          * The same account as a reader shown only {@code behaviors} is owed.
          *
-         * <p><b>Every part of it and not the ones that are easy to filter.</b> A debt is what its
-         * readings came to together, so a debt kept whole while its readings are filtered carries
-         * what a behavior the reader cannot see went without — the same fact, arriving by the half
-         * of the account nobody trimmed. So a debt none of them reads is dropped and a debt some of
-         * them read is made again from those readings, beside the reading each of them went
-         * without.
+         * <p><b>A selection of the debts and never a second answer about one of them.</b> A debt is
+         * this module's, and so is the reading that settled it: a line an {@code invariant} drew is
+         * owed once and a row written for any behavior carrying the type meets it, whichever
+         * behavior that was. So which debts a reader is shown narrows with the behaviors shown —
+         * one none of them carries is work nobody reading this can do — and what became of the ones
+         * kept does not. Re-folded from the readings left, the same debt is answered a second time
+         * from strictly less than it was answered from and comes back undecided, which is an
+         * account of the selection and not of the module.
          *
-         * <p>What is not sliced is who owes the line: a declaration owes it wherever the type is
-         * carried, and which behaviors a reader is shown is no part of that.
+         * <p>The two halves narrow differently because they answer different questions. {@code
+         * reading} is what finding the debts went without, which a reader shown some of the
+         * behaviors is owed for those and not for the rest; {@link DeclaredDebt} is what one found
+         * debt came to, which nothing about the selection bears on.
+         *
+         * <p>What is not sliced either is who owes the line: a declaration owes it wherever the type
+         * is carried, and which behaviors a reader is shown is no part of that.
          */
         public DeclaredBoundaries keptFor(java.util.Set<String> behaviors) {
             Map<String, WeakeningSet> kept = new LinkedHashMap<>(reading);
             kept.keySet().retainAll(behaviors);
             List<DeclaredDebt> owedHere = new ArrayList<>();
             for (DeclaredDebt each : owed) {
-                BorderObligationPointAssessment debt = each.debt().keptFor(behaviors);
-                if (debt != null) {
-                    owedHere.add(new DeclaredDebt(debt, each.axis(), each.owners()));
+                if (behaviors.stream().anyMatch(each.debt()::carriedBy)) {
+                    owedHere.add(each);
                 }
             }
             return new DeclaredBoundaries(owedHere, kept);
