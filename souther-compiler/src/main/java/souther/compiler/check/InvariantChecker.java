@@ -2265,7 +2265,7 @@ public final class InvariantChecker {
         // out here rather than being filed as a clause that could have moved an edge.
         InvariantBound.Read end = numbered != null
                 && numbered.claim() instanceof ComparisonClaim.Cut cut
-                ? InvariantBound.at(cut, Terms.asWrittenValue(numbered.other(), at),
+                ? InvariantBound.at(cut, Terms.writtenSyntaxOf(numbered.other(), at),
                         numbered.number().carrier())
                 : new InvariantBound.Read.NoEnd();
         Coordinate about = numbered == null ? null : numbered.number();
