@@ -506,6 +506,17 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         return met.keySet().stream().map(Reading::behavior).distinct().toList();
     }
 
+    /**
+     * Whether this point is carried by any behavior of {@code behaviors}.
+     *
+     * <p>One pass over the readings and not one per name in {@code behaviors}: asking
+     * {@link #carriedBy(String)} of each of them would walk the readings again for every name, and
+     * a selection is exactly where {@code behaviors} can be large beside this debt's own readings.
+     */
+    public boolean carriedByAny(java.util.Set<String> behaviors) {
+        return met.keySet().stream().anyMatch(each -> behaviors.contains(each.behavior()));
+    }
+
     /** How this point relates a row's value to what it is against. */
     public String operator() {
         return demand.criterion().operator();

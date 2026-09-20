@@ -6047,7 +6047,7 @@ public final class Adequacy {
             kept.keySet().retainAll(behaviors);
             List<DeclaredDebt> owedHere = new ArrayList<>();
             for (DeclaredDebt each : owed) {
-                if (behaviors.stream().anyMatch(each.debt()::carriedBy)) {
+                if (each.debt().carriedByAny(behaviors)) {
                     owedHere.add(each);
                 }
             }
