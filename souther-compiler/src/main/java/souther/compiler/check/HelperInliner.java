@@ -103,6 +103,8 @@ public final class HelperInliner {
     private ValueAtAReference reading = ValueAtAReference.COPIED;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
+    /** Whether a value that is not a constant stays a reference, for a reader that has its answer. */
+    private boolean valuesStandOnTheirSettledSignature = false;
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -406,6 +408,15 @@ public final class HelperInliner {
      */
     public HelperInliner callingValuesAsMethodsWhereEmitted() {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
+        return this;
+    }
+
+    /**
+     * In the tree an analysis reads, a value is left as a reference under the signature its own
+     * check settled, and its body is not copied to where it is named.
+     */
+    public HelperInliner leavingValuesOnTheirSettledSignatureWhereAnalysed() {
+        this.valuesStandOnTheirSettledSignature = table.policy() == InliningPolicy.DISCHARGE;
         return this;
     }
 
@@ -2331,15 +2342,19 @@ public final class HelperInliner {
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
-        if (under.isEmpty() && emittedAsAMethod(named)) {
-            // A value the region binds is the call of the method it is emitted as: what the tree
-            // holds is one reference, and what the value is stands once beside it. The reference
-            // is a call the backend has a method for, so the method is required wherever this tree
-            // ends up.
-            ReachName.Declaration reaches = named.reachesADeclaration();
-            leftStanding.add(reaches);
-            for (SequencedSet<ReachName.Declaration> asked : standingHere) {
-                asked.add(reaches);
+        boolean standsAsAReference = standsOnItsSettledSignature(named, calls);
+        boolean isCalled = !standsAsAReference && under.isEmpty() && emittedAsAMethod(named);
+        if (standsAsAReference || isCalled) {
+            // A value the region binds is one reference to it, and what the value is stands once
+            // beside it. Read under the signature the value's own check settled, it is what an
+            // analysis reads; where the tree is emitted it is the call of the method the value is
+            // emitted as, so that method is required wherever this tree ends up.
+            if (isCalled) {
+                ReachName.Declaration reaches = named.reachesADeclaration();
+                leftStanding.add(reaches);
+                for (SequencedSet<ReachName.Declaration> asked : standingHere) {
+                    asked.add(reaches);
+                }
             }
             Hir.Binder called = writing.binders()
                     .binder("$v" + next() + "_" + named.name(), named.pos());
@@ -2360,6 +2375,49 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * Whether {@code named} is a value the tree an analysis reads leaves as a reference, given
+     * {@code calls}, its body with the helpers it calls expanded.
+     *
+     * <p>A value this module declared, that names another value and is not written out as a
+     * constant. A value naming none is small and closed, and an analysis reads what it says — a
+     * threshold, a case — so it stays where it is named. One naming another is what a copy multiplies:
+     * built in each of several regions, it carries a copy of the value it names into each.
+     */
+    private boolean standsOnItsSettledSignature(Hir.Var.Denoting named, Hir.Expr calls) {
+        if (!valuesStandOnTheirSettledSignature) {
+            return false;
+        }
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
+                && !graph.recurses(reaches) && !writtenOutAsAConstant(value.writtenBody())
+                && namesAValue(calls);
+    }
+
+    /** Whether {@code e} names a value of this module anywhere in it. */
+    private boolean namesAValue(Hir.Expr e) {
+        boolean[] found = {false};
+        scanForAValue(e, found);
+        return found[0];
+    }
+
+    private void scanForAValue(Hir.Expr e, boolean[] found) {
+        if (e == null || found[0]) {
+            return;
+        }
+        if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
+            ReachName.Declaration reaches = v.reachesADeclaration();
+            Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+            if (value != null && value.params().isEmpty() && value.body() != null
+                    && !graph.recurses(reaches)) {
+                found[0] = true;
+                return;
+            }
+        }
+        Hir.forEachChild(e, child -> scanForAValue(child, found));
     }
 
     /**

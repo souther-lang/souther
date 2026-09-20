@@ -74,6 +74,7 @@ public final class Lower {
         // references rather than the sum of what the source wrote (ADR-0072).
         inliner.sharingOneMaterialisationPerRegion();
         inliner.callingValuesAsMethodsWhereEmitted();
+        inliner.leavingValuesOnTheirSettledSignatureWhereAnalysed();
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));

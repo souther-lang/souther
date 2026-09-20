@@ -3541,6 +3541,16 @@ public final class Bodies {
             decisions.putAll(core.value().decisions().byFork());
             supplied.putAll(core.value().supplied().byExpansion());
         }
+        // A value emitted as a method of its own is a body a run passes through, and what it
+        // compares and forks on is among the places of this module however many behaviors call it.
+        Set<String> behaviorNames = Names.behaviorNames(settled);
+        for (Hir.FnDef fn : settled.fns()) {
+            Core method = module.emittedHelpers().get(fn.name());
+            if (method != null && fn.params().isEmpty() && fn.standsAt() == null
+                    && !behaviorNames.contains(fn.name())) {
+                bodies.put(fn.name(), method);
+            }
+        }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the
         // module's, and a body's own answer must not move when the one beside it is edited.
