@@ -146,14 +146,24 @@ class ARowIsComposedForAPointOnATotalTest {
         Map<String, String> out = new LinkedHashMap<>();
         for (int at = 1; at < parts.length; at++) {
             String part = parts[at];
-            String named = part.substring("\nbehavior ".length(), part.indexOf(" :"));
-            out.put(named, parts[0] + part);
+            int colon = part.indexOf(" :");
+            if (colon > 0) {
+                out.put(part.substring("\nbehavior ".length(), colon), parts[0] + part);
+            }
         }
+        return out;
+    }
+
+    /** Asked as a case of its own and not where the cut is made: a model that no longer cuts into
+     *  these behaviors fails here with what is wrong, where a failure in a static initialiser
+     *  would take every case of the class down without saying so. */
+    @Test
+    void everyBehaviorOfTheModelIsOneTheseClaimsAreAbout() {
         Set<String> expected = new LinkedHashSet<>(ON_A_TOTAL);
         expected.add("noShapeOfferedReachesIt");
-        assertEquals(expected, out.keySet(),
+
+        assertEquals(expected, ALONE.keySet(),
                 "every behavior of the model is one these claims are about, and none is left out");
-        return out;
     }
 
     /** Every point of a line drawn on a total has one. */

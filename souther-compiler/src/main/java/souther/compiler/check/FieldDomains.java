@@ -32,7 +32,6 @@ import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -964,18 +963,8 @@ public final class FieldDomains {
      * the two are handed over as two, and neither of them can be asked for the other.
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
-        return composed.computeIfAbsent(Map.copyOf(fixed),
-                _ -> new Composing(settling(fixed), atomAt, countAt));
+        return new Composing(settling(fixed), atomAt, countAt);
     }
-
-    /**
-     * What each settling of these rules came to, for building a value under it.
-     *
-     * <p>A search asks for the same settling at every position it stands at, and what a settling
-     * costs is the closure of the rules under it, which a {@link Composing} works out on its first
-     * question. The key is the settling itself, so two callers that fixed the same numbers share one.
-     */
-    private final Map<Map<NumberAt<RuleKey>, Count>, Composing> composed = new ConcurrentHashMap<>();
 
     /** These constraints with an equality on each settled coordinate taken onto them. */
     private ConstraintState<FactSubject> settling(Map<NumberAt<RuleKey>, Count> fixed) {

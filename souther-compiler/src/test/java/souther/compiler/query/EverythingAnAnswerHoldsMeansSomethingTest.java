@@ -4,6 +4,7 @@ import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import souther.test.ClosedWorldContract;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -126,6 +127,13 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
             AnswerClosure.Scenario scenario) {
         return WALKED.computeIfAbsent(scenario,
                 each -> storesOf(each).stream().map(AnswerWalk::of).toList());
+    }
+
+    /** Given back when the class is done: a fork keeps its JVM for the classes after this one, and
+     *  the walks hold what the stores of every model answered. */
+    @AfterAll
+    static synchronized void released() {
+        WALKED.clear();
     }
 
     /**

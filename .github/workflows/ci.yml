@@ -12,10 +12,12 @@ permissions:
   contents: read
 
 jobs:
-  # What a pull request and a push wait on: everything except the tests that cost more than waiting
-  # for them is worth. Those are the job below, and nobody waits on them. Every closed-world
-  # contract this repository writes is here, whether or not it sweeps a corpus to close its world —
-  # a contract found days later is found against a tree that has moved.
+  # What a pull request and a push wait on: everything except the tests written `@Nightly`. A test
+  # is left out only where its class says both that no cheaper way to ask the same question was
+  # found and that what it finds is as well found by the morning as by the change that caused it.
+  # Those are the job below, and nobody waits on them. A closed-world contract is here unless its
+  # class says that: what it finds is found against the tree it was written for, and a contract
+  # deferred is found against one that has moved.
   #
   # Not on a schedule: the job below runs everything this one runs and the slow tests besides, so
   # the two together would build the reactor twice over and answer the same question the second
