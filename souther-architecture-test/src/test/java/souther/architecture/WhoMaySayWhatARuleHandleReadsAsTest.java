@@ -49,7 +49,10 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
+    /** The two writers these rows are about, as a class file names them. */
     private static final String REPORT = "souther/compiler/report/AdequacyReport";
+
+    private static final String ROWS = "souther/compiler/report/GeneratedRows";
 
     /**
      * The names several members of this writer wear, and which parameter says which.
@@ -59,13 +62,26 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * what tells them apart, and it is what tells the lambdas written inside them apart as well —
      * prose goes into a {@code StringBuilder}, and the document into a node or an array of one.
      */
-    private static final List<Told> TOLD_APART = List.of(
-            Told.takingA(REPORT, "partition", 0, StringBuilder.class),
-            Told.takingA(REPORT, "partition", 0, ObjectNode.class),
-            Told.takingA(REPORT, "partition$lambda", 0, StringBuilder.class),
-            Told.takingA(REPORT, "partition$lambda", 0, DocumentArray.class),
-            Told.takingA(REPORT, "said", 0, Subject.class),
-            Told.takingA(REPORT, "findings", 0, DocumentArray.class));
+    private static final Told PARTITION_IN_PROSE =
+            Told.takingA(REPORT, "partition", 0, StringBuilder.class);
+
+    private static final Told PARTITION_IN_THE_DOCUMENT =
+            Told.takingA(REPORT, "partition", 0, ObjectNode.class);
+
+    private static final Told INSIDE_THE_PARTITION_IN_PROSE =
+            Told.takingA(REPORT, "partition$lambda", 0, StringBuilder.class);
+
+    private static final Told INSIDE_THE_PARTITION_IN_THE_DOCUMENT =
+            Told.takingA(REPORT, "partition$lambda", 0, DocumentArray.class);
+
+    private static final Told SAID_OF_A_SUBJECT = Told.takingA(REPORT, "said", 0, Subject.class);
+
+    private static final Told THE_FINDINGS_OF_THE_DOCUMENT =
+            Told.takingA(REPORT, "findings", 0, DocumentArray.class);
+
+    private static final List<Told> TOLD_APART = List.of(PARTITION_IN_PROSE,
+            PARTITION_IN_THE_DOCUMENT, INSIDE_THE_PARTITION_IN_PROSE,
+            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, THE_FINDINGS_OF_THE_DOCUMENT);
 
     /**
      * Every class that asks what a handle reads as outside a document, and why it may.
@@ -79,16 +95,16 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * and it is why this list is short on purpose.
      */
     private static final List<String> SAYING_IT_IN_PROSE = List.of(
-            "souther/compiler/report/AdequacyReport#cited",
-            "souther/compiler/report/AdequacyReport#declared",
-            "souther/compiler/report/AdequacyReport#partition$lambda[0=java/lang/StringBuilder]",
-            "souther/compiler/report/AdequacyReport#partition[0=java/lang/StringBuilder]",
-            "souther/compiler/report/AdequacyReport#said[0=souther/compiler/report/Subject]",
-            "souther/compiler/report/GeneratedRows#about",
+            REPORT + "#cited",
+            REPORT + "#declared",
+            INSIDE_THE_PARTITION_IN_PROSE.spelt(),
+            PARTITION_IN_PROSE.spelt(),
+            SAID_OF_A_SUBJECT.spelt(),
+            ROWS + "#about",
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
             // and not told which rule, they have every rule of the position to look at.
-            "souther/compiler/report/GeneratedRows#gaveNothing");
+            ROWS + "#gaveNothing");
 
     /**
      * And every class that writes one into the document, which is one.
@@ -97,29 +113,28 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * writers of one document are two vocabularies for a consumer to learn.
      */
     private static final List<String> WRITING_IT_INTO_THE_DOCUMENT = List.of(
-            "souther/compiler/report/AdequacyReport#about",
+            REPORT + "#about",
             // The rule a search of a decision rule was given no value by, written where that search
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
-            "souther/compiler/report/AdequacyReport#causes",
-            "souther/compiler/report/AdequacyReport"
-                    + "#findings[0=souther/compiler/publish/DocumentArray]",
-            "souther/compiler/report/AdequacyReport#obligations",
-            "souther/compiler/report/AdequacyReport"
-                    + "#partition$lambda[0=souther/compiler/publish/DocumentArray]",
-            "souther/compiler/report/AdequacyReport"
-                    + "#partition[0=tools/jackson/databind/node/ObjectNode]");
+            REPORT + "#causes",
+            THE_FINDINGS_OF_THE_DOCUMENT.spelt(),
+            REPORT + "#obligations",
+            INSIDE_THE_PARTITION_IN_THE_DOCUMENT.spelt(),
+            PARTITION_IN_THE_DOCUMENT.spelt());
 
     @Test
     void everyClassThatTurnsARuleHandleIntoWordsIsWrittenDown() {
-        assertEquals(SAYING_IT_IN_PROSE, naming(PROSE, "said"),
+        assertEquals(ARosterWrittenByName.asItHandsThemBack(SAYING_IT_IN_PROSE),
+                naming(PROSE, "said"),
                 "a class here turns a handle into words with nothing in the schema behind it, which"
                         + " is what a document field written past the surface looks like");
     }
 
     @Test
     void andEveryClassThatWritesOneIntoTheDocumentIsWrittenDown() {
-        assertEquals(WRITING_IT_INTO_THE_DOCUMENT, naming(SURFACE, "put"),
+        assertEquals(ARosterWrittenByName.asItHandsThemBack(WRITING_IT_INTO_THE_DOCUMENT),
+                naming(SURFACE, "put"),
                 "the document is written in one place, and a handle reaches a consumer through the"
                         + " fields that place names");
     }

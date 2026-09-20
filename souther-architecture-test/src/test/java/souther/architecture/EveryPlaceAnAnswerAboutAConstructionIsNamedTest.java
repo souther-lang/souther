@@ -61,9 +61,9 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     private static final String THEIR_PACKAGE = "souther/compiler/ast";
 
     /** The two forms whose answers this is about, as a class file names them. */
-    private static final String NEW_DATA = "souther/compiler/ast/Hir$NewData";
+    private static final String NEW_DATA = THEIRS + "Hir$NewData";
 
-    private static final String APPLY = "souther/compiler/ast/Hir$Apply";
+    private static final String APPLY = THEIRS + "Hir$Apply";
 
     /**
      * The names whose overloads are different acts, and which parameter says which.
@@ -197,32 +197,32 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * other list holds.
      */
     private static final List<String> NAMING = List.of(
-            "souther/compiler/ast/Hir#atSlots",
-            "souther/compiler/ast/Hir#withRegion",
-            "souther/compiler/ast/Hir$Apply#carriedByValue",
-            "souther/compiler/ast/Hir$Apply#origin",
-            "souther/compiler/ast/Hir$Apply#read",
-            "souther/compiler/ast/Hir$Apply#replacedBy[1=java/util/List]",
-            "souther/compiler/ast/Hir$Apply#synthetic[0=souther/compiler/ast/Hir$Expr]",
-            "souther/compiler/ast/Hir$Apply#wasCarriedByValue",
-            "souther/compiler/ast/Hir$Apply#with",
-            "souther/compiler/ast/Hir$Apply#withArgs",
-            "souther/compiler/ast/Hir$Fields#$values",
-            "souther/compiler/ast/Hir$Fields#values",
-            "souther/compiler/ast/Hir$NewData#carriedByValue",
-            "souther/compiler/ast/Hir$NewData#fields",
-            "souther/compiler/ast/Hir$NewData#fromApply",
-            "souther/compiler/ast/Hir$NewData#mayOmitOptionalFields",
-            "souther/compiler/ast/Hir$NewData#origin",
-            "souther/compiler/ast/Hir$NewData#publishedBy",
-            "souther/compiler/ast/Hir$NewData#read",
-            "souther/compiler/ast/Hir$NewData#syntheticWithEveryFieldWritten",
-            "souther/compiler/ast/Hir$NewData#wasCarried",
-            "souther/compiler/ast/Hir$NewData#with[2=souther/compiler/diag/SourcePos]",
-            "souther/compiler/ast/Origins#carried",
-            "souther/compiler/ast/Origins#carriedByValue",
-            "souther/compiler/ast/Origins#publishedIn",
-            "souther/compiler/ast/Origins$Published#module");
+            THEIRS + "Hir#atSlots",
+            THEIRS + "Hir#withRegion",
+            APPLY + "#carriedByValue",
+            APPLY + "#origin",
+            APPLY + "#read",
+            REPLACED_BY_AN_APPLICATION.spelt(),
+            SYNTHETIC_OF_AN_EXPRESSION.spelt(),
+            APPLY + "#wasCarriedByValue",
+            APPLY + "#with",
+            APPLY + "#withArgs",
+            THEIRS + "Hir$Fields#$values",
+            THEIRS + "Hir$Fields#values",
+            NEW_DATA + "#carriedByValue",
+            NEW_DATA + "#fields",
+            NEW_DATA + "#fromApply",
+            NEW_DATA + "#mayOmitOptionalFields",
+            NEW_DATA + "#origin",
+            NEW_DATA + "#publishedBy",
+            NEW_DATA + "#read",
+            NEW_DATA + "#syntheticWithEveryFieldWritten",
+            NEW_DATA + "#wasCarried",
+            REWRITTEN_WHERE_IT_NOW_STANDS.spelt(),
+            THEIRS + "Origins#carried",
+            THEIRS + "Origins#carriedByValue",
+            THEIRS + "Origins#publishedIn",
+            THEIRS + "Origins$Published#module");
 
     /**
      * Every call that settles an answer, by the method that makes it and how many it makes.
@@ -250,8 +250,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * one, and a second call added inside either of them moves it.
      */
     private static final List<String> SETTLING = List.of(
-            "souther/compiler/ast/Hir$Apply#synthetic[0=java/lang/String]"
-                    + " -> Apply.synthetic(Expr) x1",
+            SYNTHETIC_OF_A_SPELLING.spelt() + " -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/Elaborator#fromList -> Apply.synthetic(String) x1",
             "souther/compiler/check/HelperInliner#etaExpand -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperInliner#rename -> Apply.with x1",
@@ -260,12 +259,9 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/check/HelperNames#publishedBy -> NewData.publishedBy x1",
             "souther/compiler/check/NewtypeDesugar#go -> NewData.fromApply x1",
             "souther/compiler/check/Resolve#applied -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr[1=souther/compiler/check/Resolve$InForce]"
-                    + " -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr[1=souther/compiler/check/Resolve$InForce]"
-                    + " -> NewData.read x1",
-            "souther/compiler/check/Terms#writtenSyntaxOf[2=java/util/Map]"
-                    + " -> Apply.synthetic(String) x2",
+            READ_UNDER_WHAT_IS_IN_FORCE.spelt() + " -> Apply.read x1",
+            READ_UNDER_WHAT_IS_IN_FORCE.spelt() + " -> NewData.read x1",
+            WRITTEN_UNDER_THE_BINDINGS_IN_FORCE.spelt() + " -> Apply.synthetic(String) x2",
             "souther/compiler/partition/FixtureTemplate#newtype -> Apply.synthetic(String) x1",
             "souther/compiler/partition/FixtureTemplate#record"
                     + " -> NewData.syntheticWithEveryFieldWritten x1",
@@ -275,7 +271,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
 
     @Test
     void everyMemberOfTheOwningPackageThatNamesAnAnswerIsWrittenDown() {
-        assertEquals(NAMING, namingAnAnswer(),
+        assertEquals(ARosterWrittenByName.asItHandsThemBack(NAMING), namingAnAnswer(),
                 "a row here is a way to answer what a construction was read as, or a reader of one:"
                         + " say which it is and why it is not the node's own answer carried");
     }
@@ -300,7 +296,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
 
     @Test
     void andEveryCallThatSettlesOneIsWrittenDownWithWhoMakesIt() {
-        assertEquals(SETTLING, settlingAnAnswer(),
+        assertEquals(ARosterWrittenByName.asItHandsThemBack(SETTLING), settlingAnAnswer(),
                 "settling an answer is the reading's to do and the crossings': a pass that rewrites"
                         + " a body carries what it was handed, and a row here that is not a reading"
                         + " or a crossing is a pass answering for a construction it did not read");

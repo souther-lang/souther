@@ -289,6 +289,19 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
         return List.copyOf(written);
     }
 
+    /**
+     * A roster written here, in the order this hands one back.
+     *
+     * <p>What a roster says is which rows there are, and the order they come back in is a set's:
+     * sorted by the spelling. Held to the order they were written in, a row would have to be moved
+     * whenever its spelling sorted somewhere else — and where a spelling says a type, that is a row
+     * moved for a type that was moved. The rows are what is being claimed; where each of them sits
+     * among the others is not.
+     */
+    static List<String> asItHandsThemBack(List<String> written) {
+        return written.stream().sorted().toList();
+    }
+
     /** A type as a class file names it: the whole of it, with {@code /} between the steps. */
     private static String asAClassFileNamesIt(ClassDesc type) {
         String descriptor = type.descriptorString();
