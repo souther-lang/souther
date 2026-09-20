@@ -4,7 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.SourceConstructOrigin;
@@ -177,7 +177,7 @@ public sealed interface Core {
      * the first reader to meet one would be reporting somebody else's mistake.
      */
     record KeptCallPlace(ReferenceOrigin reference, ApplicationOrigin application,
-                         ExpansionLineage lineage) {
+                         OccurrenceLineage lineage) {
 
         public KeptCallPlace {
             if (reference == null || application == null || lineage == null) {

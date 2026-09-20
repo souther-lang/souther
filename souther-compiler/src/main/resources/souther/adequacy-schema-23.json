@@ -2290,9 +2290,62 @@
                     "type": "array",
                     "items": {
                       "type": "object",
-                      "description": "One call the copy was made at: what it reached, and where the call is written. A site named by what stands there rather than by a call carries `name` or `supplied` instead.",
+                      "description": "One step the copy was made by, and `kind` says which. An `expansion` is a call the copy was made at: what it reached, and where the call is written; a site named by what stands there rather than by a call carries `name` or `supplied` instead. A `materialisation` is one build of a value's body, for the region `at` names.",
+                      "required": [
+                        "kind"
+                      ],
                       "additionalProperties": false,
+                      "allOf": [
+                        {
+                          "if": {
+                            "properties": {
+                              "kind": {
+                                "const": "expansion"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          "then": {
+                            "required": [
+                              "expanded"
+                            ]
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "kind": {
+                                "const": "materialisation"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          "then": {
+                            "required": [
+                              "materialised",
+                              "at"
+                            ]
+                          }
+                        }
+                      ],
                       "properties": {
+                        "kind": {
+                          "enum": [
+                            "expansion",
+                            "materialisation"
+                          ]
+                        },
+                        "materialised": {
+                          "type": "string",
+                          "description": "Which value's body was built."
+                        },
+                        "at": {
+                          "$ref": "#/$defs/materialisationRegion"
+                        },
                         "expanded": {
                           "type": "string"
                         },
@@ -2318,7 +2371,7 @@
                         }
                       }
                     },
-                    "description": "The calls the copy was made through, outermost last. Absent where the construct is where it was written: a helper spliced into two calls holds one construct twice under one `construct` number, and this is what tells the copies apart."
+                    "description": "The calls and builds the copy was made through, in the order they were made. Absent where the construct is where it was written: a helper spliced into two calls holds one construct twice under one `construct` number, and a value built for two regions holds its constructs twice under the same calls; this is what tells the copies apart. A key within one compilation and no name to match two documents by, because which builds there are follows how the compiler shares them."
                   }
                 }
               },
@@ -2329,6 +2382,73 @@
               }
             }
           }
+        }
+      }
+    },
+    "materialisationRegion": {
+      "type": "object",
+      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into.",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "body",
+            "slot",
+            "block",
+            "block_of_name"
+          ]
+        },
+        "module": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "construct": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "slot": {
+          "enum": [
+            "if_then",
+            "if_else",
+            "constructed_then",
+            "constructed_else",
+            "match_case",
+            "short_circuit_right",
+            "comprehension_element",
+            "comprehension_guard"
+          ]
+        },
+        "clause": {
+          "type": "string",
+          "description": "The invariant clause a refused arm answers for; absent for the arm that answers for any."
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The case names a `match` arm was written for."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Which of a comprehension's guards, in the order they were written."
+        },
+        "rule": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
         }
       }
     },

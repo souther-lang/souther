@@ -15,7 +15,7 @@ import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ApplicationDerivationCause;
@@ -201,9 +201,10 @@ public final class Elaborator {
                 yield new Core.LetIn(CoreBinders.of(li.binder()), value, body, body.type(), li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
-            // A build of a value elaborates as the value does. Which build it is, is what the walk
-            // that knows which copy it is in reads back off this node.
-            case Hir.Materialised m -> elaborate(m.body(), env, ctx, expected);
+            // A build of a value elaborates as the value does, in the copy the build is: the walk
+            // is where the copy it stands in is known, and the node says which build this is.
+            case Hir.Materialised m ->
+                    elaborate(m.body(), env, ctx.building(m.value(), m.site()), expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec §blocks)
@@ -1561,7 +1562,7 @@ public final class Elaborator {
                 // one — the same answer {@code ConstructOccurrence.unwritten} gives.
                 new Core.KeptCallPlace(reference, new ApplicationOrigin.Derived(
                         new ApplicationDerivationCause.NameReadAsAValue(reference), 0),
-                        ExpansionLineage.ORIGINAL),
+                        OccurrenceLineage.ORIGINAL),
                 settled.result(), pos);
     }
 

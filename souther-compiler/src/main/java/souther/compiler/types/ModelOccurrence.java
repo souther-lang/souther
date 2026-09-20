@@ -77,7 +77,9 @@ public record ModelOccurrence(SourceConstructOrigin origin, ExpansionLineage lin
                     "a construct with no place is no occurrence of the model");
         }
         Deque<ExpansionLineage.Expansion> open = new ArrayDeque<>();
-        for (ExpansionLineage.Expansion step : copiesIn(occurrence.lineage())) {
+        // The calls alone. What the sharing policy built is no part of what a model states, and
+        // read away here it cannot come between a crossing and the copy it was handed to.
+        for (ExpansionLineage.Expansion step : copiesIn(occurrence.lineage().expansionProjection())) {
             // A copy of a block one of the copies still open was handed: running it is that copy
             // reaching the code whoever wrote the call supplied, so what stands inside it was
             // written where that copy was called — and everything opened since is left with it. A

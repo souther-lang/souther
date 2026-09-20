@@ -10,7 +10,14 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
+import souther.compiler.publish.MaterialisationRegionWord;
+import souther.compiler.publish.RegionSlotWord;
+import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.CanonicalNameOrder;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
@@ -4139,8 +4146,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The same fields an arm is written under. A consumer joining a combination's decision to
      * the arm it goes through joins on these, and a second spelling here would join to nothing.
      */
-    private static void constructId(ObjectNode into,
-                                    souther.compiler.types.ConstructOccurrence occurrence) {
+    static void constructId(ObjectNode into,
+                            souther.compiler.types.ConstructOccurrence occurrence) {
         into.put("module", occurrence.origin().owner().module());
         // The definition whose body wrote it, asked of the owner the way an arm's identity asks:
         // two definitions' first constructs are one identity under the module alone.
@@ -4148,37 +4155,112 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .theBodyThatWrote(occurrence.origin().owner()).definition());
         into.put("construct", occurrence.origin().ordinal());
         into.put("lowered", occurrence.origin().lowered());
-        // The calls the copy was made through, outermost last, and absent where the construct is
-        // where it was written. An empty array and an absent one read alike to a person and not to
-        // a consumer that asks whether the field is there.
-        List<souther.compiler.types.ExpansionLineage.Step> steps = new ArrayList<>();
-        souther.compiler.types.ExpansionLineage at = occurrence.lineage();
-        while (at instanceof souther.compiler.types.ExpansionLineage.Expansion copy) {
-            steps.add(copy.step());
-            at = copy.within();
+        // Everything the copy was made through, calls and builds together, in the order they were
+        // made, and absent where the construct is where it was written. An empty array and an absent one read
+        // alike to a person and not to a consumer that asks whether the field is there.
+        //
+        // Both kinds of step, because this is a key to one instance of a construct in the tree that
+        // runs, and two builds of one value hold the same construct under the same calls. It
+        // identifies within one compilation and matches nothing across two: which builds there are
+        // follows how the compiler shares them.
+        List<OccurrenceLineage> steps = new ArrayList<>();
+        OccurrenceLineage at = occurrence.lineage();
+        while (!(at instanceof OccurrenceLineage.Original)) {
+            steps.add(at);
+            at = switch (at) {
+                case OccurrenceLineage.Expansion copy -> copy.within();
+                case OccurrenceLineage.Materialisation build -> build.within();
+                case OccurrenceLineage.Original original -> original;
+            };
         }
         if (steps.isEmpty()) {
             return;
         }
         ArrayNode through = into.putArray("through");
-        for (souther.compiler.types.ExpansionLineage.Step step : steps.reversed()) {
+        for (OccurrenceLineage step : steps.reversed()) {
             ObjectNode one = through.addObject();
-            one.put("expanded", step.expanded().toString());
-            switch (step.at()) {
-                case souther.compiler.types.ExpansionSite.Written(var origin) -> {
-                    one.put("module", origin.owner().module());
-                    one.put("definition", souther.compiler.types.WrittenOwner
-                            .theBodyThatWrote(origin.owner()).definition());
-                    one.put("call", origin.ordinal());
-                    one.put("lowered", origin.lowered());
+            switch (step) {
+                case OccurrenceLineage.Expansion copy -> expansionStep(one, copy);
+                case OccurrenceLineage.Materialisation build -> {
+                    one.put("kind", word(ThroughStepWord.MATERIALISATION));
+                    one.put("materialised", build.materialised().toString());
+                    regionOf(one.putObject("at"), build.at());
                 }
-                // A site named by what stands there rather than by a call the author wrote, and one
-                // read off where the block came from. Neither has a construct of its own to name,
-                // so what is written is what the site is.
-                case souther.compiler.types.ExpansionSite.Named named ->
-                        one.put("name", named.toString());
-                case souther.compiler.types.ExpansionSite.Supplied supplied ->
-                        one.put("supplied", supplied.toString());
+                case OccurrenceLineage.Original original -> throw new IllegalStateException(
+                        "the chain ends where it was written and is not a step of itself: "
+                                + original);
+            }
+        }
+    }
+
+    /** One call the copy was made through: what it reached, and where the call is written. */
+    private static void expansionStep(ObjectNode one, OccurrenceLineage.Expansion copy) {
+        one.put("kind", word(ThroughStepWord.EXPANSION));
+        one.put("expanded", copy.expanded().toString());
+        switch (copy.at()) {
+            case ExpansionSite.Written(var origin) -> {
+                one.put("module", origin.owner().module());
+                one.put("definition", WrittenOwner.theBodyThatWrote(origin.owner()).definition());
+                one.put("call", origin.ordinal());
+                one.put("lowered", origin.lowered());
+            }
+            // A site named by what stands there rather than by a call the author wrote, and one
+            // read off where the block came from. Neither has a construct of its own to name,
+            // so what is written is what the site is.
+            case ExpansionSite.Named named -> one.put("name", named.toString());
+            case ExpansionSite.Supplied supplied -> one.put("supplied", supplied.toString());
+        }
+    }
+
+    /** The region a build was made for, in the words the source settles it by. */
+    private static void regionOf(ObjectNode into, MaterialisationSite site) {
+        switch (site) {
+            case MaterialisationSite.Body body -> {
+                into.put("kind", word(MaterialisationRegionWord.BODY));
+                into.put("module", body.owner().module());
+                into.put("definition", body.owner().definition());
+            }
+            case MaterialisationSite.Slot slot -> {
+                into.put("kind", word(MaterialisationRegionWord.SLOT));
+                into.put("module", slot.construct().owner().module());
+                into.put("definition",
+                        WrittenOwner.theBodyThatWrote(slot.construct().owner()).definition());
+                into.put("construct", slot.construct().ordinal());
+                into.put("lowered", slot.construct().lowered());
+                switch (slot.slot()) {
+                    case RegionSlot.IfThen _ -> into.put("slot", word(RegionSlotWord.IF_THEN));
+                    case RegionSlot.IfElse _ -> into.put("slot", word(RegionSlotWord.IF_ELSE));
+                    case RegionSlot.ConstructedThen _ ->
+                            into.put("slot", word(RegionSlotWord.CONSTRUCTED_THEN));
+                    case RegionSlot.ConstructedElse refused -> {
+                        into.put("slot", word(RegionSlotWord.CONSTRUCTED_ELSE));
+                        refused.clause().ifPresent(clause -> into.put("clause", clause));
+                    }
+                    case RegionSlot.MatchCase match -> {
+                        into.put("slot", word(RegionSlotWord.MATCH_CASE));
+                        ArrayNode cases = into.putArray("cases");
+                        match.caseTypes().forEach(cases::add);
+                    }
+                    case RegionSlot.ShortCircuitRight _ ->
+                            into.put("slot", word(RegionSlotWord.SHORT_CIRCUIT_RIGHT));
+                    case RegionSlot.ComprehensionElement _ ->
+                            into.put("slot", word(RegionSlotWord.COMPREHENSION_ELEMENT));
+                    case RegionSlot.ComprehensionGuard guard -> {
+                        into.put("slot", word(RegionSlotWord.COMPREHENSION_GUARD));
+                        into.put("index", guard.index());
+                    }
+                }
+            }
+            case MaterialisationSite.WrittenBlock block -> {
+                into.put("kind", word(MaterialisationRegionWord.BLOCK));
+                into.put("module", block.rule().owner().module());
+                into.put("definition",
+                        WrittenOwner.theBodyThatWrote(block.rule().owner()).definition());
+                into.put("rule", block.rule().ordinal());
+            }
+            case MaterialisationSite.GeneratedBlock block -> {
+                into.put("kind", word(MaterialisationRegionWord.BLOCK_OF_NAME));
+                into.put("name", block.cause().toString());
             }
         }
     }

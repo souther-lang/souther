@@ -12,7 +12,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReferenceOrigin;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -48,7 +48,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     /** Where such a call stands, which this fixture composes: no source wrote the name or the
      *  application. */
     private static final Core.KeptCallPlace COMPOSED_PLACE =
-            new Core.KeptCallPlace(COMPOSED_NAME, COMPOSED, ExpansionLineage.ORIGINAL);
+            new Core.KeptCallPlace(COMPOSED_NAME, COMPOSED, OccurrenceLineage.ORIGINAL);
 
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "call");
 
