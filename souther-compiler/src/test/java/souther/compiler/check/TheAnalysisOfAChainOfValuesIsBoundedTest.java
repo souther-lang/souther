@@ -43,7 +43,7 @@ class TheAnalysisOfAChainOfValuesIsBoundedTest {
 
     @Test
     void aChainThatGrowsWithEveryLinkIsRefusedQuickly() {
-        CompileException refused = assertTimeoutPreemptively(Duration.ofSeconds(60),
+        CompileException refused = assertTimeoutPreemptively(Duration.ofSeconds(10),
                 () -> assertThrows(CompileException.class,
                         () -> Compiler.compile(diamonds(40))));
 

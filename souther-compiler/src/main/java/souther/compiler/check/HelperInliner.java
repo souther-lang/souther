@@ -2371,9 +2371,10 @@ public final class HelperInliner {
      * <p>A limit of how that reading is represented and not of what a model may say: a value is
      * copied into every region that builds it, so values naming one another in several branches
      * grow with each link. It sits well above what an ordinary model copies and well below what
-     * takes long to copy, and it means nothing beyond that.
+     * takes long to copy, and it means nothing beyond that. Temporary: it is not reached once the
+     * analysis shares a value's body instead of copying it.
      */
-    static final long COPIED_FOR_THE_ANALYSIS = 2_000_000L;
+    static final long COPIED_FOR_THE_ANALYSIS = 50_000L;
 
     /** How much of {@link #COPIED_FOR_THE_ANALYSIS} is left in this body. */
     private long leftToCopy = COPIED_FOR_THE_ANALYSIS;
