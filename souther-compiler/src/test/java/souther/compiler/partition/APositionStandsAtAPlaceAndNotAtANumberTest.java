@@ -75,11 +75,11 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         EmptyInput.TwoValuesAtOnePosition text = twoValues("s",
                 Text.of("autumn"), Text.of("spring"));
         assertEquals(List.of("autumn", "spring"),
-                List.of(text.one().key(), text.other().key()));
+                List.of(text.one().spelled(), text.other().spelled()));
         EmptyInput.TwoValuesAtOnePosition counted = twoValues("n",
                 new Count(BigDecimal.ONE), new Count(BigDecimal.TWO));
         assertEquals(List.of("1", "2"),
-                List.of(counted.one().key(), counted.other().key()));
+                List.of(counted.one().spelled(), counted.other().spelled()));
     }
 
     /**
@@ -142,7 +142,7 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
                 region().given(term, at).projectionOf(term),
                 "a fixed position runs somewhere").bounds();
         assertNotNull(runs, "a fixed position runs somewhere");
-        return "[" + runs.min().at().key() + ", " + runs.max().at().key() + "]";
+        return "[" + runs.min().at().spelled() + ", " + runs.max().at().spelled() + "]";
     }
 
     /** The proof that fixing {@code path} at both places leaves nothing. */

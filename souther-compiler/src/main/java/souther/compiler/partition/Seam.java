@@ -170,6 +170,30 @@ public record Seam(CutPosition at, Level below, Level above) {
         return (below == null ? "" : below.key()) + "|" + (above == null ? "" : above.key());
     }
 
+    /**
+     * This division written out, for somewhere a person reads it: the last value on one side and the
+     * first on the other, each written the way the quantity writes its values.
+     *
+     * <p>The same three cases {@link #key()} has, because what divides a quantity is what a reader
+     * is being shown and the two questions differ in the writing and not in what is read. An end the
+     * order names no value at is written as nothing, the way it is named as nothing.
+     */
+    public String spelled() {
+        if (below == null && above == null) {
+            return "@" + at.spelled();
+        }
+        return (below == null ? "" : below.spelled()) + "|"
+                + (above == null ? "" : above.spelled());
+    }
+
+    /** The plain shape of the division, for a message about this compiler
+     *  ({@link CutPosition#toString}). */
+    @Override
+    public String toString() {
+        return (below == null ? "" : below.toString()) + "|"
+                + (above == null ? "" : above.toString()) + " at " + at;
+    }
+
     /** The same division with every level written the one way, for an identity to be built from.
      *  What {@link #key()} answers, kept as the seam rather than as a word. */
     public Seam canonical() {

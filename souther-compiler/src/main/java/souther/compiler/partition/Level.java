@@ -81,7 +81,7 @@ public sealed interface Level {
 
         @Override
         public String toString() {
-            return at.key();
+            return at.spelled();
         }
     }
 
@@ -222,12 +222,31 @@ public sealed interface Level {
 
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
-     *  past it for the place inside. An exact ratio is in lowest terms already, so it is its own
-     *  key. */
+     *  past it for the place inside. Either side names itself from its own canonical parts, so a
+     *  name costs what those parts cost and never what writing the number out would. */
     default String key() {
         return switch (this) {
             case OnACarrier on -> on.at().key();
-            case OfTheQuantity counted -> counted.at().toString();
+            case OfTheQuantity counted -> counted.at().key();
+        };
+    }
+
+    /**
+     * This level written out, for somewhere a person reads it.
+     *
+     * <p>Apart from {@link #key()}, and the split is what a level of a carrier makes plain: the two
+     * arms are named by what they are and written by what they are a level <em>of</em>. A day count
+     * tells one line from another as a number and is written as a date, which is
+     * {@link Carrier#written} — a report spelling the count itself would name a line at a number
+     * nobody wrote.
+     *
+     * <p>A number the quantity counts to is a level of no carrier, so it is written as the number it
+     * is ({@link ExactRatio#spelled}).
+     */
+    default String spelled() {
+        return switch (this) {
+            case OnACarrier on -> on.of().written(on.at());
+            case OfTheQuantity counted -> counted.at().spelled();
         };
     }
 

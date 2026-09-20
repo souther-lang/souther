@@ -72,6 +72,17 @@ public record Band(BandEnd lower, BandEnd upper) {
         return where(first()) + "|" + where(last());
     }
 
+    /**
+     * The same two values written out, for somewhere a person reads them.
+     *
+     * <p>The pair {@link #key()} is: one tells two runs apart and the other says which values they
+     * are. Each end goes through the thing it is a level of ({@link Level#spelled}), so a run over
+     * the days reads as two dates.
+     */
+    public String spelled() {
+        return written(first()) + "|" + written(last());
+    }
+
     /** The same run with every level written the one way, for an identity to be built from.
      *
      * <p>Not {@link #key()}, which reads the run off the values at its ends and so says nothing
@@ -490,5 +501,9 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static String where(Level at) {
         return at == null ? "" : at.key();
+    }
+
+    private static String written(Level at) {
+        return at == null ? "" : at.spelled();
     }
 }

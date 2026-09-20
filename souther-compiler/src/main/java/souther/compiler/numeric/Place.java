@@ -31,6 +31,20 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
      */
     String key();
 
+    /**
+     * This place written out, for somewhere a person reads it.
+     *
+     * <p>Apart from {@link #key()}, which tells two places apart and has no reason to spell either.
+     * A count held at a wide scale is a value the algebra carries about as cheaply as any other, and
+     * naming it is a name; writing it is a character per place, which is what a reader asked for and
+     * what nothing else should pay for.
+     *
+     * <p>The value and not how it was written to the model: {@code 0.00} and {@code 0} come back the
+     * same, which is the rule {@link #canonical()} states. What the carrier over a place would write
+     * instead — a date for a day count — is that carrier's to say, and this is the place's own.
+     */
+    String spelled();
+
     /** Whether this is the same place on the order as {@code other}, which is {@link #key()}'s
      * question asked of two rather than of one. */
     default boolean sameAs(Place other) {

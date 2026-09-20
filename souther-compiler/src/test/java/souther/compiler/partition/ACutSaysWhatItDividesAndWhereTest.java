@@ -74,8 +74,8 @@ class ACutSaysWhatItDividesAndWhereTest {
     /** And it parts the values in the place the position's own numbers say, not the form's. */
     @Test
     void andPartsTheValuesWhereThePositionsOwnNumbersSayItDoes() {
-        assertEquals("10|11", onThePosition("10").seam().key());
-        assertEquals("20|21", overAMultiple("2", "40").seam().key(),
+        assertEquals("10|11", onThePosition("10").seam().spelled());
+        assertEquals("20|21", overAMultiple("2", "40").seam().spelled(),
                 "forty of a doubled position is twenty of it");
     }
 
@@ -113,7 +113,7 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new Level.OfTheQuantity(ExactRatio.of(8)),
                 new ComparisonClaim.Singled(true), null);
 
-        assertEquals("4", names.singledValue().key(), "eight halved is four");
+        assertEquals("4", names.singledValue().spelled(), "eight halved is four");
     }
 
     /**
@@ -130,6 +130,6 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new Level.OfTheQuantity(ExactRatio.of(9)),
                 new ComparisonClaim.Cut(Towards.BELOW, true), null);
 
-        assertEquals("4|5", closed.seam().key());
+        assertEquals("4|5", closed.seam().spelled());
     }
 }

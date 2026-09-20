@@ -80,7 +80,7 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
         return GuardThresholds.of(behavior, checked.analysisBodies().get(behavior), body, plan,
                         inputs, rules).thresholds().stream()
                 .<String>map(each -> each.term() + " at "
-                        + (each.value() == null ? "nowhere" : each.value().key()) + " on "
+                        + (each.value() == null ? "nowhere" : each.value().spelled()) + " on "
                         + quantities.ordersOf(each.term()).answered())
                 .toList();
     }

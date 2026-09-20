@@ -17,6 +17,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -146,12 +148,11 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
      */
     @Test
     void aLineAtAThirdOfAMillionthIsNamedAndMeasuredWithoutBeingWrittenOut() {
-        ExactRatio aMillionth = ExactRatio.of(new java.math.BigDecimal(
-                java.math.BigInteger.ONE, 1_000_000));
+        ExactRatio aMillionth = ExactRatio.of(new BigDecimal(BigInteger.ONE, 1_000_000));
         CutPosition line = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(3));
         CutPosition beside = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(6));
 
-        assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () -> {
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
             assertNotEquals(line.key(), beside.key(), "two lines, two names");
             assertEquals(line.key(), new CutPosition(
@@ -160,6 +161,54 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
             assertTrue(line.digitsToTellApartFrom(beside) > 1_000_000,
                     "a sixth of a millionth apart takes about that many places to name");
         });
+    }
+
+    /**
+     * A line at a decimal written at a wide scale is named, and so is the division it makes, without
+     * either writing the number out.
+     *
+     * <p>A carrier hands back a count that holds the scale the model wrote and a single digit under
+     * it, and what a name is asked for is which of two lines this is — which the parts the count is
+     * already held as answer. Built by writing the number instead, a name is a character per place,
+     * and a name is wanted wherever two lines meet.
+     *
+     * <p>What a reader is shown is the other question, and it still writes every place. Asserted
+     * here, because a name that stopped costing them by no longer being able to say them is not what
+     * this asks for.
+     */
+    @Test
+    void aLineAtADecimalWrittenAtAWideScaleIsNamedWithoutBeingWrittenOut() {
+        BigDecimal wide = new BigDecimal(BigInteger.ONE, 1_000_000);
+        Level line = new Level.OnACarrier(DECIMALS, new Count(wide));
+        Level beside = new Level.OnACarrier(DECIMALS, new Count(wide.add(wide)));
+        Level counted = new Level.OfTheQuantity(ExactRatio.of(wide));
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
+            assertNotEquals(line.key(), beside.key(), "two lines, two names");
+            assertEquals(line.key(), new Level.OnACarrier(DECIMALS, new Count(wide)).key(),
+                    "and one line, one name");
+            assertTrue(counted.key().length() < 128,
+                    () -> "a number the quantity counts to, named in "
+                            + counted.key().length());
+            assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+                            .key().length() < 128,
+                    "and the division that line makes is named the same way");
+        });
+
+        assertTrue(line.spelled().length() > 1_000_000,
+                "while what a reader is shown is the number, every place of it");
+        assertEquals(line.spelled(), DECIMALS.written(new Count(wide)),
+                "which is what the carrier over the level writes");
+    }
+
+    /** Two spellings of one number are one name, which is the whole of what a name is for here. */
+    @Test
+    void twoSpellingsOfOneNumberAreOneName() {
+        assertEquals(new Count(new BigDecimal("0.00")).key(), new Count(BigDecimal.ZERO).key(),
+                "0.00 and 0 are one place and one name for it");
+        assertNotEquals(new Count(BigDecimal.ONE).key(), new Count(BigDecimal.TEN).key(),
+                "and two places are two names");
     }
 
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */

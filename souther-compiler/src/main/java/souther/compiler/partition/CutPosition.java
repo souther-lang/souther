@@ -69,6 +69,39 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
+     * This line written out, for somewhere a person reads it.
+     *
+     * <p>A rule that wrote the whole of the quantity drew its line at one of the quantity's own
+     * levels, and that level is written the way the thing it is a level of writes it — a date for a
+     * day count ({@link Level#spelled}). A rule that wrote a multiple drew it where the quantity
+     * stands at no level of its own, so what is left to write is the number.
+     *
+     * <p>Apart from {@link #key()}, which tells two lines apart and spells neither: a line on a
+     * quantity written at a millionth has a name of a few characters and takes a million to write.
+     */
+    public String spelled() {
+        ExactRatio at = exactly();
+        if (at == null) {
+            return written.spelled();
+        }
+        Level itself = asALevelOfTheQuantity();
+        return itself == null ? at.spelled() : itself.spelled();
+    }
+
+    /**
+     * The plain shape of the line, for a message about this compiler: what the rule wrote, over how
+     * much of the quantity it wrote where that is not the whole of it.
+     *
+     * <p>Apart from {@link #spelled}, which is for a sentence somebody reads about their own model
+     * and goes through the carrier over the quantity. This one asks the level itself, so a message
+     * naming a line is never a reading that could refuse one.
+     */
+    @Override
+    public String toString() {
+        return per.equals(ExactRatio.ONE) ? written.toString() : written + "/" + per;
+    }
+
+    /**
      * This line written the one way {@link #key()} names it: the fraction reduced, and the place
      * spelled as the order spells it.
      *

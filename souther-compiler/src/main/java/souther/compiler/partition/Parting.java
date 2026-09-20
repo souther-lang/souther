@@ -36,7 +36,7 @@ public record Parting(Seam geometry, List<AuthoredLine> alternatives) {
         alternatives = List.copyOf(alternatives);
         if (alternatives.isEmpty()) {
             throw new IllegalArgumentException(
-                    "the values part here because something parts them: " + geometry.key());
+                    "the values part here because something parts them: " + geometry);
         }
     }
 

@@ -4061,13 +4061,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (decided) {
             case DecidedCondition.Compared(var condition, var held) -> {
                 out.put("kind", "comparison");
-                // The quantity as the vocabulary it was compared in spells it. A place is keyed by
-                // what it is rather than by how the rule wrote it, for the reason a form's
+                // The quantity as the vocabulary it was compared in spells it. A place is written
+                // as what it is rather than as how the rule wrote it, for the reason a form's
                 // threshold is moved into it: `0.00` and `0` are one column.
                 out.put("condition", condition.proposition() + " " + switch (condition) {
                     case DecisionCondition.AComparison it -> it.form().toString();
                     case DecisionCondition.AnOrderedComparison it ->
-                            it.term() + " " + it.at().key();
+                            it.term() + " " + it.at().spelled();
                 });
                 out.put("outcome", held ? "held" : "denied");
             }
@@ -4396,7 +4396,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Level.OnACarrier on -> {
                 into.put("kind", "on_a_carrier");
                 carrier(into.putObject("carrier"), on.of());
-                into.put("at", on.at().key());
+                into.put("at", on.at().spelled());
             }
             case Level.OfTheQuantity counted -> {
                 into.put("kind", "a_count");
@@ -4474,7 +4474,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case FarEnd.AtALine(var line, var where) -> {
                 into.put("kind", "at_a_line");
                 authoredLineId(into.putObject("line"), line);
-                into.put("where", where.key());
+                into.put("where", where.spelled());
             }
             case FarEnd.AtTheDomain(var reaches) -> {
                 into.put("kind", "at_the_domain");
