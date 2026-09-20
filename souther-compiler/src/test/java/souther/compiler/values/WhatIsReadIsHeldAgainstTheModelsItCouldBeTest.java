@@ -347,21 +347,22 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
      * of every reading all the same, since neither of them may be wrong for any reason.
      */
     private static void heldAgainstItsModels(Rule rule) {
+        AdmissibleValues<String> answer = rule.answer();
         for (int records : rule.leaves()) {
             if (records == 0) {
                 continue;
             }
             for (String atom : List.of(VALUE, OTHER)) {
                 int stands = standingAt(atom, records);
-                int holds = read(rule.answer().at(atom));
-                int promised = read(rule.answer().guaranteedAt(atom));
+                int holds = read(answer.at(atom));
+                int promised = read(answer.guaranteedAt(atom));
                 assertTrue((stands & ~holds) == 0, () -> rule.wrote()
                         + ": at " + atom + " the model leaves " + stands + " and the reading holds "
                         + holds + ", which is short of it");
                 assertTrue((promised & ~stands) == 0, () -> rule.wrote()
                         + ": at " + atom + " the reading promises " + promised
                         + " and the model leaves " + stands + ", which is less than promised");
-                assertTrue(!rule.choicesOverOnePosition() || !rule.answer().speaksFor(atom)
+                assertTrue(!rule.choicesOverOnePosition() || !answer.speaksFor(atom)
                                 || holds == stands,
                         () -> rule.wrote() + ": at " + atom + " the reading speaks for " + holds
                                 + " and the model leaves " + stands);
@@ -372,8 +373,9 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     /** One rule, and two of them stated together and as alternatives. */
     @Test
     void oneRuleAndTwo() {
-        rules().forEach(WhatIsReadIsHeldAgainstTheModelsItCouldBeTest::heldAgainstItsModels);
-        rules().forEach(left -> rules().forEach(right -> {
+        List<Rule> all = rules();
+        all.forEach(WhatIsReadIsHeldAgainstTheModelsItCouldBeTest::heldAgainstItsModels);
+        all.forEach(left -> all.forEach(right -> {
             heldAgainstItsModels(both(left, right));
             heldAgainstItsModels(either(left, right));
         }));
@@ -382,7 +384,8 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     /** And three of them, every way of composing and bracketing them. */
     @Test
     void andThreeOfThemHoweverComposed() {
-        rules().forEach(left -> rules().forEach(middle -> rules().forEach(right -> {
+        List<Rule> all = rules();
+        all.forEach(left -> all.forEach(middle -> all.forEach(right -> {
             heldAgainstItsModels(either(either(left, middle), right));
             heldAgainstItsModels(either(left, either(middle, right)));
             heldAgainstItsModels(both(either(left, middle), right));

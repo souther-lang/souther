@@ -145,19 +145,21 @@ final class PositionReadings {
         Map<String, Set<String>> named = new LinkedHashMap<>();
         Map<String, String> why = new LinkedHashMap<>();
         for (Compiled.Site site : Compiled.sitesIn(over.classes())) {
+            // Written out once per site: each is a string made of three, and a string made anew is
+            // hashed anew by every map it is a key of.
+            String at = site.at();
+            String reaches = site.owner() + "#" + site.member();
             if (site.from().startsWith(over.stage())) {
-                stage.add(site.at());
+                stage.add(at);
             }
-            named.computeIfAbsent(site.at().substring(0, site.at().indexOf('(')),
-                    k -> new LinkedHashSet<>()).add(site.at());
-            callersOf.computeIfAbsent(site.owner() + "#" + site.member(),
-                    k -> new LinkedHashSet<>()).add(site.at());
-            callsOf.computeIfAbsent(site.at(), k -> new LinkedHashSet<>())
-                    .add(site.owner() + "#" + site.member());
+            named.computeIfAbsent(at.substring(0, at.indexOf('(')),
+                    k -> new LinkedHashSet<>()).add(at);
+            callersOf.computeIfAbsent(reaches, k -> new LinkedHashSet<>()).add(at);
+            callsOf.computeIfAbsent(at, k -> new LinkedHashSet<>()).add(reaches);
             String read = observation(site, declarations, apart, over.lookup());
             if (read != null) {
-                observers.add(site.at());
-                why.putIfAbsent(site.at(), read);
+                observers.add(at);
+                why.putIfAbsent(at, read);
             }
         }
 

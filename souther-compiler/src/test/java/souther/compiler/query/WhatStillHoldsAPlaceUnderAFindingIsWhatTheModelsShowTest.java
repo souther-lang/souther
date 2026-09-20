@@ -5,6 +5,7 @@ import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest.Because;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -42,8 +43,15 @@ import static souther.compiler.query.WhatStillHoldsAPlaceUnderAFindingIsReadOnTw
  *
  * <p>A carrier added without a reading fails a build; a reading that has gone out of date with the
  * models fails the run that reads them.
+ *
+ * <p>Asked once a night, which is the run that reads them. Each model is compiled with its findings
+ * asked for, which is a different configuration from the one {@code RepositoryModels} holds for the
+ * checks that share it, so these compiles cannot borrow theirs and are most of what this costs. A
+ * reading gone out of date with the models is found by the morning; the half that fails when a
+ * carrier is added without a reading stays in the run a change waits on.
  */
 @ClosedWorldContract
+@Nightly
 class WhatStillHoldsAPlaceUnderAFindingIsWhatTheModelsShowTest {
 
     /**

@@ -7,6 +7,7 @@ import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +116,18 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     private record Met(Map<Locus.Place, Set<String>> byPlace, Set<String> fellShort,
                        Map<Locus.Place, Set<String>> differentThings, int opened) {}
 
+    /** The walk of each store of a scenario, made once for the class: the questions below all read
+     *  the same walk, and compiling the models is nearly all of what it costs. Declared before
+     *  {@link #MET}, which is worked out from it when the class is initialised. */
+    private static final Map<AnswerClosure.Scenario, List<AnswerWalk.Walked>> WALKED =
+            new EnumMap<>(AnswerClosure.Scenario.class);
+
+    private static synchronized List<AnswerWalk.Walked> walkedStoresOf(
+            AnswerClosure.Scenario scenario) {
+        return WALKED.computeIfAbsent(scenario,
+                each -> storesOf(each).stream().map(AnswerWalk::of).toList());
+    }
+
     /**
      * What both walks met, worked out once for the class that asks.
      *
@@ -134,8 +147,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         Set<String> fellShort = new TreeSet<>();
         int opened = 0;
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
-            for (Db one : storesOf(scenario)) {
-                AnswerWalk.Walked walked = AnswerWalk.of(one);
+            for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
                 opened += walked.opened();
                 List<AnswerWalk.Found> found = switch (walked.covered()) {
                     case Covered.Whole<AnswerWalk.Found>(List<AnswerWalk.Found> all) -> all;
@@ -211,8 +223,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         int opened = 0;
         Set<String> classes = new TreeSet<>();
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
-            for (Db one : storesOf(scenario)) {
-                AnswerWalk.Walked walked = AnswerWalk.of(one);
+            for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
                 opened += walked.opened();
                 classes.addAll(walked.classes());
             }
@@ -244,8 +255,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         HowAnAnswerHoldsThings.theClassesTheyComeBackAs()
                 .forEach(each -> asked.add(each.getName()));
         for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
-            for (Db one : storesOf(scenario)) {
-                for (String met : AnswerWalk.of(one).classes()) {
+            for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
+                for (String met : walked.classes()) {
                     if (!asked.contains(met) && keepsThatContract(met)) {
                         nobodyAsked.add(met);
                     }

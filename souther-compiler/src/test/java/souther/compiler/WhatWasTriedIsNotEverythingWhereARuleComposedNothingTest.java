@@ -151,7 +151,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
                     invariant shape = %s
 
                 data Long = String
-                    invariant huge = String.length(value) >= 5000
+                    invariant huge = String.length(value) >= 4097
 
                 data Flag = Yes | No
 

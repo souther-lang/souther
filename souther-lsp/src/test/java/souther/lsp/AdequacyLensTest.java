@@ -1,6 +1,9 @@
 package souther.lsp;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -15,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -777,40 +781,47 @@ class AdequacyLensTest {
      * what {@link Analyzer#resolve} is written to be allowed to say; a block with rows and no offer
      * leaves an author with work the command would write and nothing to show them it is there.
      */
-    @Test
-    void theOfferStandsWhereverTheBlockHasRowsToWrite() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("modelsThisClassWrites")
+    void theOfferStandsWhereverTheBlockHasRowsToWrite(String named,
+                                                      Map<String, String> workspace) {
         Analyzer analyzer = measuring(Adequacy.Level.ALL);
         List<String> disagreed = new ArrayList<>();
-        for (Map<String, String> workspace : List.of(
-                Map.of(MODULE, TRIP),
-                Map.of(EDGES, ONLY_EDGES),
-                Map.of(MEETINGS, A_LINE_AND_SOME_MEETINGS),
-                Map.of(SPREAD_URI, SETTLED_UNDER_ONE_CASE),
-                Map.of(ROLES, CLASSES_ONLY),
-                Map.of(TWO_URI, TWO),
-                Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER))) {
-            ModuleGraph graph = graphOf(workspace);
-            workspace.forEach((uri, text) -> {
-                for (String behavior : behaviorsIn(text)) {
-                    boolean offered = offersRows(analyzer, uri, text,
-                            on(lineOf(text, "behavior " + behavior)), graph);
-                    boolean written = analyzer.resolve(
-                            new CodeAction.Deferred("taken unoffered", uri, moduleOf(text),
-                                    behavior),
-                            text, graph) != null;
-                    // One direction. A block with rows and no offer leaves an author work the
-                    // command would write and nothing to show them it is there; an offer that
-                    // composes nothing is a search that could not make the row somebody asked for,
-                    // which is news and is what the offer is allowed to say.
-                    if (written && !offered) {
-                        disagreed.add(moduleOf(text) + "." + behavior
-                                + ": the block has rows, and nothing is offered");
-                    }
+        ModuleGraph graph = graphOf(workspace);
+        workspace.forEach((uri, text) -> {
+            for (String behavior : behaviorsIn(text)) {
+                boolean offered = offersRows(analyzer, uri, text,
+                        on(lineOf(text, "behavior " + behavior)), graph);
+                boolean written = analyzer.resolve(
+                        new CodeAction.Deferred("taken unoffered", uri, moduleOf(text),
+                                behavior),
+                        text, graph) != null;
+                // One direction. A block with rows and no offer leaves an author work the
+                // command would write and nothing to show them it is there; an offer that
+                // composes nothing is a search that could not make the row somebody asked for,
+                // which is news and is what the offer is allowed to say.
+                if (written && !offered) {
+                    disagreed.add(moduleOf(text) + "." + behavior
+                            + ": the block has rows, and nothing is offered");
                 }
-            });
-        }
+            }
+        });
 
         assertEquals(List.of(), disagreed);
+    }
+
+    /** Every model this class writes for the check above, a case each and named by the file it
+     *  is written in. */
+    static Stream<Arguments> modelsThisClassWrites() {
+        return Stream.of(
+                Arguments.of(MODULE, Map.of(MODULE, TRIP)),
+                Arguments.of(EDGES, Map.of(EDGES, ONLY_EDGES)),
+                Arguments.of(MEETINGS, Map.of(MEETINGS, A_LINE_AND_SOME_MEETINGS)),
+                Arguments.of(SPREAD_URI, Map.of(SPREAD_URI, SETTLED_UNDER_ONE_CASE)),
+                Arguments.of(ROLES, Map.of(ROLES, CLASSES_ONLY)),
+                Arguments.of(TWO_URI, Map.of(TWO_URI, TWO)),
+                Arguments.of(PRODUCER_URI,
+                        Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER)));
     }
 
     /** The behaviors declared in {@code text}, in the order they are written. */

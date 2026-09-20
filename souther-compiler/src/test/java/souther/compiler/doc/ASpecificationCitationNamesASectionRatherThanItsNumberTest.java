@@ -111,7 +111,9 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
         SortedMap<String, Integer> written = new TreeMap<>();
         for (Map.Entry<String, String> file : sources().entrySet()) {
             String path = file.getKey();
-            Matcher cited = BY_NUMBER.matcher(file.getValue());
+            // What each pattern finds contains a word that is asked for as text first: most files
+            // and most lines are ruled out by that, and the pattern is for the rest.
+            Matcher cited = BY_NUMBER.matcher(file.getValue().contains("pec") ? file.getValue() : "");
             while (cited.find()) {
                 written.merge(path, 1, Integer::sum);
             }
@@ -119,7 +121,7 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
                 continue;
             }
             for (String line : file.getValue().split("\n", -1)) {
-                Matcher elided = COMMENT.matcher(line).find()
+                Matcher elided = line.indexOf('(') >= 0 && COMMENT.matcher(line).find()
                         ? ELIDED.matcher(line) : ELIDED.matcher("");
                 while (elided.find()) {
                     written.merge(path, 1, Integer::sum);

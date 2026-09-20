@@ -11,8 +11,10 @@ import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -97,12 +99,12 @@ class ARowIsComposedForAPointOnATotalTest {
                 if List.sum(List.map(line -> line.amount.value, lines)) >= 100000
                     then Yes else No
 
-            let total (ls: List<Capped>): Int =
-                List.sum(List.map(l -> l.small.value, ls))
-
             behavior needingSeveral : (ls: List<Capped>) -> Verdict
             let needingSeveral (ls) =
                 if total(ls) >= 100 then Yes else No
+
+            let total (ls: List<Capped>): Int =
+                List.sum(List.map(l -> l.small.value, ls))
 
             behavior overADenseRunHeldAwayFromNought : (ds: List<Money>) -> Verdict
             let overADenseRunHeldAwayFromNought (ds) =
@@ -129,6 +131,30 @@ class ARowIsComposedForAPointOnATotalTest {
             List.of("overABareList", "overAProjection", "needingSeveral",
                     "overADenseRunHeldAwayFromNought", "aContainerTheRecordCounts",
                     "aTotalBelowWhereItsElementsStart", "aTotalTheOneSidedSplitCannotReach");
+
+    /**
+     * The model cut to one behavior each: the declarations before the first behavior, and that
+     * behavior with whatever it defines beside it.
+     *
+     * <p>A row is composed for one behavior and read back against that behavior, so measuring the
+     * others beside it is measuring what no claim here is about, once for every row.
+     */
+    private static final Map<String, String> ALONE = aloneByBehavior();
+
+    private static Map<String, String> aloneByBehavior() {
+        String[] parts = MODEL.split("(?=\\nbehavior )");
+        Map<String, String> out = new LinkedHashMap<>();
+        for (int at = 1; at < parts.length; at++) {
+            String part = parts[at];
+            String named = part.substring("\nbehavior ".length(), part.indexOf(" :"));
+            out.put(named, parts[0] + part);
+        }
+        Set<String> expected = new LinkedHashSet<>(ON_A_TOTAL);
+        expected.add("noShapeOfferedReachesIt");
+        assertEquals(expected, out.keySet(),
+                "every behavior of the model is one these claims are about, and none is left out");
+        return out;
+    }
 
     /** Every point of a line drawn on a total has one. */
     @Test
@@ -160,7 +186,7 @@ class ARowIsComposedForAPointOnATotalTest {
     void everyRowComposedIsOneTheModelHolds() {
         Map<String, List<String>> refused = new LinkedHashMap<>();
         forEachComposedRow((behavior, point, row) -> {
-            List<String> said = otherThanTheAnswer(MODEL + example(behavior, row));
+            List<String> said = otherThanTheAnswer(ALONE.get(behavior) + example(behavior, row));
             if (!said.isEmpty()) {
                 refused.put(point + " -> " + row, said);
             }
@@ -176,7 +202,7 @@ class ARowIsComposedForAPointOnATotalTest {
     void everyRowComposedStandsAtThePointItWasComposedFor() {
         List<String> missed = new ArrayList<>();
         forEachComposedRow((behavior, point, row) -> {
-            if (!met(MODEL + example(behavior, row), point)) {
+            if (!met(ALONE.get(behavior) + example(behavior, row), behavior, point)) {
                 missed.add(point + " -> " + row);
             }
         });
@@ -293,7 +319,8 @@ class ARowIsComposedForAPointOnATotalTest {
     void whereNoShapeOfferedIsARowTheSearchSaysItStopped() {
         List<String> said = new ArrayList<>();
         List<Object> budgets = new ArrayList<>();
-        for (BorderAssessment border : lines(MODEL, "noShapeOfferedReachesIt")) {
+        for (BorderAssessment border : lines(ALONE.get("noShapeOfferedReachesIt"),
+                "noShapeOfferedReachesIt")) {
             if (!border.label().contains("List.sum")) {
                 continue;
             }
@@ -311,7 +338,8 @@ class ARowIsComposedForAPointOnATotalTest {
         assertEquals(List.of(List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)), budgets,
                 "and what it writes some of, which is the half of the answer that says what would"
                         + " have to give for the point to be settled — and it is not a number");
-        assertEquals(List.of(), otherThanTheAnswer(MODEL + "\nexample noShapeOfferedReachesIt\n"
+        assertEquals(List.of(), otherThanTheAnswer(ALONE.get("noShapeOfferedReachesIt")
+                        + "\nexample noShapeOfferedReachesIt\n"
                         + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> " + WHATEVER + "\n"),
                 "and the row an author writes for it is one the model holds, which is why the other"
                         + " sentence would have been a lie");
@@ -354,7 +382,7 @@ class ARowIsComposedForAPointOnATotalTest {
      */
     private static void forEachPoint(String behavior,
                                      java.util.function.BiConsumer<String, ItemAssessment> at) {
-        for (BorderAssessment border : lines(MODEL, behavior)) {
+        for (BorderAssessment border : lines(ALONE.get(behavior), behavior)) {
             if (border.label().contains("List.sum")) {
                 border.items().forEach(
                         (role, item) -> at.accept(
@@ -374,18 +402,16 @@ class ARowIsComposedForAPointOnATotalTest {
     }
 
     /** Whether the point is met, read off the item rather than out of a report's text. */
-    private static boolean met(String source, String point) {
-        for (String behavior : ON_A_TOTAL) {
-            for (BorderAssessment border : lines(source, behavior)) {
-                for (Map.Entry<DomainPoint, ItemAssessment> each : border.items().entrySet()) {
-                    // Named by the line and the role together, so a point of the element's own
-                    // border is not read as the total's.
+    private static boolean met(String source, String behavior, String point) {
+        for (BorderAssessment border : lines(source, behavior)) {
+            for (Map.Entry<DomainPoint, ItemAssessment> each : border.items().entrySet()) {
+                // Named by the line and the role together, so a point of the element's own
+                // border is not read as the total's.
 
-                    if (point.equals(border.label() + " "
-                            + border.border().named(each.getKey()))) {
-                        return each.getValue() instanceof ItemAssessment.Owed owed
-                                && owed.hasRowWitness();
-                    }
+                if (point.equals(border.label() + " "
+                        + border.border().named(each.getKey()))) {
+                    return each.getValue() instanceof ItemAssessment.Owed owed
+                            && owed.hasRowWitness();
                 }
             }
         }
