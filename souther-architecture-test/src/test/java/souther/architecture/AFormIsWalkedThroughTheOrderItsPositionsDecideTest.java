@@ -150,7 +150,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
     @Test
     void andEveryPlaceTheWalkStopsAtIsOneThatExists() {
         assertEquals(Set.of(),
-                new WhoHoldsWhatAReaderHandedOver(AND_WHAT_IS_COMPILED_BESIDE_IT)
+                WhoHoldsWhatAReaderHandedOver.of(AND_WHAT_IS_COMPILED_BESIDE_IT)
                         .boundariesThatAreNotThere(),
                 "a walk stops at each of these because of what it promises there, and a name with"
                         + " nothing under it promises nothing");
@@ -192,7 +192,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
      * ({@link WhoHoldsWhatAReaderHandedOver}).
      */
     private static List<String> whoWalksAForm(CompiledOutputs where) {
-        WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
+        WhoHoldsWhatAReaderHandedOver handed = WhoHoldsWhatAReaderHandedOver.of(where);
         List<String> walking = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_FORM, "coefs")) {
             if (handed.readsAWalkForWhereThingsAre(handed.methodThatIs(holding))) {
