@@ -1,68 +1,102 @@
 package souther.compiler.check;
 
-import org.junit.jupiter.api.Test;
-import souther.compiler.Compiler;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.query.ReadAs;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.Type;
 
-import java.util.concurrent.atomic.AtomicLong;
+import org.junit.jupiter.api.Test;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * How many times a chain of bindings is read to name it, which grows with the chain.
+ * What a chain of bindings costs to name, where each one is entered inside the conditional the one
+ * before it is read from.
  *
- * <p>Naming a {@code let} reads its initializer to name it, and entering the binding reads that
- * same initializer twice over — once for which value it is and once for what the term grammar
- * calls it. Where the initializer holds a binding of its own, each of those three readings reaches
- * the inner one and can start the three again, which is three readings to the length of the chain.
- * The program this is asked of duplicates nothing: every name in it is read once, and the number of
- * bindings is the length of the chain.
+ * <p>A value referenced from another is expanded at the site that reads it rather than left a name,
+ * so a chain of bindings that each read the one before it nests: the second's initializer holds the
+ * first's binding, the third's holds the second's, and so on down. Naming an initializer computes
+ * what its own initializer denotes and what the term grammar calls it, each a fresh walk of it
+ * ({@link Terms#inside}) — so where an initializer holds a binding of its own, walking it starts the
+ * two again, and a chain nested this deep would be walked a number of times growing with its depth
+ * rather than a number growing with its length.
  *
- * <p>Held as a count of the walks the reading started rather than as a time. What a reading answers
- * is the same either way, so wall-clock is the only thing the answer leaves behind — and a measure
- * that reads a machine's load as a change in this compiler goes red for what it is not about.
+ * <p>Built directly against {@link Terms} rather than through a compiled program, so what is
+ * measured is this reading and nothing that parsing, typing or lowering do around it — and held as a
+ * count of the walks a reading starts rather than as a time, over several doublings, so the property
+ * asked is the shape of the growth and not one point on it.
  */
 class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
 
-    /** A chain where each binding is read once, so nothing in it is copied and the number of
-     *  bindings is the length of the chain. The conditional is what keeps each initializer a shape
-     *  with something under it rather than a name standing for the one before. */
-    private static String chainOf(int length) {
-        StringBuilder source = new StringBuilder("module m exposing (f)\n\n")
-                .append("let a0 = List.length([1, 2, 3])\n");
-        for (int i = 1; i <= length; i++) {
-            source.append("let a").append(i)
-                    .append(" = (if List.length([1]) > 0 then a").append(i - 1)
-                    .append(" else 0) + 1\n");
-        }
-        return source.append("\nbehavior f : (n: Int) -> Int\nlet f (n) = a")
-                .append(length).append("\n").toString();
+    private static final SourcePos POS = new SourcePos(0, 0);
+    private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "f");
+
+    /** One level of the chain: the binding it introduces and the expression that introduces it. */
+    private record Level(Core.Binder binder, Core expr) {}
+
+    /** Level {@code i}, read inside the conditional {@code previous} is read from where {@code i} is
+     *  not the first — the shape a chain takes once each reference to the one before it has been
+     *  expanded at the site that reads it. */
+    private static Level levelOf(Hir.Binders binders, int i, Level previous) {
+        Core.Binder binder = CoreBinders.of(binders.binder("a" + i, POS));
+        Core value = previous == null
+                ? new Core.Int(0, Type.INT, POS)
+                : new Core.Binary(BinOp.ADD,
+                        new Core.If(new Core.Bool(true, Type.BOOL, POS), previous.expr(),
+                                new Core.Int(0, Type.INT, POS),
+                                Core.ForkPlace.asWritten(ConstructOccurrence.unwritten()),
+                                Type.INT, POS),
+                        new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(),
+                        Type.INT, POS);
+        Core read = new Core.Read(binder.name(), binder.binding(), Type.INT, POS);
+        return new Level(binder, new Core.LetIn(binder, value, read, Type.INT, POS));
     }
 
-    /** How many canonical-key walks compiling a chain of {@code length} bindings starts. */
-    private static long walksOver(int length) {
-        AtomicLong counting = new AtomicLong();
+    /** A chain nested {@code depth} deep, each level's initializer holding the one before it. */
+    private static Core chainOf(int depth) {
+        Hir.Binders binders = new Hir.Binders(OWNER);
+        Level level = levelOf(binders, 0, null);
+        for (int i = 1; i <= depth; i++) {
+            level = levelOf(binders, i, level);
+        }
+        return level.expr();
+    }
+
+    /** How many canonical-key walks naming a chain nested {@code depth} deep starts. */
+    private static long walksOver(int depth) {
+        Terms terms = new Terms(Terms.Of.THE_DISCHARGE_TREE, RuleReadingContext.unshared(
+                RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
+                ReadAs.THE_COMPILATION_DOES));
+        long[] counting = {0};
         Terms.COUNTING_WALKS = counting;
         try {
-            Compiler.compileWithWarnings(chainOf(length));
+            terms.bodyKey(chainOf(depth), Denotations.none());
         } finally {
             Terms.COUNTING_WALKS = null;
         }
-        return counting.get();
+        return counting[0];
     }
 
     /**
-     * Twice the bindings, and the reading starts about twice the walks.
-     *
-     * <p>Asked as a ratio between two lengths rather than as a number at one. What a chain of a
-     * given length costs is the sum of what every reader of it spends and is no claim of this
-     * class's; what doubling the chain does to that is, and it is the whole of what went wrong.
+     * Doubling the depth of the chain, and the reading starts about twice the walks at every step —
+     * not a number growing with the depth.
      */
     @Test
-    void twiceTheBindingsIsAboutTwiceTheWalks() {
-        long shorter = walksOver(6);
-        long longer = walksOver(12);
-        assertTrue(shorter > 0, "the count was taken over a reading that named nothing");
-        assertTrue(longer <= shorter * 3,
-                "naming twice the chain started " + longer + " walks against " + shorter);
+    void doublingTheDepthAboutDoublesTheWalks() {
+        Map<Integer, Long> walks = new LinkedHashMap<>();
+        for (int depth : new int[] {20, 40, 80, 160}) {
+            walks.put(depth, walksOver(depth));
+        }
+        assertTrue(walks.get(40) <= walks.get(20) * 3, "depth 40: " + walks);
+        assertTrue(walks.get(80) <= walks.get(40) * 3, "depth 80: " + walks);
+        assertTrue(walks.get(160) <= walks.get(80) * 3, "depth 160: " + walks);
     }
 }

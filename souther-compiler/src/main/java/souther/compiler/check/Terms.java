@@ -32,7 +32,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * What a value is to the invariant-discharge check: where it is, what it is called, and whether
@@ -2160,25 +2159,20 @@ final class Terms {
      */
     private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                          Leaf leaf) {
-        AtomicLong counting = COUNTING_WALKS;
+        long[] counting = COUNTING_WALKS;
         if (counting != null) {
-            counting.incrementAndGet();
+            counting[0]++;
         }
         return naming(raw, at, bound, depth, leaf).term();
     }
 
-    /**
-     * Where a test in this package counts the walks this reading started, and null everywhere else.
-     *
-     * <p>Beside {@link #UNSUPPORTED} and for a reason of the same kind. What a reading answers says
-     * nothing about how many times it read the tree to answer it, so a reader that goes over an
-     * expression once and a reader that goes over it once per name above it compile alike — and
-     * what separates them has nowhere else to be read.
-     *
-     * <p>Counted where a walk begins. Every canonical key comes from one of those, whatever asked
-     * for it, so the count is the whole of what a reading spent on keys.
-     */
-    static AtomicLong COUNTING_WALKS;
+    /** Where a test in this package counts the walks this reading started, and null everywhere else.
+     *  Beside {@link #FOLLOWED} and for the same reason: what a reading answers says nothing about
+     *  how many times it read the tree to answer it, so a reader that goes over an expression once
+     *  and a reader that goes over it once per name above it compile alike, and what separates them
+     *  has nowhere else to be read. Counted where a walk begins, which is every canonical key
+     *  whatever asked for it. */
+    static long[] COUNTING_WALKS;
 
     /**
      * What a walk over an expression does where the term grammar runs out.
