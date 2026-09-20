@@ -236,9 +236,15 @@ public sealed interface ObligationIdentity
             }
         }
 
+        /** The ids of the two classes, sorted. */
+        public List<String> classIdsInOrder() {
+            return classes.stream().sorted(ClassOfAPosition.byClassIdOrder())
+                    .map(ClassOfAPosition::classId).toList();
+        }
+
         /** The two classes in the one order classes are named in. */
         public List<ClassOfAPosition> inOrder() {
-            return classes.stream().sorted().toList();
+            return classes.stream().sorted(ClassOfAPosition.steadyOrder()).toList();
         }
     }
 }

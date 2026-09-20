@@ -4,6 +4,8 @@ import souther.bench.SaltedOrder.Kind;
 import souther.bench.SaltedOrder.Tag;
 import souther.bench.SaltedOrder.Val;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.publish.CanonicalArrangement;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.query.WeakeningSet;
@@ -43,8 +45,9 @@ import java.util.Set;
  * below that promise are named; every other is an answer.
  *
  * <p>A fold is one of the declared commutative operations, found as the crossings are. A
- * comparator is total where it is the natural order, which a type gives what it equates, or a chain
- * that ends in one; a comparator built from a key is not, because two elements can share a key.
+ * comparator is total where it is one of the declared total orders, or a chain that ends in one.
+ * The natural order of a type is not, because nothing says its ordering agrees with its equality;
+ * and a comparator built from a key is not, because two elements can share a key.
  * The element a walk is at leaves the walk as an answer when it is returned or stored, unless the
  * method asked for exactly one.
  */
@@ -184,6 +187,25 @@ final class SaltedOrderVocabulary {
         Set<Signature> out = new LinkedHashSet<>();
         out.add(Signature.of(method(WeakeningSet.class, "ofAll", Collection.class)));
         return out;
+    }
+
+    private static final Set<Signature> TOTAL_ORDERS = totalOrders();
+
+    /**
+     * Comparators of this compiler that tie no two values that are not equal, by comparing every
+     * part of them and none by how it is spelled. Found as the crossings are, and held to what they
+     * say by the test that compares every pair of a population by each of them.
+     */
+    private static Set<Signature> totalOrders() {
+        Set<Signature> out = new LinkedHashSet<>();
+        out.add(Signature.of(method(TermPath.class, "structuralOrder")));
+        out.add(Signature.of(method(ClassOfAPosition.class, "steadyOrder")));
+        out.add(Signature.of(method(ClassOfAPosition.class, "byClassIdOrder")));
+        return out;
+    }
+
+    static Set<Signature> declaredTotalOrders() {
+        return TOTAL_ORDERS;
     }
 
     private static final Set<Signature> COMMUTATIVE_FOLDS = commutativeFolds();
@@ -394,12 +416,8 @@ final class SaltedOrderVocabulary {
     private static Outcome comparatorOf(Call call) {
         String owner = call.owner();
         String name = call.name();
-        boolean natural = call.isStatic() && call.descriptor().startsWith("()")
-                && ((owner.equals("java/util/Comparator")
-                        && (name.equals("naturalOrder") || name.equals("reverseOrder")))
-                || (owner.equals("java/util/Collections") && name.equals("reverseOrder"))
-                || (owner.equals("java/util/Map$Entry") && name.equals("comparingByKey")));
-        if (natural) {
+        if (call.isStatic() && TOTAL_ORDERS.contains(new Signature(owner, name,
+                call.descriptor()))) {
             return Outcome.returning(Val.of(new Tag(Kind.TOTAL_ORDER, "")));
         }
         boolean derives = owner.equals("java/util/Comparator") && !call.isStatic()
@@ -425,9 +443,26 @@ final class SaltedOrderVocabulary {
         return call.descriptor().contains("Ljava/util/Comparator;");
     }
 
-    /** Whether what a call sorts by leaves no two elements that differ tied. */
+    /**
+     * Whether what a call sorts by leaves no two elements that differ tied.
+     *
+     * <p>A comparator does where it is one of the declared total orders. The natural order of a
+     * type does not, for nothing says of a type that its ordering agrees with its equality: one
+     * decimal is equal to another in value and not in scale, and the sort leaves them where the walk
+     * put them. Only the numbers and characters, whose two orders are one, are sorted by no
+     * comparator and left with nothing tied.
+     */
     private static boolean tiesNothing(Call call) {
-        return !byAComparator(call) || hasATotalOrder(call.args());
+        if (byAComparator(call)) {
+            return hasATotalOrder(call.args());
+        }
+        String owner = call.owner();
+        boolean ofNumbers = owner.equals("java/util/stream/IntStream")
+                || owner.equals("java/util/stream/LongStream")
+                || owner.equals("java/util/stream/DoubleStream");
+        boolean ofANumberArray = owner.equals("java/util/Arrays")
+                && call.descriptor().matches("\\(\\[[IJDCBSF].*");
+        return ofNumbers || ofANumberArray;
     }
 
     private static Outcome constructed(Call call, Set<Tag> came) {
@@ -702,7 +737,7 @@ final class SaltedOrderVocabulary {
      * share a method name with one: {@code add} is a put into a list and is arithmetic on a number.
      */
     static boolean inTheCollectionsLibrary(String owner) {
-        return owner.startsWith("java/util/") && !owner.startsWith("java/util/function/")
+        return (owner.startsWith("java/util/") && !owner.startsWith("java/util/function/"))
                 || owner.equals("java/lang/Iterable") || owner.equals("java/lang/StringBuilder")
                 || owner.equals("java/lang/StringBuffer") || owner.equals("java/lang/Appendable")
                 || owner.equals("java/lang/CharSequence");

@@ -2,6 +2,7 @@ package souther.bench.readings.orders;
 
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -11,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
@@ -43,7 +45,7 @@ public final class WalkedIntoAnAnswer {
     }
 
     public static CompositionBudget theFirstOneThatMatches(Held held) {
-        return held.figures().stream().filter(each -> each.ordinal() > 0).findFirst()
+        return held.figures().stream().filter(each -> each.name().length() > 0).findFirst()
                 .orElseThrow();
     }
 
@@ -150,31 +152,62 @@ public final class WalkedIntoAnAnswer {
     }
 
     public static Map<Integer, List<CompositionBudget>> groupedIntoListsByACollector(Held held) {
-        return held.figures().stream().collect(Collectors.groupingBy(each -> each.ordinal() % 2));
+        return held.figures().stream().collect(Collectors.groupingBy(each -> each.name().length() % 2));
     }
 
     public static Map<Integer, List<CompositionBudget>> groupedIntoListsByHand(Held held) {
         Map<Integer, List<CompositionBudget>> out = new HashMap<>();
         for (CompositionBudget each : held.figures()) {
-            out.computeIfAbsent(each.ordinal() % 2, _ -> new ArrayList<>()).add(each);
+            out.computeIfAbsent(each.name().length() % 2, _ -> new ArrayList<>()).add(each);
         }
         return out;
     }
 
     public static List<CompositionBudget> sortedByAKeyTwoOfThemCanShare(Held held) {
         return held.figures().stream()
-                .sorted(Comparator.comparingInt(each -> each.ordinal() / 2)).toList();
+                .sorted(Comparator.comparingInt(each -> each.name().length() / 2)).toList();
     }
 
     public static List<CompositionBudget> sortedInPlaceByAKeyTwoOfThemCanShare(Held held) {
         List<CompositionBudget> out = new ArrayList<>(held.figures());
-        out.sort(Comparator.comparingInt(each -> each.ordinal() / 2));
+        out.sort(Comparator.comparingInt(each -> each.name().length() / 2));
         return out;
+    }
+
+    public static List<String> sortedByTheNaturalOrderOfNames(Held held) {
+        return held.figures().stream().map(Enum::name).sorted().toList();
+    }
+
+    public static List<CompositionBudget> sortedByTheNaturalOrderOfTheElements(Held held) {
+        return held.figures().stream().sorted().toList();
+    }
+
+    public static List<CompositionBudget> madeAListAndThenSortedItNaturally(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.sort(Comparator.naturalOrder());
+        return out;
+    }
+
+    public static List<CompositionBudget> sortedByAKeyAndThenByTheNaturalOrder(Held held) {
+        return held.figures().stream()
+                .sorted(Comparator.comparingInt((CompositionBudget each) -> each.name().length() / 2)
+                        .thenComparing(Comparator.naturalOrder()))
+                .toList();
+    }
+
+    public static List<BigDecimal> sortedNaturallyWhereTwoUnequalValuesTie(Held held) {
+        return held.figures().stream()
+                .map(each -> new BigDecimal("1." + "0".repeat(each.name().length())))
+                .sorted().toList();
+    }
+
+    public static List<String> theKeysOfATreeKeptNaturally(Held held) {
+        return new ArrayList<>(new TreeMap<>(held.named()).keySet());
     }
 
     public static List<CompositionBudget> keptByATreeThatTiesTwoOfThem(Held held) {
         Set<CompositionBudget> tree =
-                new TreeSet<>(Comparator.comparingInt(each -> each.ordinal() / 2));
+                new TreeSet<>(Comparator.comparingInt(each -> each.name().length() / 2));
         tree.addAll(held.figures());
         return new ArrayList<>(tree);
     }

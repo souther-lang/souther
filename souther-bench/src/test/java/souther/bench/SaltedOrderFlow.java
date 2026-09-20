@@ -1060,6 +1060,10 @@ final class SaltedOrderFlow {
         Val made = null;
 
         Signature signature = new Signature(owner, name, descriptor);
+        if (isStatic && SaltedOrderVocabulary.declaredTotalOrders().contains(signature)) {
+            state.push(Val.of(new Tag(Kind.TOTAL_ORDER, "")));
+            return;
+        }
         boolean crosses = SaltedOrderVocabulary.crosses(signature);
         if (crosses || SaltedOrderVocabulary.folds(signature)) {
             Set<Tag> given = new LinkedHashSet<>(receiver.tags());

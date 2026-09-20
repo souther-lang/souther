@@ -2,6 +2,7 @@ package souther.bench.readings.orders;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.WeakeningSet;
@@ -50,13 +51,13 @@ public final class AskedOrNamedInOrder {
     public static int summedOverAWalk(Held held) {
         int total = 0;
         for (CompositionBudget each : held.figures()) {
-            total += each.ordinal();
+            total += each.name().length();
         }
         return total;
     }
 
     public static boolean askedOfEveryOne(Held held) {
-        return held.figures().stream().anyMatch(each -> each.ordinal() > 1);
+        return held.figures().stream().anyMatch(each -> each.name().length() > 1);
     }
 
     public static Set<String> filledIntoASetOfNames(Held held) {
@@ -77,28 +78,28 @@ public final class AskedOrNamedInOrder {
         return both;
     }
 
-    public static Map<String, CompositionBudget> aMapThatKeepsItsKeysInTheirOwnOrder(Held held) {
-        return new TreeMap<>(held.named());
-    }
-
-    public static List<String> sortedByAKeyBeforeItIsKeptAsAList(Held held) {
-        return held.figures().stream().map(Enum::name).sorted().toList();
-    }
-
-    public static List<CompositionBudget> madeAListAndThenSortedIt(Held held) {
-        List<CompositionBudget> out = new ArrayList<>(held.figures());
-        out.sort(Comparator.naturalOrder());
+    public static Map<ClassOfAPosition, String> aMapThatKeepsItsKeysInADeclaredOrder(
+            HeldClasses held) {
+        Map<ClassOfAPosition, String> out = new TreeMap<>(ClassOfAPosition.steadyOrder());
+        out.putAll(held.named());
         return out;
     }
 
-    public static List<CompositionBudget> sortedByTheNaturalOrder(Held held) {
-        return held.figures().stream().sorted().toList();
+    public static List<ClassOfAPosition> sortedByADeclaredOrder(HeldClasses held) {
+        return held.classes().stream().sorted(ClassOfAPosition.steadyOrder()).toList();
     }
 
-    public static List<CompositionBudget> sortedByAKeyAndThenByTheNaturalOrder(Held held) {
-        return held.figures().stream()
-                .sorted(Comparator.comparingInt((CompositionBudget each) -> each.ordinal() / 2)
-                        .thenComparing(Comparator.naturalOrder()))
+    public static List<ClassOfAPosition> madeAListAndThenSortedItByADeclaredOrder(
+            HeldClasses held) {
+        List<ClassOfAPosition> out = new ArrayList<>(held.classes());
+        out.sort(ClassOfAPosition.steadyOrder());
+        return out;
+    }
+
+    public static List<ClassOfAPosition> sortedByAKeyAndThenByADeclaredOrder(HeldClasses held) {
+        return held.classes().stream()
+                .sorted(Comparator.comparing((ClassOfAPosition each) -> each.classId())
+                        .thenComparing(ClassOfAPosition.steadyOrder()))
                 .toList();
     }
 
@@ -132,7 +133,7 @@ public final class AskedOrNamedInOrder {
 
     public static Map<Integer, Long> countedInGroups(Held held) {
         return held.figures().stream().collect(
-                Collectors.groupingBy(each -> each.ordinal() % 2, Collectors.counting()));
+                Collectors.groupingBy(each -> each.name().length() % 2, Collectors.counting()));
     }
 
     public static List<CompositionBudget> handedToAHelperThatPutsThemInOrder(Held held) {

@@ -6,6 +6,7 @@ import souther.bench.SaltedOrder.Finding;
 import souther.bench.SaltedOrder.Reading;
 import souther.bench.readings.orders.AskedOrNamedInOrder;
 import souther.bench.readings.orders.Held;
+import souther.bench.readings.orders.HeldClasses;
 import souther.bench.readings.orders.ReadersAfter;
 import souther.bench.readings.orders.ReadersBefore;
 import souther.bench.readings.orders.WalkedIntoAnAnswer;
@@ -91,6 +92,7 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
                 "put in an order by souther.compiler.publish.CanonicalSelection$Order.keep",
                 "put in an order by souther.compiler.inputs.NumericTerms.inOrder",
                 "put in an order by java.util.EnumSet",
+                "put in an order by java.util.TreeMap",
                 "put in an order by java.util.stream.Stream.sorted",
                 "put in an order by java.util.List.sort",
                 "folded by souther.compiler.query.WeakeningSet.ofAll",
@@ -148,15 +150,16 @@ class TheReadingOfWhereAnUnorderedCopysOrderGoesTest {
     void theCopiesTheFixturesMakeAreTheOnesTheReadingBeginsAt() {
         Reading reading = readingOver(AskedOrNamedInOrder.class);
 
-        assertEquals(4, reading.roots().size(),
+        assertEquals(6, reading.roots().size(),
                 () -> "the copies made by the model are the ones it begins at: " + reading.roots());
         assertTrue(reading.roots().stream()
-                        .allMatch(each -> each.startsWith(Held.class.getName() + "#<init>")),
+                        .allMatch(each -> each.startsWith(Held.class.getName() + "#<init>")
+                                || each.startsWith(HeldClasses.class.getName() + "#<init>")),
                 () -> "a copy from somewhere other than the model was read: " + reading.roots());
     }
 
     private static Reading readingOver(Class<?> readers) {
-        return SaltedOrderFlow.read(fixtures(Held.class, readers),
+        return SaltedOrderFlow.read(fixtures(Held.class, HeldClasses.class, readers),
                 TheReadingOfWhereAnUnorderedCopysOrderGoesTest::madeInTheFixtures);
     }
 

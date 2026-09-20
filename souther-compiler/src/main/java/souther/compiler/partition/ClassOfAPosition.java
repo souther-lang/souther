@@ -15,7 +15,7 @@ import java.util.Comparator;
  * search's own vocabulary, and an account rooted there says a row is owed for what a search happens
  * to be able to look for.
  */
-public record ClassOfAPosition(AxisId at, String classId) implements Comparable<ClassOfAPosition> {
+public record ClassOfAPosition(AxisId at, String classId) {
 
     /**
      * The words a report writes for the axis, and then what those words are made of, because two
@@ -27,6 +27,13 @@ public record ClassOfAPosition(AxisId at, String classId) implements Comparable<
             .thenComparing(each -> each.at.term())
             .thenComparing(ClassOfAPosition::classId);
 
+    /** The class first, and then the axis by every part of it. */
+    private static final Comparator<ClassOfAPosition> BY_CLASS = Comparator
+            .comparing(ClassOfAPosition::classId)
+            .thenComparing(each -> each.at.toString())
+            .thenComparing(each -> each.at.behavior())
+            .thenComparing(each -> each.at.term());
+
     public ClassOfAPosition {
         if (at == null || classId == null) {
             throw new IllegalArgumentException(
@@ -36,10 +43,18 @@ public record ClassOfAPosition(AxisId at, String classId) implements Comparable<
 
     /**
      * One order for classes, the one a report names a pair in. Every part of a class is compared,
-     * so two that are not equal are never tied.
+     * so two that are not equal are never tied. Asked for by name and not as a natural order, so
+     * that a reader of a sort can see which order it is.
      */
-    @Override
-    public int compareTo(ClassOfAPosition other) {
-        return STEADY.compare(this, other);
+    public static Comparator<ClassOfAPosition> steadyOrder() {
+        return STEADY;
+    }
+
+    /**
+     * The other order a report words classes in: by the class alone, and then by everything else,
+     * so that the ids of a pair come out sorted and no two classes that are not equal are tied.
+     */
+    public static Comparator<ClassOfAPosition> byClassIdOrder() {
+        return BY_CLASS;
     }
 }

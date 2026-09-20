@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 
 import java.util.ArrayList;
@@ -45,7 +46,8 @@ public sealed interface Realization {
 
         /**
          * Held in the terms' own order, so that a reader walking it meets the demands in the same
-         * order in every run. Two demands of one term are told apart by where they write.
+         * order in every run. Two demands of one term are told apart by where they write, compared
+         * by every part of the path and not by how it is spelled.
          */
         public Found {
             Map<NumericTerm, List<RealizationTarget>> byTerm = new HashMap<>();
@@ -55,7 +57,8 @@ public sealed interface Realization {
             Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
             for (NumericTerm term : NumericTerms.inOrder(byTerm.keySet())) {
                 List<RealizationTarget> ofOne = byTerm.get(term);
-                ofOne.sort(Comparator.comparing(each -> each.writeRoot().toString()));
+                ofOne.sort(Comparator.comparing(RealizationTarget::writeRoot,
+                        TermPath.structuralOrder()));
                 for (RealizationTarget each : ofOne) {
                     inOrder.put(each, fixing.get(each));
                 }

@@ -1896,7 +1896,7 @@ public final class Generator {
                                          ObligationIdentity.OfAFallbackPairCell asked) {
         Map<Integer, Integer> wanted = pinned(axes, asked);
         return wanted == null
-                ? asked.classes().stream().map(ClassOfAPosition::classId).sorted().toList()
+                ? asked.classIdsInOrder()
                 : Pins.of(axes, wanted).labels();
     }
 
