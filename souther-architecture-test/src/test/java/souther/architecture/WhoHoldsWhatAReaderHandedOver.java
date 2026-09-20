@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Every method that holds what one reader handed over, including the ones it was handed on to.
@@ -129,8 +130,25 @@ final class WhoHoldsWhatAReaderHandedOver {
      *  because the question is asked of the same few names at every method. */
     private final Map<String, Optional<Class<?>>> asLoaded = new HashMap<>();
 
+    /**
+     * The reading of each population, kept for as long as the fork that built it.
+     *
+     * <p>Building one is a walk over every class this repository compiled and over every call each
+     * of their methods makes, and none of what it reads moves while the tests run — the compile
+     * that produced it happened before any of them started. A rule here asks the same population
+     * the same question once per check it has, and each of those checks was paying for the walk
+     * again.
+     */
+    private static final Map<CompiledOutputs, WhoHoldsWhatAReaderHandedOver> BUILT =
+            new ConcurrentHashMap<>();
+
+    /** What was handed over in {@code where}, read once however many rules ask. */
+    static WhoHoldsWhatAReaderHandedOver of(CompiledOutputs where) {
+        return BUILT.computeIfAbsent(where, WhoHoldsWhatAReaderHandedOver::new);
+    }
+
     /** Every method compiled in {@code where}, with what each of them calls. */
-    WhoHoldsWhatAReaderHandedOver(CompiledOutputs where) {
+    private WhoHoldsWhatAReaderHandedOver(CompiledOutputs where) {
         List<ClassModel> read = where.all();
         for (ClassModel each : read) {
             String owner = each.thisClass().name().stringValue();

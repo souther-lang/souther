@@ -314,7 +314,7 @@ class NoReaderOfABlockObservesWhichPositionCameFirstTest {
      * ({@link WhoHoldsWhatAReaderHandedOver}).
      */
     private static List<String> whoReadsOneByWhereItIs(CompiledOutputs where) {
-        WhoHoldsWhatAReaderHandedOver handed = new WhoHoldsWhatAReaderHandedOver(where);
+        WhoHoldsWhatAReaderHandedOver handed = WhoHoldsWhatAReaderHandedOver.of(where);
         List<String> reading = new ArrayList<>();
         for (String holding : handed.holdingWhat(THE_BLOCK, "members")) {
             if (handed.readsAWalkForWhereThingsAre(handed.methodThatIs(holding))) {
