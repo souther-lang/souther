@@ -353,7 +353,7 @@ public final class Representations {
     }
 
     /** A boundary object is keyed by strings, so a key that is not one means the codec broke. */
-    private static String requireKey(Object key) {
+    private static String requireKey(@Nullable Object key) {
         if (key instanceof String s) {
             return s;
         }

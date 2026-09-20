@@ -154,38 +154,38 @@ public final class Lists {
     /** The sum of a list of {@code Int} (Elm {@code List.sum}); the empty list is 0. Adds through
      *  the kernel the {@code +} operator uses, so a total past the range of an {@code Int} aborts
      *  here rather than wrapping. */
-    public static long sumInt(List<?> xs) {
+    public static long sumInt(List<Long> xs) {
         long acc = 0;
-        for (Object x : xs) {
-            acc = IntMath.addExact(acc, (Long) x);
+        for (long x : xs) {
+            acc = IntMath.addExact(acc, x);
         }
         return acc;
     }
 
     /** The product of a list of {@code Int} (Elm {@code List.product}); the empty list is 1. */
-    public static long productInt(List<?> xs) {
+    public static long productInt(List<Long> xs) {
         long acc = 1;
-        for (Object x : xs) {
-            acc = IntMath.multiplyExact(acc, (Long) x);
+        for (long x : xs) {
+            acc = IntMath.multiplyExact(acc, x);
         }
         return acc;
     }
 
     /** The sum of a list of {@code Decimal}; the empty list is 0. {@code BigDecimal.add} keeps the
      *  larger scale of its two operands, so the elements' own scales carry through the walk. */
-    public static BigDecimal sumDecimal(List<?> xs) {
+    public static BigDecimal sumDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ZERO;
-        for (Object x : xs) {
-            acc = acc.add((BigDecimal) x);
+        for (BigDecimal x : xs) {
+            acc = acc.add(x);
         }
         return acc;
     }
 
     /** The product of a list of {@code Decimal}; the empty list is 1. */
-    public static BigDecimal productDecimal(List<?> xs) {
+    public static BigDecimal productDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ONE;
-        for (Object x : xs) {
-            acc = acc.multiply((BigDecimal) x);
+        for (BigDecimal x : xs) {
+            acc = acc.multiply(x);
         }
         return acc;
     }
@@ -193,19 +193,19 @@ public final class Lists {
     /** The sum of a list of {@code Rational}; the empty list is nought. Exact throughout — the
      *  identity is the exact nought the type constructs, so there is no seed for an author to write
      *  and no rounding anywhere in the walk. */
-    public static Rational sumRational(List<?> xs) {
+    public static Rational sumRational(List<Rational> xs) {
         Rational acc = Rational.ZERO;
-        for (Object x : xs) {
-            acc = acc.plus((Rational) x);
+        for (Rational x : xs) {
+            acc = acc.plus(x);
         }
         return acc;
     }
 
     /** The product of a list of {@code Rational}; the empty list is one. */
-    public static Rational productRational(List<?> xs) {
+    public static Rational productRational(List<Rational> xs) {
         Rational acc = Rational.ONE;
-        for (Object x : xs) {
-            acc = acc.times((Rational) x);
+        for (Rational x : xs) {
+            acc = acc.times(x);
         }
         return acc;
     }

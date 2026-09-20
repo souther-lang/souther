@@ -82,7 +82,7 @@
         <dependency>
             <groupId>org.jooq</groupId>
             <artifactId>jooq</artifactId>
-            <version>3.21.7</version>
+            <version>3.21.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>
