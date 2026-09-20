@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,6 +73,25 @@ public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> class
     public boolean isEmpty() {
         return classesOwed.isEmpty() && armsOwed.isEmpty() && pairsOwed.isEmpty()
                 && meetingsOwed.isEmpty();
+    }
+
+    /**
+     * Every one of them, in the one list a reader standing on the far side of a search reads from.
+     *
+     * <p>In this order and no other: classes, then arms, then the combinations of two classes, then
+     * the meetings of the body's decisions — the order {@link #classesOwed}, {@link #armsOwed},
+     * {@link #pairsOwed} and {@link #meetingsOwed} are already handed over in, put end to end. A
+     * reader answering for what this plan asks does it once here, over a sealed kind that a fifth
+     * list added beside the four above would leave nothing here to answer for — which is the whole
+     * reason this exists beside them rather than instead of them.
+     */
+    public List<GenerationObligation> obligations() {
+        List<GenerationObligation> out = new ArrayList<>();
+        classesOwed.forEach(each -> out.add(new GenerationObligation.Class(each)));
+        armsOwed.forEach(each -> out.add(new GenerationObligation.Arm(each)));
+        pairsOwed.forEach(each -> out.add(new GenerationObligation.Pair(each)));
+        meetingsOwed.forEach(each -> out.add(new GenerationObligation.Meeting(each)));
+        return List.copyOf(out);
     }
 
     private static void onlyOnce(String kind, List<?> owed) {
