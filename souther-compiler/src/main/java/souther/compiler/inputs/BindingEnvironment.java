@@ -4,6 +4,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,17 +39,70 @@ import java.util.Map;
  */
 final class BindingEnvironment {
 
+    /**
+     * How many bindings are kept beside the table before they are written into a new one.
+     *
+     * <p>Going inside a binding is done once for every {@code let} between a walk's start and the
+     * name it asks about, so the cost of one is the cost of a chain of them squared. A table copied
+     * at each is what that square is made of; a few kept apart and searched newest first are what
+     * keeps a lookup as short as the number kept, and the table is copied once for that many.
+     */
+    private static final int KEPT_APART = 16;
+
+    /** One binding made on the way here, over the ones made before it. */
+    private record Layer(BindingId binding, Core value, Layer older, int depth) {}
+
     private final Map<BindingId, TermPath> roots;
-    private final Map<BindingId, Core> bound;
+    private final Map<BindingId, Core> table;
+    private final Layer newest;
     private final ElementBindings elements;
     private final boolean callsStand;
+    private volatile Map<BindingId, Core> boundAsATable;
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, boolean callsStand) {
-        this.roots = Map.copyOf(roots);
-        this.bound = Map.copyOf(bound);
+        this(Map.copyOf(roots), Map.copyOf(bound), null, elements, callsStand);
+    }
+
+    private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> table,
+                               Layer newest, ElementBindings elements, boolean callsStand) {
+        this.roots = roots;
+        this.table = table;
+        this.newest = newest;
         this.elements = elements;
         this.callsStand = callsStand;
+    }
+
+    /** What {@code binding} is bound to on the way here, the nearest binding winning. */
+    private Core boundTo(BindingId binding) {
+        for (Layer layer = newest; layer != null; layer = layer.older()) {
+            if (layer.binding().equals(binding)) {
+                return layer.value();
+            }
+        }
+        return table.get(binding);
+    }
+
+    /** Everything bound on the way here as one table, made when it is asked for. */
+    private Map<BindingId, Core> bound() {
+        Map<BindingId, Core> made = boundAsATable;
+        if (made == null) {
+            if (newest == null) {
+                made = table;
+            } else {
+                Map<BindingId, Core> wider = new LinkedHashMap<>(table);
+                List<Layer> oldestFirst = new ArrayList<>();
+                for (Layer layer = newest; layer != null; layer = layer.older()) {
+                    oldestFirst.add(layer);
+                }
+                for (int at = oldestFirst.size() - 1; at >= 0; at--) {
+                    wider.put(oldestFirst.get(at).binding(), oldestFirst.get(at).value());
+                }
+                made = Map.copyOf(wider);
+            }
+            boundAsATable = made;
+        }
+        return made;
     }
 
     /**
@@ -73,7 +127,7 @@ final class BindingEnvironment {
         if (containers.size() > 1) {
             return new BindingRole.ElementOfSeveral(containers);
         }
-        Core value = bound.get(binding);
+        Core value = boundTo(binding);
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
@@ -98,7 +152,7 @@ final class BindingEnvironment {
         // What is bound on the way here first, and what the body bound anywhere after it. No
         // binding holds nothing — this environment refuses a null value — so what is not here is
         // absent rather than bound to nothing, and one lookup says so.
-        Core here = bound.get(binding);
+        Core here = boundTo(binding);
         return here != null ? here : elements.boundTo(binding);
     }
 
@@ -129,17 +183,22 @@ final class BindingEnvironment {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
         }
-        Map<BindingId, Core> wider = new LinkedHashMap<>(bound);
         // The nearest binding wins, which is what being inside it means.
-        wider.put(binder.binding(), value);
-        return new BindingEnvironment(roots, wider, elements, callsStand);
+        int depth = newest == null ? 1 : newest.depth() + 1;
+        Layer inner = new Layer(binder.binding(), value, newest, depth);
+        if (depth <= KEPT_APART) {
+            return new BindingEnvironment(roots, table, inner, elements, callsStand);
+        }
+        BindingEnvironment written = new BindingEnvironment(roots, table, inner, elements,
+                callsStand);
+        return new BindingEnvironment(roots, written.bound(), null, elements, callsStand);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
     BindingEnvironment naming(BindingId binding, TermPath path) {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(binding, path);
-        return new BindingEnvironment(wider, bound, elements, callsStand);
+        return new BindingEnvironment(Map.copyOf(wider), table, newest, elements, callsStand);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -155,18 +214,18 @@ final class BindingEnvironment {
                 || (other instanceof BindingEnvironment that
                         && callsStand == that.callsStand
                         && roots.equals(that.roots)
-                        && bound.equals(that.bound)
+                        && bound().equals(that.bound())
                         && elements.equals(that.elements));
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(roots, bound, elements, callsStand);
+        return java.util.Objects.hash(roots, bound(), elements, callsStand);
     }
 
     @Override
     public String toString() {
-        return "BindingEnvironment[roots=" + roots + ", bound=" + bound + ", elements=" + elements
+        return "BindingEnvironment[roots=" + roots + ", bound=" + bound() + ", elements=" + elements
                 + ", callsStand=" + callsStand + "]";
     }
 }

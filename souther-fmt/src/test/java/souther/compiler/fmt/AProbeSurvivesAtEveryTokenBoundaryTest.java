@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxElement;
@@ -8,7 +9,9 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +49,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AProbeSurvivesAtEveryTokenBoundaryTest {
 
     private static final String PROBE = "// probe";
+
+    /**
+     * What formatting a formatted text gives, by that text.
+     *
+     * <p>Two variants that put the probe in different places are often written the same way by the
+     * formatter, and the second formatting is a function of the text it is given. So it is worked
+     * out once for each text the first formatting wrote, across both sweeps.
+     */
+    private static final Map<String, String> AGAIN = new HashMap<>();
+
+    private static String formattedAgain(String formatted, CstParser.Result read) {
+        return AGAIN.computeIfAbsent(formatted, _ -> Formatter.format(read.root()));
+    }
+
+    /** Given back when the class is done: a fork keeps its JVM for the classes after this one. */
+    @AfterAll
+    static void released() {
+        AGAIN.clear();
+    }
 
     /** One of everything a module can be written with. Kept in canonical form, so a variant differs
      * from it only by the probe. */
@@ -205,7 +227,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                 want.sort(null);
                 String formatted;
                 try {
-                    formatted = Formatter.format(variant);
+                    formatted = Formatter.format(read.root());
                 } catch (RuntimeException e) {
                     refused.add(context(variant) + "  " + e.getMessage());
                     continue;
@@ -215,7 +237,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                     rewritten.add(context(variant) + "  did not parse: " + reread.errors());
                     continue;
                 }
-                if (!formatted.equals(Formatter.format(formatted))) {
+                if (!formatted.equals(formattedAgain(formatted, reread))) {
                     unstable.add(context(variant));
                     continue;
                 }

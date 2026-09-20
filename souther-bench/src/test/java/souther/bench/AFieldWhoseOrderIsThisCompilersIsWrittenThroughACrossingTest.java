@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -154,13 +155,7 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
      */
     private static Set<String> namesStartedThrough(String method) throws Exception {
         Set<String> out = new LinkedHashSet<>();
-        boolean starts = false;
-        for (Compiled.Invocation each : called()) {
-            starts |= each.site().at().equals(method)
-                    && each.site().member().equals(STARTS_AN_ARRAY)
-                    && each.site().owner().equals(NAMES_A_PART);
-        }
-        if (!starts) {
+        if (!STARTING_BY_NAMING_A_PART.contains(method)) {
             return out;
         }
         for (Compiled.Site each : compiled()) {
@@ -225,6 +220,14 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
 
     private static final List<Compiled.Site> SITES = read(Compiled::sites);
     private static final List<Compiled.Invocation> CALLS = read(Compiled::invocations);
+
+    /** The methods that start an array by naming a part of the document, taken in one pass over the
+     *  calls. Asked of one method at a time it is a pass over every call for each of them. */
+    private static final Set<String> STARTING_BY_NAMING_A_PART = CALLS.stream()
+            .filter(each -> each.site().member().equals(STARTS_AN_ARRAY)
+                    && each.site().owner().equals(NAMES_A_PART))
+            .map(each -> each.site().at())
+            .collect(Collectors.toSet());
 
     private interface Reading<T> {
         List<T> read() throws Exception;

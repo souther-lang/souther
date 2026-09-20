@@ -1,5 +1,6 @@
 package souther.bench;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.bench.PositionReadings.Authority;
@@ -109,6 +110,26 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
     }
 
     /**
+     * What is read of this compiler, taken when the first check asks and given to the rest. It is
+     * a function of the compiled classes, which do not change while the class runs, and each check
+     * taking its own is the same walk over every class made again.
+     */
+    private static PositionReadings.Reading reading;
+
+    private static synchronized PositionReadings.Reading readOfThisCompiler() throws IOException {
+        if (reading == null) {
+            reading = PositionReadings.of(thisCompiler());
+        }
+        return reading;
+    }
+
+    /** Given back when the class is done: a fork keeps its JVM for the classes after this one. */
+    @AfterAll
+    static void released() {
+        reading = null;
+    }
+
+    /**
      * No path from the stage reaches raw structure without an authority answering for it.
      *
      * <p>Both what a method's own code does and what it calls, to any depth. A place that reads
@@ -117,8 +138,7 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
      */
     @Test
     void nothingInTheStageReadsStructureThatNoAuthorityAnswersFor() throws IOException {
-        PositionReadings.Over over = thisCompiler();
-        PositionReadings.Reading read = PositionReadings.of(over);
+        PositionReadings.Reading read = readOfThisCompiler();
 
         assertFalse(read.observers().isEmpty(),
                 "no reading of raw structure was found anywhere, so this asserts nothing about the"
@@ -151,7 +171,7 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
      */
     @Test
     void everyAuthorityIsStandingSomewhereOnTheWay() throws IOException {
-        PositionReadings.Reading read = PositionReadings.of(thisCompiler());
+        PositionReadings.Reading read = readOfThisCompiler();
         assertEquals(List.of(), AUTHORITIES.stream()
                         .map(Authority::owns)
                         .filter(each -> !read.encountered().contains(each))
@@ -170,7 +190,7 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
      */
     @Test
     void everythingBuiltOutOfTypesIsOneThisCanReadTheComponentsOf() throws IOException {
-        assertEquals(List.of(), PositionReadings.of(thisCompiler()).madeOfNonRecords(),
+        assertEquals(List.of(), readOfThisCompiler().madeOfNonRecords(),
                 "a case of what is built out of types that is not a record: what it holds is not"
                         + " where this reads what a compound holds, so taking it apart would read"
                         + " as reading nothing");

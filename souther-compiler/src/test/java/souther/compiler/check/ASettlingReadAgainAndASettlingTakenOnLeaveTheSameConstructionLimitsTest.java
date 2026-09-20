@@ -12,6 +12,7 @@ import souther.compiler.query.Front;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,8 +39,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>The statement is what lets one reading serve a whole search. Without it a search that read the
  * declaration once would be answering about the rules as they stood before it chose anything, which
  * is the reading that leaves {@code b} its whole range while {@code a < b} is still open.
+ *
+ * <p>Asked once a night. The two sides are compared at every position of every model this
+ * repository carries, and the side that reads per settling builds the regex machines of every
+ * declaration again for each settling, which is what the comparison is about and so cannot be
+ * shared between the sides. Lending the machines across declarations would make the run cheaper by
+ * changing how much a {@code Meter} has spent, and that is observable, so it is not a saving this
+ * test may take. A disagreement between the two readings is found by the morning, on the branch a
+ * change landed on.
  */
 @ClosedWorldContract
+@Nightly
 class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
 
     /**

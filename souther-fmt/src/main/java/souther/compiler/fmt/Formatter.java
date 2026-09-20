@@ -2473,13 +2473,15 @@ public final class Formatter {
     }
 
     private static SyntaxToken lastCodeTokenOf(SyntaxNode n) {
-        SyntaxToken last = null;
-        for (SyntaxToken t : tokens(n)) {
-            if (!t.isTrivia()) {
-                last = t;
+        List<SyntaxElement> children = n.children();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            SyntaxToken found = children.get(i) instanceof SyntaxNode c ? lastCodeTokenOf(c)
+                    : children.get(i) instanceof SyntaxToken t && !t.isTrivia() ? t : null;
+            if (found != null) {
+                return found;
             }
         }
-        return last;
+        return null;
     }
 
     /** The outermost construct beginning at {@code t}. */
@@ -2504,12 +2506,19 @@ public final class Formatter {
 
     /** Where {@code n}'s own text begins, past whatever trivia the parser put in front of it. */
     private static int firstCodeOffset(SyntaxNode n) {
-        for (SyntaxToken t : tokens(n)) {
-            if (!t.isTrivia()) {
-                return t.start();
+        SyntaxToken first = firstCodeTokenOf(n);
+        return first == null ? n.start() : first.start();
+    }
+
+    private static SyntaxToken firstCodeTokenOf(SyntaxNode n) {
+        for (SyntaxElement e : n.children()) {
+            SyntaxToken found = e instanceof SyntaxNode c ? firstCodeTokenOf(c)
+                    : e instanceof SyntaxToken t && !t.isTrivia() ? t : null;
+            if (found != null) {
+                return found;
             }
         }
-        return n.start();
+        return null;
     }
 
     /**

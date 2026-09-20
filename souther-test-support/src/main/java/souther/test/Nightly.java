@@ -15,6 +15,11 @@ import java.lang.annotation.Target;
  * what the test claims — so it is written beside the claim and not derived from it, and a test that
  * becomes cheap loses this and keeps what it says.
  *
+ * <p>Cost alone is not enough. A test is here when no cheaper way to ask the same question was
+ * found and when what it finds is as well found by the morning as by the change that caused it, and
+ * the class says both beside the claim. A test whose claim a change needs at once stays in the run a
+ * change waits on, and is made cheaper.
+ *
  * <p>The tag is what surefire reads, and it is spelled here once. A plain run leaves the tag out
  * through {@code test.excluded.groups}; a run that means to ask these empties that property.
  *

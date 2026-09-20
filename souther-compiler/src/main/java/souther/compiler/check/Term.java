@@ -222,6 +222,11 @@ final class Term {
     private final List<Term> parts;
     private final int hash;
 
+    /** {@link #standsForText}, written the first time it is asked for. A walk puts its terms in
+     *  order by comparing these, so one term is compared as often as the walk has neighbours for
+     *  it, and each comparison would write out everything the term reaches. */
+    private volatile String standsForText;
+
     /**
      * How a term's hash is mixed with the hashes of its parts.
      *
@@ -440,6 +445,15 @@ final class Term {
      * {@link souther.compiler.numeric.CanonicalForm#entriesIn}.
      */
     String standsForText() {
+        String written = standsForText;
+        if (written == null) {
+            written = writtenForOrder();
+            standsForText = written;
+        }
+        return written;
+    }
+
+    private String writtenForOrder() {
         StringBuilder sb = new StringBuilder();
         sb.append(shape.name()).append('(').append(textOf(of));
         if (shape == Shape.EQ) {

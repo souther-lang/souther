@@ -74,8 +74,15 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
      */
     private PlannedValues<String> either(PlannedValues<String> one, PlannedValues<String> other,
                                          boolean apart) {
+        return either(one, said(one), other, said(other), apart);
+    }
+
+    /** The same, for two branches whose fate is already known. */
+    private static PlannedValues<String> either(PlannedValues<String> one, Emptiness saidOfOne,
+                                                PlannedValues<String> other, Emptiness saidOfOther,
+                                                boolean apart) {
         return switch (Emptiness.Alternatives.from(
-                Emptiness.SidesShownEmpty.of(said(one), said(other)))) {
+                Emptiness.SidesShownEmpty.of(saidOfOne, saidOfOther))) {
             case NEITHER_STANDS -> one.bothDead(other);
             case ONLY_THE_RIGHT -> other;
             case ONLY_THE_LEFT -> one;
@@ -116,11 +123,22 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     /** A choice holds at most the sum, which is what the count adds for one. */
     @Test
     void aChoiceHoldsAtMostTheSum() {
-        for (PlannedValues<String> one : readings()) {
-            for (PlannedValues<String> other : readings()) {
-                int apart = held(built(one)) + held(built(other));
-                assertTrue(held(built(either(one, other, true))) <= apart, one + " || " + other);
-                assertTrue(held(built(either(one, other, false))) <= apart,
+        List<PlannedValues<String>> all = readings();
+        int[] held = new int[all.size()];
+        Emptiness[] said = new Emptiness[all.size()];
+        for (int at = 0; at < all.size(); at++) {
+            held[at] = held(built(all.get(at)));
+            said[at] = said(all.get(at));
+        }
+        for (int left = 0; left < all.size(); left++) {
+            for (int right = 0; right < all.size(); right++) {
+                PlannedValues<String> one = all.get(left);
+                PlannedValues<String> other = all.get(right);
+                int apart = held[left] + held[right];
+                assertTrue(held(built(either(one, said[left], other, said[right], true))) <= apart,
+                        one + " || " + other);
+                assertTrue(held(built(either(one, said[left], other, said[right], false)))
+                                <= apart,
                         "and merged it holds no more than that: " + one + " || " + other);
             }
         }
@@ -129,9 +147,16 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     /** And a conjunction at most the product, which is what the count multiplies for one. */
     @Test
     void aConjunctionHoldsAtMostTheProduct() {
-        for (PlannedValues<String> one : readings()) {
-            for (PlannedValues<String> other : readings()) {
-                assertTrue(held(built(one.meet(other))) <= held(built(one)) * held(built(other)),
+        List<PlannedValues<String>> all = readings();
+        int[] held = new int[all.size()];
+        for (int at = 0; at < all.size(); at++) {
+            held[at] = held(built(all.get(at)));
+        }
+        for (int left = 0; left < all.size(); left++) {
+            for (int right = 0; right < all.size(); right++) {
+                PlannedValues<String> one = all.get(left);
+                PlannedValues<String> other = all.get(right);
+                assertTrue(held(built(one.meet(other))) <= held[left] * held[right],
                         one + " && " + other);
             }
         }
