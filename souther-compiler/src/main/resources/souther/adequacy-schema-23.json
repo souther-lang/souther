@@ -2440,7 +2440,7 @@
     },
     "materialisationRegion": {
       "type": "object",
-      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into, by which reference of that definition the name is. Every arm carries what tells one of its regions from every other: a region named by less than that is one two builds could share.",
+      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into, by which reference of that definition the name is. Every arm carries what tells one of its regions from every other, and none of another arm's: a document naming a region two ways is a document a join could pick either of.",
       "required": [
         "kind"
       ],
@@ -2461,7 +2461,51 @@
             "required": [
               "module",
               "definition"
-            ]
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
+                {
+                  "required": [
+                    "lowered"
+                  ]
+                },
+                {
+                  "required": [
+                    "slot"
+                  ]
+                },
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                },
+                {
+                  "required": [
+                    "rule"
+                  ]
+                },
+                {
+                  "required": [
+                    "reference"
+                  ]
+                }
+              ]
+            }
           }
         },
         {
@@ -2482,7 +2526,21 @@
               "construct",
               "lowered",
               "slot"
-            ]
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "rule"
+                  ]
+                },
+                {
+                  "required": [
+                    "reference"
+                  ]
+                }
+              ]
+            }
           }
         },
         {
@@ -2501,7 +2559,46 @@
               "module",
               "definition",
               "rule"
-            ]
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
+                {
+                  "required": [
+                    "lowered"
+                  ]
+                },
+                {
+                  "required": [
+                    "slot"
+                  ]
+                },
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                },
+                {
+                  "required": [
+                    "reference"
+                  ]
+                }
+              ]
+            }
           }
         },
         {
@@ -2520,7 +2617,46 @@
               "module",
               "definition",
               "reference"
-            ]
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
+                {
+                  "required": [
+                    "lowered"
+                  ]
+                },
+                {
+                  "required": [
+                    "slot"
+                  ]
+                },
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                },
+                {
+                  "required": [
+                    "rule"
+                  ]
+                }
+              ]
+            }
           }
         },
         {
@@ -2537,7 +2673,21 @@
           "then": {
             "required": [
               "cases"
-            ]
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
           }
         },
         {
@@ -2554,7 +2704,214 @@
           "then": {
             "required": [
               "index"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "constructed_else"
+              }
+            },
+            "required": [
+              "slot"
             ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "if_then"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "if_else"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "constructed_then"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "short_circuit_right"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "comprehension_element"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

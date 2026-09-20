@@ -14,9 +14,13 @@ import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,7 +41,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * agreed with by a writer that said nothing — which is the state this is here to refuse. So the
  * keys are stated, the writer is held to them, and the schema is held to them beside it.
  *
- * <p>The conformance corpus holds no decision inside a built value, so nothing else writes one out.
+ * <p>The conformance corpus holds no decision inside a built value, so nothing else writes one out
+ * — the checks that a document naming a region wrongly is refused splice one into a document the
+ * corpus does check in, rather than compiling a program that reaches the shape.
  */
 class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
 
@@ -161,17 +168,32 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
         return out;
     }
 
-    /** Whether {@code of} takes the branch {@code condition} selects, which here is a key holding
-     *  a word. */
+    /** Whether {@code of} takes the branch {@code condition} selects, which here is one or more
+     *  keys each holding a word from a {@code const} or an {@code enum}. */
     private static boolean meets(JsonNode condition, JsonNode of) {
         JsonNode properties = condition.get("properties");
         for (String key : names(properties)) {
-            JsonNode word = properties.get(key).get("const");
-            if (!of.has(key) || !of.get(key).asString().equals(word.asString())) {
+            if (!of.has(key)) {
+                return false;
+            }
+            JsonNode said = properties.get(key);
+            String held = of.get(key).asString();
+            boolean matches = said.has("const") ? said.get("const").asString().equals(held)
+                    : anyIs(said.get("enum"), held);
+            if (!matches) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean anyIs(JsonNode words, String word) {
+        for (JsonNode each : words) {
+            if (word.equals(each.asString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Test
@@ -198,5 +220,112 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
         JsonNode build = written(new MaterialisationSite.Body(OWNER)).get("through").get(0);
 
         assertEquals(Set.of("kind", "materialised", "at"), names(build));
+    }
+
+    /** Every key any region is named by, across every arm. */
+    private static final Set<String> EVERY_REGION_KEY = NAMED_BY.values().stream()
+            .flatMap(Set::stream).collect(Collectors.toCollection(TreeSet::new));
+
+    /**
+     * A region named with a key another arm uses, and this one does not, is refused.
+     *
+     * <p>{@code containsAll} is not enough to guard this: it is met by a schema that demands the
+     * region's own keys and allows every arm's keys besides, which is a schema two of these could
+     * still be written under. What is checked here is the other half — that a document adding one
+     * such key is one the schema no longer takes.
+     *
+     * <p>Except {@code clause} on a {@code constructed_else} region, which is not another arm's key
+     * leaking in: it is this arm's own, present on the one this map named by it and absent on the
+     * one named without it, and that absence is what tells the two apart.
+     */
+    @Test
+    void theSchemaRefusesARegionNamedWithAnotherArmsKey() {
+        List<String> wrong = new ArrayList<>();
+        NAMED_BY.forEach((site, keys) -> {
+            for (String stray : EVERY_REGION_KEY) {
+                if (keys.contains(stray) || isTheOptionalClauseOfItsOwnArm(site, stray)) {
+                    continue;
+                }
+                ObjectNode at = (ObjectNode) written(site).get("through").get(0).get("at");
+                withStray(at, stray);
+                if (DocumentShape.of(spliced(at)).wrong().isEmpty()) {
+                    wrong.add(site + " is still accepted with a stray `" + stray + "`");
+                }
+            }
+        });
+
+        assertEquals(List.of(), wrong);
+    }
+
+    private static boolean isTheOptionalClauseOfItsOwnArm(MaterialisationSite site, String key) {
+        return "clause".equals(key) && site instanceof MaterialisationSite.Slot slot
+                && slot.slot() instanceof RegionSlot.ConstructedElse;
+    }
+
+    /** {@code at}, with {@code key} added at a value of the shape its own schema entry asks for —
+     *  so a document is wrong only for carrying the key at all and not for the shape under it. */
+    private static void withStray(ObjectNode at, String key) {
+        switch (key) {
+            case "construct", "lowered", "index", "rule", "reference" -> at.put(key, 0);
+            case "cases" -> at.putArray(key).add("Yes");
+            default -> at.put(key, "x");
+        }
+    }
+
+    /**
+     * A real, checked-in, schema-shaped document with its one {@code through} array replaced by a
+     * build naming {@code at}.
+     *
+     * <p>A document built by hand for this alone would have to restate every key a document is
+     * asked for around a decision — the module's own status, its declarations, a behavior's
+     * partition, everything the schema demands elsewhere — and would be answering none of what this
+     * test is about. So this takes a document {@code soIsEveryAnswerCheckedIn} already holds to the
+     * schema, and touches only the one array whose shape is in question.
+     */
+    private static JsonNode spliced(JsonNode at) {
+        ObjectNode document = (ObjectNode) checkedInDocument().deepCopy();
+        ObjectNode step = JsonNodeFactory.instance.objectNode();
+        step.put("kind", "materialisation");
+        step.put("materialised", "m.v");
+        step.set("at", at);
+        ArrayNode through = (ArrayNode) throughArrayOf(document);
+        through.removeAll();
+        through.add(step);
+        return document;
+    }
+
+    /** The first {@code through} array {@code node} holds, at any depth. */
+    private static JsonNode throughArrayOf(JsonNode node) {
+        if (node.isObject() && node.has("through") && node.get("through").isArray()) {
+            return node.get("through");
+        }
+        for (JsonNode child : node.isObject() ? node.properties().stream().map(Map.Entry::getValue)
+                .toList() : node.isArray() ? toList(node) : List.<JsonNode>of()) {
+            JsonNode found = throughArrayOf(child);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private static List<JsonNode> toList(JsonNode array) {
+        List<JsonNode> out = new ArrayList<>();
+        array.forEach(out::add);
+        return out;
+    }
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** A document {@code TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest} already
+     *  holds the shipped schema to. Read fresh, since a caller of {@link #spliced} deep-copies it
+     *  before mutating anything. */
+    private static JsonNode checkedInDocument() {
+        try (var in = ABuildIsWrittenInTheWordsTheSchemaNamesTest.class.getResourceAsStream(
+                "/souther/compiler/conformance/catalog/expected.report.json")) {
+            return JSON.readTree(in.readAllBytes());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }
