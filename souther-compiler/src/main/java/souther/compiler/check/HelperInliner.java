@@ -2444,11 +2444,11 @@ public final class HelperInliner {
     /**
      * What a value's method takes, and whether it can be called at all.
      *
-     * <p>A method is called only where everything the value demands at its root can be handed to it
-     * or folded in it: a value of this module that is emitted as a method is handed, a constant is
-     * folded. Anything else it demands — a value another module declared — is built by the region
-     * that builds the value, and if the method were to build it instead, two values that name it
-     * would each build it, which is what one region sharing it is for.
+     * <p>A method is called only where everything the value demands at its root is what the method
+     * takes, {@link #takenByTheMethod}. Anything else it demands — a constant, a value another
+     * module declared — would be built inside the method, and two values that name it would each
+     * build it, which is what one region sharing it is for. Such a value is built by the region
+     * that names it instead.
      */
     private record Handover(boolean callable, List<Hir.Var.Denoting> taken) { }
 
@@ -2463,11 +2463,8 @@ public final class HelperInliner {
                 Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
                 Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
                 demandedHere(calls, under);
-                boolean callable = true;
-                for (Hir.Var.Denoting each : under.values()) {
-                    callable &= isAMethodValue(each) || constantOf(each).isPresent();
-                }
-                known = new Handover(callable, takenByTheMethod(under));
+                List<Hir.Var.Denoting> taken = takenByTheMethod(under);
+                known = new Handover(taken.size() == under.size(), taken);
             }
             handovers.put(reaches, known);
         }
