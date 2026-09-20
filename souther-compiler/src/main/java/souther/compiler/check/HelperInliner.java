@@ -2279,7 +2279,8 @@ public final class HelperInliner {
         return null;
     }
 
-    /** The values {@code e} names without crossing into a region, first reference of each. */
+    /** The values {@code e} names without crossing into a region, first reference of each, and
+     *  those every way out of a fork here names ({@link #onEveryWayOut}). */
     private void demandedHere(Hir.Expr e, Map<String, Hir.Var.Denoting> out) {
         if (e == null) {
             return;
@@ -2287,13 +2288,66 @@ public final class HelperInliner {
         switch (e) {
             case Hir.Var.Denoting named when materialisable(named) != null ->
                     out.putIfAbsent(named.reaches(), named);
-            case Hir.If iff -> demandedHere(iff.cond(), out);
-            case Hir.IfConstructed ic -> demandedHere(ic.construct(), out);
-            case Hir.Match m -> demandedHere(m.scrutinee(), out);
+            case Hir.If iff -> {
+                demandedHere(iff.cond(), out);
+                onEveryWayOut(List.of(iff.then(), iff.els()), out);
+            }
+            case Hir.IfConstructed ic -> {
+                demandedHere(ic.construct(), out);
+                List<Hir.Expr> ways = new ArrayList<>();
+                ways.add(ic.then());
+                for (Hir.ElseArm arm : ic.els()) {
+                    ways.add(arm.body());
+                }
+                onEveryWayOut(ways, out);
+            }
+            case Hir.Match m -> {
+                demandedHere(m.scrutinee(), out);
+                List<Hir.Expr> ways = new ArrayList<>();
+                for (Hir.Case each : m.cases()) {
+                    ways.add(each.body());
+                }
+                onEveryWayOut(ways, out);
+            }
             case Hir.Binary b when isShortCircuit(b) -> demandedHere(b.left(), out);
             case Hir.Block _ -> { }
             case Hir.ListComp _ -> { }
             default -> Hir.forEachChild(e, child -> demandedHere(child, out));
+        }
+    }
+
+    /**
+     * The values every one of {@code ways} names, added to what the region around them demands.
+     *
+     * <p>A fork's arms are ways out of one place: whichever is taken, one of them is. So a value
+     * every arm names is named on every path through here, and binding it around the fork
+     * evaluates it exactly where some reference to it is evaluated — which is the whole of what
+     * keeps the region rule from moving work onto a path that had none.
+     *
+     * <p>Only the forks that are ways out. The right of a short-circuit is reached for some of what
+     * reaches the left, a block's body for each application of it and a comprehension's element for
+     * each item, and none of those is a way the code has to go.
+     *
+     * <p>Which says nothing about how often the fork runs, only about whether it does. A value
+     * bound here and read in one arm is built once whichever arm runs, where arm-local bindings
+     * would each build it — one materialisation per region, told of a place that is one region.
+     */
+    private void onEveryWayOut(List<Hir.Expr> ways, Map<String, Hir.Var.Denoting> out) {
+        Map<String, Hir.Var.Denoting> shared = null;
+        for (Hir.Expr way : ways) {
+            Map<String, Hir.Var.Denoting> named = new LinkedHashMap<>();
+            demandedHere(way, named);
+            if (shared == null) {
+                shared = named;
+            } else {
+                shared.keySet().retainAll(named.keySet());
+            }
+            if (shared.isEmpty()) {
+                return;
+            }
+        }
+        if (shared != null) {
+            shared.forEach(out::putIfAbsent);
         }
     }
 

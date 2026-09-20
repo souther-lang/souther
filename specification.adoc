@@ -2735,10 +2735,11 @@ The body is an expression. `+{ ... }+` is a block expression (<<block-expression
 [#fn-value-semantics]
 === A value is substituted where it is named
 
-A value is not module state. Its expression is elaborated in the module that declares it and substituted at each reference, so nothing is held between references and the module's values come into being in no order.
+A value is not module state. Its expression is elaborated in the module that declares it, and it denotes as if that expression stood at each reference, so nothing is held between references and the module's values come into being in no order.
 
-* Its names are resolved once, where it is written (<<qualified-reference>>). What is substituted is the resolved definition, not text to be read again at the reference.
-* It is evaluated at each reference. A value's body obeys a helper's rules — it cannot call an injected behavior (<<depends-on>>) — so it is pure and total, and re-evaluation is not observable.
+* Its names are resolved once, where it is written (<<qualified-reference>>). What stands at the reference is the resolved definition, not text to be read again there.
+* A value's body obeys a helper's rules — it cannot call an injected behavior (<<depends-on>>) — so it is pure and total, and when it is evaluated is not observable.
+* The substitution says what a value means, not what an implementation builds. One materialisation MAY be shared among the references inside one evaluation region — a branch, a match arm, the right of a short-circuit, a block's body, the element a comprehension writes per item. Sharing MUST NOT evaluate a value on a path on which no reference to it is evaluated: a materialisation stands at the head of the region that demands it, and a value every arm of a fork names is demanded by the fork.
 * Two references may yield distinct values. Nothing observes that: there is no reference identity in the language, and comparison is structural (<<newtype-comparison>>).
 * An invariant a value breaks is reported at the value, whether or not anything names it.
 * What a value constructs is the value's own. A behavior that names one reads something already made, so the construction stays with the definition and is not required in that behavior's `+constructs+` (<<constructs>>). A spread of a value reads one the same way. This is where a value parts from a helper, whose construction set does fold into its caller.
@@ -7029,8 +7030,11 @@ What the width is depends on which of them it is, because the emitted form is no
 The `apply` method generated for `f` is 88025 bytes of code, but a JVM method holds at
 most 65535.
 Hint: Split the work into another behavior, which is emitted as a class of its own, or
-move the table out of the source. Naming parts with `let` does not divide it: a
-non-recursive helper is inlined before it is emitted.
+move the table out of the source.
+Hint: Naming parts with `let` does not divide it. A non-recursive helper is inlined at
+each call, so moving code into one leaves the same code here. A value is materialised
+once in each region that names it, so naming something this body writes out more than
+once can remove the copies — but what is left is still this method.
 ----
 
 How much code a definition becomes is not known until it is written, so unlike E2101 this is not decided at the declaration; it is reported as the definition that was being emitted when the class file writer refused. The message names the generated method, because one declaration becomes several — a `+data+` is emitted as a value class, a decoder and an encoder, and a `+behavior+` as an implementation and an interface — and which of them grew is not readable from the declaration.
