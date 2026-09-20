@@ -1,7 +1,9 @@
 package souther.architecture;
 
+import souther.architecture.ARosterWrittenByName.Told;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 
 import org.junit.jupiter.api.Test;
 
@@ -58,6 +60,53 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     /** The same package, as a call's owner says it — exactly, so one under it is not it. */
     private static final String THEIR_PACKAGE = "souther/compiler/ast";
 
+    /** The two forms whose answers this is about, as a class file names them. */
+    private static final String NEW_DATA = "souther/compiler/ast/Hir$NewData";
+
+    private static final String APPLY = "souther/compiler/ast/Hir$Apply";
+
+    /**
+     * The names whose overloads are different acts, and which parameter says which.
+     *
+     * <p>A pass writes an application where no source did, and does it from an expression it
+     * already has or from a spelling it has to resolve first. The second hands its arguments to the
+     * first, so what each of them settles is not the same, and a row saying only {@code synthetic}
+     * would be saying one of those about both.
+     *
+     * <p>What an application is replaced by is either an expression alone or an expression and the
+     * arguments to apply it to, and only the second names what the construction was read as. What a
+     * construction is rewritten to keeps where it was written or is told where it is now, and only
+     * the second carries the answer across. What a source expression is read into takes what is in
+     * force where it is read, and the one taking a reading resolves nothing of its own. What a
+     * core term's written syntax is is worked out under the bindings in force, and the one that
+     * starts with none hands over to it.
+     *
+     * <p>One parameter each, because that is what tells them apart and nothing else has to. An
+     * argument added beside it leaves every row here where it is.
+     */
+    private static final Told SYNTHETIC_OF_AN_EXPRESSION =
+            Told.takingA(APPLY, "synthetic", 0, Hir.Expr.class);
+
+    private static final Told SYNTHETIC_OF_A_SPELLING =
+            Told.takingA(APPLY, "synthetic", 0, String.class);
+
+    private static final Told REPLACED_BY_AN_APPLICATION =
+            Told.takingA(APPLY, "replacedBy", 1, List.class);
+
+    private static final Told READ_UNDER_WHAT_IS_IN_FORCE = Told.takingWhatIsCalled(
+            "souther/compiler/check/Resolve", "expr", 1,
+            "souther/compiler/check/Resolve$InForce");
+
+    private static final Told REWRITTEN_WHERE_IT_NOW_STANDS =
+            Told.takingA(NEW_DATA, "with", 2, SourcePos.class);
+
+    private static final Told WRITTEN_UNDER_THE_BINDINGS_IN_FORCE =
+            Told.takingA("souther/compiler/check/Terms", "writtenSyntaxOf", 2, Map.class);
+
+    private static final List<Told> TOLD_APART = List.of(SYNTHETIC_OF_AN_EXPRESSION,
+            SYNTHETIC_OF_A_SPELLING, REPLACED_BY_AN_APPLICATION, READ_UNDER_WHAT_IS_IN_FORCE,
+            REWRITTEN_WHERE_IT_NOW_STANDS, WRITTEN_UNDER_THE_BINDINGS_IN_FORCE);
+
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
     /**
@@ -67,22 +116,32 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * says the same thing and says it in forty characters of type names, so an edge written with one
      * is read by working out what it is rather than by reading it.
      *
-     * <p>The whole signature is here beside the word, because that is what an edge is matched on. A
-     * word standing for a member is only as good as the member it stands for being the one it was
-     * written for: matched by name alone, an overload added tomorrow would be written with a word
-     * that means the other one.
+     * <p>The name and not the signature, because a word is about an act and an act does not change
+     * when the member performing it takes one more argument. What a word stands for is held to one
+     * member by the rows having to cover the package's overloads between them: a row saying only
+     * the name is for every overload of it, so an overload added tomorrow arrives under a word
+     * written for the others, and is refused until somebody says which act it is.
+     *
+     * @param told which overload this is, where the overloads of a name are different acts
      */
-    private record Settler(String word, String owner, String name, String descriptor) {
+    private record Settler(String word, String owner, String name, Told told) {
+
+        /** One word for every overload of a name, which is what a single act is written as. */
+        Settler(String word, String owner, String name) {
+            this(word, owner, name, null);
+        }
+
+        /** Whether {@code signature} is an overload this word is for. */
+        boolean covers(String signature) {
+            return member().equals(signature.substring(0, signature.indexOf('(')))
+                    && (told == null || told.picks(signature.substring(signature.indexOf('('))));
+        }
 
         /** The member, whichever of its overloads a call names — what says an invocation settles. */
         String member() {
             return owner + "#" + name;
         }
 
-        /** The one overload, which is what an edge is written from. */
-        String signature() {
-            return member() + descriptor;
-        }
     }
 
     /**
@@ -97,48 +156,23 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * this one answers what a call reaches.
      */
     private static final List<Settler> SETTLERS = List.of(
-            new Settler("NewData.read", "souther/compiler/ast/Hir$NewData", "read",
-                    "(Lsouther/compiler/ast/Ast$NewData;Lsouther/compiler/ast/Hir$Name;"
-                            + "Ljava/util/List;Ljava/util/List;Lsouther/compiler/ast/Reading;)"
-                            + "Lsouther/compiler/ast/Hir$NewData;"),
-            new Settler("NewData.fromApply", "souther/compiler/ast/Hir$NewData", "fromApply",
-                    "(Lsouther/compiler/ast/Hir$Apply;Lsouther/compiler/ast/Hir$Name;"
-                            + "Ljava/util/List;)Lsouther/compiler/ast/Hir$NewData;"),
-            new Settler("NewData.syntheticWithEveryFieldWritten",
-                    "souther/compiler/ast/Hir$NewData", "syntheticWithEveryFieldWritten",
-                    "(Lsouther/compiler/ast/Hir$Name;Ljava/util/List;Ljava/util/List;"
-                            + "Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)"
-                            + "Lsouther/compiler/ast/Hir$NewData;"),
-            new Settler("NewData.publishedBy", "souther/compiler/ast/Hir$NewData", "publishedBy",
-                    "(Ljava/lang/String;)Lsouther/compiler/ast/Hir$NewData;"),
-            new Settler("NewData.carriedByValue", "souther/compiler/ast/Hir$NewData",
-                    "carriedByValue", "()Lsouther/compiler/ast/Hir$NewData;"),
-            new Settler("Apply.read", "souther/compiler/ast/Hir$Apply", "read",
-                    "(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$AppliedCallee;"
-                            + "Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)"
-                            + "Lsouther/compiler/ast/Hir$Apply;"),
-            new Settler("Apply.synthetic(Expr)", "souther/compiler/ast/Hir$Apply", "synthetic",
-                    "(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;"
-                            + "Lsouther/compiler/types/ApplicationOrigin;"
-                            + "Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)"
-                            + "Lsouther/compiler/ast/Hir$Apply;"),
-            new Settler("Apply.synthetic(String)", "souther/compiler/ast/Hir$Apply", "synthetic",
-                    "(Ljava/lang/String;Lsouther/compiler/types/ReachName;"
-                            + "Lsouther/compiler/types/ReferenceOrigin;"
-                            + "Lsouther/compiler/types/ApplicationOrigin;Ljava/util/List;"
-                            + "Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)"
-                            + "Lsouther/compiler/ast/Hir$Apply;"),
-            new Settler("Apply.carriedByValue", "souther/compiler/ast/Hir$Apply", "carriedByValue",
-                    "()Lsouther/compiler/ast/Hir$Apply;"),
-            new Settler("Apply.with", "souther/compiler/ast/Hir$Apply", "with",
-                    "(Lsouther/compiler/ast/Hir$AppliedCallee;Lsouther/compiler/ast/Hir$Expr;"
-                            + "Ljava/util/List;Lsouther/compiler/diag/SourcePos;"
-                            + "Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply;"));
+            new Settler("NewData.read", NEW_DATA, "read"),
+            new Settler("NewData.fromApply", NEW_DATA, "fromApply"),
+            new Settler("NewData.syntheticWithEveryFieldWritten", NEW_DATA,
+                    "syntheticWithEveryFieldWritten"),
+            new Settler("NewData.publishedBy", NEW_DATA, "publishedBy"),
+            new Settler("NewData.carriedByValue", NEW_DATA, "carriedByValue"),
+            new Settler("Apply.read", APPLY, "read"),
+            new Settler("Apply.synthetic(Expr)", APPLY, "synthetic", SYNTHETIC_OF_AN_EXPRESSION),
+            new Settler("Apply.synthetic(String)", APPLY, "synthetic", SYNTHETIC_OF_A_SPELLING),
+            new Settler("Apply.carriedByValue", APPLY, "carriedByValue"),
+            new Settler("Apply.with", APPLY, "with"));
 
     /**
-     * Every member of the owning package that names an answer, by the whole of what it is — owner,
-     * member, what it takes and what it answers with. A second member of a name is a second row, so
-     * an overload that settles an answer of its own cannot stand behind one that already does.
+     * Every member of the owning package that names an answer, by owner and name, and by which
+     * overload where the overloads of a name do not all name one ({@link ARosterWrittenByName}).
+     * {@code synthetic} is the one: the overload taking a spelling hands its arguments to the one
+     * taking an expression, and only the second names an answer, so the row says which.
      *
      * <p>Four settle one: {@code read} on each form is a source spelling it, {@code fromApply}
      * moves to a construction what the application it means already answered, and
@@ -157,32 +191,32 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * other list holds.
      */
     private static final List<String> NAMING = List.of(
-            "souther/compiler/ast/Hir#atSlots(Lsouther/compiler/ast/Hir$Expr;Ljava/util/function/UnaryOperator;Ljava/util/function/UnaryOperator;)Lsouther/compiler/ast/Hir$Expr;",
-            "souther/compiler/ast/Hir#withRegion(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Expr;",
-            "souther/compiler/ast/Hir$Apply#carriedByValue()Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#origin()Lsouther/compiler/ast/ConstructionOrigin;",
-            "souther/compiler/ast/Hir$Apply#read(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$AppliedCallee;Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#replacedBy(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#synthetic(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;Lsouther/compiler/types/ApplicationOrigin;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#wasCarriedByValue()Z",
-            "souther/compiler/ast/Hir$Apply#with(Lsouther/compiler/ast/Hir$AppliedCallee;Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#withArgs(Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Fields#$values()[Lsouther/compiler/ast/Hir$Fields;",
-            "souther/compiler/ast/Hir$Fields#values()[Lsouther/compiler/ast/Hir$Fields;",
-            "souther/compiler/ast/Hir$NewData#carriedByValue()Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Hir$NewData#fields()Lsouther/compiler/ast/Hir$Fields;",
-            "souther/compiler/ast/Hir$NewData#fromApply(Lsouther/compiler/ast/Hir$Apply;Lsouther/compiler/ast/Hir$Name;Ljava/util/List;)Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Hir$NewData#mayOmitOptionalFields()Z",
-            "souther/compiler/ast/Hir$NewData#origin()Lsouther/compiler/ast/ConstructionOrigin;",
-            "souther/compiler/ast/Hir$NewData#publishedBy(Ljava/lang/String;)Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Hir$NewData#read(Lsouther/compiler/ast/Ast$NewData;Lsouther/compiler/ast/Hir$Name;Ljava/util/List;Ljava/util/List;Lsouther/compiler/ast/Reading;)Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Hir$NewData#syntheticWithEveryFieldWritten(Lsouther/compiler/ast/Hir$Name;Ljava/util/List;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Hir$NewData#wasCarried(Lsouther/compiler/types/TypeSymbol$AtModule;)Z",
-            "souther/compiler/ast/Hir$NewData#with(Ljava/util/List;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$NewData;",
-            "souther/compiler/ast/Origins#carried(Lsouther/compiler/ast/ConstructionOrigin;Lsouther/compiler/types/TypeSymbol$AtModule;)Z",
-            "souther/compiler/ast/Origins#carriedByValue(Lsouther/compiler/ast/ConstructionOrigin;)Lsouther/compiler/ast/ConstructionOrigin;",
-            "souther/compiler/ast/Origins#publishedIn(Lsouther/compiler/ast/ConstructionOrigin;Ljava/lang/String;)Lsouther/compiler/ast/ConstructionOrigin;",
-            "souther/compiler/ast/Origins$Published#module()Ljava/lang/String;");
+            "souther/compiler/ast/Hir#atSlots",
+            "souther/compiler/ast/Hir#withRegion",
+            "souther/compiler/ast/Hir$Apply#carriedByValue",
+            "souther/compiler/ast/Hir$Apply#origin",
+            "souther/compiler/ast/Hir$Apply#read",
+            "souther/compiler/ast/Hir$Apply#replacedBy[1=List]",
+            "souther/compiler/ast/Hir$Apply#synthetic[0=Hir$Expr]",
+            "souther/compiler/ast/Hir$Apply#wasCarriedByValue",
+            "souther/compiler/ast/Hir$Apply#with",
+            "souther/compiler/ast/Hir$Apply#withArgs",
+            "souther/compiler/ast/Hir$Fields#$values",
+            "souther/compiler/ast/Hir$Fields#values",
+            "souther/compiler/ast/Hir$NewData#carriedByValue",
+            "souther/compiler/ast/Hir$NewData#fields",
+            "souther/compiler/ast/Hir$NewData#fromApply",
+            "souther/compiler/ast/Hir$NewData#mayOmitOptionalFields",
+            "souther/compiler/ast/Hir$NewData#origin",
+            "souther/compiler/ast/Hir$NewData#publishedBy",
+            "souther/compiler/ast/Hir$NewData#read",
+            "souther/compiler/ast/Hir$NewData#syntheticWithEveryFieldWritten",
+            "souther/compiler/ast/Hir$NewData#wasCarried",
+            "souther/compiler/ast/Hir$NewData#with[2=SourcePos]",
+            "souther/compiler/ast/Origins#carried",
+            "souther/compiler/ast/Origins#carriedByValue",
+            "souther/compiler/ast/Origins#publishedIn",
+            "souther/compiler/ast/Origins$Published#module");
 
     /**
      * Every call that settles an answer, by the method that makes it and how many it makes.
@@ -204,26 +238,28 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * move for it.
      */
     private static final List<String> SETTLING = List.of(
-            "souther/compiler/ast/Hir$Apply#synthetic(Ljava/lang/String;Lsouther/compiler/types/ReachName;Lsouther/compiler/types/ReferenceOrigin;Lsouther/compiler/types/ApplicationOrigin;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply; -> Apply.synthetic(Expr) x1",
-            "souther/compiler/check/Elaborator#fromList(Ljava/lang/String;Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/ast/Hir$RowCollection;)Lsouther/compiler/ast/Hir$Expr; -> Apply.synthetic(String) x1",
-            "souther/compiler/check/HelperInliner#etaExpand(Lsouther/compiler/ast/Hir$Var;ILjava/util/function/IntFunction;)Lsouther/compiler/ast/Hir$Block; -> Apply.synthetic(Expr) x1",
-            "souther/compiler/check/HelperInliner#rename(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/check/HelperInliner$Renaming;)Lsouther/compiler/ast/Hir$Expr; -> Apply.with x1",
-            "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> Apply.carriedByValue x1",
-            "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> NewData.carriedByValue x1",
-            "souther/compiler/check/HelperNames#publishedBy(Lsouther/compiler/ast/Hir$Expr;Ljava/lang/String;)Lsouther/compiler/ast/Hir$Expr; -> NewData.publishedBy x1",
-            "souther/compiler/check/NewtypeDesugar#go(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/check/DeclarationNewtypes;)Lsouther/compiler/ast/Hir$Expr; -> NewData.fromApply x1",
-            "souther/compiler/check/Resolve#applied(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Ast$Var;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> NewData.read x1",
-            "souther/compiler/check/Terms#writtenSyntaxOf(Lsouther/compiler/core/Core;Lsouther/compiler/check/Denotations;Ljava/util/Map;)Lsouther/compiler/ast/Hir$Expr; -> Apply.synthetic(String) x2",
-            "souther/compiler/partition/FixtureTemplate#newtype(Lsouther/compiler/types/TypeReachName$Written;Lsouther/compiler/partition/FixtureTemplate;)Lsouther/compiler/partition/FixtureTemplate; -> Apply.synthetic(String) x1",
-            "souther/compiler/partition/FixtureTemplate#record(Lsouther/compiler/types/TypeReachName$Written;Ljava/util/SequencedMap;)Lsouther/compiler/partition/FixtureTemplate; -> NewData.syntheticWithEveryFieldWritten x1",
-            "souther/compiler/partition/FixtureTemplate#spreading(Lsouther/compiler/types/TypeReachName$Written;Lsouther/compiler/partition/FixtureTemplate;Ljava/util/SequencedMap;)Lsouther/compiler/partition/FixtureTemplate; -> NewData.syntheticWithEveryFieldWritten x1",
-            "souther/compiler/partition/FixtureTemplate#temporal(Ljava/lang/String;Ljava/lang/String;)Lsouther/compiler/partition/FixtureTemplate; -> Apply.synthetic(String) x1");
+            "souther/compiler/ast/Hir$Apply#synthetic[0=String] -> Apply.synthetic(Expr) x1",
+            "souther/compiler/check/Elaborator#fromList -> Apply.synthetic(String) x1",
+            "souther/compiler/check/HelperInliner#etaExpand -> Apply.synthetic(Expr) x1",
+            "souther/compiler/check/HelperInliner#rename -> Apply.with x1",
+            "souther/compiler/check/HelperNames#carriedByValue -> Apply.carriedByValue x1",
+            "souther/compiler/check/HelperNames#carriedByValue -> NewData.carriedByValue x1",
+            "souther/compiler/check/HelperNames#publishedBy -> NewData.publishedBy x1",
+            "souther/compiler/check/NewtypeDesugar#go -> NewData.fromApply x1",
+            "souther/compiler/check/Resolve#applied -> Apply.read x1",
+            "souther/compiler/check/Resolve#expr[1=Resolve$InForce] -> Apply.read x1",
+            "souther/compiler/check/Resolve#expr[1=Resolve$InForce] -> NewData.read x1",
+            "souther/compiler/check/Terms#writtenSyntaxOf[2=Map] -> Apply.synthetic(String) x2",
+            "souther/compiler/partition/FixtureTemplate#newtype -> Apply.synthetic(String) x1",
+            "souther/compiler/partition/FixtureTemplate#record"
+                    + " -> NewData.syntheticWithEveryFieldWritten x1",
+            "souther/compiler/partition/FixtureTemplate#spreading"
+                    + " -> NewData.syntheticWithEveryFieldWritten x1",
+            "souther/compiler/partition/FixtureTemplate#temporal -> Apply.synthetic(String) x1");
 
     @Test
     void everyMemberOfTheOwningPackageThatNamesAnAnswerIsWrittenDown() {
-        assertEquals(NAMING, new ArrayList<>(namingAnAnswer()),
+        assertEquals(NAMING, namingAnAnswer(),
                 "a row here is a way to answer what a construction was read as, or a reader of one:"
                         + " say which it is and why it is not the node's own answer carried");
     }
@@ -232,21 +268,18 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      *  edge is rendered through, checked against the package before anything is rendered. */
     @Test
     void andEachWordTheEdgesAreWrittenWithStandsForOneMember() {
-        assertEquals(SETTLERS.stream().map(Settler::signature).sorted().toList(),
-                SETTLERS.stream().map(Settler::signature).distinct().sorted().toList(),
-                "two rows of the settlers table name one member");
         assertEquals(SETTLERS.stream().map(Settler::word).sorted().toList(),
                 SETTLERS.stream().map(Settler::word).distinct().sorted().toList(),
                 "two members of the settlers table are written with one word");
-        assertEquals(List.of(), SETTLERS.stream().map(Settler::signature)
-                        .filter(each -> !declaredInThatPackage().contains(each)).toList(),
+        assertEquals(List.of(), SETTLERS.stream().map(Settler::member)
+                        .filter(each -> !theNamesOfThatPackage().contains(each)).toList(),
                 "a settlers row names a member this package does not declare");
-        // And the other way round, which is what makes the table the members rather than the ones
-        // that happen to be called. An overload nobody calls yet settles what its siblings settle,
-        // and a table that waited for a caller would be answered about it by whoever wrote one.
-        assertEquals(everyOverloadOfASettler(),
-                SETTLERS.stream().map(Settler::signature).sorted().toList(),
-                "an overload of a settling member is a way in whether or not anything uses it yet");
+        // And every overload under exactly one word, which is what makes the table the members
+        // rather than the ones that happen to be called. An overload nobody calls yet settles what
+        // its siblings settle, and one under no word is a way in nobody has ruled on.
+        assertEquals(Map.of(), overloadsNotUnderOneWord(),
+                "an overload of a settling member is a way in whether or not anything uses it yet,"
+                        + " and each of them is one act: say which word it is written with");
     }
 
     @Test
@@ -287,9 +320,9 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
                 "the calls this reads are made outside the package that declares what they reach");
     }
 
-    /** Every method of the owning package whose code names an answer, by owner, name and what it
-     *  takes and answers with — so a second member of a name is a second row. */
-    private static Set<String> namingAnAnswer() {
+    /** Every method of the owning package whose code names an answer, by name — and by which
+     *  overload where the overloads of a name do not all name one. */
+    private static List<String> namingAnAnswer() {
         Set<String> found = new TreeSet<>();
         for (ClassModel each : COMPILED.all()) {
             if (!each.thisClass().asInternalName().startsWith(THEIRS)) {
@@ -304,20 +337,38 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
                 }
             }
         }
-        return found;
+        return new ARosterWrittenByName(declaredInThatPackage(), TOLD_APART).namesOf(found);
     }
 
     /** Every call to a settling member, as the method that makes it, what it settles and how many
      *  of them that method makes. */
     private static List<String> settlingAnAnswer() {
-        Map<String, Integer> counted = new TreeMap<>();
+        Map<String, Map<String, Integer>> counted = new TreeMap<>();
         walkEveryCall((caller, invoked) -> {
             if (!settlingMembers().contains(memberOf(invoked))) {
                 return;
             }
-            counted.merge(caller + " -> " + wordFor(invoked), 1, Integer::sum);
+            counted.computeIfAbsent(caller, _ -> new TreeMap<>())
+                    .merge(wordFor(invoked), 1, Integer::sum);
         });
-        return counted.entrySet().stream().map(row -> row.getKey() + " x" + row.getValue()).toList();
+        List<String> rows = new ArrayList<>();
+        new ARosterWrittenByName(everyMethodCompiled(), TOLD_APART).by(counted)
+                .forEach((caller, words) -> words.forEach((word, times) ->
+                        rows.add(caller + " -> " + word + " x" + times)));
+        return rows.stream().sorted().toList();
+    }
+
+    /** Every method this repository compiles, by owner, name and descriptor — the population a
+     *  caller's name is read against, so that a name held by two methods is told apart. */
+    private static Set<String> everyMethodCompiled() {
+        Set<String> found = new TreeSet<>();
+        for (ClassModel each : COMPILED.all()) {
+            for (MethodModel method : each.methods()) {
+                found.add(each.thisClass().name().stringValue() + "#"
+                        + method.methodName().stringValue() + method.methodType().stringValue());
+            }
+        }
+        return found;
     }
 
     /**
@@ -330,7 +381,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      */
     private static String wordFor(InvokeInstruction invoked) {
         for (Settler settler : SETTLERS) {
-            if (settler.signature().equals(signatureOf(invoked))) {
+            if (settler.covers(signatureOf(invoked))) {
                 return settler.word();
             }
         }
@@ -405,12 +456,37 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
         }
     }
 
-    /** Every overload the package declares of a member the table names, by the whole of what it is
-     *  — what the table is required to hold, read off the classes rather than off the calls. */
-    private static List<String> everyOverloadOfASettler() {
-        return declaredInThatPackage().stream()
-                .filter(each -> settlingMembers().contains(each.substring(0, each.indexOf('('))))
-                .sorted().toList();
+    /**
+     * Every overload the package declares of a member the table names, against the words that
+     * cover it, where that is not one word.
+     *
+     * <p>Read off the classes rather than off the calls, which is what makes the table the members
+     * rather than the ones something happens to reach. An overload under no word is one nobody has
+     * said what it settles; one under two is a name told apart twice over and an edge naming it
+     * would be rendered with whichever word was written first.
+     */
+    private static Map<String, List<String>> overloadsNotUnderOneWord() {
+        Map<String, List<String>> found = new TreeMap<>();
+        for (String each : declaredInThatPackage()) {
+            if (!settlingMembers().contains(each.substring(0, each.indexOf('(')))) {
+                continue;
+            }
+            List<String> words = SETTLERS.stream().filter(settler -> settler.covers(each))
+                    .map(Settler::word).toList();
+            if (words.size() != 1) {
+                found.put(each, words);
+            }
+        }
+        return found;
+    }
+
+    /** What the owning package's methods are called, which is what a settlers row names. */
+    private static Set<String> theNamesOfThatPackage() {
+        Set<String> found = new TreeSet<>();
+        for (String each : declaredInThatPackage()) {
+            found.add(each.substring(0, each.indexOf('(')));
+        }
+        return found;
     }
 
     /** Every method the package that declares these forms holds, by the whole of what it is. */
