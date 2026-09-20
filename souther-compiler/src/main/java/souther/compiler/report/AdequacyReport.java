@@ -4396,11 +4396,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Level.OnACarrier on -> {
                 into.put("kind", "on_a_carrier");
                 carrier(into.putObject("carrier"), on.of());
-                into.put("at", on.at().spelled());
+                into.put("at", on.written());
             }
             case Level.OfTheQuantity counted -> {
                 into.put("kind", "a_count");
-                into.put("at", counted.at().spelled());
+                into.put("at", counted.written());
             }
         }
     }

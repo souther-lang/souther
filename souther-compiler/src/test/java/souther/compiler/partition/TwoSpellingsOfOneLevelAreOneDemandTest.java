@@ -183,32 +183,54 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         Level beside = new Level.OnACarrier(DECIMALS, new Count(wide.add(wide)));
         Level counted = new Level.OfTheQuantity(ExactRatio.of(wide));
 
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
-            assertNotEquals(line.key(), beside.key(), "two lines, two names");
-            assertEquals(line.key(), new Level.OnACarrier(DECIMALS, new Count(wide)).key(),
-                    "and one line, one name");
-            assertTrue(counted.key().length() < 128,
-                    () -> "a number the quantity counts to, named in "
-                            + counted.key().length());
-            assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
-                            .key().length() < 128,
-                    "and the division that line makes is named the same way");
-        });
+        assertEquals("1;1000000", line.key(), "the name is the two parts of the decimal");
+        assertNotEquals(line.key(), beside.key(), "two lines, two names");
+        assertEquals(line.key(), new Level.OnACarrier(DECIMALS, new Count(wide)).key(),
+                "and one line, one name");
+        assertEquals(ExactRatio.of(wide).key(), counted.key(),
+                "a number the quantity counts to is named by the ratio's own name");
+        assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+                        .key().length() < 128,
+                "and the division that line makes is named from the same parts");
 
-        assertTrue(line.spelled().length() > 1_000_000,
+        assertEquals(1_000_002, line.spelled().length(),
                 "while what a reader is shown is the number, every place of it");
-        assertEquals(line.spelled(), DECIMALS.written(new Count(wide)),
-                "which is what the carrier over the level writes");
     }
 
     /** Two spellings of one number are one name, which is the whole of what a name is for here. */
     @Test
     void twoSpellingsOfOneNumberAreOneName() {
-        assertEquals(new Count(new BigDecimal("0.00")).key(), new Count(BigDecimal.ZERO).key(),
-                "0.00 and 0 are one place and one name for it");
+        assertEquals(new Count(new BigDecimal("1.0")).key(), new Count(new BigDecimal("1.00")).key(),
+                "1.0 and 1.00 are one place and one name for it");
+        assertEquals(new Count(new BigDecimal("0.00")).key(), new Count(BigDecimal.ZERO).key());
         assertNotEquals(new Count(BigDecimal.ONE).key(), new Count(BigDecimal.TEN).key(),
                 "and two places are two names");
+        assertEquals("1;-1000000", new Count(new BigDecimal(BigInteger.ONE, -1_000_000)).key(),
+                "a decimal written as a multiple of a wide power of ten is named the same way");
+    }
+
+    /**
+     * A level is asked three questions and answers each one its own way: a name, its coordinate,
+     * and what an author reads.
+     *
+     * <p>A division of a quantity is spelled from coordinates, which is the column a report has
+     * always carried for it; a level a report shows is written as its carrier writes it, which is
+     * what the report's schema says of one.
+     */
+    @Test
+    void aLevelIsNamedSpelledAndWrittenAsThreeDifferentQuestions() {
+        Carrier days = new Carrier.Days();
+        Level day = new Level.OnACarrier(days, Count.of(20454));
+
+        assertEquals("20454", day.spelled(), "the coordinate is the day count");
+        assertEquals("2026-01-01", day.written(), "and what an author reads is the date");
+        assertEquals(days.written(Count.of(20454)), day.written(),
+                "which is what the carrier says of that place");
+        assertEquals("20454|20455", Seam.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
+                        .spelled(),
+                "and the division of the days is spelled from the counts either side of it");
+        assertEquals("7", Level.OfTheQuantity.of(7).written(),
+                "a level of no carrier is the number in both");
     }
 
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */

@@ -40,8 +40,12 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
      * what nothing else should pay for.
      *
      * <p>The value and not how it was written to the model: {@code 0.00} and {@code 0} come back the
-     * same, which is the rule {@link #canonical()} states. What the carrier over a place would write
-     * instead — a date for a day count — is that carrier's to say, and this is the place's own.
+     * same, which is the rule {@link #canonical()} states.
+     *
+     * <p>Three questions are asked of a place and this answers one of them. {@link #key()} names
+     * it, this writes the coordinate the algebra holds — a day count is the number of days — and
+     * what the carrier over it would show an author, a date for that day count, is the carrier's
+     * to say.
      */
     String spelled();
 

@@ -166,6 +166,6 @@ public record LevelInterval(Bound low, Bound high) {
     @Override
     public String toString() {
         return (low == null ? "(" : low.toString()) + ", "
-                + (high == null ? ")" : high.at() + (high.inclusive() ? "]" : ")"));
+                + (high == null ? ")" : high.at().spelled() + (high.inclusive() ? "]" : ")"));
     }
 }

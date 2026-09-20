@@ -76,8 +76,7 @@ public record Band(BandEnd lower, BandEnd upper) {
      * The same two values written out, for somewhere a person reads them.
      *
      * <p>The pair {@link #key()} is: one tells two runs apart and the other says which values they
-     * are. Each end goes through the thing it is a level of ({@link Level#spelled}), so a run over
-     * the days reads as two dates.
+     * are, each end written as a level is ({@link Level#spelled}).
      */
     public String spelled() {
         return written(first()) + "|" + written(last());

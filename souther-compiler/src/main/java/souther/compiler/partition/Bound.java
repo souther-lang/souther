@@ -104,6 +104,6 @@ public record Bound(CutPosition at, boolean inclusive) {
 
     @Override
     public String toString() {
-        return (inclusive ? "[" : "(") + at;
+        return (inclusive ? "[" : "(") + at.spelled();
     }
 }

@@ -73,6 +73,26 @@ class ALineDrawnOnADateIsALineTest {
     }
 
     /**
+     * The structured report writes a level of the days as the date, which is what its schema says a
+     * level on a carrier is: written the way that carrier writes one.
+     *
+     * <p>The human report was already held to this above; the document a tool reads is a second
+     * writer of the same level and had none of it.
+     */
+    @Test
+    void theStructuredReportWritesALevelAsTheDate() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertTrue(json.contains("\"at\" : \"2026-01-01\""), json);
+        assertFalse(json.contains("\"at\" : \"20454\""), json);
+        assertFalse(json.contains("\"at\" : \"20453\""), json);
+    }
+
+    /**
      * Whether any {@code not read} line of {@code block} is about {@code position}.
      *
      * <p>Asked as a line rather than as a prefix. A finding about a rule names the rule first and

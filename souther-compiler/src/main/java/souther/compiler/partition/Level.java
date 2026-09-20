@@ -232,18 +232,32 @@ public sealed interface Level {
     }
 
     /**
-     * This level written out, for somewhere a person reads it.
+     * This level's coordinate in digits.
      *
-     * <p>Apart from {@link #key()}, and the split is what a level of a carrier makes plain: the two
-     * arms are named by what they are and written by what they are a level <em>of</em>. A day count
-     * tells one line from another as a number and is written as a date, which is
-     * {@link Carrier#written} — a report spelling the count itself would name a line at a number
-     * nobody wrote.
+     * <p>Three questions are asked of a level. {@link #key()} names it, this writes the number the
+     * algebra holds — a level of the days is a day count — and {@link #written()} writes it as the
+     * thing it is a level of writes it. A division of a quantity is spelled from these coordinates
+     * ({@link Seam#spelled}); a report's level is written.
      *
      * <p>A number the quantity counts to is a level of no carrier, so it is written as the number it
-     * is ({@link ExactRatio#spelled}).
+     * is ({@link ExactRatio#spelled}) in both.
      */
     default String spelled() {
+        return switch (this) {
+            case OnACarrier on -> on.at().spelled();
+            case OfTheQuantity counted -> counted.at().spelled();
+        };
+    }
+
+    /**
+     * This level as an author reads it: a date for a level of the days, and the number for one that
+     * is a level of no carrier.
+     *
+     * <p>The carrier's own account of a value ({@link Carrier#written}), so a report that shows a
+     * level and a row that carries one say the same thing. A report that read the place under the
+     * level instead named a line at a count nobody wrote.
+     */
+    default String written() {
         return switch (this) {
             case OnACarrier on -> on.of().written(on.at());
             case OfTheQuantity counted -> counted.at().spelled();
