@@ -127,6 +127,27 @@ class ARosterWrittenByNameSaysWhenANameIsSeveralMembersTest {
     }
 
     /**
+     * And a row told apart by something its siblings take as well is refused.
+     *
+     * <p>The way a row could go on saying one member's answer about another through the very thing
+     * that was meant to stop it. Both members of {@code both} take a string first, so a row saying
+     * so picks out neither of them, and the two would be written under one spelling with whichever
+     * the walk answered last standing for the pair.
+     */
+    @Test
+    void andARowToldApartByWhatItsSiblingsTakeTooIsRefused() {
+        Told shared = Told.takingA(OWNER, "both", 0, String.class);
+
+        AssertionError refused = assertThrows(AssertionError.class,
+                () -> new ARosterWrittenByName(DECLARED, List.of(shared))
+                        .namesOf(Set.of(OWNER + "#both(Ljava/lang/String;)V")),
+                "a row picking out both members of a name was taken for one that says which");
+
+        assertTrue(refused.getMessage().contains(shared.spelt()),
+                "the refusal does not say which row picks out several: " + refused.getMessage());
+    }
+
+    /**
      * And the refusal names every member it is short of, and not the first of them.
      *
      * <p>Saying which member a row means is one edit each, and a roster is short of however many it

@@ -1,5 +1,10 @@
 package souther.architecture;
 
+import souther.architecture.ARosterWrittenByName.Told;
+import souther.compiler.publish.DocumentArray;
+import souther.compiler.report.Subject;
+
+import tools.jackson.databind.node.ObjectNode;
 
 import org.junit.jupiter.api.Test;
 
@@ -12,11 +17,9 @@ import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +49,24 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
+    private static final String REPORT = "souther/compiler/report/AdequacyReport";
+
+    /**
+     * The names several members of this writer wear, and which parameter says which.
+     *
+     * <p>This writer says a partition in the report a person reads and in the document a consumer
+     * keys on, and both are called {@code partition}. What each of them is handed to write into is
+     * what tells them apart, and it is what tells the lambdas written inside them apart as well —
+     * prose goes into a {@code StringBuilder}, and the document into a node or an array of one.
+     */
+    private static final List<Told> TOLD_APART = List.of(
+            Told.takingA(REPORT, "partition", 0, StringBuilder.class),
+            Told.takingA(REPORT, "partition", 0, ObjectNode.class),
+            Told.takingA(REPORT, "partition$lambda", 0, StringBuilder.class),
+            Told.takingA(REPORT, "partition$lambda", 0, DocumentArray.class),
+            Told.takingA(REPORT, "said", 0, Subject.class),
+            Told.takingA(REPORT, "findings", 0, DocumentArray.class));
+
     /**
      * Every class that asks what a handle reads as outside a document, and why it may.
      *
@@ -58,27 +79,16 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * and it is why this list is short on purpose.
      */
     private static final List<String> SAYING_IT_IN_PROSE = List.of(
-            "souther/compiler/report/AdequacyReport"
-                    + "#cited(Set, SourceRendering, SourceId, PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport"
-                    + "#declared(StringBuilder, AdequacyReport$ModuleReport, SourceRendering,"
-                    + " PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport#partition lambda taking (StringBuilder,"
-                    + " BorderAssessment, PublishedRuleHandle$WhereARuleIs, SourceRendering,"
-                    + " SourceId, PointRole, RoleAnswer)",
-            "souther/compiler/report/AdequacyReport#partition(StringBuilder,"
-                    + " AdequacyReport$BehaviorReport, SourceId, SourceRendering,"
-                    + " PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport"
-                    + "#said(Subject, SourceRendering, PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/GeneratedRows"
-                    + "#about(Adequacy$Finding, SourceRendering, PublishedRuleHandle$WhereARuleIs)",
+            "souther/compiler/report/AdequacyReport#cited",
+            "souther/compiler/report/AdequacyReport#declared",
+            "souther/compiler/report/AdequacyReport#partition$lambda[0=StringBuilder]",
+            "souther/compiler/report/AdequacyReport#partition[0=StringBuilder]",
+            "souther/compiler/report/AdequacyReport#said[0=Subject]",
+            "souther/compiler/report/GeneratedRows#about",
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
             // and not told which rule, they have every rule of the position to look at.
-            "souther/compiler/report/GeneratedRows"
-                    + "#gaveNothing(StringOfferShortfall$NotOffered, TermPath, SourceRendering,"
-                    + " PublishedRuleHandle$WhereARuleIs)");
+            "souther/compiler/report/GeneratedRows#gaveNothing");
 
     /**
      * And every class that writes one into the document, which is one.
@@ -87,36 +97,26 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * writers of one document are two vocabularies for a consumer to learn.
      */
     private static final List<String> WRITING_IT_INTO_THE_DOCUMENT = List.of(
-            "souther/compiler/report/AdequacyReport"
-                    + "#about(ObjectNode, PublishedSubject, DocumentSources)",
+            "souther/compiler/report/AdequacyReport#about",
             // The rule a search of a decision rule was given no value by, written where that search
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
-            "souther/compiler/report/AdequacyReport#causes(ObjectNode, Generator$"
-                    + "UnresolvedCombination, DocumentSources, PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport#findings(DocumentArray, List, DocumentSources,"
-                    + " PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport"
-                    + "#obligations(DocumentArray, List, Map, DocumentSources,"
-                    + " PublishedRuleHandle$WhereARuleIs)",
-            "souther/compiler/report/AdequacyReport#partition lambda taking (DocumentArray,"
-                    + " PublishedRuleHandle$WhereARuleIs, DocumentSources, WhereAPartIs,"
-                    + " PartitionEvidence$NotRead)",
-            "souther/compiler/report/AdequacyReport#partition(ObjectNode, PartitionEvidence,"
-                    + " Measure, List, ClaimAnnotations, DocumentSources,"
-                    + " PublishedRuleHandle$WhereARuleIs, WhereAPartIs,"
-                    + " CombinationCriterion)");
+            "souther/compiler/report/AdequacyReport#causes",
+            "souther/compiler/report/AdequacyReport#findings[0=DocumentArray]",
+            "souther/compiler/report/AdequacyReport#obligations",
+            "souther/compiler/report/AdequacyReport#partition$lambda[0=DocumentArray]",
+            "souther/compiler/report/AdequacyReport#partition[0=ObjectNode]");
 
     @Test
     void everyClassThatTurnsARuleHandleIntoWordsIsWrittenDown() {
-        assertEquals(SAYING_IT_IN_PROSE, new ArrayList<>(naming(PROSE, "said")),
+        assertEquals(SAYING_IT_IN_PROSE, naming(PROSE, "said"),
                 "a class here turns a handle into words with nothing in the schema behind it, which"
                         + " is what a document field written past the surface looks like");
     }
 
     @Test
     void andEveryClassThatWritesOneIntoTheDocumentIsWrittenDown() {
-        assertEquals(WRITING_IT_INTO_THE_DOCUMENT, new ArrayList<>(naming(SURFACE, "put")),
+        assertEquals(WRITING_IT_INTO_THE_DOCUMENT, naming(SURFACE, "put"),
                 "the document is written in one place, and a handle reaches a consumer through the"
                         + " fields that place names");
     }
@@ -155,14 +155,28 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
      * in prose is a class that may put those words under any field of the document and add no row
      * here. Which method it happened in is what tells those two apart.
      */
-    private static Set<String> naming(String owner, String member) {
+    private static List<String> naming(String owner, String member) {
         Set<String> found = new TreeSet<>();
         for (Path module : COMPILED.modules()) {
             for (ClassModel each : COMPILED.classesOf(module)) {
                 for (MethodModel method : each.methods()) {
                     if (calls(method, owner, member)) {
-                        found.add(each.thisClass().asInternalName() + "#" + said(method));
+                        found.add(said(each, method));
                     }
+                }
+            }
+        }
+        return new ARosterWrittenByName(everyMethodOfEveryModule(), TOLD_APART).namesOf(found);
+    }
+
+    /** Every method the repository's modules compiled, which is the population a row's name is
+     *  read against. */
+    private static Set<String> everyMethodOfEveryModule() {
+        Set<String> found = new TreeSet<>();
+        for (Path module : COMPILED.modules()) {
+            for (ClassModel each : COMPILED.classesOf(module)) {
+                for (MethodModel method : each.methods()) {
+                    found.add(said(each, method));
                 }
             }
         }
@@ -170,31 +184,21 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
     }
 
     /**
-     * The method somebody wrote, as a name and what it takes.
+     * The method somebody wrote, as the owner, what it is called and what it takes.
      *
-     * <p>What it takes, because a name is not a method: this writer says a partition in the report a
-     * person reads and in the document, and both are called {@code partition}. Told apart by name
-     * alone, a handle rendered in prose inside the one that writes the document would arrive here as
-     * a row that was already allowed — which is the whole distinction these rows exist to draw.
-     *
-     * <p>And the method somebody wrote, because a lambda is compiled to a method of its own, named
-     * after the one it was written in and numbered within the class. The number moves when a lambda
-     * is added anywhere above it, so a row carrying one would go red for edits that have nothing to
-     * do with handles.
+     * <p>A lambda is compiled to a method of its own, named after the one it was written in and
+     * numbered within the class. The number moves when a lambda is added anywhere above it, so it
+     * is dropped: what a lambda is called here is the method it was written in, and the lambdas of
+     * one method are several members of that name for the roster to tell apart the way it tells
+     * any others apart.
      */
-    private static String said(MethodModel method) {
+    private static String said(ClassModel owner, MethodModel method) {
         String compiled = method.methodName().stringValue();
-        String taking = method.methodTypeSymbol().parameterList().stream()
-                .map(each -> each.displayName())
-                .collect(Collectors.joining(", ", "(", ")"));
-        if (compiled.startsWith("lambda$")) {
-            // What a lambda takes is what it captured and what it is applied to, which is not what
-            // the method around it takes — and is what tells one lambda of that method from
-            // another now that the number is gone.
-            return compiled.substring("lambda$".length(), compiled.lastIndexOf('$'))
-                    + " lambda taking " + taking;
-        }
-        return compiled + taking;
+        String called = compiled.startsWith("lambda$")
+                ? compiled.substring("lambda$".length(), compiled.lastIndexOf('$')) + "$lambda"
+                : compiled;
+        return owner.thisClass().asInternalName() + "#" + called
+                + method.methodType().stringValue();
     }
 
     /**

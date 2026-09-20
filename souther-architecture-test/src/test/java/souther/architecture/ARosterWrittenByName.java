@@ -114,6 +114,7 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
      * and each round of saying which overload a row means would find the next one.
      */
     private void refuseTheNamesNothingTellsApart(Set<String> written, Map<String, ?> answers) {
+        refuseEveryRowThatPicksOutMoreThanOne();
         Set<String> nothingTellsApart = new TreeSet<>();
         for (String member : written) {
             if (!declared.contains(member)) {
@@ -165,6 +166,31 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
             }
         }
         return null;
+    }
+
+    /**
+     * A refusal where a row meant to tell one member from its siblings picks out several of them.
+     *
+     * <p>What a row says is which member it is, and a parameter several of them share says nothing
+     * of the kind. Left to stand, the members it picks would be written under one spelling and
+     * whichever of them the walk answered last would be the answer the row holds — which is the
+     * reading a roster of names is refused for, arriving through the thing that was meant to stop
+     * it.
+     */
+    private void refuseEveryRowThatPicksOutMoreThanOne() {
+        Map<String, List<String>> several = new TreeMap<>();
+        for (Told each : told) {
+            List<String> picked = overloadsOf(each.owner() + "#" + each.name()).stream()
+                    .filter(member -> each.picks(descriptorOf(member))).toList();
+            if (picked.size() > 1) {
+                several.put(each.spelt(), picked);
+            }
+        }
+        if (!several.isEmpty()) {
+            throw new AssertionError("a row says which member it is by a parameter its siblings"
+                    + " take as well, so what it picks out is several members and not one: "
+                    + several);
+        }
     }
 
     /** Whether the walk answered the same about every one of {@code overloads}. */
