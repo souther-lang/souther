@@ -1,0 +1,49 @@
+// A border that is a line over several positions, which is the whole of what this corpus is for.
+//
+// Every other corpus draws its borders on one position, where a bound weighed differently is the
+// same bound. Here each rule relates two numeric positions, so the border is a line in their plane
+// and the rows at its points, the classes either side of it and the ways it could have run
+// otherwise are all things the measures have something to say about.
+//
+// Two shapes. A weighted sum of two counts against a limit, which is a line with a slope that has
+// to be right, and a difference between two positions against a limit, which is a line at one
+// fixed slope whose offset is what a row has to pin.
+module conformance.packing exposing
+    ( Straws, Bars, Hour, Load, Rejected, Booked, Clash
+    , packBox, bookSlot )
+
+data Straws = Int
+    invariant value >= 0 && value <= 20
+
+data Bars = Int
+    invariant value >= 0 && value <= 20
+
+data Hour = Int
+    invariant value >= 0 && value <= 24
+
+data Load = { grams: Int }
+data Rejected
+
+// A straw weighs 300 and a chocolate bar 600, and a box carries 4800. The border is the line
+// through (16, 0) and (0, 8): moving either count alone crosses it at a different place, and a
+// slope of 3 in place of 2 is a line the rows at one position each cannot tell from this one.
+behavior packBox : (straws: Straws, bars: Bars) -> Load | Rejected
+    constructs Load
+
+let packBox (straws, bars) = {
+    guard 300 * straws.value + 600 * bars.value <= 4800 else Rejected
+    Load { grams = 300 * straws.value + 600 * bars.value }
+}
+
+data Booked = { from: Hour, until: Hour }
+data Clash
+
+// A booking may not run more than eight hours, which holds two positions apart rather than either
+// of them to a value.
+behavior bookSlot : (from: Hour, until: Hour) -> Booked | Clash
+    constructs Booked
+
+let bookSlot (from, until) = {
+    guard until.value - from.value <= 8 else Clash
+    Booked { from = from, until = until }
+}

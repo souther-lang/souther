@@ -1,0 +1,46 @@
+// The rows at the points of two lines, each over two positions.
+//
+// A box is on its line at three places along it, so that a slope of 3 in place of 2 is a line one of
+// them would have crossed. Beside the line it is written once above and once below at each end, and
+// a booking is on its line at three offsets from the start.
+examples for conformance.packing
+
+example packBox
+    | "sixteen straws alone are exactly what a box carries" :
+        (Straws(16), Bars(0)) -> Load { grams = 4800 }
+    | "eight bars alone are exactly what a box carries" :
+        (Straws(0), Bars(8)) -> Load { grams = 4800 }
+    | "twelve straws and two bars are on the line between them" :
+        (Straws(12), Bars(2)) -> Load { grams = 4800 }
+    | "one straw over the line is turned away" :
+        (Straws(17), Bars(0)) -> Rejected
+    | "one bar over the line is turned away" :
+        (Straws(0), Bars(9)) -> Rejected
+    | "a mixed load over the line is turned away" :
+        (Straws(13), Bars(2)) -> Rejected
+    | "the most straws a box is asked for are far over the line" :
+        (Straws(20), Bars(0)) -> Rejected
+    | "the most bars a box is asked for are far over the line" :
+        (Straws(0), Bars(20)) -> Rejected
+    | "an empty box is well inside" :
+        (Straws(0), Bars(0)) -> Load { grams = 0 }
+    | "a mixed load under the line is packed" :
+        (Straws(6), Bars(4)) -> Load { grams = 4200 }
+
+example bookSlot
+    | "eight hours from the start of the day is the longest booking" :
+        (Hour(0), Hour(8)) -> Booked { from = Hour(0), until = Hour(8) }
+    | "eight hours from the middle of the day is the same booking" :
+        (Hour(10), Hour(18)) -> Booked { from = Hour(10), until = Hour(18) }
+    | "eight hours ending at midnight is the same booking" :
+        (Hour(16), Hour(24)) -> Booked { from = Hour(16), until = Hour(24) }
+    | "nine hours from the start of the day is a clash" :
+        (Hour(0), Hour(9)) -> Clash
+    | "nine hours from the middle of the day is a clash" :
+        (Hour(10), Hour(19)) -> Clash
+    | "ten hours from the start of the day is further over the line" :
+        (Hour(0), Hour(10)) -> Clash
+    | "a short booking is well inside" :
+        (Hour(9), Hour(10)) -> Booked { from = Hour(9), until = Hour(10) }
+    | "a booking that ends before it starts is inside the rule" :
+        (Hour(20), Hour(3)) -> Booked { from = Hour(20), until = Hour(3) }
