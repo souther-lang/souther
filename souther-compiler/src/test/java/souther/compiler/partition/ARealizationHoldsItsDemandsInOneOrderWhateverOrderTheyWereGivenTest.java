@@ -12,12 +12,14 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What a search fixed is held in one order, whichever order the demands came in.
@@ -69,6 +71,35 @@ class ARealizationHoldsItsDemandsInOneOrderWhateverOrderTheyWereGivenTest {
             assertEquals(heldIn.get(0), each,
                     "the same demands were held in another order for another order they were given in");
         }
+    }
+
+    /**
+     * Ordering the demands does not loosen what they are held to: a target with nothing under it,
+     * or nothing standing as a target, is refused as it was when the map was copied.
+     */
+    @Test
+    void aDemandThatStandsNowhereIsRefused() {
+        Map<RealizationTarget, Place> nowhere = new HashMap<>();
+        nowhere.put(target(TermPath.of("elsewhere")), null);
+        assertThrows(NullPointerException.class, () -> new Realization.Found(nowhere));
+
+        Map<RealizationTarget, Place> unnamed = new HashMap<>();
+        unnamed.put(null, Count.of(1));
+        assertThrows(NullPointerException.class, () -> new Realization.Found(unnamed));
+
+        assertThrows(NullPointerException.class, () -> new Realization.Found(null));
+    }
+
+    @Test
+    void whatIsHeldCannotBeChangedByWhoeverGaveIt() {
+        Map<RealizationTarget, Place> given = new LinkedHashMap<>();
+        given.put(target(TermPath.of("elsewhere")), Count.of(1));
+        Realization.Found found = new Realization.Found(given);
+
+        given.put(target(TermPath.of("another")), Count.of(2));
+
+        assertEquals(1, found.fixing().size(), "the map given is what the realization holds");
+        assertThrows(UnsupportedOperationException.class, () -> found.fixing().clear());
     }
 
     private static TermPath under(Refinement narrowing) {

@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What looking for a row at one coverage item came to.
@@ -60,7 +61,8 @@ public sealed interface Realization {
                 ofOne.sort(Comparator.comparing(RealizationTarget::writeRoot,
                         TermPath.structuralOrder()));
                 for (RealizationTarget each : ofOne) {
-                    inOrder.put(each, fixing.get(each));
+                    inOrder.put(each, Objects.requireNonNull(fixing.get(each),
+                            "a target the search fixed stands somewhere: " + each));
                 }
             }
             fixing = Collections.unmodifiableMap(inOrder);
