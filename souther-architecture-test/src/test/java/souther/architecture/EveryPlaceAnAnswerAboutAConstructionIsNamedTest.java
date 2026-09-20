@@ -202,8 +202,8 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/ast/Hir$Apply#carriedByValue",
             "souther/compiler/ast/Hir$Apply#origin",
             "souther/compiler/ast/Hir$Apply#read",
-            "souther/compiler/ast/Hir$Apply#replacedBy[1=List]",
-            "souther/compiler/ast/Hir$Apply#synthetic[0=Hir$Expr]",
+            "souther/compiler/ast/Hir$Apply#replacedBy[1=java/util/List]",
+            "souther/compiler/ast/Hir$Apply#synthetic[0=souther/compiler/ast/Hir$Expr]",
             "souther/compiler/ast/Hir$Apply#wasCarriedByValue",
             "souther/compiler/ast/Hir$Apply#with",
             "souther/compiler/ast/Hir$Apply#withArgs",
@@ -218,7 +218,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/ast/Hir$NewData#read",
             "souther/compiler/ast/Hir$NewData#syntheticWithEveryFieldWritten",
             "souther/compiler/ast/Hir$NewData#wasCarried",
-            "souther/compiler/ast/Hir$NewData#with[2=SourcePos]",
+            "souther/compiler/ast/Hir$NewData#with[2=souther/compiler/diag/SourcePos]",
             "souther/compiler/ast/Origins#carried",
             "souther/compiler/ast/Origins#carriedByValue",
             "souther/compiler/ast/Origins#publishedIn",
@@ -250,7 +250,8 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * one, and a second call added inside either of them moves it.
      */
     private static final List<String> SETTLING = List.of(
-            "souther/compiler/ast/Hir$Apply#synthetic[0=String] -> Apply.synthetic(Expr) x1",
+            "souther/compiler/ast/Hir$Apply#synthetic[0=java/lang/String]"
+                    + " -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/Elaborator#fromList -> Apply.synthetic(String) x1",
             "souther/compiler/check/HelperInliner#etaExpand -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperInliner#rename -> Apply.with x1",
@@ -259,9 +260,12 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/check/HelperNames#publishedBy -> NewData.publishedBy x1",
             "souther/compiler/check/NewtypeDesugar#go -> NewData.fromApply x1",
             "souther/compiler/check/Resolve#applied -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr[1=Resolve$InForce] -> Apply.read x1",
-            "souther/compiler/check/Resolve#expr[1=Resolve$InForce] -> NewData.read x1",
-            "souther/compiler/check/Terms#writtenSyntaxOf[2=Map] -> Apply.synthetic(String) x2",
+            "souther/compiler/check/Resolve#expr[1=souther/compiler/check/Resolve$InForce]"
+                    + " -> Apply.read x1",
+            "souther/compiler/check/Resolve#expr[1=souther/compiler/check/Resolve$InForce]"
+                    + " -> NewData.read x1",
+            "souther/compiler/check/Terms#writtenSyntaxOf[2=java/util/Map]"
+                    + " -> Apply.synthetic(String) x2",
             "souther/compiler/partition/FixtureTemplate#newtype -> Apply.synthetic(String) x1",
             "souther/compiler/partition/FixtureTemplate#record"
                     + " -> NewData.syntheticWithEveryFieldWritten x1",

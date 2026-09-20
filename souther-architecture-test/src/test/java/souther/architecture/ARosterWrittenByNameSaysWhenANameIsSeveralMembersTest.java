@@ -102,7 +102,7 @@ class ARosterWrittenByNameSaysWhenANameIsSeveralMembersTest {
      */
     @Test
     void andToldApartItIsSpeltByThatParameterAlone() {
-        assertEquals(List.of(OWNER + "#both[1=List]"),
+        assertEquals(List.of(OWNER + "#both[1=java/util/List]"),
                 new ARosterWrittenByName(DECLARED, List.of(THE_ONE_TAKING_A_LIST))
                         .namesOf(Set.of(OWNER + "#both(Ljava/lang/String;Ljava/util/List;)V")),
                 "the row says which member it is by the parameter that tells it from its sibling");
@@ -174,6 +174,73 @@ class ARosterWrittenByNameSaysWhenANameIsSeveralMembersTest {
 
         assertTrue(refused.getMessage().contains("String") && refused.getMessage().contains("Integer"),
                 "the refusal does not name the rows that both pick it: " + refused.getMessage());
+    }
+
+    /**
+     * And a row that picks nothing of the name it is for is refused.
+     *
+     * <p>A row saying which member it is by a parameter nothing of that name takes any more says
+     * it of nobody. Left standing it is a sentence about the population that stopped being true
+     * while the roster went on reading, and the member it was written for is back to being one
+     * nothing tells apart — which is refused where the row is missing altogether and would be
+     * passed over where it is present and saying nothing.
+     *
+     * <p>A row for a name this population does not declare at all is another thing, and is not
+     * this: the rows of one roster are written for whichever populations the rules sharing them
+     * read.
+     */
+    @Test
+    void andARowThatPicksNothingOfItsNameIsRefused() {
+        Told takingSomethingNoneOfThemTakes = Told.takingA(OWNER, "both", 1, Set.class);
+
+        AssertionError refused = assertThrows(AssertionError.class,
+                () -> new ARosterWrittenByName(DECLARED, List.of(takingSomethingNoneOfThemTakes))
+                        .namesOf(Set.of(OWNER + "#both(Ljava/lang/String;)V")),
+                "a row picking out nothing of the name it is for was left standing");
+
+        assertTrue(refused.getMessage().contains(takingSomethingNoneOfThemTakes.spelt()),
+                "the refusal does not name the row that picks nothing: " + refused.getMessage());
+    }
+
+    /** And a row for a name this population does not declare is not one that picks nothing. */
+    @Test
+    void andARowForANameThisPopulationDoesNotDeclareIsNotThat() {
+        assertEquals(List.of(OWNER + "#alone"),
+                new ARosterWrittenByName(DECLARED,
+                        List.of(Told.takingA("some/Other", "elsewhere", 0, String.class)))
+                        .namesOf(Set.of(OWNER + "#alone(Ljava/lang/String;)V")),
+                "a row written for another population was read as one that has stopped picking"
+                        + " anything here");
+    }
+
+    /**
+     * And two members are never written under one spelling, however their types are named.
+     *
+     * <p>What a roster holds a member under is the spelling, so the rows of one name have to be as
+     * many spellings as they are members. Two types called the same in different packages are the
+     * way that stops being true for nothing anybody wrote: each row picks one member and is the
+     * only row that picks it, and both are written down under the same string — the roster keeps
+     * whichever was read last, and no check on the rows themselves sees it.
+     *
+     * <p>Spelt as a class file names the type, that cannot happen, and this is what says so rather
+     * than a sentence about it. A spelling shortened to what the type is called is what it refuses.
+     */
+    @Test
+    void andTwoMembersAreNeverWrittenUnderOneSpelling() {
+        Set<String> declared = Set.of(
+                OWNER + "#both(La/foo/Subject;)V",
+                OWNER + "#both(Lb/bar/Subject;)V");
+        List<Told> onePerMember = List.of(
+                Told.takingWhatIsCalled(OWNER, "both", 0, "a/foo/Subject"),
+                Told.takingWhatIsCalled(OWNER, "both", 0, "b/bar/Subject"));
+
+        assertEquals(Map.of(OWNER + "#both[0=a/foo/Subject]", 1,
+                        OWNER + "#both[0=b/bar/Subject]", 2),
+                new ARosterWrittenByName(declared, onePerMember).by(Map.of(
+                        OWNER + "#both(La/foo/Subject;)V", 1,
+                        OWNER + "#both(Lb/bar/Subject;)V", 2)),
+                "two members whose types are called the same are written under one spelling, so"
+                        + " the roster holds whichever of them was read last");
     }
 
     /**

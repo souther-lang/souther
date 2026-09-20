@@ -68,9 +68,17 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
             return new Told(owner, name, at, ClassDesc.ofInternalName(parameter));
         }
 
-        /** The member, as a row that has to tell two overloads apart is written. */
+        /**
+         * The member, as a row that has to tell two overloads apart is written.
+         *
+         * <p>The type as a class file names it, and not the last step of it. This is the key the
+         * roster is written under and read back by, so two rows that pick different members have
+         * to be two spellings: shortened to what the type is called, a row for
+         * {@code a/Subject} and one for {@code b/Subject} are one string, and the member written
+         * under it is whichever of them the walk answered last.
+         */
         String spelt() {
-            return owner + "#" + name + "[" + at + "=" + parameter.displayName() + "]";
+            return owner + "#" + name + "[" + at + "=" + asAClassFileNamesIt(parameter) + "]";
         }
 
         /** Whether this is what {@code member} is called. */
@@ -185,22 +193,32 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
      * spelt as the sibling of whichever row won, and moves the first time the list is reordered.
      */
     private void refuseSelectorsThatDoNotPickOneMemberEach() {
-        Map<String, List<String>> several = new TreeMap<>();
+        Map<String, List<String>> notOne = new TreeMap<>();
         Map<String, List<String>> pickedBy = new TreeMap<>();
+        Map<String, Set<String>> under = new TreeMap<>();
         for (Told each : told) {
-            List<String> picked = overloadsOf(each.owner() + "#" + each.name()).stream()
+            List<String> overloads = overloadsOf(each.owner() + "#" + each.name());
+            if (overloads.isEmpty()) {
+                // A name this population does not declare. The rows of one roster are written for
+                // whichever populations the rules that share them read, and a row about another
+                // one is not about anything here — being short of nothing is not being stale.
+                continue;
+            }
+            List<String> picked = overloads.stream()
                     .filter(member -> each.picks(descriptorOf(member))).toList();
-            if (picked.size() > 1) {
-                several.put(each.spelt(), picked);
+            if (picked.size() != 1) {
+                notOne.put(each.spelt(), picked);
             }
             for (String member : picked) {
                 pickedBy.computeIfAbsent(member, _ -> new ArrayList<>()).add(each.spelt());
+                under.computeIfAbsent(each.spelt(), _ -> new TreeSet<>()).add(member);
             }
         }
-        if (!several.isEmpty()) {
-            throw new AssertionError("a row says which member it is by a parameter its siblings"
-                    + " take as well, so what it picks out is several members and not one: "
-                    + several);
+        if (!notOne.isEmpty()) {
+            throw new AssertionError("a row says which member it is, and each of these picks out"
+                    + " something else: several, where the parameter it names is one its siblings"
+                    + " take as well, or none, where nothing of that name takes it any more. "
+                    + notOne);
         }
         Map<String, List<String>> twice = new TreeMap<>();
         pickedBy.forEach((member, rows) -> {
@@ -212,6 +230,17 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
             throw new AssertionError("each of these members is picked out by several rows, so"
                     + " which one it is written as is whichever of them was written first: say"
                     + " which member each row is for, once. " + twice);
+        }
+        Map<String, Set<String>> shared = new TreeMap<>();
+        under.forEach((spelling, members) -> {
+            if (members.size() > 1) {
+                shared.put(spelling, members);
+            }
+        });
+        if (!shared.isEmpty()) {
+            throw new AssertionError("each of these spellings is what several members are written"
+                    + " under, so the roster holds whichever of them was read last: what a row is"
+                    + " spelt as has to say which member it is. " + shared);
         }
     }
 
@@ -258,6 +287,13 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
             written.add(spelling(each, answers));
         }
         return List.copyOf(written);
+    }
+
+    /** A type as a class file names it: the whole of it, with {@code /} between the steps. */
+    private static String asAClassFileNamesIt(ClassDesc type) {
+        String descriptor = type.descriptorString();
+        return descriptor.startsWith("L") && descriptor.endsWith(";")
+                ? descriptor.substring(1, descriptor.length() - 1) : descriptor;
     }
 
     /** What the member is called: its owner and its name, which is what its overloads share. */

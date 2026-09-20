@@ -81,9 +81,9 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
     private static final List<String> SAYING_IT_IN_PROSE = List.of(
             "souther/compiler/report/AdequacyReport#cited",
             "souther/compiler/report/AdequacyReport#declared",
-            "souther/compiler/report/AdequacyReport#partition$lambda[0=StringBuilder]",
-            "souther/compiler/report/AdequacyReport#partition[0=StringBuilder]",
-            "souther/compiler/report/AdequacyReport#said[0=Subject]",
+            "souther/compiler/report/AdequacyReport#partition$lambda[0=java/lang/StringBuilder]",
+            "souther/compiler/report/AdequacyReport#partition[0=java/lang/StringBuilder]",
+            "souther/compiler/report/AdequacyReport#said[0=souther/compiler/report/Subject]",
             "souther/compiler/report/GeneratedRows#about",
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
@@ -102,10 +102,13 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
             "souther/compiler/report/AdequacyReport#causes",
-            "souther/compiler/report/AdequacyReport#findings[0=DocumentArray]",
+            "souther/compiler/report/AdequacyReport"
+                    + "#findings[0=souther/compiler/publish/DocumentArray]",
             "souther/compiler/report/AdequacyReport#obligations",
-            "souther/compiler/report/AdequacyReport#partition$lambda[0=DocumentArray]",
-            "souther/compiler/report/AdequacyReport#partition[0=ObjectNode]");
+            "souther/compiler/report/AdequacyReport"
+                    + "#partition$lambda[0=souther/compiler/publish/DocumentArray]",
+            "souther/compiler/report/AdequacyReport"
+                    + "#partition[0=tools/jackson/databind/node/ObjectNode]");
 
     @Test
     void everyClassThatTurnsARuleHandleIntoWordsIsWrittenDown() {
