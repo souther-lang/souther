@@ -45,8 +45,8 @@ public record OrderedInterval(Endpoint low, Endpoint high) {
      * asking about a position has. That reader interprets both against what its order holds
      * ({@link OrderedIntervals#valuesAt}) and asks this of the results.
      *
-     * <p>Beside {@code equals} rather than replacing it. What is written down is what a report
-     * writes back, and a value used as a map key is keyed by how it was written unless somebody
+     * <p>Beside {@code equals} rather than replacing it. What is held is the representation it was
+     * read with, and a value used as a map key is keyed by that representation unless somebody
      * canonicalised it — so the derived equality stays the structural one, and this is the question
      * a reader about values asks by name.
      */

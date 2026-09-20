@@ -232,7 +232,7 @@ public sealed interface Level {
     }
 
     /**
-     * This level's coordinate in digits.
+     * This level's coordinate written out as text.
      *
      * <p>Three questions are asked of a level. {@link #key()} names it, this writes the number the
      * algebra holds — a level of the days is a day count — and {@link #written()} writes it as the

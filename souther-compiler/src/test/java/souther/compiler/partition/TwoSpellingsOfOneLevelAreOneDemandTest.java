@@ -31,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Two spellings of one number are one level, so they are one demand and one debt.
  *
- * <p>A level keeps the spelling the rule was written in, because that is what a report writes back:
- * {@code 0} and {@code 0.00} are two values and one place on the order. Everything that compares
+ * <p>A level keeps the representation the rule was written with, so {@code 0} and {@code 0.00} are
+ * two values and one place on the order. Everything that compares
  * levels goes through the order, and a value that <em>holds</em> a level and is compared as a value
  * cannot — a map keyed on a debt asks {@link Object#equals}, and a check that two readings ask the
  * same thing asks it of two criteria. Those readers hold the level written the one way.

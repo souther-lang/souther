@@ -35,7 +35,8 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
     String key();
 
     /**
-     * This place's coordinate written out in digits.
+     * This place's coordinate written out as text: the number for a count, the string itself for a
+     * string.
      *
      * <p>Three questions are asked of a place and this answers one of them. {@link #key()} names
      * it, this writes the coordinate the algebra holds — a day count is the number of days — and
@@ -62,9 +63,9 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
      * map key, or held inside a larger value that is. Two places of one line come back equal here,
      * so the derived equality of whatever holds them answers the question the order would.
      *
-     * <p>Beside the two above rather than replacing them: what a rule wrote is what a report writes
-     * back, and {@code 0.00m} is written as the author wrote it. This is the same place said the one
-     * way, and it is only ever what an identity is built from.
+     * <p>Beside the two above rather than replacing them: a place keeps the representation it was
+     * read with, so {@code 0.00m} stays {@code 0.00m} where it is held. This is the same place in
+     * the one representation, and it is only ever what an identity is built from.
      */
     Place canonical();
 

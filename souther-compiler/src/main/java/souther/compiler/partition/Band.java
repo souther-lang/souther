@@ -73,7 +73,7 @@ public record Band(BandEnd lower, BandEnd upper) {
     }
 
     /**
-     * The same two values as coordinates written out in digits.
+     * The same two values as coordinates written out as text.
      *
      * <p>The pair {@link #key()} is: one tells two runs apart and the other says which values they
      * are, each end spelled as a level is ({@link Level#spelled}).

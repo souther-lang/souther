@@ -171,8 +171,8 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
-     * This division's coordinates written out in digits: the last value on one side and the first
-     * on the other.
+     * This division's coordinates written out as text: the last value on one side and the first on
+     * the other.
      *
      * <p>The same three cases {@link #key()} has, because the two questions differ in the writing
      * and not in what is read. Each end is spelled as a level is ({@link Level#spelled}), so a

@@ -69,7 +69,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
-     * This line's coordinate written out in digits.
+     * This line's coordinate written out as text.
      *
      * <p>A rule that wrote the whole of the quantity drew its line at one of the quantity's own
      * levels, which is spelled as a level is ({@link Level#spelled}). A rule that wrote a multiple
