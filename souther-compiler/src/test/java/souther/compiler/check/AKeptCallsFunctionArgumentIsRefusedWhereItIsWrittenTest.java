@@ -62,7 +62,8 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
     void aBlockThatAnswersTheWrongTypeIsUnderlinedWhereItIsWritten() {
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
-                new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
+                new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(),
+                null, ARGUMENT, null);
         Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
@@ -87,7 +88,8 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
     void itIsRefusedBySameSentenceAsAValueArgument() {
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block answersAnInt = new Hir.Block(List.of(binders.binder("x", ARGUMENT)),
-                new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(), ARGUMENT, null);
+                new Hir.IntLit(1, ARGUMENT, null), souther.compiler.types.RuleOrigin.unwritten(),
+                null, ARGUMENT, null);
         Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,

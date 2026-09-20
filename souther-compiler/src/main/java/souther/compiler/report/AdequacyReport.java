@@ -4260,7 +4260,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case MaterialisationSite.GeneratedBlock block -> {
                 into.put("kind", word(MaterialisationRegionWord.BLOCK_OF_NAME));
-                into.put("name", block.cause().toString());
+                into.put("module", block.reference().owner().module());
+                into.put("definition",
+                        WrittenOwner.theBodyThatWrote(block.reference().owner()).definition());
+                into.put("reference", block.reference().ordinal());
             }
         }
     }

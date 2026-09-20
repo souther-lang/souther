@@ -1433,6 +1433,7 @@ public final class HelperInliner {
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
             case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
+                    block.expandedFrom(),
                     block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
@@ -2032,10 +2033,26 @@ public final class HelperInliner {
         // name, and these are the parameters and the call it stands for. Which expansion it is, is
         // said here, where the name that made it necessary is still in hand — a reader below has
         // only the shape, and the shape is one every composed application wears.
+        //
+        // And which block this is, for the same reason and at the same moment. Its rule says no
+        // author wrote it, so what tells it from the next one is the name it was written out of.
         return new Hir.Block(params,
                 Hir.Apply.synthetic(function, args, new ApplicationOrigin.Eta(etaOf(function)),
                         function.pos(), null),
-                souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
+                souther.compiler.types.RuleOrigin.unwritten(), writtenReference(function),
+                function.pos(), null);
+    }
+
+    /**
+     * The reference {@code function} is, where a source wrote one, and null where this compiler
+     * composed the name.
+     *
+     * <p>A name a pass wrote carries a number and nothing else, so it tells no two blocks apart. It
+     * is null here rather than a refusal: whether anything needs this block told from another is
+     * settled where one asks, and a name nobody can be sent to is only a problem for whoever asks.
+     */
+    private static SourceReferenceOrigin writtenReference(Hir.Var function) {
+        return function.origin() instanceof SourceReferenceOrigin written ? written : null;
     }
 
     /**
@@ -2259,18 +2276,21 @@ public final class HelperInliner {
     /**
      * The region the body of {@code block} is: a block the author wrote is told by its rule, and one
      * a pass wrote out of a name is told by that name.
+     *
+     * <p>Both are read off what the block says about itself. What stands inside it is walked again
+     * after the block is written — a call in it becomes an expansion — so a block asked which one it
+     * is by the shape it ended up with would be asked a question the shape had stopped answering.
      */
     private static Supplier<MaterialisationSite> siteOfBlock(Hir.Block block) {
         return () -> {
             if (block.rule().isWritten()) {
                 return new MaterialisationSite.WrittenBlock(block.rule());
             }
-            if (block.body() instanceof Hir.Apply applied
-                    && applied.application() instanceof ApplicationOrigin.Eta eta) {
-                return new MaterialisationSite.GeneratedBlock(eta.cause());
+            if (block.expandedFrom() != null) {
+                return new MaterialisationSite.GeneratedBlock(block.expandedFrom());
             }
-            throw new IllegalStateException("a block no author wrote and no name was expanded into"
-                    + " has nothing to tell its builds by, at " + block.pos());
+            throw new IllegalStateException("a block no author wrote and no source wrote the name"
+                    + " of has nothing to tell its builds by, at " + block.pos());
         };
     }
 
@@ -2453,7 +2473,7 @@ public final class HelperInliner {
                     region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
                     b.origin(), b.pos(), b.region());
             case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
-                    bl.rule(), bl.pos(), bl.region());
+                    bl.rule(), bl.expandedFrom(), bl.pos(), bl.region());
             case Hir.ListComp comp -> {
                 List<Hir.Expr> guards = new ArrayList<>();
                 for (int at = 0; at < comp.guards().size(); at++) {
@@ -2980,10 +3000,11 @@ public final class HelperInliner {
                 for (Hir.Binder p : block.params()) {
                     params.add(renaming.copy().of(p));
                 }
-                // The rule is the block's own and is not renamed. What a copy is stamped with is
-                // where a reader is sent, and which rule this is has to be the same in every copy.
+                // The rule is the block's own and is not renamed, and neither is the name a block
+                // this pass wrote was written out of. What a copy is stamped with is where a reader
+                // is sent, and which block this is has to be the same in every copy.
                 yield new Hir.Block(params,
-                        rename(block.body(), renaming), block.rule(),
+                        rename(block.body(), renaming), block.rule(), block.expandedFrom(),
                         renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()

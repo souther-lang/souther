@@ -77,15 +77,20 @@ public sealed interface MaterialisationSite extends SettledAnswer {
      * The body of a block a pass wrote out of a name standing where a value goes.
      *
      * <p>The author wrote a name and not a block, so what settles which block this is is the
-     * reference that made it necessary ({@link EtaOrigin}) — a thing that was there before anything
-     * was expanded.
+     * reference that made it necessary — a thing that was there before anything was expanded, and
+     * the same one {@link ExpansionSite.Named} names a copy made at such a name by.
+     *
+     * <p>Told by the reference and not by what it reaches: two occurrences of one name are two
+     * references and two blocks. A binding the block was read out of is not here, being this
+     * compiler's own and not a thing the source settled.
      */
-    record GeneratedBlock(EtaOrigin cause) implements MaterialisationSite {
+    record GeneratedBlock(SourceReferenceOrigin reference) implements MaterialisationSite {
 
         public GeneratedBlock {
-            if (cause == null) {
+            if (reference == null) {
                 throw new IllegalArgumentException(
-                        "a block a name was expanded into was expanded from some name");
+                        "a block a name was expanded into was expanded from some name a source"
+                                + " wrote");
             }
         }
     }

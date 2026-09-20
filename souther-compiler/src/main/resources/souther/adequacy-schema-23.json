@@ -2310,7 +2310,21 @@
                           "then": {
                             "required": [
                               "expanded"
-                            ]
+                            ],
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "materialised"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "at"
+                                  ]
+                                }
+                              ]
+                            }
                           }
                         },
                         {
@@ -2328,7 +2342,46 @@
                             "required": [
                               "materialised",
                               "at"
-                            ]
+                            ],
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "expanded"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "module"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "definition"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "call"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "lowered"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "name"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "supplied"
+                                  ]
+                                }
+                              ]
+                            }
                           }
                         }
                       ],
@@ -2387,11 +2440,124 @@
     },
     "materialisationRegion": {
       "type": "object",
-      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into.",
+      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into, by which reference of that definition the name is. Every arm carries what tells one of its regions from every other: a region named by less than that is one two builds could share.",
       "required": [
         "kind"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "body"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "definition"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "slot"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "definition",
+              "construct",
+              "lowered",
+              "slot"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "block"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "definition",
+              "rule"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "block_of_name"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "definition",
+              "reference"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "match_case"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "required": [
+              "cases"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "const": "comprehension_guard"
+              }
+            },
+            "required": [
+              "slot"
+            ]
+          },
+          "then": {
+            "required": [
+              "index"
+            ]
+          }
+        }
+      ],
       "properties": {
         "kind": {
           "enum": [
@@ -2447,8 +2613,10 @@
           "type": "integer",
           "minimum": 0
         },
-        "name": {
-          "type": "string"
+        "reference": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Which reference of the definition the name written where a value goes is."
         }
       }
     },

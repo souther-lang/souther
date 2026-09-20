@@ -13,6 +13,7 @@ import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
@@ -1601,9 +1602,18 @@ public interface Hir {
      * applies it decides by, and telling two of those apart has to survive the body being spliced —
      * which a position does not, being stamped with the call site wherever the body is one a reader
      * cannot open.
+     *
+     * <p>{@code expandedFrom} is the name this block was written out of, for the blocks no author
+     * wrote: a name standing where a value goes is the function it names, and what a pass puts
+     * there is the block applying it. Null for a block the author wrote, which its rule names.
+     *
+     * <p>Said by whoever writes the block and not read back off what stands inside it. The body is
+     * walked again after it is written — a call in it becomes an {@link Expansion}, a binding may
+     * come to stand around it — so a reader working out which block this is from the shape it ended
+     * up with is asking a question the shape stopped answering.
      */
     record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
-                 SourcePos pos, Region region) implements Expr {
+                 SourceReferenceOrigin expandedFrom, SourcePos pos, Region region) implements Expr {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -2837,7 +2847,8 @@ public interface Hir {
                     x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
-            case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
+            case Block x ->
+                    new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
             case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
@@ -2942,7 +2953,8 @@ public interface Hir {
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
                 yield body == bl.body() ? bl
-                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
+                        : new Block(bl.params(), body, bl.rule(), bl.expandedFrom(), bl.pos(),
+                                bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
