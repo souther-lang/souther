@@ -50,12 +50,61 @@ final class ExactRatioOrder {
      * pair no width ever separates.
      */
     static int compareMagnitudes(ExactRatio a, ExactRatio b) {
+        Integer written = fromWritingBothOut(a, b);
+        if (written != null) {
+            return written;
+        }
         for (int width = FIRST_WIDTH; ; width += width >> 1) {
             Integer decided = fromBrackets(a, b, width);
             if (decided != null) {
                 return decided;
             }
         }
+    }
+
+    /** The most the two values' powers of two may stand apart for both to be written over one
+     *  denominator, which is a shift of this many bits. */
+    private static final long NEAR_TWOS = 512;
+
+    /** The same for five, which is a multiplication by a number of about two and a third times
+     *  this many bits. */
+    private static final long NEAR_FIVES = 256;
+
+    /**
+     * Which magnitude is the larger, settled by writing both over one denominator, or null where
+     * their powers stand too far apart for that to stay small.
+     *
+     * <p>Exact, and the same answer the brackets come to: what the brackets are for is the pair whose
+     * powers no machine writes down. Most pairs are not that, and for those the difference between
+     * the exponents is a shift and a small power of five, so the two products are a few words wide
+     * and no width has to be tried.
+     */
+    private static Integer fromWritingBothOut(ExactRatio a, ExactRatio b) {
+        boolean subtractable = Math.abs(a.twos()) <= Integer.MAX_VALUE
+                && Math.abs(b.twos()) <= Integer.MAX_VALUE
+                && Math.abs(a.fives()) <= Integer.MAX_VALUE
+                && Math.abs(b.fives()) <= Integer.MAX_VALUE;
+        if (!subtractable) {
+            return null;
+        }
+        long twos = a.twos() - b.twos();
+        long fives = a.fives() - b.fives();
+        if (Math.abs(twos) > NEAR_TWOS || Math.abs(fives) > NEAR_FIVES) {
+            return null;
+        }
+        BigInteger left = a.numeratorWithoutUnits().abs().multiply(b.denominatorWithoutUnits());
+        BigInteger right = b.numeratorWithoutUnits().abs().multiply(a.denominatorWithoutUnits());
+        if (twos > 0) {
+            left = left.shiftLeft((int) twos);
+        } else if (twos < 0) {
+            right = right.shiftLeft((int) -twos);
+        }
+        if (fives > 0) {
+            left = left.multiply(FIVE.pow((int) fives));
+        } else if (fives < 0) {
+            right = right.multiply(FIVE.pow((int) -fives));
+        }
+        return left.compareTo(right);
     }
 
     /**
