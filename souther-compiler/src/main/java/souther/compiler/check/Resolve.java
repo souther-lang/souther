@@ -1115,7 +1115,8 @@ public final class Resolve {
             }
             case Ast.Block b -> {
                 AnsweredAll ps = bindAll(bound, b.params());
-                yield new Hir.Block(ps.binders(), expr(b.body(), ps.bound()), b.rule(), b.pos(),
+                yield new Hir.Block(ps.binders(), expr(b.body(), ps.bound()), b.rule(), null,
+                        b.pos(),
                         b.region());
             }
             // an attempt's binder names the value only where there is one to name — the success

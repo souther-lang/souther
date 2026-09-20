@@ -6640,12 +6640,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6672,12 +6674,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6704,12 +6708,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6736,12 +6742,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6768,12 +6776,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6800,12 +6810,14 @@
                 "construct" : 1,
                 "lowered" : 0,
                 "through" : [ {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.夜間割増",
                   "module" : "conformance.shipping",
                   "definition" : "送料を出す",
                   "call" : 1,
                   "lowered" : 0
                 }, {
+                  "kind" : "expansion",
                   "expanded" : "conformance.shipping.午前の集荷か",
                   "module" : "conformance.shipping",
                   "definition" : "夜間割増",
@@ -6926,12 +6938,14 @@
               "construct" : 1,
               "lowered" : 0,
               "through" : [ {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.夜間割増",
                 "module" : "conformance.shipping",
                 "definition" : "送料を出す",
                 "call" : 1,
                 "lowered" : 0
               }, {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.午前の集荷か",
                 "module" : "conformance.shipping",
                 "definition" : "夜間割増",
@@ -6961,12 +6975,14 @@
               "construct" : 1,
               "lowered" : 0,
               "through" : [ {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.夜間割増",
                 "module" : "conformance.shipping",
                 "definition" : "送料を出す",
                 "call" : 1,
                 "lowered" : 0
               }, {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.午前の集荷か",
                 "module" : "conformance.shipping",
                 "definition" : "夜間割増",
@@ -6996,12 +7012,14 @@
               "construct" : 1,
               "lowered" : 0,
               "through" : [ {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.夜間割増",
                 "module" : "conformance.shipping",
                 "definition" : "送料を出す",
                 "call" : 1,
                 "lowered" : 0
               }, {
+                "kind" : "expansion",
                 "expanded" : "conformance.shipping.午前の集荷か",
                 "module" : "conformance.shipping",
                 "definition" : "夜間割増",

@@ -10,7 +10,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReferenceOrigin;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -52,7 +52,7 @@ public final class KeptCalls {
     public static Core.PreservedCall to(ValueName.Stdlib.Operation operation, List<Core> args,
                                         Type type, SourcePos pos) {
         return new Core.PreservedCall(declared(operation), args,
-                new Core.KeptCallPlace(NAME, COMPOSED, ExpansionLineage.ORIGINAL), type, pos);
+                new Core.KeptCallPlace(NAME, COMPOSED, OccurrenceLineage.ORIGINAL), type, pos);
     }
 
     /**
@@ -69,7 +69,7 @@ public final class KeptCalls {
                     pos));
         }
         return new Core.PreservedCall(signature.declaring(), args,
-                new Core.KeptCallPlace(NAME, COMPOSED, ExpansionLineage.ORIGINAL),
+                new Core.KeptCallPlace(NAME, COMPOSED, OccurrenceLineage.ORIGINAL),
                 signature.result(), pos);
     }
 

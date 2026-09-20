@@ -14,7 +14,7 @@ import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
@@ -208,7 +208,7 @@ class EveryTermIsReadForWhatItSaysTest {
         Core.PreservedCall call = KeptCalls.to(ValueName.Stdlib.operation("List", "isEmpty"),
                 List.of(new Core.Str("", Type.STRING, POS)), Type.BOOL, POS);
         return new Core.PreservedCall(call.declared(), call.args(),
-                new Core.KeptCallPlace(reference, application, ExpansionLineage.ORIGINAL),
+                new Core.KeptCallPlace(reference, application, OccurrenceLineage.ORIGINAL),
                 call.type(), POS);
     }
 }

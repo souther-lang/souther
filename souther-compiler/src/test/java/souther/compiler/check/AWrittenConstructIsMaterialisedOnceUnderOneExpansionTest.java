@@ -8,7 +8,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.test.ClosedWorldContract;
 
@@ -154,7 +154,7 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
         List<String> asWritten = new ArrayList<>();
         for (Found found : walks) {
             found.at.keySet().forEach(which ->
-                    (which.lineage() instanceof ExpansionLineage.Original ? asWritten : copied)
+                    (which.lineage() instanceof OccurrenceLineage.Original ? asWritten : copied)
                             .add(found.where + " " + which));
         }
 
@@ -218,11 +218,11 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
 
     private static Found walked(String where, Hir.Expr body) {
         Found found = new Found(where);
-        walk(body, ExpansionLineage.ORIGINAL, found);
+        walk(body, OccurrenceLineage.ORIGINAL, found);
         return found;
     }
 
-    private static void walk(Hir.Expr e, ExpansionLineage copy, Found into) {
+    private static void walk(Hir.Expr e, OccurrenceLineage copy, Found into) {
         if (e instanceof Hir.Binary binary && binary.origin() != null
                 && binary.origin().isWritten()) {
             into.materialised(new ConstructOccurrence(binary.origin(), copy), binary);
@@ -235,6 +235,11 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
             expansion.bound().forEach(bound -> walk(bound.value(), copy, into));
             expansion.given().forEach(given -> walk(given.value(), copy, into));
             walk(expansion.body(), copy.copiedInto(expansion.callee(), expansion.at()), into);
+            return;
+        }
+        // The value a build computes is that build's copy, and what reads the binding is not.
+        if (e instanceof Hir.Materialised build) {
+            walk(build.body(), copy.builtFor(build.value(), build.site()), into);
             return;
         }
         Hir.forEachChild(e, child -> walk(child, copy, into));

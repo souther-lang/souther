@@ -9,6 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
@@ -338,6 +339,10 @@ class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
     }
 
     /** The copies of {@code lineage}, outermost first. */
+    private static List<ExpansionLineage.Expansion> stepsOf(OccurrenceLineage lineage) {
+        return stepsOf(lineage.expansionProjection());
+    }
+
     private static List<ExpansionLineage.Expansion> stepsOf(ExpansionLineage lineage) {
         List<ExpansionLineage.Expansion> out = new ArrayList<>();
         for (ExpansionLineage each = lineage;

@@ -4,8 +4,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
@@ -46,7 +47,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                            Preserved preserved,
                            Map<BindingId, ValueName.Behavior> dependencies,
                            List<BindingOwner> within,
-                           ExpansionLineage lineage) {
+                           OccurrenceLineage lineage) {
 
     public CheckContext {
         if (symbols == null || published == null || kinds == null || inners == null
@@ -65,7 +66,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                         Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                         Preserved preserved) {
         this(symbols, published, kinds, inners, fieldTypes, layout, data, reqs, callees, makingAnOptional, preserved,
-                Map.of(), List.of(), ExpansionLineage.ORIGINAL);
+                Map.of(), List.of(), OccurrenceLineage.ORIGINAL);
     }
 
     public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
@@ -76,7 +77,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                         Preserved preserved,
                         Map<BindingId, ValueName.Behavior> dependencies) {
         this(symbols, published, kinds, inners, fieldTypes, layout, data, reqs, callees, makingAnOptional, preserved,
-                dependencies, List.of(), ExpansionLineage.ORIGINAL);
+                dependencies, List.of(), OccurrenceLineage.ORIGINAL);
     }
 
     /**
@@ -98,6 +99,17 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
         // counting inside the other's identity, and the counting is the thing a construct's name has
         // to be free of.
         return same().within(List.copyOf(deeper), lineage.copiedInto(expanded, at));
+    }
+
+    /**
+     * The same, elaborating the build of {@code value} that was made for the region {@code at}.
+     *
+     * <p>A build adds one step to which copy a construct stands in and nothing to what its bindings
+     * belong to: the value's body is written into the body it is built for, and only the copy is
+     * different.
+     */
+    public CheckContext building(ValueName value, MaterialisationSite at) {
+        return same().within(within, lineage.builtFor(value, at));
     }
 
     /**
@@ -133,7 +145,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                         Preserved preserved,
                         Map<BindingId, ValueName.Behavior> dependencies,
                         List<BindingOwner> within,
-                        ExpansionLineage lineage) {
+                        OccurrenceLineage lineage) {
 
         CheckContext data(Hir.Data other) {
             return built(other, reqs, callees, makingAnOptional, preserved, dependencies, within, lineage);
@@ -159,7 +171,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
             return built(data, reqs, callees, makingAnOptional, preserved, bound, within, lineage);
         }
 
-        CheckContext within(List<BindingOwner> expansion, ExpansionLineage copy) {
+        CheckContext within(List<BindingOwner> expansion, OccurrenceLineage copy) {
             return built(data, reqs, callees, makingAnOptional, preserved, dependencies, expansion,
                     copy);
         }
@@ -168,7 +180,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                                    Map<ValueName.Behavior, ReqSig> callees,
                                    boolean makingAnOptional, Preserved preserved,
                                    Map<BindingId, ValueName.Behavior> deps,
-                                   List<BindingOwner> within, ExpansionLineage lineage) {
+                                   List<BindingOwner> within, OccurrenceLineage lineage) {
             return new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, data, reqs, callees,
                     makingAnOptional, preserved, deps, within, lineage);
         }

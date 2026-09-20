@@ -37,6 +37,9 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.publish.MaterialisationRegionWord;
+import souther.compiler.publish.RegionSlotWord;
+import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 
@@ -374,6 +377,19 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // What a construct's copy was made by, and how a build's region is named: which of the
+            // two a step is, which way its region is told, and which of a construct's regions it is.
+            new Vocabulary("through[].kind",
+                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
+                            "properties", "construct", "properties", "through", "items",
+                            "properties", "kind"),
+                    ThroughStepWord.class),
+            new Vocabulary("materialisationRegion.kind",
+                    List.of("$defs", "materialisationRegion", "properties", "kind"),
+                    MaterialisationRegionWord.class),
+            new Vocabulary("materialisationRegion.slot",
+                    List.of("$defs", "materialisationRegion", "properties", "slot"),
+                    RegionSlotWord.class),
             // What one thing keeping that verdict open says about a wider run. Its own enum and its
             // own field: the words are the compiler's, and which of them a fact answers is decided
             // where the fact is made rather than read back off the kind beside it here — one kind

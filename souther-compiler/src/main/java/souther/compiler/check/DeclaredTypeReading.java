@@ -235,6 +235,8 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 }
                 case Hir.Apply call -> applied(call);
                 case Hir.Expansion ex -> ofExpansion(ex);
+                // A build of a value is that value, whichever region it was built for.
+                case Hir.Materialised m -> of(m.body());
                 case Hir.LetIn let -> ofLet(let);
                 case Hir.Var v -> ofVar(v);
                 // It answers no value, which is a type and is this one.

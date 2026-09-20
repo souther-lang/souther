@@ -9,9 +9,11 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
@@ -1575,7 +1577,7 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, Block, Tuple, TupleGet, Unreachable {
     }
 
     /**
@@ -1600,9 +1602,18 @@ public interface Hir {
      * applies it decides by, and telling two of those apart has to survive the body being spliced —
      * which a position does not, being stamped with the call site wherever the body is one a reader
      * cannot open.
+     *
+     * <p>{@code expandedFrom} is the name this block was written out of, for the blocks no author
+     * wrote: a name standing where a value goes is the function it names, and what a pass puts
+     * there is the block applying it. Null for a block the author wrote, which its rule names.
+     *
+     * <p>Said by whoever writes the block and not read back off what stands inside it. The body is
+     * walked again after it is written — a call in it becomes an {@link Expansion}, a binding may
+     * come to stand around it — so a reader working out which block this is from the shape it ended
+     * up with is asking a question the shape stopped answering.
      */
     record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
-                 SourcePos pos, Region region) implements Expr {
+                 SourceReferenceOrigin expandedFrom, SourcePos pos, Region region) implements Expr {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -1649,6 +1660,49 @@ public interface Hir {
          * and is not answered here. */
         public RetType annotation() {
             return annotated ? declaredType : null;
+        }
+    }
+
+    /**
+     * One build of a value's body, kept as evidence of which build it is.
+     *
+     * <p>What a value bound by the region that demands it is made of: the body, and the reason this
+     * build stands for the region and not for another ({@link MaterialisationSite}). The pass that
+     * shares builds knows the region and does not know which copy of a body it is walking in, and a
+     * walk that knows the copy does not know the region. So the first leaves what it settled in the
+     * tree, and the second reads it back as it descends.
+     *
+     * <p>Wraps the value a binding is given and not the binding: what belongs to this build is what
+     * computes the value, and what reads the binding belongs to the region around it. A value
+     * naming another builds that one inside its own body when a fork of the body demands it, and
+     * beside its own when the body itself does — the nesting says which.
+     *
+     * <p>It is no evaluation region of its own and no call: it adds nothing to what stands under it
+     * except which build that is.
+     *
+     * @param value which value's body this is a build of
+     * @param site  the region it was built for
+     */
+    record Materialised(ValueName value, MaterialisationSite site, Expr body, SourcePos pos,
+                        Region region) implements Expr {
+
+        public Materialised {
+            if (value == null || site == null || body == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region: " + value + " for " + site);
+            }
+        }
+
+        /**
+         * {@code e} as the value it computes, for a reader whose question is about what the value
+         * is and not about which build of it stands here.
+         */
+        public static Expr stripped(Expr e) {
+            Expr at = e;
+            while (at instanceof Materialised build) {
+                at = build.body();
+            }
+            return at;
         }
     }
 
@@ -2792,7 +2846,9 @@ public interface Hir {
             case Expansion x -> new Expansion(x.callee(), x.application(), x.at(), x.bound(),
                     x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
-            case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
+            case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
+            case Block x ->
+                    new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
             case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
@@ -2889,10 +2945,16 @@ public interface Hir {
                         : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                                 ex.declaredReturn(), body, ex.pos(), ex.region());
             }
+            case Materialised m -> {
+                Expr body = atExpr.apply(m.body());
+                yield body == m.body() ? m
+                        : new Materialised(m.value(), m.site(), body, m.pos(), m.region());
+            }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
                 yield body == bl.body() ? bl
-                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
+                        : new Block(bl.params(), body, bl.rule(), bl.expandedFrom(), bl.pos(),
+                                bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);

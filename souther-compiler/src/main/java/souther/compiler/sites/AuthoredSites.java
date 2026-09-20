@@ -478,7 +478,7 @@ public final class AuthoredSites {
                     take(e);
                     expr(block.body());
                 }
-                case Hir.Expansion _ -> { }
+                case Hir.Expansion _, Hir.Materialised _ -> { }
             }
         }
 

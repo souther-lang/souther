@@ -13,13 +13,16 @@ import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.EtaOrigin;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.ParameterSlot;
 import souther.compiler.types.ReferenceOrigin;
+import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -39,6 +42,7 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /**
  * Expands calls to helper {@code fn}s inline (spec §blocks: a named helper is the same as an inline block).
@@ -1162,7 +1166,7 @@ public final class HelperInliner {
      */
     private Hir.Expr expanded(Hir.Expr e) {
         Hir.Expr calls = inline(e);
-        return reading == ValueAtAReference.SHARED_PER_REGION ? region(calls) : calls;
+        return reading == ValueAtAReference.SHARED_PER_REGION ? region(calls, rootSite()) : calls;
     }
 
     /**
@@ -1340,6 +1344,10 @@ public final class HelperInliner {
                                 () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
+            // A build already kept as one: what it holds is walked like any other body, and what
+            // says which build it is stays where the pass that made it put it.
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(), inline(m.body()),
+                    m.pos(), m.region());
             case Hir.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
                 // lambda the author wrote and a named function read as a value are the same block by
@@ -1425,6 +1433,7 @@ public final class HelperInliner {
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
             case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
+                    block.expandedFrom(),
                     block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
@@ -2024,10 +2033,26 @@ public final class HelperInliner {
         // name, and these are the parameters and the call it stands for. Which expansion it is, is
         // said here, where the name that made it necessary is still in hand — a reader below has
         // only the shape, and the shape is one every composed application wears.
+        //
+        // And which block this is, for the same reason and at the same moment. Its rule says no
+        // author wrote it, so what tells it from the next one is the name it was written out of.
         return new Hir.Block(params,
                 Hir.Apply.synthetic(function, args, new ApplicationOrigin.Eta(etaOf(function)),
                         function.pos(), null),
-                souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
+                souther.compiler.types.RuleOrigin.unwritten(), writtenReference(function),
+                function.pos(), null);
+    }
+
+    /**
+     * The reference {@code function} is, where a source wrote one, and null where this compiler
+     * composed the name.
+     *
+     * <p>A name a pass wrote carries a number and nothing else, so it tells no two blocks apart. It
+     * is null here rather than a refusal: whether anything needs this block told from another is
+     * settled where one asks, and a name nobody can be sent to is only a problem for whoever asks.
+     */
+    private static SourceReferenceOrigin writtenReference(Hir.Var function) {
+        return function.origin() instanceof SourceReferenceOrigin written ? written : null;
     }
 
     /**
@@ -2200,7 +2225,7 @@ public final class HelperInliner {
      * of the two the walk reached first, which is to say at whichever the source happened to write
      * first.
      */
-    private Hir.Expr region(Hir.Expr e) {
+    private Hir.Expr region(Hir.Expr e, Supplier<MaterialisationSite> site) {
         Map<String, Hir.Binder> here = new LinkedHashMap<>();
         List<Hir.Binder> order = new ArrayList<>();
         List<Hir.Expr> values = new ArrayList<>();
@@ -2209,7 +2234,7 @@ public final class HelperInliner {
             Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
             demandedHere(e, demanded);
             for (Hir.Var.Denoting each : List.copyOf(demanded.values())) {
-                materialise(each, here, order, values);
+                materialise(each, here, order, values, site);
             }
             Hir.Expr inner = read(e);
             for (int i = order.size() - 1; i >= 0; i--) {
@@ -2224,6 +2249,52 @@ public final class HelperInliner {
     }
 
     /**
+     * The region a definition's body is the whole of, said as the definition being written.
+     *
+     * <p>Every site here is asked for only when a value is built in that region: a region with no
+     * build has no need of a name, and one that cannot be named is refused where a build asks.
+     */
+    private Supplier<MaterialisationSite> rootSite() {
+        BindingOwner into = writing.destination();
+        return () -> {
+            if (into instanceof BindingOwner.OfValue definition) {
+                return new MaterialisationSite.Body(
+                        new WrittenOwner.Body(definition.module(), definition.name()));
+            }
+            throw new IllegalStateException(
+                    "a body's builds are for some definition's body, and this is written into "
+                            + into);
+        };
+    }
+
+    /** The region {@code slot} of the construct the source wrote as {@code construct} opens. */
+    private static Supplier<MaterialisationSite> slot(SourceConstructOrigin construct,
+                                                      RegionSlot slot) {
+        return () -> new MaterialisationSite.Slot(construct, slot);
+    }
+
+    /**
+     * The region the body of {@code block} is: a block the author wrote is told by its rule, and one
+     * a pass wrote out of a name is told by that name.
+     *
+     * <p>Both are read off what the block says about itself. What stands inside it is walked again
+     * after the block is written — a call in it becomes an expansion — so a block asked which one it
+     * is by the shape it ended up with would be asked a question the shape had stopped answering.
+     */
+    private static Supplier<MaterialisationSite> siteOfBlock(Hir.Block block) {
+        return () -> {
+            if (block.rule().isWritten()) {
+                return new MaterialisationSite.WrittenBlock(block.rule());
+            }
+            if (block.expandedFrom() != null) {
+                return new MaterialisationSite.GeneratedBlock(block.expandedFrom());
+            }
+            throw new IllegalStateException("a block no author wrote and no source wrote the name"
+                    + " of has nothing to tell its builds by, at " + block.pos());
+        };
+    }
+
+    /**
      * Binds what {@code named} reaches in the region being written, after everything that value's
      * own body demands there.
      *
@@ -2232,7 +2303,8 @@ public final class HelperInliner {
      * a body of it is expanded — so following what each one demands terminates.
      */
     private void materialise(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
-                             List<Hir.Binder> order, List<Hir.Expr> values) {
+                             List<Hir.Binder> order, List<Hir.Expr> values,
+                             Supplier<MaterialisationSite> site) {
         String reached = named.reaches();
         if (readAt(reached) != null) {
             return;
@@ -2245,13 +2317,15 @@ public final class HelperInliner {
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
-            materialise(each, here, order, values);
+            materialise(each, here, order, values, site);
         }
         Hir.Binder binder = writing.binders()
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(reached, binder);
         order.add(binder);
-        values.add(HelperNames.carriedByValue(read(calls)));
+        Hir.Expr built = HelperNames.carriedByValue(read(calls));
+        values.add(new Hir.Materialised(named.denotes(), site.get(), built, built.pos(),
+                built.region()));
     }
 
     /**
@@ -2368,30 +2442,48 @@ public final class HelperInliner {
             return readName(v);
         }
         return switch (e) {
-            case Hir.If iff -> new Hir.If(read(iff.cond()), region(iff.then()), region(iff.els()),
+            case Hir.If iff -> new Hir.If(read(iff.cond()),
+                    region(iff.then(), slot(iff.origin(), new RegionSlot.IfThen())),
+                    region(iff.els(), slot(iff.origin(), new RegionSlot.IfElse())),
                     iff.origin(), iff.pos(), iff.region());
-            case Hir.IfConstructed ic -> new Hir.IfConstructed(read(ic.construct()), ic.binder(),
-                    region(ic.then()), Hir.mapArms(ic.els(), this::region), ic.origin(), ic.pos(),
-                    ic.region());
+            case Hir.IfConstructed ic -> {
+                List<Hir.ElseArm> arms = new ArrayList<>();
+                for (Hir.ElseArm arm : ic.els()) {
+                    arms.add(arm.with(region(arm.body(),
+                            slot(ic.origin(), new RegionSlot.ConstructedElse(arm.clause())))));
+                }
+                yield new Hir.IfConstructed(read(ic.construct()), ic.binder(),
+                        region(ic.then(), slot(ic.origin(), new RegionSlot.ConstructedThen())),
+                        arms, ic.origin(), ic.pos(), ic.region());
+            }
             case Hir.Match m -> {
                 List<Hir.Case> cases = new ArrayList<>();
                 for (Hir.Case each : m.cases()) {
-                    cases.add(new Hir.Case(each.caseTypes(), each.binding(), region(each.body()),
+                    List<String> written = new ArrayList<>();
+                    for (Hir.Name caseType : each.caseTypes()) {
+                        written.add(caseType.written());
+                    }
+                    cases.add(new Hir.Case(each.caseTypes(), each.binding(),
+                            region(each.body(), slot(m.origin(), new RegionSlot.MatchCase(written))),
                             each.unwrapAsserts(), each.pos()));
                 }
                 yield new Hir.Match(read(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
             }
             case Hir.Binary b when isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
-                    region(b.right()), b.origin(), b.pos(), b.region());
-            case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body()), bl.rule(), bl.pos(),
-                    bl.region());
+                    region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
+                    b.origin(), b.pos(), b.region());
+            case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
+                    bl.rule(), bl.expandedFrom(), bl.pos(), bl.region());
             case Hir.ListComp comp -> {
                 List<Hir.Expr> guards = new ArrayList<>();
-                for (Hir.Expr guard : comp.guards()) {
-                    guards.add(region(guard));
+                for (int at = 0; at < comp.guards().size(); at++) {
+                    guards.add(region(comp.guards().get(at),
+                            slot(comp.forkOfGuard(at), new RegionSlot.ComprehensionGuard(at))));
                 }
-                yield new Hir.ListComp(region(comp.element()), guards, comp.origin(), comp.pos(),
-                        comp.region());
+                yield new Hir.ListComp(
+                        region(comp.element(),
+                                slot(comp.origin(), new RegionSlot.ComprehensionElement())),
+                        guards, comp.origin(), comp.pos(), comp.region());
             }
             // `given` is what the callee was handed and is also inside the body, so it is read the
             // same way — a reference left standing there is one no reader below could emit.
@@ -2888,6 +2980,10 @@ public final class HelperInliner {
                         ex.declaredReturn(), rename(ex.body(), renaming),
                         renaming.at(ex.pos()), renaming.over(ex.region()));
             }
+            // A copy of a build is a build of the same value for the same region: which one it is
+            // is the source's answer and moves with no copy.
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    rename(m.body(), renaming), renaming.at(m.pos()), renaming.over(m.region()));
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     lit.origin(), renaming.at(lit.pos()), renaming.over(lit.region()));
             case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),
@@ -2904,10 +3000,11 @@ public final class HelperInliner {
                 for (Hir.Binder p : block.params()) {
                     params.add(renaming.copy().of(p));
                 }
-                // The rule is the block's own and is not renamed. What a copy is stamped with is
-                // where a reader is sent, and which rule this is has to be the same in every copy.
+                // The rule is the block's own and is not renamed, and neither is the name a block
+                // this pass wrote was written out of. What a copy is stamped with is where a reader
+                // is sent, and which block this is has to be the same in every copy.
                 yield new Hir.Block(params,
-                        rename(block.body(), renaming), block.rule(),
+                        rename(block.body(), renaming), block.rule(), block.expandedFrom(),
                         renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()
