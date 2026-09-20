@@ -614,7 +614,7 @@ public final class CallElaborator {
                 return numericFold(call, applied.result(), expected);
             }
             if (kernel == Kernel.STRING_MATCHES) {
-                validateRegexPattern(args.get(0), ctx.symbols());
+                validateRegexPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
             }
             return applied.result();
         }
@@ -706,10 +706,10 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols, BoundValues at) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return ConstEval.against(symbols).eval(nd.inits().get(0).value());
+            return ConstEval.against(symbols).eval(new BoundExpr(nd.inits().get(0).value(), at));
         }
         return Optional.empty();
     }
@@ -720,11 +720,12 @@ public final class CallElaborator {
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
      * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Hir.Expr e, Symbols symbols) {
+    static void validateRegexPattern(BoundExpr e, Symbols symbols) {
         String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
-                            .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
+                            .at(e.expr().pos())
+                            .say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
         }
         try {
             java.util.regex.Pattern.compile(pattern);
@@ -732,7 +733,8 @@ public final class CallElaborator {
             // getDescription() is the one-line reason ("Unclosed character class near index 3");
             // getMessage() would also dump the pattern and a caret, which the source region already shows.
             throw CompileException.of(Diagnostic
-                            .at(e.pos()).say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
+                            .at(e.expr().pos())
+                            .say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
         }
     }
 

@@ -191,7 +191,54 @@ public final class AffineForms {
      * compose the moment its part did.
      */
     public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading) {
-        return of(raw, at, reading, new java.util.HashSet<>());
+        return of(raw, at, reading, new Walk<>());
+    }
+
+    /**
+     * One walk of one expression: the names it is inside, and what each name it has read came to.
+     *
+     * <p>The first is what stops a name that reaches itself. The second is what stops a name read
+     * twice from being read twice: what a binding comes to is a fact about the value it was given
+     * and the environment that value is read in, and both are fixed where the binding was made
+     * (ADR-0111) — so the second reading of a name is the first reading asked again. A body naming
+     * one binding twice, over a chain of bindings that each do, is a reading that doubles with
+     * every link without it.
+     *
+     * <p>Held for one walk and not beyond it. What a name comes to is this reading's answer, and a
+     * table outliving the walk would be one reading's answer offered to another's.
+     *
+     * <p>A name is entered on the way to its own answer, so what is held under it was reached with
+     * it on the path. That is the same path every reading of it takes: a path can hold a binding
+     * twice only where a value reaches itself, which is refused before any of this runs.
+     */
+    private static final class Walk<A, E> {
+
+        private final java.util.Set<BindingId> following = new java.util.HashSet<>();
+        private final java.util.Map<BindingId, Outcome<A, E>> read = new java.util.HashMap<>();
+
+        /** Whether {@code binding} may be followed from here, marking it followed where it may. */
+        boolean enter(BindingId binding) {
+            return following.add(binding);
+        }
+
+        /** Done following {@code binding}. */
+        void leave(BindingId binding) {
+            following.remove(binding);
+        }
+
+        /** What {@code binding} came to, asking {@code answer} the first time and no other. */
+        Outcome<A, E> readingOf(BindingId binding,
+                                java.util.function.Supplier<Outcome<A, E>> answer) {
+            Outcome<A, E> already = read.get(binding);
+            if (already != null) {
+                return already;
+            }
+            Outcome<A, E> came = answer.get();
+            if (came != null) {
+                read.put(binding, came);
+            }
+            return came;
+        }
     }
 
     /**
@@ -249,7 +296,7 @@ public final class AffineForms {
      * environment it would be asked of expressions a name already answered for.
      */
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
-                                           java.util.Set<BindingId> following) {
+                                           Walk<A, E> following) {
         Core e = Terms.asOperator(raw);
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
@@ -300,7 +347,7 @@ public final class AffineForms {
     /** The form {@code e} came to, or null where the reading stopped inside it. For the parts of a
      *  composition, whose own stop is the whole one. */
     private static <A, E> LinearForm<A> formOf(Core e, E at, Reading<A, E> reading,
-                                               java.util.Set<BindingId> following,
+                                               Walk<A, E> following,
                                                Stop<A, E> stopped) {
         Outcome<A, E> read = of(e, at, reading, following);
         if (read instanceof Outcome.StoppedAt<A, E> here) {
@@ -332,26 +379,30 @@ public final class AffineForms {
      * nothing stopped and this answers nothing, and the stop is reported at the name.
      */
     private static <A, E> Outcome<A, E> read(Core e, E at, Reading<A, E> reading,
-                                             java.util.Set<BindingId> following) {
+                                             Walk<A, E> following) {
         if (!(e instanceof Core.Read r)) {
             return null;
         }
         ReadThrough<E> through = reading.readThrough(r, at);
         if (through != null) {
-            if (through.value() == e || !following.add(r.binding())) {
+            if (through.value() == e || !following.enter(r.binding())) {
                 return null;
             }
-            Outcome<A, E> form = of(through.value(), through.at(), reading, following);
-            following.remove(r.binding());
+            // Asked once per binding. What a name comes to is the value it was given read in the
+            // environment it was given in, and a second occurrence of the name is that same
+            // question — so the walk holds the answer rather than composing the value again.
+            Outcome<A, E> form = following.readingOf(r.binding(),
+                    () -> of(through.value(), through.at(), reading, following));
+            following.leave(r.binding());
             return form;
         }
         java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
-        if (alternatives == null || alternatives.isEmpty() || !following.add(r.binding())) {
+        if (alternatives == null || alternatives.isEmpty() || !following.enter(r.binding())) {
             return null;
         }
         Stop<A, E> stopped = new Stop<>();
         LinearForm<A> agreed = commonForm(membersOf(alternatives, reading), following, stopped);
-        following.remove(r.binding());
+        following.leave(r.binding());
         if (agreed != null) {
             return new Outcome.Composed<>(agreed);
         }
@@ -481,29 +532,29 @@ public final class AffineForms {
      * one value.
      */
     private static <A, E> java.util.List<Standing<A, E>> standing(
-            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
+            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
         return switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
                 if (through != null) {
-                    if (through.value() == e || !following.add(r.binding())) {
+                    if (through.value() == e || !following.enter(r.binding())) {
                         yield java.util.List.of(new Standing<>(e, at, reading));
                     }
                     java.util.List<Standing<A, E>> denoted =
                             standing(through.value(), through.at(), reading, following);
-                    following.remove(r.binding());
+                    following.leave(r.binding());
                     yield denoted;
                 }
                 java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
                 if (alternatives == null || alternatives.isEmpty()
-                        || !following.add(r.binding())) {
+                        || !following.enter(r.binding())) {
                     yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : membersOf(alternatives, reading)) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
-                following.remove(r.binding());
+                following.leave(r.binding());
                 yield each;
             }
             case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
@@ -548,7 +599,7 @@ public final class AffineForms {
      * nothing to compare.
      */
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
-            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
+            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
         return switch (e) {
             case Core.FieldAccess fa -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
@@ -596,7 +647,7 @@ public final class AffineForms {
      * the values agree or this walk has nothing to say about the position.
      */
     private static <A, E> LinearForm<A> commonForm(java.util.List<Standing<A, E>> these,
-                                                   java.util.Set<BindingId> following,
+                                                   Walk<A, E> following,
                                                    Stop<A, E> stopped) {
         LinearForm<A> agreed = null;
         for (Standing<A, E> each : these) {
@@ -617,7 +668,7 @@ public final class AffineForms {
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
     private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
-                                                 java.util.Set<BindingId> following,
+                                                 Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         LinearForm<A> written = literal(e, reading);
         if (written != null) {
@@ -747,7 +798,7 @@ public final class AffineForms {
      * one rule with two readings, and neither is a case anybody wrote.
      */
     private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
-                                                 java.util.Set<BindingId> following,
+                                                 Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);

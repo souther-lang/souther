@@ -16,12 +16,16 @@ F# and Elm were measured rather than recalled. Both split a value from a functio
 
 **A lambda on the right of `=` is the parameter-list form.** `let f = (x) -> e` and `let f (x) = e` define one thing; the parameter-list form is what the formatter writes back. Only a lambda the source wrote moves: a `.field` getter is a block too, but its parameter is synthesized, and a definition whose parameter the author never wrote is not one they can read. It stays a block, and a block is not a value. ADR-0026 declined this spelling on the ground that F#, OCaml and Haskell write the named form. That is a habit in those languages, not a rule, and with the value form present the two spellings meet in one place for the first time — so one of them has to mean something, and meaning the same thing is what costs nothing. There is no ambiguity to settle: a top-level definition's call sites are not read (ADR-0066), so both spellings take their parameter types from the body.
 
-### A value is substituted, not held
+### A value denotes as if it were substituted, and is materialised once
 
-A value is not module state. Its expression is elaborated in the module that declares it and substituted at each reference.
+A value is not module state. Its expression is elaborated in the module that declares it, and it denotes as if that expression stood at each reference.
 
-- **Its names are resolved once, where it is written.** ADR-0067 resolves a module's names in the module that wrote them; what is substituted is the resolved definition, not text to be read again at the reference.
-- **It is evaluated at each reference, and that is not observable.** A value's body obeys a helper's rules, so it cannot call an injected behavior and is pure and total.
+**As if, and not by copying.** The substitution says what a value means; it does not say what a compiler builds. Because a value's body is pure, total, and has no observable identity, an implementation may share one materialisation among the references inside one evaluation region. A reading that copies instead makes what a body holds the product of its references rather than the sum of what the author wrote: a chain of values each naming the one before them twice doubles with every link while the source grows by a line.
+
+**Sharing does not evaluate a value on a path on which no reference to it is evaluated.** An evaluation region is somewhere entered on some paths and not others — a branch, a match arm, the right of a short-circuit, a block's body, the element a comprehension writes per item — and a materialisation is bound at the head of the region that demands it. The arms of a fork are the ways out of one place, so a value every arm names is demanded by the fork and materialised there; a value one arm names is materialised in that arm alone.
+
+- **Its names are resolved once, where it is written.** ADR-0067 resolves a module's names in the module that wrote them; what stands at the reference is the resolved definition, not text to be read again there.
+- **When it is evaluated is not observable.** A value's body obeys a helper's rules, so it cannot call an injected behavior and is pure and total.
 - **Identity is not observable.** Two references may yield distinct values; the language has no reference identity and compares structurally (ADR-0047).
 - **An invariant a value breaks is reported at the value**, whether or not anything names it — which is what a construction with a constant argument already does.
 - **What a value constructs belongs in the `constructs` of the behavior that names it**, transitively, exactly as a helper body's constructions do. Spreading a value builds it, so a spread contributes the same way.
@@ -29,7 +33,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 - **A value must not reach itself**, by naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (ADR-0038); a value has no such form. The value graph is therefore not the call graph, and a cycle through a value is refused with the path it goes round, apart from the recursion check — which would ask for a return type the author never wrote.
 - **Every edge of both graphs is a resolved name.** A call, a bare name and a spread each carry what they denote, so applying a function-typed parameter is not a call to whatever else bears its spelling. The call edges were matched against the helper table by name, which made a parameter named like a value close a cycle that does not exist — and, on its own, made `let f (g: (Int) -> Int) = g(1)` recursive whenever a helper was named `g`. An expansion carries the argument's own answer into the body it substitutes it into, so a named function handed to a combinator stays the helper it is.
 
-If a value's body ever becomes able to touch the outside world, when it is evaluated stops being unobservable and this has to be decided again.
+If a value's body ever becomes able to touch the outside world, when and how often it is evaluated stops being unobservable, and both the substitution and the sharing have to be decided again.
 
 ### One name in the value namespace
 

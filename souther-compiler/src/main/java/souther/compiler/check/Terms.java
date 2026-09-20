@@ -685,8 +685,7 @@ final class Terms {
      * author wrote.
      */
     static Object folded(Core e, Symbols symbols, Denotations at) {
-        Hir.Expr written = asWrittenValue(e, at);
-        return written == null ? null : ConstEval.against(symbols).eval(written).orElse(null);
+        return CoreConstantEval.against(symbols, at).eval(e).orElse(null);
     }
 
     /**
@@ -2663,7 +2662,7 @@ final class Terms {
             // A temporal is one of the literals the language has (spec
             // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands. It
             // was carried here as a call and answered `false` in this switch's default while
-            // `asWrittenValue` was writing it back out — one value, two answers about whether the
+            // `writtenSyntaxOf` was writing it back out — one value, two answers about whether the
             // source holds it.
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _ -> true;
@@ -2696,6 +2695,15 @@ final class Terms {
         return built != null && namedByRule(built.container(), at);
     }
 
+    /** What a name answered, and the environment it answered under — the environment because a
+     * binding entered after the answer is a name this one could reach that it could not before. */
+    private record Named(Denotations at, boolean named) {}
+
+    /** What each name followed came to, so that a name read twice is followed once. A value a name
+     * was given may read two more names, and each of those two more again, so a walk that asks the
+     * question afresh at each occurrence asks it as many times as the names multiply out to. */
+    private final Map<BindingId, Named> named = new HashMap<>();
+
     /**
      * Whether {@code e} names something without a guard having to have spoken about it: it is read all
      * the way down. A location is; so is a value composed of ones by a shape the term grammar reads —
@@ -2711,9 +2719,15 @@ final class Terms {
             // The name is the expression it was given, so the question is asked of that expression.
             // It was a flag recorded when the binding was entered, which is a second record of what
             // the initializer already answers.
+            Named had = named.get(r.binding());
+            if (had != null && had.at() == at) {
+                return had.named();
+            }
             Core given = at.valueOf(r.binding());
-            return computesAsWhatItWasGiven(r.binding(), at) && given != null && given != e
-                    && (affineOf(given, at) != null || namedByRule(given, at));
+            boolean answer = computesAsWhatItWasGiven(r.binding(), at) && given != null
+                    && given != e && (affineOf(given, at) != null || namedByRule(given, at));
+            named.put(r.binding(), new Named(at, answer));
+            return answer;
         }
         Core read = asOperator(e);
         if (read instanceof Core.PreservedCall call
@@ -2750,10 +2764,15 @@ final class Terms {
     // --- what the two representations share ----------------------------------------------------
 
     /**
-     * {@code e} as the value it is written as, for the one reader that is defined over written values:
-     * the constant folder. A value written out is the same value in either representation, so this is
-     * a rendering and not a second tree — everything computed answers with nothing, and the fold then
-     * has nothing to fold.
+     * {@code e} as the syntax the author would have written for it, for a reader that shows a value
+     * back to a person. A value written out is the same value in either representation, so this is a
+     * rendering and not a second tree — everything computed answers with nothing.
+     *
+     * <p><b>Rendering only.</b> What a value comes to at compile time is
+     * {@link CoreConstantEval}, which reads this tree rather than a copy of it: folding what this
+     * writes out would be following each name by copying its body, once per reference, which is
+     * what makes a name read twice cost twice. A reader that wants the answer and not the syntax
+     * asks {@link #folded}.
      *
      * <p><b>Read where it stands.</b> A helper call is expanded as a binding over the helper's body
      * (spec §invariant-discharge-representation), so a value an author wrote at a call stands under
@@ -2768,8 +2787,8 @@ final class Terms {
      * means: what a name <em>denotes</em> is {@link #inside}'s, and this is the written value's own
      * question.
      */
-    static Hir.Expr asWrittenValue(Core e, Denotations at) {
-        return asWrittenValue(e, at, Map.of());
+    static Hir.Expr writtenSyntaxOf(Core e, Denotations at) {
+        return writtenSyntaxOf(e, at, Map.of());
     }
 
     /**
@@ -2798,32 +2817,32 @@ final class Terms {
         return out;
     }
 
-    private static Hir.Expr asWrittenValue(Core e, Denotations at, Map<BindingId, Core> given) {
+    private static Hir.Expr writtenSyntaxOf(Core e, Denotations at, Map<BindingId, Core> given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
         return switch (e) {
             // A binding is the value its body is, with the binder standing for what it was given.
             // A binding is the value its body is, with the binder standing for what it was given.
-            case Core.LetIn li -> asWrittenValue(li.body(), at, withGiven(given, li));
+            case Core.LetIn li -> writtenSyntaxOf(li.body(), at, withGiven(given, li));
             // And a name whose binding the clause's shape already consumed stands for what the
             // environment says it was given — which is the same rule, asked where the binding is no
             // longer in the tree ({@link ClauseExpr.Scoped}).
             case Core.Read r when given.containsKey(r.binding()) ->
-                    asWrittenValue(given.get(r.binding()), at, given);
+                    writtenSyntaxOf(given.get(r.binding()), at, given);
             case Core.Read r when at.valueOf(r.binding()) != null ->
-                    asWrittenValue(at.valueOf(r.binding()), at, given);
+                    writtenSyntaxOf(at.valueOf(r.binding()), at, given);
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
             case Core.Bool b -> new Hir.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
-                Hir.Expr operand = asWrittenValue(n.operand(), at, given);
+                Hir.Expr operand = writtenSyntaxOf(n.operand(), at, given);
                 yield operand == null ? null : new Hir.Neg(operand, n.pos(), null);
             }
             case Core.Binary b -> {
-                Hir.Expr left = asWrittenValue(b.left(), at, given);
-                Hir.Expr right = asWrittenValue(b.right(), at, given);
+                Hir.Expr left = writtenSyntaxOf(b.left(), at, given);
+                Hir.Expr right = writtenSyntaxOf(b.right(), at, given);
                 yield left == null || right == null ? null
                         : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
             }
@@ -2875,7 +2894,7 @@ final class Terms {
                                           Map<BindingId, Core> given) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Core arg : args) {
-            Hir.Expr each = asWrittenValue(arg, at, given);
+            Hir.Expr each = writtenSyntaxOf(arg, at, given);
             if (each == null) {
                 return null;
             }

@@ -123,7 +123,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
                     "types an operand under the operator it stands beside"),
-            new Held("souther.compiler.check.ConstEval.arith",
+            new Held("souther.compiler.check.ConstantAlgebra.arith",
                     "what the operator computes of two constants"),
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
@@ -188,6 +188,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "copies it into the node it is rebuilding"),
             new Held("souther.compiler.check.HelperInliner.inline",
                     "copies it into the node a spliced helper becomes"),
+            new Held("souther.compiler.check.HelperInliner.isShortCircuit",
+                    "asks whether what stands on the right of an operator is reached only for some"
+                            + " of what reaches the left, which is what bounds where a value may be"
+                            + " materialised"),
+            new Held("souther.compiler.check.HelperInliner.read",
+                    "copies it into the node it is rebuilding, and asks the question above of a"
+                            + " binary so that the right of a short-circuit is written as a region"
+                            + " of its own"),
             new Held("souther.compiler.check.HelperInliner.rename",
                     "the same, under a renaming of what the body bound"),
             new Held("souther.compiler.check.NewtypeDesugar.go",
@@ -195,7 +203,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.arithmetic",
                     "writes it into the checked node, and into the one inside a construction where"
                             + " the answer is a newtype"),
-            new Held("souther.compiler.check.Terms.asWrittenValue",
+            new Held("souther.compiler.check.Terms.writtenSyntaxOf",
                     "writes it back into the syntax a value is rendered as"),
             new Held("souther.compiler.check.Resolve.expr",
                     "writes what that answered into the node the resolved tree holds"),
@@ -292,10 +300,20 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.operand",
                     "asks whether the operator joins two conditions, which is the one thing an"
                             + " operand can be held to before the one beside it has been read"),
+            new Held("souther.compiler.check.ConstantAlgebra.binary",
+                    "what the operator computes of two constants, and — for the six that compare —"
+                            + " what it placed, which is what the fold is asked for instead of the"
+                            + " operator"),
             new Held("souther.compiler.check.ConstEval.binary",
-                    "what the operator computes of two constants, which operand it needs to compute"
-                            + " it, and — for the six that compare — what it placed, which is what"
-                            + " the fold is asked for instead of the operator"),
+                    "hands the operator of a written binary to the algebra that folds it — twice,"
+                            + " once to ask whether the left operand settles it and once for what"
+                            + " the two come to. Nothing here asks what the operator means"),
+            new Held("souther.compiler.check.CoreConstantEval.binary",
+                    "the same, on the tree the rules are discharged over: the operator is carried"
+                            + " to the one algebra that folds it, and this reads nothing of it"),
+            new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
+                    "which operators answer from their left operand alone, which is what says"
+                            + " whether the one beside it is read at all"),
             new Held("souther.compiler.check.DischargeRules.noSmallerThan",
                     "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.core.GrowingFold.appended",

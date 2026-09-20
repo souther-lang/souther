@@ -192,8 +192,11 @@ public final class Elaborator {
                 if (li.opens() != null) {
                     checkOpens(li, bindType, ctx.symbols());
                 }
-                // the binding is visible only inside the body, so a sibling branch cannot see it
-                Scope inner = env.with(li.binder(), bindType);
+                // the binding is visible only inside the body, so a sibling branch cannot see it.
+                // What it was given goes with it: a reader below that asks what an expression comes
+                // to reads the name through this, and the value is read under what was in force
+                // where it was written rather than under the binding it makes.
+                Scope inner = env.binding(li.binder(), bindType, li.value());
                 Core body = elaborate(li.body(), inner, ctx, expected);
                 yield new Core.LetIn(CoreBinders.of(li.binder()), value, body, body.type(), li.pos());
             }
@@ -870,7 +873,11 @@ public final class Elaborator {
                 }
             }
             values.add(value);
-            inner = inner.with(b.binder(), bindType);
+            // What the argument was, under what it was written against. It is elaborated in the
+            // caller's scope above, so that is where a reader below reads it: read under the
+            // bindings this expansion makes instead, a name in it would be answered by whatever
+            // the callee's body binds under that spelling.
+            inner = inner.binding(b.binder(), bindType, b.value(), env.values());
         }
         givenFunctions(ex, decided, env, ctx);
         return new Applied(decided, values, inner);

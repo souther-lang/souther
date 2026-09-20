@@ -135,7 +135,7 @@ final class OrderedLeaf {
         // its side, the same rule written with a different operator is a rule nobody read
         // ({@code n == m} beside {@code n < m}).
         boolean against = named.apply(said.other()) != null;
-        Hir.Expr written = Terms.asWrittenValue(said.other(), at);
+        Hir.Expr written = Terms.writtenSyntaxOf(said.other(), at);
         return new Read<>(switch (said.claim()) {
             case ComparisonClaim.Singled singled -> singled.holdsAtTheValue()
                     ? onlyTheValue(said.number(), carrier, written)
