@@ -63,6 +63,33 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
                 """);
     }
 
+    /**
+     * A build made inside a helper's expansion, which is itself expanded twice: the expansion is
+     * inside a build and the build is inside an expansion.
+     *
+     * <p>The two builds are one value for one region of one written body, so only the copy of the
+     * helper they stand in tells them apart.
+     */
+    @Test
+    void aBuildInsideTwoExpansionsOfOneHelper() {
+        accepted("""
+                let helper (n: Int) : Int = if n > 0 then viaCall else 0
+
+                behavior f : (n: Int) -> Int
+                let f (n) = helper(n) + helper(n)
+                """);
+    }
+
+    @Test
+    void aBuildInsideTwoExpansionsOfALibraryOperation() {
+        accepted("""
+                let bigger (m: Int) : Bool = m > viaCall
+
+                behavior f : (n: Int) -> Bool
+                let f (n) = List.any(bigger, [n]) || List.any(bigger, [n + 1])
+                """);
+    }
+
     @Test
     void theTwoExpansionsStandInsideTwoBuilds() {
         String source = HEAD + """

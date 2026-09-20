@@ -1338,15 +1338,13 @@ public final class HelperInliner {
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(),
-                        insideThisCopy(ex.application(),
-                                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(),
-                                () -> inline(ex.body())),
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
-            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(), inline(m.body()),
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> inline(m.body())),
                     m.pos(), m.region());
             case Hir.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
@@ -2331,6 +2329,19 @@ public final class HelperInliner {
     }
 
     /**
+     * {@code work} done over the body of {@code ex}, an expansion already in the tree, with what it
+     * writes belonging to that expansion.
+     *
+     * <p>Every walk that goes into the body of a node standing for an owner goes in as that owner,
+     * whatever the walk is for: a build made while reading it is a build inside this copy, and one
+     * that took the owner around the expansion would be the same build in every copy of the body.
+     */
+    private Hir.Expr insideThisExpansion(Hir.Expansion ex, Supplier<Hir.Expr> work) {
+        return insideThisCopy(ex.application(),
+                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(), work);
+    }
+
+    /**
      * {@code work} done with the calls it expands belonging to the build of {@code value} for
      * {@code where}.
      *
@@ -2513,8 +2524,12 @@ public final class HelperInliner {
                             g.arrivesAs()));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), read(ex.body()), ex.pos(), ex.region());
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
+                        ex.pos(), ex.region());
             }
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
+                    m.region());
             default -> Hir.mapChildren(e, this::read, this::readName);
         };
     }
