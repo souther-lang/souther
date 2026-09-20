@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
@@ -419,8 +420,12 @@ public final class StandingAtAPoint {
 
         @Override
         ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
+            // Each occurrence's steps outermost first, so that the order the steps are first met in
+            // is the order they nest in and the readings built over them are tried in one order.
             for (BehaviorInputs.Occurrence each : values) {
-                each.at().forEach((step, ordinal) -> steps.merge(step, ordinal + 1, Math::max));
+                for (ElementsTaken.Taken taken : each.at().outermostFirst()) {
+                    steps.merge(taken.step(), taken.element() + 1, Math::max);
+                }
             }
             // Nothing is chosen, so nothing here is ruled out and the first of them is the answer.
             // Where there is more than one the position is inside a sequence, the steps are not
@@ -475,9 +480,9 @@ public final class StandingAtAPoint {
 
         /** Whether {@code each} was reached through the elements this reading chose. */
         private boolean agrees(BehaviorInputs.Occurrence each) {
-            for (Map.Entry<TermPath, Integer> step : each.at().entrySet()) {
-                Integer picked = chosen.get(step.getKey());
-                if (picked != null && !picked.equals(step.getValue())) {
+            for (Map.Entry<TermPath, Integer> picked : chosen.entrySet()) {
+                Integer taken = each.at().elementAt(picked.getKey());
+                if (taken != null && !taken.equals(picked.getValue())) {
                     return false;
                 }
             }

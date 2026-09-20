@@ -823,15 +823,15 @@ public final class Generator {
      * recognisable value somewhere else. Still worth offering, and not ahead of one that grounds
      * the class it is for: see {@link #nearestFirst}.
      */
-    public record Baseline(Map<String, Named> at) {
+    public record Baseline(Lookup<String, Named> at) {
 
         public Baseline {
-            at = Map.copyOf(at);
+            Objects.requireNonNull(at, "the values a module states, by the parameter each is of");
         }
 
-        /** Whether this names a value at any position at all. */
-        public boolean isEmpty() {
-            return at.isEmpty();
+        /** The baseline that states one value, at one parameter. */
+        public static Baseline stating(String parameter, Named value) {
+            return new Baseline(Lookup.built(put -> put.put(parameter, value)));
         }
 
         /** A value the module states, by the name a row writes it under. */
@@ -2372,9 +2372,8 @@ public final class Generator {
 
         @Override
         public Taken take(Candidate candidate) {
-            Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
-                    : against(axes, candidate.delta(), candidate.where(),
-                            candidate.from().baseline(), references);
+            Map<String, FixtureTemplate> given = candidate.from().writtenAgainst(axes,
+                    candidate.delta(), candidate.where(), references);
             if (!candidate.from().composes() && given.isEmpty()) {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
             }
@@ -2414,18 +2413,42 @@ public final class Generator {
      * candidates and not one, and a search that dropped the second answered a class it could have
      * written a row for.
      *
-     * @param baseline what the module states, or a baseline naming nothing where the row is
-     *                 composed from the classes
-     * @param stands   where {@code baseline}'s own values already sit, which is what a move is
-     *                 measured against and what a spread writes over
-     * @param index    where this came in the order the origins were gathered, which is what orders
-     *                 two origins one distance away
+     * @param origin  what the module states, or the composition where the row is composed from the
+     *                classes
+     * @param stands  where the origin's own values already sit, which is what a move is measured
+     *                against and what a spread writes over
+     * @param index   where this came in the order the origins were gathered, which is what orders
+     *                two origins one distance away
      */
-    private record ResolvedOrigin(Baseline baseline, int[] stands, int index) {
+    private record ResolvedOrigin(Origin origin, int[] stands, int index) {
+
+        /** What a row is written against: values the module states, or nothing at all. */
+        private sealed interface Origin {
+
+            /** Values the module states, by the parameter each is of. */
+            record Stated(Baseline baseline) implements Origin {}
+
+            /** No value: the row is composed from the classes alone. */
+            record Composition() implements Origin {}
+        }
 
         /** Whether this is the composition rather than a value the module states. */
         boolean composes() {
-            return baseline.isEmpty();
+            return origin instanceof Origin.Composition;
+        }
+
+        /**
+         * The parameters of a row this writes as the value the module states, each as the name it
+         * is written under, for the assignment {@code where} reached from {@code delta}. Nothing for
+         * the composition, which writes no parameter that way.
+         */
+        Map<String, FixtureTemplate> writtenAgainst(MeasuredInput.MeasuredAxes axes, Delta delta,
+                                                    int[] where, FixtureReferences references) {
+            return switch (origin) {
+                case Origin.Stated stated ->
+                        against(axes, delta, where, stated.baseline(), references);
+                case Origin.Composition _ -> Map.of();
+            };
         }
 
         /**
@@ -2437,9 +2460,12 @@ public final class Generator {
          * as for one over two records.
          */
         int grounding(Set<String> asked) {
+            if (!(origin instanceof Origin.Stated stated)) {
+                return 0;
+            }
             int out = 0;
             for (String head : asked) {
-                if (baseline.at().containsKey(head)) {
+                if (stated.baseline().at().containsKey(head)) {
                     out++;
                 }
             }
@@ -2771,10 +2797,12 @@ public final class Generator {
         for (Baseline baseline : baselines) {
             int[] stands = stands(axes, baseline, check, references);
             if (stands != null) {
-                out.add(new ResolvedOrigin(baseline, stands, out.size()));
+                out.add(new ResolvedOrigin(new ResolvedOrigin.Origin.Stated(baseline), stands,
+                        out.size()));
             }
         }
-        out.add(new ResolvedOrigin(new Baseline(Map.of()), composes(axes.axes()), out.size()));
+        out.add(new ResolvedOrigin(new ResolvedOrigin.Origin.Composition(), composes(axes.axes()),
+                out.size()));
         return List.copyOf(out);
     }
 
@@ -3571,19 +3599,19 @@ public final class Generator {
             // found them would leave a case chosen on the way to a cut that came to nothing.
             switch (placing(subject, looking, here, out, assumed, cut)) {
                 case Placed.AtNone(ReachabilityGap why) -> gaps.add(why);
-                case Placed.AtAll(Map<NumericTerm.FromOnePosition, Place> standing,
+                case Placed.AtAll(NumericWitness.Standing.Found standing,
                                   Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                                   Requirements taken) -> {
                     assumed = taken;
                     routed.putAll(routes);
-                    for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
-                        here = here.given(each.getKey(), each.getValue());
+                    for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
+                        here = here.given(each.position(), each.place());
                         // The target this cut's number was routed to, and never one built from the
                         // number again. Built here a second time, the place the row writes would be
                         // worked out twice — once where the cut was read and once where its answer
                         // is filed — and the two would part at exactly the name this routing exists
                         // for.
-                        out.put(routes.get(each.getKey()), each.getValue());
+                        out.put(routes.get(each.position()), each.place());
                     }
                 }
             }
@@ -3706,9 +3734,9 @@ public final class Generator {
         //
         // And where a budget of this compiler's is why the walk found nothing, that rather than
         // the word for a walk that had everything and reached none of it.
-        Map<NumericTerm.FromOnePosition, Place> standing = switch (found) {
+        NumericWitness.Standing.Found standing = switch (found) {
             case null -> null;
-            case NumericWitness.Standing.Found it -> it.at();
+            case NumericWitness.Standing.Found it -> it;
             case NumericWitness.Standing.ProvedImpossible _, NumericWitness.Standing.NotFound _
                     -> null;
         };
@@ -3746,7 +3774,7 @@ public final class Generator {
          *                 number of this row was filed under
          * @param assumed  what the row is taken to be now that these are written
          */
-        record AtAll(Map<NumericTerm.FromOnePosition, Place> standing,
+        record AtAll(NumericWitness.Standing.Found standing,
                      Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                      Requirements assumed) implements Placed {}
 
@@ -4731,9 +4759,8 @@ public final class Generator {
 
             @Override
             public Taken take(Candidate candidate) {
-                Map<String, FixtureTemplate> given = candidate.from().composes() ? Map.of()
-                        : against(axes, candidate.delta(), candidate.where(),
-                                candidate.from().baseline(), references);
+                Map<String, FixtureTemplate> given = candidate.from().writtenAgainst(axes,
+                        candidate.delta(), candidate.where(), references);
                 if (!candidate.from().composes() && given.isEmpty()) {
                     // nothing here can be written against the model's value
                     return Taken.AND_MORE;
@@ -4813,7 +4840,7 @@ public final class Generator {
                 found[n++] = i;
             }
         }
-        return java.util.Arrays.copyOf(found, n);
+        return Arrays.copyOf(found, n);
     }
 
 

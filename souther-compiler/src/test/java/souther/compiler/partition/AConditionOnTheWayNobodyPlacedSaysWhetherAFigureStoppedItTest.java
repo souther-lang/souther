@@ -116,7 +116,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
                 List.of(WIDE), _ -> Carrier.WHOLE, NothingTheDeclarationsNarrow.LOOKING);
 
         assertNotNull(assertInstanceOf(NumericWitness.Standing.Found.class, standing,
-                        "a whole number stands somewhere in a region nothing narrows").at(),
+                        "a whole number stands somewhere in a region nothing narrows").placeOf(WIDE),
                 "and where it stands is what comes back");
     }
 

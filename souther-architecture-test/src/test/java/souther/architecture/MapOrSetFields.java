@@ -30,6 +30,23 @@ final class MapOrSetFields {
     private MapOrSetFields() {
     }
 
+    /**
+     * Fails where {@code carrier}, a class this repository publishes, holds a {@code Map} or a
+     * {@code Set}.
+     *
+     * <p>Which carriers are asked is each rule's to name, by calling this with the class. Nothing
+     * here finds them: a class asked about because of what it holds today would leave the rule the
+     * day it went back to holding a map, which is the change the rule is for.
+     */
+    static void assertHoldsNone(CompiledOutputs compiled, String carrier) {
+        List<String> found = in(compiled.read(carrier));
+        if (!found.isEmpty()) {
+            throw new AssertionError(carrier + " was moved off java.util.Map/Set — a field reading"
+                    + " as one of those again gives a reader a walk that a copy salts, differently"
+                    + " on some runs than on others: " + found);
+        }
+    }
+
     /** Every field of {@code model} typed as a kind of {@code Map} or {@code Set}, as its class, its
      *  name and its descriptor. */
     static List<String> in(ClassModel model) {

@@ -9,9 +9,14 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -87,11 +92,11 @@ final class NumericWitness {
         if (within.emptiness().isPresent() || leavesNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
-        Map<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
+        SequencedMap<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         return walk(within, terms, 0, on, looking, standing, stoppedBy)
-                ? new Standing.Found(standing)
+                ? Standing.Found.walked(standing)
                 : new Standing.NotFound(stoppedBy);
     }
 
@@ -124,11 +129,77 @@ final class NumericWitness {
      */
     sealed interface Standing {
 
-        /** Where each position stands, which is an assignment the region admits. */
-        record Found(Map<NumericTerm.FromOnePosition, Place> at) implements Standing {
+        /**
+         * Where each position stands, which is an assignment the region admits.
+         *
+         * <p>In the order the walk fixed the positions in, which is the order a reader tells the
+         * region of them in: the region is told one position at a time, and what it is told after
+         * one is fixed is asked of a region that already knows it. So the order is part of what
+         * this is, and two of these that place the same positions in two orders are two values:
+         * held as a sequence, and not as a map, whose equality would not see it.
+         *
+         * <p>Made only by the walk that fixed the positions, which is what says what order they
+         * were fixed in. A position is placed once.
+         */
+        final class Found implements Standing {
 
-            public Found {
-                at = Map.copyOf(at);
+            private final List<Placed> inFixingOrder;
+
+            private Found(List<Placed> inFixingOrder) {
+                this.inFixingOrder = List.copyOf(inFixingOrder);
+                Set<NumericTerm.FromOnePosition> seen = new HashSet<>();
+                for (Placed each : this.inFixingOrder) {
+                    if (!seen.add(each.position())) {
+                        throw new IllegalArgumentException(
+                                "a position is placed once: " + each.position());
+                    }
+                }
+            }
+
+            /** What the walk came to, its positions in the order it fixed them. */
+            private static Found walked(SequencedMap<NumericTerm.FromOnePosition, Place> standing) {
+                List<Placed> placed = new ArrayList<>();
+                standing.forEach((position, place) -> placed.add(new Placed(position, place)));
+                return new Found(placed);
+            }
+
+            /** One position and the place the walk put it at. */
+            record Placed(NumericTerm.FromOnePosition position, Place place) {
+
+                public Placed {
+                    Objects.requireNonNull(position, "a place is a position's");
+                    Objects.requireNonNull(place, "a position is placed somewhere");
+                }
+            }
+
+            /** The positions and where each stands, in the order the walk fixed them. */
+            List<Placed> inFixingOrder() {
+                return inFixingOrder;
+            }
+
+            /** Where {@code position} stands, or null where this places no such position. */
+            Place placeOf(NumericTerm.FromOnePosition position) {
+                for (Placed each : inFixingOrder) {
+                    if (each.position().equals(position)) {
+                        return each.place();
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Found found && inFixingOrder.equals(found.inFixingOrder);
+            }
+
+            @Override
+            public int hashCode() {
+                return inFixingOrder.hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "Found" + inFixingOrder;
             }
         }
 

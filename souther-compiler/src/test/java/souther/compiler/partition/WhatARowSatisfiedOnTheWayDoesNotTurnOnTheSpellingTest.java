@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -82,7 +83,10 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
         // By what the walk came to and not by which site it is filed under, nor by where the
         // conditions are written. Two spellings number their comparisons differently and write
         // them in different places, and what they state is the same.
-        return guards.reaching().byComparison().values().stream()
+        List<List<OnTheWay>> filed = ReachingAccounts.filedFor(guards.reaching(), body);
+        // Two spellings that both recorded nothing are equal, and say nothing about either.
+        assertFalse(filed.isEmpty(), () -> "the reading of " + behavior + " recorded something");
+        return filed.stream()
                 .map(WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest::said)
                 .sorted()
                 .toList();
