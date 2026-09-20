@@ -352,8 +352,7 @@ final class SaltedOrderVocabulary {
         boolean filed = owner.equals("java/nio/file/Files")
                 && (name.startsWith("write") || name.equals("newBufferedWriter"));
         boolean documented = owner.startsWith("tools/jackson/")
-                && (name.equals("put") || name.equals("putPOJO") || name.equals("set")
-                        || name.equals("add") || name.equals("addPOJO")
+                && (name.equals("add") || name.equals("addPOJO") || name.equals("insert")
                         || name.startsWith("write"));
         boolean formatted = owner.equals("java/text/MessageFormat") && name.equals("format");
         boolean emitted = owner.equals("java/lang/classfile/CodeBuilder")
@@ -362,15 +361,43 @@ final class SaltedOrderVocabulary {
         return printed || filed || documented || formatted || emitted;
     }
 
-    /**
-     * Whether a write puts a value in by a key it is given. Where the key is not made of a walk, the
-     * member stands where the key says and what it says is what it was made of, so an element a walk
-     * is at is only that element's own. Where the key is made of one, the members stand in the order
-     * the walk met them, because a document keeps its members in the order they were put in.
-     */
+    /** Whether a call hands back a document node that nothing else holds. */
+    static boolean makesAFreshNode(String owner, String name) {
+        return owner.equals("tools/jackson/databind/node/JsonNodeFactory")
+                && (name.equals("objectNode") || name.equals("arrayNode"));
+    }
+
+    /** Whether a call puts a member in a document by a key it is given. */
     static boolean isAKeyedMemberWrite(String owner, String name) {
         return owner.equals("tools/jackson/databind/node/ObjectNode")
                 && (name.equals("put") || name.equals("putPOJO") || name.equals("set"));
+    }
+
+    /**
+     * A member put in a document by a key, which is a write into what holds it and not a write out.
+     *
+     * <p>Where the key is made of a walk the members stand in the order the walk met them, because a
+     * document keeps its members in the order they were put in. Where two elements can put a value
+     * under one key, the one that is left is the walk's to say, as it is in a map. The one case that
+     * is neither is a document made for the call that puts a member in it, which the element that
+     * call was handed is the only one to reach.
+     */
+    private static Outcome keyedMemberWrite(Call call) {
+        Val target = call.receiver();
+        Val key = call.args().get(0);
+        Val value = call.args().get(1);
+        Set<Tag> into = new LinkedHashSet<>(orderedFrom(List.of(key), false));
+        Set<Tag> values = new LinkedHashSet<>();
+        boolean madeForTheCall = target.alloc() >= 0;
+        for (Tag each : value.tags()) {
+            if (!(madeForTheCall && each.isHanded())) {
+                values.add(each);
+            }
+        }
+        into.addAll(survivors(values, isTheElementItself(key)));
+        return new Outcome(target.plus(into),
+                into.isEmpty() ? List.of() : List.of(new Push(target, into)), List.of(),
+                List.of(), List.of(), false, "written as a member");
     }
 
     private static final Set<String> IS_A_VIEW = Set.of(
@@ -830,6 +857,9 @@ final class SaltedOrderVocabulary {
         if (name.equals("remove")) {
             return Outcome.returning(call.descriptor().startsWith("()") && walked.cameOutOfACopy()
                     ? Val.of(call.selectingOneFrom(walked)) : Val.CLEAN);
+        }
+        if (isAKeyedMemberWrite(call.owner(), name) && call.args().size() == 2) {
+            return keyedMemberWrite(call);
         }
         if (library && SELECTS_BY_WHAT_THE_ARGUMENT_HOLDS.contains(name)
                 && call.args().size() == 1) {

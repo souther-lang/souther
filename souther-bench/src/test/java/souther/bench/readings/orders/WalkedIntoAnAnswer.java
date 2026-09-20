@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -271,6 +272,31 @@ public final class WalkedIntoAnAnswer {
             out.add(each.name());
         }
         return out;
+    }
+
+    public static ObjectNode theLastOneLeftUnderAKeyTheyShareInANode(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        for (CompositionBudget each : held.figures()) {
+            out.put("same", each.name());
+        }
+        return out;
+    }
+
+    public static ObjectNode theLastOneLeftInANodeMadeBeforeTheWalk(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        held.figures().forEach(each -> out.put("same", each.name()));
+        return out;
+    }
+
+    public static String theOneTheWalkChoseMadeIntoABuilderByAConstructorReference(Held held) {
+        Function<String, StringBuilder> make = StringBuilder::new;
+        CompositionBudget first = held.figures().stream().findFirst().orElseThrow();
+        return make.apply(first.name()).toString();
+    }
+
+    public static BigDecimal aDecimalMadeByAConstructorReferenceOfTheOneTheWalkChose(Held held) {
+        Function<String, BigDecimal> make = BigDecimal::new;
+        return make.apply(held.figures().stream().findFirst().orElseThrow().name());
     }
 
     public static ObjectNode theOneTheWalkChoseUnderAKey(Held held) {

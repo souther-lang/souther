@@ -400,8 +400,9 @@ final class SaltedOrderFlow {
                 || type.equals("java/lang/StringBuilder")) {
             return tag.isPositional();
         }
-        boolean aLibraryCollection = type.startsWith("java/util/")
-                && !type.startsWith("java/util/function/");
+        boolean aLibraryCollection = (type.startsWith("java/util/")
+                && !type.startsWith("java/util/function/"))
+                || type.startsWith("tools/jackson/databind/node/");
         if (aLibraryCollection || type.startsWith("java/util/stream/")) {
             return true;
         }
@@ -589,7 +590,11 @@ final class SaltedOrderFlow {
     }
 
     private Val seeded(Unit unit, int parameter, String home, boolean wide, String descriptor) {
-        Set<Tag> tags = narrowed(readFact("P:" + unit + "#" + parameter, unit), descriptor);
+        Set<Tag> tags = new LinkedHashSet<>();
+        for (Tag each : narrowed(readFact("P:" + unit + "#" + parameter, unit), descriptor)) {
+            // What a walk hands a method is the one element that call is made for.
+            tags.add(each.handedToACall());
+        }
         return new Val(tags, wide, -1, null, home);
     }
 
@@ -749,7 +754,10 @@ final class SaltedOrderFlow {
             // What a function's body returns is handed back to the walk that runs it. Anything else
             // that returns the element a walk is at has taken the first, the last or any of them.
             if (!unit.method().name().startsWith("lambda$")) {
-                value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at");
+                // An element handed to this method is the one it was made for, and is what it hands
+                // back; the walk is the caller's.
+                value = value.leavingTheWalkAt(unit.method() + " returns an element a walk was at",
+                        true);
             }
             joinFact("R:" + unit, value.tags());
             for (Tag each : value.tags()) {
@@ -949,7 +957,7 @@ final class SaltedOrderFlow {
             }
             default -> {
                 Val value = narrowed(state.pop(), type.descriptorString())
-                        .leavingTheWalkAt(unit.method() + " stores an element a walk was at");
+                        .leavingTheWalkAt(unit.method() + " stores an element a walk was at", false);
                 if (field.opcode() == Opcode.PUTFIELD) {
                     state.pop();
                 }
@@ -1171,9 +1179,10 @@ final class SaltedOrderFlow {
                 kept = Val.of(kept).madeOfTheElement().tags();
             }
             boolean heldInAMap = made != null && made.isHeldInAMap();
-            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()),
-                    heldInAMap ? made.alloc() : -1, made == null ? null : made.made(),
-                    heldInAMap ? made.home() : null));
+            int object = heldInAMap ? made.alloc()
+                    : SaltedOrderVocabulary.makesAFreshNode(owner, name) ? index + 1 : -1;
+            state.push(new Val(narrowed(kept, returns), isWide(type.returnType()), object,
+                    made == null ? null : made.made(), heldInAMap ? made.home() : null));
         }
     }
 
@@ -1191,13 +1200,8 @@ final class SaltedOrderFlow {
             // A write is a sink whatever else is known of the call: what is written is written
             // in the order it has, and only the one there is has none.
             Set<Tag> written = new LinkedHashSet<>();
-            boolean byKey = SaltedOrderVocabulary.isAKeyedMemberWrite(owner, name)
-                    && call.args().size() == 2;
             for (Tag each : call.tainted()) {
-                boolean onlyTheValue = byKey && each.kind() == Kind.PICKED
-                        && !call.args().get(0).tags().contains(each)
-                        && !call.receiver().tags().contains(each);
-                if (!each.isTheOnly() && !onlyTheValue) {
+                if (!each.isTheOnly()) {
                     written.add(each);
                 }
             }
@@ -1247,12 +1251,27 @@ final class SaltedOrderFlow {
     private Set<Tag> runLibraryRef(State state, String function, List<Set<Tag>> elements,
                                    String where, String here) {
         LibraryRef ref = libraryRefs.get(function);
-        if (ref == null || ref.isConstructor()) {
+        if (ref == null) {
             return Set.of();
         }
         List<Val> given = new ArrayList<>();
         for (Set<Tag> each : elements) {
             given.add(Val.of(each));
+        }
+        if (ref.isConstructor()) {
+            // What a constructor reference hands back is the object it made, holding what the
+            // constructor put in it of what it was given.
+            Val made = Val.CLEAN.withMade(ref.method().owner());
+            Call built = new Call(ref.method().owner(), "<init>", ref.method().descriptor(), made,
+                    given, false, false, false, false);
+            Outcome outcome = effectsOf(state, built, where, here);
+            Set<Tag> holding = new LinkedHashSet<>(outcome.result().tags());
+            for (Push each : outcome.pushes()) {
+                if (each.into() == made) {
+                    holding.addAll(each.tags());
+                }
+            }
+            return holding;
         }
         Val receiver;
         List<Val> args;

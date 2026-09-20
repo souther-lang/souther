@@ -107,14 +107,38 @@ final class SaltedOrder {
             return new Tag(Kind.PICKED, origin, THE_ONLY);
         }
 
+        private static final String HANDED = "+handed";
+
+        /** What the site says before it says whether the element was handed to a call. */
+        private String base() {
+            return site.endsWith(HANDED) ? site.substring(0, site.length() - HANDED.length())
+                    : site;
+        }
+
+        /**
+         * The element a walk is at, as a call it was handed to sees it: the one element that call is
+         * made for. What is put in something that call made is put in once, and the walk that
+         * hands one element to each of many calls is not the walk of any of them.
+         */
+        Tag handedToACall() {
+            return kind == Kind.PICKED && !isTheOnly() && !isHanded()
+                    ? new Tag(kind, origin, site + HANDED) : this;
+        }
+
+        /** Whether this is an element the walk handed to the call it is read in. */
+        boolean isHanded() {
+            return kind == Kind.PICKED && site.endsWith(HANDED);
+        }
+
         /** What is made of the element a walk is at, which two different elements can share. */
         Tag madeOfTheElement() {
-            return kind == Kind.PICKED && site.isEmpty() ? new Tag(kind, origin, MADE_OF) : this;
+            return kind == Kind.PICKED && base().isEmpty()
+                    ? new Tag(kind, origin, MADE_OF + (isHanded() ? HANDED : "")) : this;
         }
 
         /** Whether this is the element itself, which no other element of the same walk is. */
         boolean isTheElementItself() {
-            return kind == Kind.PICKED && site.isEmpty();
+            return kind == Kind.PICKED && base().isEmpty();
         }
 
         /** Whether this is the only element there was, as against one a walk happens to be at. */
@@ -126,8 +150,9 @@ final class SaltedOrder {
          * What an element a walk is at becomes once it leaves the walk: the one the walk was at
          * when it left, which is the first or the last or any, as the order says.
          */
-        Tag leavingTheWalkAt(String where) {
-            return kind == Kind.PICKED && !isTheOnly() ? new Tag(Kind.CHOSEN, origin, where) : this;
+        Tag leavingTheWalkAt(String where, boolean keepingWhatWasHanded) {
+            boolean stays = isTheOnly() || (keepingWhatWasHanded && isHanded());
+            return kind == Kind.PICKED && !stays ? new Tag(Kind.CHOSEN, origin, where) : this;
         }
 
         /** Whether an order the run decided is in this value already. */
@@ -290,11 +315,11 @@ final class SaltedOrder {
         }
 
         /** The same, with every element a walk is at made the one it was at when it left. */
-        Val leavingTheWalkAt(String where) {
+        Val leavingTheWalkAt(String where, boolean keepingWhatWasHanded) {
             boolean any = false;
             Set<Tag> out = new LinkedHashSet<>();
             for (Tag each : tags) {
-                Tag left = each.leavingTheWalkAt(where);
+                Tag left = each.leavingTheWalkAt(where, keepingWhatWasHanded);
                 any |= left != each;
                 out.add(left);
             }
