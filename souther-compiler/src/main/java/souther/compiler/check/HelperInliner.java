@@ -1338,15 +1338,13 @@ public final class HelperInliner {
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(),
-                        insideThisCopy(ex.application(),
-                                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(),
-                                () -> inline(ex.body())),
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
-            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(), inline(m.body()),
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> inline(m.body())),
                     m.pos(), m.region());
             case Hir.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
@@ -2313,7 +2311,8 @@ public final class HelperInliner {
         if (body == null) {
             return;
         }
-        Hir.Expr calls = inline(body);
+        MaterialisationSite where = site.get();
+        Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
@@ -2323,9 +2322,36 @@ public final class HelperInliner {
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(reached, binder);
         order.add(binder);
-        Hir.Expr built = HelperNames.carriedByValue(read(calls));
-        values.add(new Hir.Materialised(named.denotes(), site.get(), built, built.pos(),
+        Hir.Expr built = HelperNames.carriedByValue(
+                insideThisBuild(named.denotes(), where, () -> read(calls)));
+        values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * {@code work} done over the body of {@code ex}, an expansion already in the tree, with what it
+     * writes belonging to that expansion.
+     *
+     * <p>Every walk that goes into the body of a node standing for an owner goes in as that owner,
+     * whatever the walk is for: a build made while reading it is a build inside this copy, and one
+     * that took the owner around the expansion would be the same build in every copy of the body.
+     */
+    private Hir.Expr insideThisExpansion(Hir.Expansion ex, Supplier<Hir.Expr> work) {
+        return insideThisCopy(ex.application(),
+                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(), work);
+    }
+
+    /**
+     * {@code work} done with the calls it expands belonging to the build of {@code value} for
+     * {@code where}.
+     *
+     * <p>A build is not a copy made through a call, so the lineage stays as it is: what changes is
+     * only which owner the expansions written from here stand inside.
+     */
+    private Hir.Expr insideThisBuild(ValueName value, MaterialisationSite where,
+                                     Supplier<Hir.Expr> work) {
+        BindingOwner build = new BindingOwner.Build(writing.enclosing(), value, where);
+        return insideThisCopy(build, writing.lineage(), Map.of(), work);
     }
 
     /**
@@ -2498,8 +2524,12 @@ public final class HelperInliner {
                             g.arrivesAs()));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), read(ex.body()), ex.pos(), ex.region());
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
+                        ex.pos(), ex.region());
             }
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
+                    m.region());
             default -> Hir.mapChildren(e, this::read, this::readName);
         };
     }
@@ -2709,6 +2739,8 @@ public final class HelperInliner {
                         new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
                 case BindingOwner.Synthesized it ->
                         new BindingOwner.Synthesized(ownerOf(it.within()), it.pass(), it.ordinal());
+                case BindingOwner.Build it ->
+                        new BindingOwner.Build(ownerOf(it.within()), it.value(), it.site());
                 // The body's own. What it was called where it was written says nothing here: the
                 // copy is this expansion's, so what its bindings belong to is this expansion.
                 default -> root;

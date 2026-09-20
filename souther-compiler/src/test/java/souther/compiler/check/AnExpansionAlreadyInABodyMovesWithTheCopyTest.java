@@ -166,6 +166,7 @@ class AnExpansionAlreadyInABodyMovesWithTheCopyTest {
             BindingOwner next = switch (at) {
                 case BindingOwner.Expansion it -> it.within();
                 case BindingOwner.Synthesized it -> it.within();
+                case BindingOwner.Build it -> it.within();
                 default -> null;
             };
             if (next == null) {

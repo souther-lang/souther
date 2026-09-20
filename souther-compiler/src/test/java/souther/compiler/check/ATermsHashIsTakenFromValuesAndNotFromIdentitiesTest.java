@@ -168,7 +168,7 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
 
     private void walkPayload(Term.Payload payload, Path path) {
         switch (payload) {
-            case Term.Payload.Nothing ignored -> { }
+            case Term.Payload.Nothing _ -> { }
             case Term.Payload.OfType(Class<?> type) -> walkType(type, path.then(type.getSimpleName()));
             case Term.Payload.OfList(Term.Payload element) ->
                     walkPayload(element, path.then("each element"));
@@ -187,7 +187,8 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
             case ParameterizedType parameterized -> {
                 Class<?> raw = (Class<?>) parameterized.getRawType();
                 Term.Rule holds = Term.ruleFor(raw);
-                if (holds != Term.Rule.ITS_ELEMENTS && holds != Term.Rule.ITS_UNORDERED_ELEMENTS) {
+                if (holds != Term.Rule.ITS_ELEMENTS && holds != Term.Rule.ITS_UNORDERED_ELEMENTS
+                        && holds != Term.Rule.ITS_ELEMENT_IF_ANY) {
                     findings.add(shown(raw) + " holds what a term is hashed from and nothing says"
                             + " how it is taken (" + holds + "), under\n       " + path);
                     return;
@@ -243,7 +244,7 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                             path.then(shown(type) + " stands for its " + part.getName()));
                 }
             }
-            case ITS_ELEMENTS, ITS_UNORDERED_ELEMENTS -> findings.add(shown(type)
+            case ITS_ELEMENTS, ITS_UNORDERED_ELEMENTS, ITS_ELEMENT_IF_ANY -> findings.add(shown(type)
                     + " is taken by its elements, and what it holds is not written down here,"
                     + " under\n       " + path);
             case NONE_HERE -> findings.add("nothing takes " + shown(type) + ", under\n       " + path);
