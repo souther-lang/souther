@@ -300,7 +300,57 @@ final class SaltedOrderVocabulary {
     }
 
     private static final Set<String> STARTS_A_TRAVERSAL = Set.of(
-            "iterator", "listIterator", "spliterator", "stream", "parallelStream");
+            "iterator", "listIterator", "descendingIterator", "spliterator", "stream",
+            "parallelStream");
+
+    /**
+     * Keeps or drops the receiver's own elements by what the argument holds. The argument's order is
+     * not imported, and the receiver keeps whatever order it already had.
+     */
+    private static final Set<String> SELECTS_BY_WHAT_THE_ARGUMENT_HOLDS =
+            Set.of("retainAll", "removeAll");
+
+    /**
+     * Where a value is made of what it is given and of nothing else, so that it is as dependent on
+     * an order as what went in: the parts of a text, a parsed date, a compiled pattern, a
+     * descriptor, a constant, a class looked up by its name.
+     */
+    private static final List<String> PURE_OF_WHAT_IT_IS_GIVEN = List.of(
+            "java/time/", "java/util/regex/", "java/text/Normalizer", "java/lang/constant/",
+            "java/lang/classfile/Annotation", "java/lang/classfile/MethodSignature",
+            "java/lang/classfile/attribute/", "java/lang/Class", "java/lang/ClassLoader",
+            "net/unit8/raoh/");
+
+    private static boolean isPureOfWhatItIsGiven(Call call) {
+        String owner = call.owner();
+        if (owner.equals("java/lang/String")) {
+            return true;
+        }
+        for (String each : PURE_OF_WHAT_IT_IS_GIVEN) {
+            if (owner.startsWith(each)) {
+                return true;
+            }
+        }
+        return owner.startsWith("java/util/function/") && !call.name().equals("accept");
+    }
+
+    /**
+     * Whether a call puts what it is given where it is written out, in the order it has: printed, put
+     * in a file, made a member of a document, emitted as code. A value that reaches one of these
+     * with an order the run gave is written with it.
+     */
+    static boolean writesOut(String owner, String name) {
+        return (owner.equals("java/io/PrintStream")
+                        && (name.startsWith("print") || name.startsWith("format")
+                                || name.startsWith("write") || name.startsWith("append")))
+                || (owner.equals("java/nio/file/Files")
+                        && (name.startsWith("write") || name.equals("newBufferedWriter")))
+                || owner.startsWith("tools/jackson/")
+                || owner.equals("java/text/MessageFormat")
+                || owner.equals("java/lang/classfile/CodeBuilder")
+                || owner.equals("java/lang/classfile/ClassBuilder")
+                || owner.equals("java/lang/classfile/MethodBuilder");
+    }
 
     private static final Set<String> IS_A_VIEW = Set.of(
             "keySet", "values", "entrySet", "sequencedKeySet", "sequencedValues",
@@ -334,7 +384,8 @@ final class SaltedOrderVocabulary {
             "getAsLong", "getAsDouble", "cast");
 
     private static final Set<String> ASKS_ONLY = Set.of(
-            "contains", "containsAll", "containsKey", "containsValue", "isEmpty", "size", "equals",
+            "contains", "containsAll", "containsKey", "containsValue", "disjoint", "isEmpty",
+            "size", "equals",
             "hashCode", "count", "sum", "average", "anyMatch", "allMatch", "noneMatch",
             "getOrDefault", "isPresent", "hasNext", "hasMoreElements", "hasPrevious", "compare",
             "compareTo", "nextIndex", "previousIndex", "getClass", "isInstance", "length",
@@ -492,6 +543,16 @@ final class SaltedOrderVocabulary {
         }
         if (isAnExceptionMessage(type)) {
             return Outcome.ending("the message of " + type.replace('/', '.'));
+        }
+        if (type.equals("java/lang/Record")) {
+            return Outcome.ending("constructed as a record");
+        }
+        if (type.equals("java/lang/String")) {
+            return pushing(made, textFrom(came));
+        }
+        if (isPureOfWhatItIsGiven(call) || type.startsWith("java/math/")
+                || type.equals("java/util/zip/ZipFile")) {
+            return pushing(made, valuesTheOrderChose(came));
         }
         return Outcome.refused();
     }
@@ -691,6 +752,13 @@ final class SaltedOrderVocabulary {
                 && walked.cameOutOfACopy()) {
             return Outcome.returning(Val.of(walked.as(Kind.SEQUENCE)));
         }
+        boolean leastOrGreatest = name.equals("min") || name.equals("max");
+        if (leastOrGreatest && byAComparator(call) && hasATotalOrder(call.args())
+                && walked.cameOutOfACopy()) {
+            // The smallest by an order that ties nothing is the one there is, whichever comes first.
+            return new Outcome(Val.CLEAN, List.of(), List.of(), feeds,
+                    List.of(call.owner().replace('/', '.') + "." + name), false);
+        }
         if (SELECTS_ONE.contains(name) && walked.cameOutOfACopy()) {
             return Outcome.returning(Val.of(call.selectingOneFrom(walked)))
                     .feeding(feeds, false);
@@ -699,9 +767,47 @@ final class SaltedOrderVocabulary {
             return Outcome.returning(call.descriptor().startsWith("()") && walked.cameOutOfACopy()
                     ? Val.of(call.selectingOneFrom(walked)) : Val.CLEAN);
         }
+        if (library && SELECTS_BY_WHAT_THE_ARGUMENT_HOLDS.contains(name)
+                && call.args().size() == 1) {
+            return Outcome.returning(Val.CLEAN).endingAs("asked what it holds");
+        }
+        if (library && name.equals("clear") && call.descriptor().startsWith("()")) {
+            return new Outcome(Val.CLEAN, List.of(), List.of(receiver), List.of(), List.of(),
+                    false);
+        }
+        if (library && call.owner().equals("java/util/Collections") && name.equals("reverse")) {
+            // Reversed in place, so the order it had is the order it has, the other way round.
+            return Outcome.returning(Val.CLEAN).endingAs("reversed in place");
+        }
+        if (library && call.owner().equals("java/util/BitSet")) {
+            return Outcome.returning(Val.CLEAN).endingAs("asked what it holds");
+        }
+        if (call.owner().equals("java/lang/System") && name.equals("arraycopy")) {
+            return pushing(call.args().get(2), Val.of(call.args().get(0).tags()).tags());
+        }
+        if (name.equals("indexOf") || name.equals("lastIndexOf")) {
+            // Where something stands in what has an order is that order's answer; where it stands
+            // in the text of one element is not.
+            Set<Tag> positions = new LinkedHashSet<>();
+            for (Tag each : came) {
+                if (each.isAnAnswer()) {
+                    positions.add(each);
+                }
+            }
+            return Outcome.returning(Val.of(positions));
+        }
         if (ASKS_ONLY.contains(name) || VISITS.contains(name)) {
             return Outcome.returning(Val.CLEAN).feeding(feeds, false)
                     .endingAs(ASKS_ONLY.contains(name) ? "asked what it holds" : "visited");
+        }
+        if (name.equals("clone") && call.owner().startsWith("[")) {
+            // A copy of an array has the order the array has.
+            return Outcome.returning(Val.of(came));
+        }
+        if (isPureOfWhatItIsGiven(call)) {
+            return Outcome.returning(!call.returnsAReference() ? Val.CLEAN
+                    : Val.of(call.owner().equals("java/lang/String") ? textFrom(came)
+                            : valuesTheOrderChose(came)));
         }
         if (PASSES_THROUGH.contains(name)
                 || (name.equals("of") && call.owner().equals("java/util/Optional"))) {
@@ -794,6 +900,19 @@ final class SaltedOrderVocabulary {
             elements.add(walked.as(Kind.PICKED));
         }
         return List.of(new Feed(functions, elements, false));
+    }
+
+    /**
+     * What a value made of these is: one that is not a container or a text holds no order of its
+     * own, so an order in what it was made of is the one it was chosen by.
+     */
+    private static Set<Tag> valuesTheOrderChose(Set<Tag> came) {
+        Set<Tag> out = new LinkedHashSet<>();
+        for (Tag tag : came) {
+            out.add(tag.kind() == Kind.SEQUENCE ? new Tag(Kind.CHOSEN, tag.origin(), tag.site())
+                    : tag);
+        }
+        return out;
     }
 
     /** What a text made of these says: the walk it was made along, or the element it was made of. */

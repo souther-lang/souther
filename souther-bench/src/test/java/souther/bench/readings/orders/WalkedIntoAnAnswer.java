@@ -3,8 +3,11 @@ package souther.bench.readings.orders;
 import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -199,6 +202,58 @@ public final class WalkedIntoAnAnswer {
         return held.figures().stream()
                 .map(each -> new BigDecimal("1." + "0".repeat(each.name().length())))
                 .sorted().toList();
+    }
+
+    public static List<CompositionBudget> removedFromInTheOrderTheWalkGave(Held held,
+                                                                          Set<CompositionBudget> gone) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.removeAll(gone);
+        return out;
+    }
+
+    public static List<CompositionBudget> reversedInPlaceFromTheOrderTheWalkGave(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        Collections.reverse(out);
+        return out;
+    }
+
+    public static CompositionBudget theFirstOfTheDescendingWalk(Held held) {
+        return new ArrayDeque<>(held.figures()).descendingIterator().next();
+    }
+
+    public static String theTextOfTheSetStrippedStillSaysItsOrder(Held held) {
+        return held.figures().toString().stripTrailing();
+    }
+
+    public static LocalDate parsedFromTheTextOfTheSet(Held held) {
+        return LocalDate.parse(held.figures().toString());
+    }
+
+    public static int whereTheOrderPutsOneInAList(Held held, CompositionBudget one) {
+        return new ArrayList<>(held.figures()).indexOf(one);
+    }
+
+    public static void printedInTheOrderTheRunGave(Held held) {
+        System.out.println(held.figures());
+    }
+
+    public static Object[] copiedIntoAnArrayInTheOrderTheWalkGave(Held held) {
+        Object[] out = new Object[held.figures().size()];
+        System.arraycopy(held.figures().toArray(), 0, out, 0, out.length);
+        return out;
+    }
+
+    public static BigDecimal madeOfTheTextOfTheSet(Held held) {
+        return new BigDecimal(held.figures().toString());
+    }
+
+    public static Object[] aCopyOfTheArrayTheSetMade(Held held) {
+        return held.figures().toArray().clone();
+    }
+
+    public static CompositionBudget theLeastByAKeyTwoOfThemCanShare(Held held) {
+        return held.figures().stream()
+                .min(Comparator.comparingInt(each -> each.name().length())).orElseThrow();
     }
 
     public static List<String> theKeysOfATreeKeptNaturally(Held held) {

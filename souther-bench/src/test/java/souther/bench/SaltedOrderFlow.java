@@ -1140,7 +1140,12 @@ final class SaltedOrderFlow {
                     returnsAReference, asksForExactlyOne.contains(key));
             Outcome outcome = SaltedOrderVocabulary.of(jdk);
             Set<String> origins = originsOf(jdk.tainted());
-            if (outcome.unmodeled()) {
+            if (outcome.unmodeled() && SaltedOrderVocabulary.writesOut(owner, name)) {
+                Set<String> sites = sitesOf(Val.of(jdk.tainted()));
+                note(where, "writes what came out of a copy to " + owner.replace('/', '.') + "."
+                        + name + ", where it is written in the order the run gave"
+                        + (sites.isEmpty() ? "" : "; an order made at " + sites), origins);
+            } else if (outcome.unmodeled()) {
                 Set<String> sites = sitesOf(Val.of(jdk.tainted()));
                 note(where, (isJava(owner) ? "calls " : "hands what came out of a copy to ")
                         + owner.replace('/', '.') + "." + name
