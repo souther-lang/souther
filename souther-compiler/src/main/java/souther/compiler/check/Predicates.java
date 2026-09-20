@@ -1344,8 +1344,11 @@ final class Predicates {
      */
     private Piecewise piecewiseOf(NumericConstraint owed, Core left, Core right, Denotations at) {
         Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
-        chosenCalls(left, at, choosing);
-        chosenCalls(right, at, choosing);
+        // One account of the names followed, over both sides: a name is the same value whichever
+        // side of the comparison read it, so following it again would put nothing new in the map.
+        Set<BindingId> following = new HashSet<>();
+        chosenCalls(left, at, choosing, following);
+        chosenCalls(right, at, choosing, following);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
         if (choosing.size() != 1) {
             return null;
@@ -1388,9 +1391,15 @@ final class Predicates {
      * <p>Which calls those are is asked of {@link Choice} and not of the table it reads. A reader
      * here that knew the table would be a second interpretation of it, and the two would come apart
      * the day the library changed which argument a case answers. */
-    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out) {
+    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out,
+                             Set<BindingId> following) {
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            chosenCalls(at.valueOf(r.binding()), at, out);
+            // A name followed once. What it was given is one value, so everything it holds is in
+            // the map after the first read of it; following it per occurrence walks what the names
+            // below it multiply out to, over a body that names them one more time.
+            if (following.add(r.binding())) {
+                chosenCalls(at.valueOf(r.binding()), at, out, following);
+            }
             return;
         }
         if (e instanceof Core.PreservedCall call) {
@@ -1400,7 +1409,7 @@ final class Predicates {
                 out.put(atom, choice);
             }
         }
-        Core.forEachChild(e, child -> chosenCalls(child, at, out));
+        Core.forEachChild(e, child -> chosenCalls(child, at, out, following));
     }
 
 

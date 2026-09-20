@@ -288,8 +288,11 @@ public enum StringPredicates {
         if (predicate == null || call.args().size() != predicate.arity()) {
             return null;
         }
+        // Under nothing: what is read here is a clause of a declaration, which stands beneath no
+        // binding — and the call is the clause itself, so nothing between the two binds a name
+        // either.
         String written = ConstEval.against(symbols)
-                .evalString(call.args().get(predicate.written())).orElse(null);
+                .evalString(BoundExpr.root(call.args().get(predicate.written()))).orElse(null);
         return written == null
                 ? new Reading.WrittenArgumentNotKnown() : predicate.readingOf(written);
     }

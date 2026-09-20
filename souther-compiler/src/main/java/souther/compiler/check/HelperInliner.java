@@ -87,6 +87,23 @@ public final class HelperInliner {
      */
     private Preserved settledValues = Preserved.NONE;
     private java.util.function.Function<ValueName, Object> settledConstants = _ -> null;
+    /**
+     * What this expansion puts where a value's name was written.
+     *
+     * <p>{@link ValueAtAReference#COPIED} unless a caller says otherwise, which is what every
+     * reader that cannot read a binding still needs. {@link ValueAtAReference#SETTLED_REFERENCE} is
+     * carried by {@link #settledValues} rather than by this, since what it needs is the signature
+     * and not the arm.
+     */
+    private ValueAtAReference reading = ValueAtAReference.COPIED;
+    /**
+     * Where a value materialised in each region this expansion is inside is read, outermost first.
+     *
+     * <p>Held by what a name reaches, which is the key a value is held by everywhere here — two
+     * spellings can reach one declaration and one spelling can reach two, so a table of spellings
+     * would read one value's binding for another's.
+     */
+    private final List<Map<String, Hir.Binder>> materialised = new ArrayList<>();
     /** What each declaration this table reaches calls, and which of them recurse. A function of the
      * table, so a narrowed table does not narrow it: what recurses was settled over the table as it
      * was built. */
@@ -354,6 +371,21 @@ public final class HelperInliner {
                                              java.util.function.Function<ValueName, Object> constants) {
         this.settledValues = settled;
         this.settledConstants = constants;
+        return this;
+    }
+
+    /**
+     * The same, materialising each value once per evaluation region rather than copying its body at
+     * every reference.
+     *
+     * <p>What a tree that runs is built in. A value denotes as if its body stood at each reference,
+     * and the body is pure, total and has no identity to observe (ADR-0072), so one materialisation
+     * answers for every reference that reads it. What bounds the sharing is the region: a branch, an
+     * arm, the right of a short-circuit, the body of a block — anywhere entered on some paths and
+     * not others. Bound outside one, a value would be evaluated where no reference to it is reached.
+     */
+    public HelperInliner sharingOneMaterialisationPerRegion() {
+        this.reading = ValueAtAReference.SHARED_PER_REGION;
         return this;
     }
 
@@ -1116,7 +1148,21 @@ public final class HelperInliner {
      * {@code depends on} parameters are the trailing bindings named in {@code dependencies}. */
     public Hir.Expr inline(Hir.Expr e, Set<BindingId> dependencies, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, dependencies, () -> inline(e));
+        return writing(into, dependencies, () -> expanded(e));
+    }
+
+    /**
+     * {@code e} with its calls expanded, and — where a value is read as a shared materialisation —
+     * with the values it names bound into the regions that demand them.
+     *
+     * <p>Two walks and not one. What region a value belongs at is a fact about where its references
+     * stand, and an expansion part way through a body is not somewhere that can be answered: the
+     * expansion leaves each reference standing, and the walk after it reads the finished tree, where
+     * every region the calls brought with them is already in it.
+     */
+    private Hir.Expr expanded(Hir.Expr e) {
+        Hir.Expr calls = inline(e);
+        return reading == ValueAtAReference.SHARED_PER_REGION ? region(calls) : calls;
     }
 
     /**
@@ -1127,7 +1173,7 @@ public final class HelperInliner {
      */
     public Hir.Expr inline(Hir.Expr e, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, Set.of(), () -> inline(e));
+        return writing(into, Set.of(), () -> expanded(e));
     }
 
     /**
@@ -1444,7 +1490,9 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
-            return inline(call.replacedBy(valueOf(named), args));
+            Hir.FnDef applied = appliedValue(named);
+            return inline(call.replacedBy(applied == null ? valueOf(named)
+                    : appliedValueBody((Hir.Var.Denoting) named, applied), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -2060,8 +2108,44 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(reaches)) {
             return v;
         }
+        if (reading == ValueAtAReference.SHARED_PER_REGION) {
+            // Left standing here and read again by the walk that materialises it: which region the
+            // body belongs at is a fact about where the reference stands, and an expansion in
+            // progress is not yet at a region it can answer that with.
+            return v;
+        }
         Hir.Expr settled = settled(named);
         return settled != null ? settled : substituted(named.reaches(), value.writtenBody());
+    }
+
+    /**
+     * What applying {@code v} applies: the body of the value it names, copied here.
+     *
+     * <p>A different question from {@link #valueOf}, which answers what stands where a value goes.
+     * A value whose body is a block is applied rather than held — the block is second-class and
+     * may not be bound by a {@code let} (spec §blocks) — so what the call needs is the body, and a
+     * name standing for a binding would be a call applying a binding no reader can emit.
+     *
+     * <p>Not a kind of value, either: whether a body produces a block is not what decides this.
+     * A reference in a callee position is a different use of the name from a reference in a value
+     * position, and each is answered by what its position needs.
+     */
+    private Hir.Expr appliedValueBody(Hir.Var.Denoting named, Hir.FnDef value) {
+        Hir.Expr settled = settled(named);
+        return settled != null && settled != named
+                ? settled : substituted(named.reaches(), value.writtenBody());
+    }
+
+    /** The value {@code v} names where applying it applies that value's own body, or null where
+     *  the name reaches no such value. */
+    private Hir.FnDef appliedValue(Hir.Var v) {
+        if (!(v instanceof Hir.Var.Denoting named)
+                || !(named.denotes() instanceof ValueName.Helper)) {
+            return null;
+        }
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value == null || value.body() == null || graph.recurses(reaches) ? null : value;
     }
 
     /**
@@ -2103,7 +2187,250 @@ public final class HelperInliner {
     }
 
     /**
-     * The body of the value {@code reached} stands for, expanded here — and a refusal where this
+     * {@code e} as one evaluation region: the values it demands here bound once ahead of it, and
+     * every region inside it the same.
+     *
+     * <p>A region is somewhere entered on some paths and not others — a branch, an arm, the right of
+     * a short-circuit, the body of a block, the element a comprehension writes per item. What a
+     * region demands is what it names without crossing into one of those, so a value bound at the
+     * head of a region is evaluated exactly where some reference to it would have been.
+     *
+     * <p>What is demanded is worked out before anything is written, and not as the references are
+     * met. A value named both here and inside a region below would otherwise be bound at whichever
+     * of the two the walk reached first, which is to say at whichever the source happened to write
+     * first.
+     */
+    private Hir.Expr region(Hir.Expr e) {
+        Map<String, Hir.Binder> here = new LinkedHashMap<>();
+        List<Hir.Binder> order = new ArrayList<>();
+        List<Hir.Expr> values = new ArrayList<>();
+        materialised.add(here);
+        try {
+            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
+            demandedHere(e, demanded);
+            for (Hir.Var.Denoting each : List.copyOf(demanded.values())) {
+                materialise(each, here, order, values);
+            }
+            Hir.Expr inner = read(e);
+            for (int i = order.size() - 1; i >= 0; i--) {
+                Hir.Binder binder = order.get(i);
+                inner = new Hir.LetIn(binder, values.get(i), null, false, null, inner,
+                        binder.pos(), e.region());
+            }
+            return inner;
+        } finally {
+            materialised.remove(materialised.size() - 1);
+        }
+    }
+
+    /**
+     * Binds what {@code named} reaches in the region being written, after everything that value's
+     * own body demands there.
+     *
+     * <p>Its body first, because a binding may only read bindings already written. The value graph
+     * has no cycles — {@link ValueCycles} refuses a module whose values are not well founded before
+     * a body of it is expanded — so following what each one demands terminates.
+     */
+    private void materialise(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                             List<Hir.Binder> order, List<Hir.Expr> values) {
+        String reached = named.reaches();
+        if (readAt(reached) != null) {
+            return;
+        }
+        Hir.Expr body = materialisable(named);
+        if (body == null) {
+            return;
+        }
+        Hir.Expr calls = inline(body);
+        Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
+        demandedHere(calls, under);
+        for (Hir.Var.Denoting each : List.copyOf(under.values())) {
+            materialise(each, here, order, values);
+        }
+        Hir.Binder binder = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(reached, binder);
+        order.add(binder);
+        values.add(HelperNames.carriedByValue(read(calls)));
+    }
+
+    /**
+     * The body {@code named} would be materialised from, or null where the name is not one this
+     * binds.
+     *
+     * <p>Narrower than what a count of substituting asks. A declaration written with a parameter
+     * list is a function: it is applied where it is named, and written out where it is held, and
+     * neither of those is a value bound once and read. Bound as one, what would stand at the name
+     * is the function's body with its parameters reaching nothing.
+     */
+    private Hir.Expr materialisable(Hir.Var.Denoting named) {
+        return declarationArity(named).isPresent() ? null : substitutedAt(named);
+    }
+
+    /** Where a region this is inside bound {@code reached}, innermost first, or null where none
+     *  did. */
+    private Hir.Binder readAt(String reached) {
+        for (int i = materialised.size() - 1; i >= 0; i--) {
+            Hir.Binder binder = materialised.get(i).get(reached);
+            if (binder != null) {
+                return binder;
+            }
+        }
+        return null;
+    }
+
+    /** The values {@code e} names without crossing into a region, first reference of each, and
+     *  those every way out of a fork here names ({@link #onEveryWayOut}). */
+    private void demandedHere(Hir.Expr e, Map<String, Hir.Var.Denoting> out) {
+        if (e == null) {
+            return;
+        }
+        switch (e) {
+            case Hir.Var.Denoting named when materialisable(named) != null ->
+                    out.putIfAbsent(named.reaches(), named);
+            case Hir.If iff -> {
+                demandedHere(iff.cond(), out);
+                onEveryWayOut(List.of(iff.then(), iff.els()), out);
+            }
+            case Hir.IfConstructed ic -> {
+                demandedHere(ic.construct(), out);
+                List<Hir.Expr> ways = new ArrayList<>();
+                ways.add(ic.then());
+                for (Hir.ElseArm arm : ic.els()) {
+                    ways.add(arm.body());
+                }
+                onEveryWayOut(ways, out);
+            }
+            case Hir.Match m -> {
+                demandedHere(m.scrutinee(), out);
+                List<Hir.Expr> ways = new ArrayList<>();
+                for (Hir.Case each : m.cases()) {
+                    ways.add(each.body());
+                }
+                onEveryWayOut(ways, out);
+            }
+            case Hir.Binary b when isShortCircuit(b) -> demandedHere(b.left(), out);
+            case Hir.Block _ -> { }
+            case Hir.ListComp _ -> { }
+            default -> Hir.forEachChild(e, child -> demandedHere(child, out));
+        }
+    }
+
+    /**
+     * The values every one of {@code ways} names, added to what the region around them demands.
+     *
+     * <p>A fork's arms are ways out of one place: whichever is taken, one of them is. So a value
+     * every arm names is named on every path through here, and binding it around the fork
+     * evaluates it exactly where some reference to it is evaluated — which is the whole of what
+     * keeps the region rule from moving work onto a path that had none.
+     *
+     * <p>Only the forks that are ways out. The right of a short-circuit is reached for some of what
+     * reaches the left, a block's body for each application of it and a comprehension's element for
+     * each item, and none of those is a way the code has to go.
+     *
+     * <p>Which says nothing about how often the fork runs, only about whether it does. A value
+     * bound here and read in one arm is built once whichever arm runs, where arm-local bindings
+     * would each build it — one materialisation per region, told of a place that is one region.
+     */
+    private void onEveryWayOut(List<Hir.Expr> ways, Map<String, Hir.Var.Denoting> out) {
+        Map<String, Hir.Var.Denoting> shared = null;
+        for (Hir.Expr way : ways) {
+            Map<String, Hir.Var.Denoting> named = new LinkedHashMap<>();
+            demandedHere(way, named);
+            if (shared == null) {
+                shared = named;
+            } else {
+                shared.keySet().retainAll(named.keySet());
+            }
+            if (shared.isEmpty()) {
+                return;
+            }
+        }
+        if (shared != null) {
+            shared.forEach(out::putIfAbsent);
+        }
+    }
+
+    /** Whether what stands on the right of this is reached only for some of what reaches the
+     *  left. */
+    private static boolean isShortCircuit(Hir.Binary b) {
+        return b.op() == souther.compiler.types.BinOp.AND
+                || b.op() == souther.compiler.types.BinOp.OR;
+    }
+
+    /** {@code e} with each value reference the region bound read as that binding, and each region
+     *  inside it written as one. */
+    private Hir.Expr read(Hir.Expr e) {
+        if (e == null) {
+            return null;
+        }
+        if (e instanceof Hir.Var v) {
+            return readName(v);
+        }
+        return switch (e) {
+            case Hir.If iff -> new Hir.If(read(iff.cond()), region(iff.then()), region(iff.els()),
+                    iff.origin(), iff.pos(), iff.region());
+            case Hir.IfConstructed ic -> new Hir.IfConstructed(read(ic.construct()), ic.binder(),
+                    region(ic.then()), Hir.mapArms(ic.els(), this::region), ic.origin(), ic.pos(),
+                    ic.region());
+            case Hir.Match m -> {
+                List<Hir.Case> cases = new ArrayList<>();
+                for (Hir.Case each : m.cases()) {
+                    cases.add(new Hir.Case(each.caseTypes(), each.binding(), region(each.body()),
+                            each.unwrapAsserts(), each.pos()));
+                }
+                yield new Hir.Match(read(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
+            }
+            case Hir.Binary b when isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
+                    region(b.right()), b.origin(), b.pos(), b.region());
+            case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body()), bl.rule(), bl.pos(),
+                    bl.region());
+            case Hir.ListComp comp -> {
+                List<Hir.Expr> guards = new ArrayList<>();
+                for (Hir.Expr guard : comp.guards()) {
+                    guards.add(region(guard));
+                }
+                yield new Hir.ListComp(region(comp.element()), guards, comp.origin(), comp.pos(),
+                        comp.region());
+            }
+            // `given` is what the callee was handed and is also inside the body, so it is read the
+            // same way — a reference left standing there is one no reader below could emit.
+            case Hir.Expansion ex -> {
+                List<Hir.Bound> bound = new ArrayList<>();
+                for (Hir.Bound b : ex.bound()) {
+                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), read(b.value())));
+                }
+                List<Hir.Given> given = new ArrayList<>();
+                for (Hir.Given g : ex.given()) {
+                    given.add(new Hir.Given(g.declaredType(), read(g.value()), g.applied(),
+                            g.arrivesAs()));
+                }
+                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
+                        ex.declaredReturn(), read(ex.body()), ex.pos(), ex.region());
+            }
+            default -> Hir.mapChildren(e, this::read, this::readName);
+        };
+    }
+
+    /**
+     * A name slot as the region reads it: the binding where the region materialised what the name
+     * reaches, or the name where no region did.
+     *
+     * <p>Beside the expression slots rather than left alone, because a name written where a value
+     * goes is a reference wherever it is written. A construction's spread is one, and read here it
+     * is the same materialisation every other reference in the region reads — bound of its own, a
+     * value spread and named in one region would stand twice.
+     */
+    private Hir.Var readName(Hir.Var v) {
+        if (!(v instanceof Hir.Var.Denoting named) || materialisable(named) == null) {
+            return v;
+        }
+        Hir.Binder binder = readAt(named.reaches());
+        return binder == null ? v : Hir.Var.local(binder, named.pos());
+    }
+
+    /**
+     * The body of the value {@code reached} stands for, copied here — and a refusal where this
      * expansion is already substituting that value.
      *
      * <p>Substituting a value into itself has no end, so an expansion that reached one would descend
@@ -2115,16 +2442,12 @@ public final class HelperInliner {
      * that ran out and a report about an expression nesting too deeply.
      *
      * <p>What it holds is the path and not what it has seen: a value named twice in one body is
-     * substituted twice, side by side, and only one inside the other is re-entry.
+     * copied twice, side by side, and only one inside the other is re-entry.
      *
      * <p>The path is also what says whose job the mark is. What a value carried is written over the
      * whole expansion once it is whole, by the substitution no other substitution is inside — the
      * outermost one holds every subtree the ones under it produced, and the mark is a flag, so
-     * writing it there says of each node what writing it at every level said. Written at every
-     * level it is written over each subtree once per level that subtree is under, which is the
-     * depth of a chain of values times its length. The walk allocates nothing — rebuilding an
-     * expression hands back what it was given where nothing changed — so what it costs is the
-     * walking, and nothing downstream of it can see that it ran twice.
+     * writing it there says of each node what writing it at every level said.
      */
     private Hir.Expr substituted(String reached, Hir.Expr body) {
         if (!substituting.add(reached)) {
@@ -2153,7 +2476,11 @@ public final class HelperInliner {
         List<Hir.Expr> values = new ArrayList<>();
         List<Hir.Var> spreads = new ArrayList<>();
         for (Hir.Var spread : nd.spreads()) {
-            Hir.FnDef value = valueSpread(spread);
+            // A spread is a reference (ADR-0072), so where references are materialised once in the
+            // region that demands them, this is one of them and is left for that walk. Bound here
+            // as well, a value spread and named in one region would be built twice.
+            Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
+                    ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
                 continue;

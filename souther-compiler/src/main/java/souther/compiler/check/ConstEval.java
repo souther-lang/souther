@@ -1,18 +1,16 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Folds a compile-time-constant expression to its value ({@code Long} / {@code BigDecimal} /
@@ -34,9 +32,21 @@ import java.util.regex.PatternSyntaxException;
  * derivation that carries it to the boundary ask here rather than each recognising its own set of
  * expressions (issue #208).
  *
- * <p>It folds a tree; it does not resolve names. A name reaches here already standing for what it
- * denotes — a module's value is substituted by {@link HelperInliner} before an invariant or a body is
- * read — so a {@code let} whose body is constant folds, and a parameter or a field read does not.
+ * <p><b>It folds an expression under the bindings in force.</b> It resolves no module name: what a
+ * module's value stands for is settled before a body is read here. A {@code let} is a different
+ * question — it is part of the expression, and the binding it writes is an edge of that expression
+ * rather than a name to look up. A binding denotes the expression it was given, which is the
+ * environment's answer (ADR-0106, ADR-0111); folding that expression is this reader's, and it is
+ * done once per binding however many times the binding is read.
+ *
+ * <p><b>A binding is read where the name is read, and not where it is written.</b> A body that
+ * never reads a binder never folds what it was given, so {@code let x = <not foldable> in "a"}
+ * comes to {@code "a"}. What is being asked is whether the answer is known at compile time, which
+ * is not the same question as whether the whole expression could be run at compile time; nothing
+ * here asks the second.
+ *
+ * <p>What an operator makes of the values under it is {@link ConstantAlgebra}, which the reading
+ * over {@code Core} asks as well. One account of the arithmetic, two walks to reach it.
  */
 public final class ConstEval {
 
@@ -56,362 +66,131 @@ public final class ConstEval {
     }
 
     /**
+     * What each binding read so far came to.
+     *
+     * <p>On the reading and not in the environment. An environment answers what a name denotes; what
+     * a reader makes of that value is the reader's, and a result kept beside the denotation would be
+     * this fold's answer offered to every other reader of the same name (ADR-0111).
+     *
+     * <p>Kept per fold rather than per call, which is what stops a binding read twice from being
+     * folded twice: a chain of bindings each reading the one before it twice is a count that doubles
+     * per link otherwise, over a body that grows by a line.
+     */
+    private final Map<BindingId, Optional<Object>> folded = new HashMap<>();
+
+    /**
      * The string {@code e} evaluates to at compile time, or empty when it does not evaluate to one:
      * what a position accepting a written string but not a computed one is asking about.
      */
-    public Optional<String> evalString(Hir.Expr e) {
+    public Optional<String> evalString(BoundExpr e) {
         return eval(e).filter(String.class::isInstance).map(String.class::cast);
     }
 
-    /** Folds {@code e} to its constant value, or empty when it is not a compile-time constant. */
-    Optional<Object> eval(Hir.Expr e) {
+    /** Folds {@code e} to its constant value under the bindings it is read beneath, or empty when
+     *  it is not a compile-time constant. */
+    Optional<Object> eval(BoundExpr e) {
+        return eval(e.expr(), e.at());
+    }
+
+    /** The same, for an expression no binding stands over. A caller that has bindings in force and
+     *  hands over a part of what it is reading takes {@link #eval(BoundExpr)}: dropping them reads
+     *  every name they gave as a name standing for nothing. */
+    Optional<Object> eval(Hir.Expr root) {
+        return eval(root, BoundValues.NONE);
+    }
+
+    private Optional<Object> eval(Hir.Expr e, BoundValues env) {
         return switch (e) {
             case Hir.IntLit i -> Optional.of(i.value());
             case Hir.DecimalLit d -> Optional.of(d.value());
             case Hir.StringLit s -> Optional.of(s.value());
             case Hir.BoolLit b -> Optional.of(b.value());
-            case Hir.Neg neg -> negate(eval(neg.operand()).orElse(null));
-            case Hir.Binary bin -> binary(bin);
-            case Hir.Apply call -> call(call);
+            case Hir.Neg neg -> ConstantAlgebra.negate(eval(neg.operand(), env).orElse(null));
+            case Hir.Binary bin -> binary(bin, env);
+            case Hir.Apply call -> call(call, env);
+            // A binding is an edge of the expression: the body is folded under it, and what it was
+            // given is folded where the binder is read.
+            case Hir.LetIn li -> eval(li.body(), env.binding(li.binder(), li.value()));
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
+                    given(local.id(), env);
             default -> Optional.empty();
         };
     }
 
-    /**
-     * The negation of a folded number, over every number a fold reaches.
-     *
-     * <p>The exact one among them for the reason the binary arms admit it: negation answers the type
-     * it is given, so a value this reads and cannot negate would be a constant that stops being one
-     * for the way it was bracketed — {@code -1 / 2} folding where {@code -(1 / 2)} does not, of the
-     * same number.
-     */
-    private static Optional<Object> negate(Object o) {
-        if (o instanceof Long x) {
-            return Optional.of(-x);
+    /** What the binding {@code id} was given comes to, folded once however often it is read. */
+    private Optional<Object> given(BindingId id, BoundValues env) {
+        BoundValues.Bound bound = env.read(id);
+        if (bound == null) {
+            return Optional.empty();
         }
-        if (o instanceof BigDecimal d) {
-            return Optional.of(d.negate());
+        Optional<Object> already = folded.get(id);
+        if (already != null) {
+            return already;
         }
-        if (o instanceof ExactRatio r) {
-            return Optional.of(r.negated());
-        }
-        return Optional.empty();
+        // Put before the fold as "not a constant", so a binding that reaches itself answers rather
+        // than going round. A module whose values do that is refused as the cycle it is, elsewhere.
+        folded.put(id, Optional.empty());
+        Optional<Object> answer = eval(bound.value(), bound.at());
+        folded.put(id, answer);
+        return answer;
     }
 
-    private Optional<Object> binary(Hir.Binary bin) {
-        Optional<Object> l = eval(bin.left());
-        // `&&` and `||` settle on their left operand, and what settles them is the answer whatever
-        // the right operand is. Read eagerly, a right operand this cannot fold would take a settled
-        // condition down with it — so a construction the language calls constant would be checked
-        // where it was written one way and not the other.
-        if (l.orElse(null) instanceof Boolean settled
-                && ((bin.op() == BinOp.AND && !settled)
-                        || (bin.op() == BinOp.OR && settled))) {
-            return Optional.of(settled);
+    private Optional<Object> binary(Hir.Binary bin, BoundValues env) {
+        Optional<Object> l = eval(bin.left(), env);
+        // Where the left operand settles it, the right one is not read at all — a right operand this
+        // cannot fold would otherwise take a settled condition down with it.
+        Optional<Object> settled = l.isEmpty() ? Optional.empty()
+                : ConstantAlgebra.settledByTheLeft(bin.op(), l.get());
+        if (settled.isPresent()) {
+            return settled;
         }
-        Optional<Object> r = eval(bin.right());
+        Optional<Object> r = eval(bin.right(), env);
         if (l.isEmpty() || r.isEmpty()) {
             return Optional.empty();
         }
-        Object a = l.get();
-        Object b = r.get();
-        // A comparison folds through what its operator placed, and this is where the operator's
-        // words are left behind: what such an expression comes to is the relation it states of its
-        // two sides, which is the one answer a reading that never had an operator asks for as well.
-        if (ComparisonPlacement.of(bin.op()) instanceof ComparisonClaim placed) {
-            return Optional.ofNullable(stands(placed.statedRelation(), a, b));
-        }
-        return switch (bin.op()) {
-            case AND -> a instanceof Boolean x && b instanceof Boolean y
-                    ? Optional.of(x && y) : Optional.empty();
-            case OR -> a instanceof Boolean x && b instanceof Boolean y
-                    ? Optional.of(x || y) : Optional.empty();
-            case ADD, SUB, MUL -> arith(bin.op(), a, b);
-            // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
-            // the string case folds, and a list is not a constant here to begin with.
-            case CONCAT -> a instanceof String x && b instanceof String y
-                    ? Optional.of(x + y) : Optional.empty();
-            case DIV -> quotient(a, b);
-            // Answered above as what it placed. Written out rather than left to a default, because
-            // what would arrive here is the partition above having admitted a comparison into the
-            // arms that compute a value, and an arm inventing an answer for that is how a fold
-            // comes to disagree with every other reader of the same comparison.
-            case EQ, NE, LT, LE, GT, GE -> throw new IllegalStateException(
-                    "a comparison is folded from what it placed, not from " + bin.op());
-        };
+        return ConstantAlgebra.binary(bin.op(), l.get(), r.get());
     }
 
     /**
      * Whether {@code rel} holds between two folded constants, or {@code null} where these two
      * cannot answer it.
      *
-     * <p>The whole of what a comparison of written values comes to, whichever words the caller has
-     * it in. A reading that composed a comparison out of what the rules proved has no operator and
-     * no node — it has what the comparison places and its two sides — and an expression written with
-     * an operator arrives with the relation that operator placed
-     * ({@link ComparisonClaim#statedRelation}). One fold under the crossing, rather than one on
-     * either side of it agreeing about every pair of constants there is until somebody edits one.
-     *
-     * <p>An ordering answers where the two are of one ordered kind, and an equality answers of any
-     * two constants at all: {@code true == true} is decided where {@code true < true} is not
-     * something to decide.
-     *
-     * <p><b>Which way the two stand is worked out here and goes nowhere.</b> A sign handed back to a
-     * caller is what a second table of six is written over — {@code c < 0} and the three beside it
-     * are the same table as {@link Rel#holds} in another hand — so the order of two constants is
-     * taken and answered in the one place, and there is nothing to call for the sign alone.
+     * <p>The door the readers outside this one come in by. What it answers is
+     * {@link ConstantAlgebra#stands}, which is where the rule is.
      */
     static Boolean stands(Rel rel, Object a, Object b) {
-        // A comparison one side of which holds a ratio is decided on the exact values, which is the
-        // same rule the operator states (ADR-0116). Asked before the two same-kind arms below and
-        // only where a ratio is in hand, so that an `Int` beside a `Decimal` is still two kinds with
-        // nothing between them.
-        if (eitherIsExact(a, b)) {
-            ExactRatio x = exactly(a);
-            ExactRatio y = exactly(b);
-            return (x == null || y == null) ? null : rel.holds(x.compareTo(y));
-        }
-        if (a instanceof Long x && b instanceof Long y) {
-            return rel.holds(Long.compare(x, y));
-        }
-        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return rel.holds(x.compareTo(y));
-        }
-        if (a instanceof String x && b instanceof String y) {
-            return rel.holds(x.compareTo(y));
-        }
-        return switch (rel) {
-            case EQ -> equal(a, b);
-            case NE -> !equal(a, b);
-            case GE, GT, LE, LT -> null;
-        };
+        return ConstantAlgebra.stands(rel, a, b);
     }
 
-    /**
-     * The quotient of two written numbers, or empty where this is not the one to answer it.
-     *
-     * <p>The quotient is exact, so what it folds to is a ratio and not a number of either operand's
-     * type (ADR-0116). There is no pair of whole numbers whose exact quotient is out of range and
-     * none whose fraction is dropped, so the two refusals the truncating quotient needed are gone
-     * with it; what is left is the divisor of nought, which the run time aborts on and which no value
-     * handed back would be about.
-     *
-     * <p>Two decimals go through the same reading, their quotient being exact as well. What the fold
-     * answers is the ratio, so a written {@code 1.0m / 3.0m} comes to a third here and not to the
-     * number of places somebody would have had to choose for it.
-     */
-    private static Optional<Object> quotient(Object a, Object b) {
-        ExactRatio x = exactly(a);
-        ExactRatio y = exactly(b);
-        if (x == null || y == null || y.isZero()) {
-            return Optional.empty();
-        }
-        return Optional.of(x.dividedBy(y));
-    }
-
-    /**
-     * The exact value of a folded number, or null where the constant is not one.
-     *
-     * <p>What it is for is the arithmetic a Rational operand makes exact: the operand beside it is
-     * read at its exact mathematical value because that is what the operator means, and the fold has
-     * to read it the same way or a constant expression and the same expression at run time would
-     * answer differently. It is no conversion between the two numeric types — nothing here brings a
-     * {@code Decimal} and an {@code Int} together, and the callers ask only where one side already
-     * holds a ratio.
-     */
-    private static ExactRatio exactly(Object constant) {
-        return switch (constant) {
-            case ExactRatio r -> r;
-            case Long whole -> ExactRatio.of(whole);
-            case BigDecimal written -> ExactRatio.of(written);
-            default -> null;
-        };
-    }
-
-    /** Whether either side of an operator already holds an exact ratio, which is what makes that
-     *  operation exact arithmetic (ADR-0116). */
-    private static boolean eitherIsExact(Object a, Object b) {
-        return a instanceof ExactRatio || b instanceof ExactRatio;
-    }
-
-    private static Optional<Object> arith(BinOp op, Object a, Object b) {
-        if (eitherIsExact(a, b)) {
-            ExactRatio x = exactly(a);
-            ExactRatio y = exactly(b);
-            if (x == null || y == null) {
-                return Optional.empty();
-            }
-            return Optional.of(switch (op) {
-                case ADD -> x.plus(y);
-                case SUB -> x.minus(y);
-                case MUL -> x.times(y);
-                default -> throw new IllegalStateException();
-            });
-        }
-        if (a instanceof Long x && b instanceof Long y) {
-            // The same kernels the operators emit: an Int that overflows aborts rather than wrapping,
-            // so a fold that wrapped would answer what the run time refuses to compute.
-            try {
-                return Optional.of(switch (op) {
-                    case ADD -> Math.addExact(x, y);
-                    case SUB -> Math.subtractExact(x, y);
-                    case MUL -> Math.multiplyExact(x, y);
-                    default -> throw new IllegalStateException();
-                });
-            } catch (ArithmeticException _) {
-                return Optional.empty();
-            }
-        }
-        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return Optional.of(switch (op) {
-                case ADD -> x.add(y);
-                case SUB -> x.subtract(y);
-                case MUL -> x.multiply(y);
-                default -> throw new IllegalStateException();
-            });
-        }
-        return Optional.empty();
-    }
-
-    /** Whether two folded values are the one value. A {@code Decimal} answers by amount and not by
-     * how it was written, as it does everywhere else: {@code 1.0m} and {@code 1.00m} are one number,
-     * and a comparison folding the other way would decide at compile time what the run time denies.
-     *
-     * <p>Not private, because whether two written numbers are one number is asked elsewhere too —
-     * holding two builds' declarations against each other asks it of every literal they state
-     * ({@code DeclarationAgreement}). Asked of this rather than answered again there: a second
-     * answer is the rule restated, and a restatement is what goes wrong the day the rule moves. */
+    /** Whether two folded values are the one value — {@link ConstantAlgebra#equal}. */
     public static boolean equal(Object a, Object b) {
-        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return x.compareTo(y) == 0;
-        }
-        return a.equals(b);
+        return ConstantAlgebra.equal(a, b);
     }
 
-    /**
-     * Whether {@code s} matches {@code pattern}, or empty where answering it here would cost more
-     * than leaving it to the run time.
-     *
-     * <p>A backtracking engine can take exponential time on a pattern written to make it, and can
-     * exhaust the stack on one written to make that. Neither is this compiler's to survive by luck:
-     * an unbounded attempt would end the compilation rather than this fold, and what would end is a
-     * compile of a program nothing is wrong with. So the subject is handed over through a reader
-     * that stops the engine past a budget, and what the engine spends before answering is what
-     * decides whether the answer is worth having.
-     *
-     * <p>What each of the three refusals answers is the same thing: this fold does not settle the
-     * match, and the run-time check does. None of them is about the program.
-     */
-    private static Optional<Object> matches(String pattern, String s) {
-        try {
-            return Optional.of(COMPILED.computeIfAbsent(pattern, Pattern::compile)
-                    .matcher(new Budgeted(s)).matches());
-        } catch (PatternSyntaxException | Budgeted.Spent | StackOverflowError _) {
-            return Optional.empty();   // a bad pattern is reported by the check that compiles it
-        }
-    }
-
-    /** Patterns already compiled. A declaration's pattern is asked about once per construction from
-     * it and once per reading of a branch, and compiling one is the only expensive thing here. */
-    private static final Map<String, Pattern> COMPILED = new ConcurrentHashMap<>();
-
-    /** A subject the regex engine may only read so many times. */
-    private static final class Budgeted implements CharSequence {
-
-        /** Enough for any pattern written to say what a value is, and far short of what one written
-         * to backtrack costs. */
-        private static final int READS = 200_000;
-
-        /** Raised where the engine has read past the budget. Not an error in the program: it says
-         * only that this is not answered here. */
-        static final class Spent extends RuntimeException {
-            private static final long serialVersionUID = 1L;
-            Spent() {
-                super(null, null, false, false);
-            }
-        }
-
-        private final String of;
-        private final int[] read;
-
-        Budgeted(String of) {
-            this(of, new int[1]);
-        }
-
-        private Budgeted(String of, int[] read) {
-            this.of = of;
-            this.read = read;
-        }
-
-        @Override
-        public char charAt(int at) {
-            if (++read[0] > READS) {
-                throw new Spent();
-            }
-            return of.charAt(at);
-        }
-
-        @Override
-        public int length() {
-            return of.length();
-        }
-
-        @Override
-        public CharSequence subSequence(int from, int to) {
-            return new Budgeted(of.substring(from, to), read);
-        }
-
-        @Override
-        public String toString() {
-            return of;
-        }
-    }
-
-    private Optional<Object> call(Hir.Apply call) {
-        List<Hir.Expr> args = call.args();
+    private Optional<Object> call(Hir.Apply call, BoundValues env) {
         // Applying a name nothing declares is not a constant. There is no operation to fold it to,
         // and the name is reported where it is written.
         if (call.answered() == null) {
             return Optional.empty();
         }
         // What this call does, asked as the kernel the library declares the operation to be. The
-        // three below fold because of what they compute, which is what a kernel names; the alias
-        // they are published under is the library's own, and a fold selected by one would be right
-        // for exactly as long as the two agreed.
-        if (!(call.answered().denotes() instanceof souther.compiler.types.ValueName.Stdlib.Operation
-                operation)) {
+        // alias an operation is published under is the library's own, and a fold selected by one
+        // would be right for exactly as long as the two agreed.
+        if (!(call.answered().denotes() instanceof ValueName.Stdlib.Operation operation)) {
             return Optional.empty();
         }
         Kernel kernel = symbols.kernelOf(operation);
         if (kernel == null) {
             return Optional.empty();
         }
-        switch (kernel) {
-            case STRING_LENGTH -> {
-                if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
-                    return Optional.of((long) s.length());
-                }
+        List<Object> args = new ArrayList<>();
+        for (Hir.Expr arg : call.args()) {
+            Object folds = eval(arg, env).orElse(null);
+            if (folds == null) {
+                return Optional.empty();
             }
-            // matches(pattern, s): the pattern is written first and the subject last (spec §pipe).
-            // The pattern of a declaration is already required to be a written constant, so a call
-            // over a written subject is one the compiler answers rather than the run time.
-            case STRING_MATCHES -> {
-                if (args.size() == 2
-                        && eval(args.get(0)).orElse(null) instanceof String pattern
-                        && eval(args.get(1)).orElse(null) instanceof String s) {
-                    return matches(pattern, s);
-                }
-            }
-            case STRING_CONTAINS -> {
-                // contains(sub, s): the string being searched is the last argument (spec §pipe)
-                if (args.size() == 2
-                        && eval(args.get(0)).orElse(null) instanceof String sub
-                        && eval(args.get(1)).orElse(null) instanceof String s) {
-                    return Optional.of(s.contains(sub));
-                }
-            }
-            default -> { }
+            args.add(folds);
         }
-        return Optional.empty();
+        return ConstantAlgebra.computed(kernel, args);
     }
 }

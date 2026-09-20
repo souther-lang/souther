@@ -69,6 +69,10 @@ public final class Lower {
      */
     public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
                                             Set<String> dependencies) {
+        // A body that runs reads each value it names as one materialisation per evaluation region.
+        // Copying it at every reference instead makes what a body holds the product of its
+        // references rather than the sum of what the source wrote (ADR-0072).
+        inliner.sharingOneMaterialisationPerRegion();
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));

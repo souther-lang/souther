@@ -201,7 +201,8 @@ final class JvmLimits {
             case CODE_SIZE -> CompileException.of(said
                     .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
                             exceeded.method(), measured, String.valueOf(CODE_BYTES)))
-                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable()).build());
+                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable())
+                    .hint(new DeclarationMessage.NamingPartsDoesNotDivideTheMethod()).build());
             case CONSTANT_POOL_INDEX -> CompileException.of(said
                     .say(new DeclarationMessage.AClassRefersPastTheConstantPool(name, measured,
                             String.valueOf(POOL_ENTRIES)))
