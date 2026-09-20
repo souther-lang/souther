@@ -114,7 +114,7 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
      * and each round of saying which overload a row means would find the next one.
      */
     private void refuseTheNamesNothingTellsApart(Set<String> written, Map<String, ?> answers) {
-        refuseEveryRowThatPicksOutMoreThanOne();
+        refuseSelectorsThatDoNotPickOneMemberEach();
         Set<String> nothingTellsApart = new TreeSet<>();
         for (String member : written) {
             if (!declared.contains(member)) {
@@ -169,27 +169,49 @@ record ARosterWrittenByName(Set<String> declared, List<Told> told) {
     }
 
     /**
-     * A refusal where a row meant to tell one member from its siblings picks out several of them.
+     * A refusal where what the rows of a name pick out is not one member each.
      *
-     * <p>What a row says is which member it is, and a parameter several of them share says nothing
-     * of the kind. Left to stand, the members it picks would be written under one spelling and
-     * whichever of them the walk answered last would be the answer the row holds — which is the
-     * reading a roster of names is refused for, arriving through the thing that was meant to stop
-     * it.
+     * <p>Both ways round, because a row saying which member it is is only that while it picks one
+     * member and while that member is picked by it alone.
+     *
+     * <p>A row picking several says nothing of the kind: the members it picks would be written
+     * under one spelling and whichever of them the walk answered last would be the answer the row
+     * holds — which is the reading a roster of names is refused for, arriving through the thing
+     * that was meant to stop it.
+     *
+     * <p>And a member picked by several rows is one whose spelling is whichever row was written
+     * first. Two rows that both pick it are two claims about one member, and reading the list until
+     * one matches settles them by the order somebody happened to write them in — so the member is
+     * spelt as the sibling of whichever row won, and moves the first time the list is reordered.
      */
-    private void refuseEveryRowThatPicksOutMoreThanOne() {
+    private void refuseSelectorsThatDoNotPickOneMemberEach() {
         Map<String, List<String>> several = new TreeMap<>();
+        Map<String, List<String>> pickedBy = new TreeMap<>();
         for (Told each : told) {
             List<String> picked = overloadsOf(each.owner() + "#" + each.name()).stream()
                     .filter(member -> each.picks(descriptorOf(member))).toList();
             if (picked.size() > 1) {
                 several.put(each.spelt(), picked);
             }
+            for (String member : picked) {
+                pickedBy.computeIfAbsent(member, _ -> new ArrayList<>()).add(each.spelt());
+            }
         }
         if (!several.isEmpty()) {
             throw new AssertionError("a row says which member it is by a parameter its siblings"
                     + " take as well, so what it picks out is several members and not one: "
                     + several);
+        }
+        Map<String, List<String>> twice = new TreeMap<>();
+        pickedBy.forEach((member, rows) -> {
+            if (rows.size() > 1) {
+                twice.put(member, rows);
+            }
+        });
+        if (!twice.isEmpty()) {
+            throw new AssertionError("each of these members is picked out by several rows, so"
+                    + " which one it is written as is whichever of them was written first: say"
+                    + " which member each row is for, once. " + twice);
         }
     }
 

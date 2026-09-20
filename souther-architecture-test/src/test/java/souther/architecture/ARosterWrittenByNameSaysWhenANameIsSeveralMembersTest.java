@@ -148,6 +148,35 @@ class ARosterWrittenByNameSaysWhenANameIsSeveralMembersTest {
     }
 
     /**
+     * And a member two rows both pick out is refused.
+     *
+     * <p>The other way round from the one above, and the way a roster settles a member by the order
+     * somebody wrote its rows in. Reading the rows until one matches, the member is spelt as
+     * whichever of them came first — so two claims about one member are resolved by the list's
+     * order, and the spelling moves the first time somebody reorders it.
+     *
+     * <p>Both rows pick one member each here, so nothing about either of them on its own says
+     * anything is wrong.
+     */
+    @Test
+    void andAMemberTwoRowsBothPickOutIsRefused() {
+        Set<String> declared = Set.of(
+                OWNER + "#both(Ljava/lang/String;Ljava/lang/Integer;)V",
+                OWNER + "#both(Ljava/lang/Object;Ljava/lang/Long;)V");
+        List<Told> bothPickingTheFirst = List.of(
+                Told.takingA(OWNER, "both", 0, String.class),
+                Told.takingA(OWNER, "both", 1, Integer.class));
+
+        AssertionError refused = assertThrows(AssertionError.class,
+                () -> new ARosterWrittenByName(declared, bothPickingTheFirst)
+                        .namesOf(Set.of(OWNER + "#both(Ljava/lang/String;Ljava/lang/Integer;)V")),
+                "one member was picked out by two rows and written as whichever came first");
+
+        assertTrue(refused.getMessage().contains("String") && refused.getMessage().contains("Integer"),
+                "the refusal does not name the rows that both pick it: " + refused.getMessage());
+    }
+
+    /**
      * And the refusal names every member it is short of, and not the first of them.
      *
      * <p>Saying which member a row means is one edit each, and a roster is short of however many it

@@ -117,27 +117,33 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * is read by working out what it is rather than by reading it.
      *
      * <p>The name and not the signature, because a word is about an act and an act does not change
-     * when the member performing it takes one more argument. What a word stands for is held to one
-     * member by the rows having to cover the package's overloads between them: a row saying only
-     * the name is for every overload of it, so an overload added tomorrow arrives under a word
-     * written for the others, and is refused until somebody says which act it is.
+     * when the member performing it takes one more argument.
      *
-     * @param told which overload this is, where the overloads of a name are different acts
+     * <p><b>A row is one member all the same, and a name is only shorthand for one.</b> This table
+     * is what says what a member settles — there is no reading of the package that answers it, so
+     * two overloads answering alike is not a thing anything here could find out, and a row written
+     * as a name would be assuming it of whatever is declared under that name next. Where the rows
+     * of {@link #NAMING} may say a name because a walk answered each overload of it separately,
+     * these may say one only while the package declares one member under it, which is checked
+     * ({@link #theSettlingMembers}). A second one arriving is a second act, and it is written down
+     * before this table stands for it.
+     *
+     * @param told which overload this is, where the package declares several under the name
      */
     private record Settler(String word, String owner, String name, Told told) {
 
-        /** One word for every overload of a name, which is what a single act is written as. */
+        /** A name the package declares one member under, which is one act written the short way. */
         Settler(String word, String owner, String name) {
             this(word, owner, name, null);
         }
 
-        /** Whether {@code signature} is an overload this word is for. */
+        /** Whether {@code signature} is the overload this word is for. */
         boolean covers(String signature) {
             return member().equals(signature.substring(0, signature.indexOf('(')))
                     && (told == null || told.picks(signature.substring(signature.indexOf('('))));
         }
 
-        /** The member, whichever of its overloads a call names — what says an invocation settles. */
+        /** The member, as a name — what a row says where the package declares one under it. */
         String member() {
             return owner + "#" + name;
         }
@@ -236,6 +242,12 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * The count is the same question a step in: a second call added beside a first is a second place
      * settling an answer, and a row that says only that its caller settles one somewhere would not
      * move for it.
+     *
+     * <p><b>What the count is of, where a caller is written as a name.</b> A caller's name stands
+     * for every overload of it only while the walk counted the same for each — that is what
+     * {@link ARosterWrittenByName} collapses on — so the number here is what each of them makes and
+     * not what they make between them. Two overloads making one such call apiece are one row saying
+     * one, and a second call added inside either of them moves it.
      */
     private static final List<String> SETTLING = List.of(
             "souther/compiler/ast/Hir$Apply#synthetic[0=String] -> Apply.synthetic(Expr) x1",
@@ -264,22 +276,22 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
                         + " say which it is and why it is not the node's own answer carried");
     }
 
-    /** The words the edges are written with stand for the members they say they do — the table an
-     *  edge is rendered through, checked against the package before anything is rendered. */
+    /**
+     * The words the edges are written with stand for the members they say they do.
+     *
+     * <p>The table an edge is rendered through, settled against the package before anything is
+     * rendered — and settled in one place, so that a row which has stopped naming one member stops
+     * every reading that goes through it rather than the one that happens to look.
+     */
     @Test
     void andEachWordTheEdgesAreWrittenWithStandsForOneMember() {
         assertEquals(SETTLERS.stream().map(Settler::word).sorted().toList(),
                 SETTLERS.stream().map(Settler::word).distinct().sorted().toList(),
                 "two members of the settlers table are written with one word");
-        assertEquals(List.of(), SETTLERS.stream().map(Settler::member)
-                        .filter(each -> !theNamesOfThatPackage().contains(each)).toList(),
-                "a settlers row names a member this package does not declare");
-        // And every overload under exactly one word, which is what makes the table the members
-        // rather than the ones that happen to be called. An overload nobody calls yet settles what
-        // its siblings settle, and one under no word is a way in nobody has ruled on.
-        assertEquals(Map.of(), overloadsNotUnderOneWord(),
-                "an overload of a settling member is a way in whether or not anything uses it yet,"
-                        + " and each of them is one act: say which word it is written with");
+        assertEquals(SETTLERS.stream().map(Settler::word).sorted().toList(),
+                theSettlingMembers().values().stream().sorted().toList(),
+                "each row of the settlers table is one member of this package, and each member a"
+                        + " row names is under one word");
     }
 
     @Test
@@ -344,12 +356,13 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      *  of them that method makes. */
     private static List<String> settlingAnAnswer() {
         Map<String, Map<String, Integer>> counted = new TreeMap<>();
+        Map<String, String> settling = theSettlingMembers();
         walkEveryCall((caller, invoked) -> {
-            if (!settlingMembers().contains(memberOf(invoked))) {
+            String word = settling.get(signatureOf(invoked));
+            if (word == null) {
                 return;
             }
-            counted.computeIfAbsent(caller, _ -> new TreeMap<>())
-                    .merge(wordFor(invoked), 1, Integer::sum);
+            counted.computeIfAbsent(caller, _ -> new TreeMap<>()).merge(word, 1, Integer::sum);
         });
         List<String> rows = new ArrayList<>();
         new ARosterWrittenByName(everyMethodCompiled(), TOLD_APART).by(counted)
@@ -372,21 +385,67 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     }
 
     /**
-     * The word {@code invoked} is written with, and a failure where nothing here holds one for it.
+     * Each member of this package that settles an answer, against the word it is written with.
      *
-     * <p>Not a spelling worked out from the descriptor. An overload nobody has written down is an
-     * overload nobody has said settles what: rendered by falling back to its signature it would join
-     * the list as one more row, which reads as a caller to look at rather than as a way in that
-     * nobody has ruled on.
+     * <p>The table settled against what the package declares, and settled once for every reading
+     * that goes through it: which calls settle an answer and which word each of them is rendered
+     * with are the same question, and answered apart they would be answered about different sets
+     * the first time a row stopped naming one member.
+     *
+     * <p><b>One member per row, which a name says only where the package declares one.</b> There
+     * is no reading of this package that says what a member settles — this table is that — so two
+     * overloads settling alike is not something anything here could find out, and a row written as
+     * a name would be assuming it of whatever is declared under that name next. A second member
+     * arriving under a settler's name is a second act with nothing said about it, and it is refused
+     * here rather than rendered with the word its sibling was written for.
+     *
+     * <p>And every member under a settler's name is under exactly one word, whichever way the row
+     * that names it is written. One under none is a way in nobody has ruled on; one under two is a
+     * member whose word depends on which row was read first.
      */
-    private static String wordFor(InvokeInstruction invoked) {
+    private static Map<String, String> theSettlingMembers() {
+        Map<String, List<String>> byMember = new TreeMap<>();
+        List<String> assumingOfANameItCannotKnow = new ArrayList<>();
         for (Settler settler : SETTLERS) {
-            if (settler.covers(signatureOf(invoked))) {
-                return settler.word();
+            List<String> overloads = declaredInThatPackage().stream()
+                    .filter(each -> each.startsWith(settler.member() + "(")).toList();
+            if (settler.told() == null && overloads.size() != 1) {
+                assumingOfANameItCannotKnow.add(settler.member());
+            }
+            for (String each : overloads) {
+                if (settler.covers(each)) {
+                    byMember.computeIfAbsent(each, _ -> new ArrayList<>()).add(settler.word());
+                }
             }
         }
-        throw new AssertionError("`" + signatureOf(invoked) + "` settles an answer and is written"
-                + " with no word: add it to the settlers table, saying which act it is");
+        if (!assumingOfANameItCannotKnow.isEmpty()) {
+            throw new AssertionError("this package declares several members under each of these,"
+                    + " and a row saying only the name would be saying of every one of them what"
+                    + " was written about one — which is a thing no reading here settles, because"
+                    + " this table is what settles it: say which act each of them is. "
+                    + assumingOfANameItCannotKnow);
+        }
+        List<String> underOtherThanOneWord = new ArrayList<>();
+        for (String each : declaredInThatPackage()) {
+            List<String> words = byMember.getOrDefault(each, List.of());
+            if (namesASettler(each) && words.size() != 1) {
+                underOtherThanOneWord.add(each + " " + words);
+            }
+        }
+        if (!underOtherThanOneWord.isEmpty()) {
+            throw new AssertionError("an overload of a settling member is a way in whether or not"
+                    + " anything uses it yet, and each of them is one act: "
+                    + underOtherThanOneWord);
+        }
+        Map<String, String> settling = new TreeMap<>();
+        byMember.forEach((member, words) -> settling.put(member, words.getFirst()));
+        return settling;
+    }
+
+    /** Whether {@code member} is declared under a name the settlers table writes a word for. */
+    private static boolean namesASettler(String member) {
+        String called = member.substring(0, member.indexOf('('));
+        return SETTLERS.stream().anyMatch(settler -> settler.member().equals(called));
     }
 
     /** Every call this package's forms are built by, from outside the package that declares them. */
@@ -412,21 +471,9 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
         return forms;
     }
 
-    /** The members a settling call names, whichever overload it names. */
-    private static Set<String> settlingMembers() {
-        Set<String> members = new LinkedHashSet<>();
-        for (Settler settler : SETTLERS) {
-            members.add(settler.member());
-        }
-        return members;
-    }
-
-    private static String memberOf(InvokeInstruction invoked) {
-        return invoked.owner().name().stringValue() + "#" + invoked.name().stringValue();
-    }
-
     private static String signatureOf(InvokeInstruction invoked) {
-        return memberOf(invoked) + invoked.typeSymbol().descriptorString();
+        return invoked.owner().name().stringValue() + "#" + invoked.name().stringValue()
+                + invoked.typeSymbol().descriptorString();
     }
 
     /** Where a class is declared: the whole of its internal name but the class, so a package under
@@ -454,39 +501,6 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
                 });
             }
         }
-    }
-
-    /**
-     * Every overload the package declares of a member the table names, against the words that
-     * cover it, where that is not one word.
-     *
-     * <p>Read off the classes rather than off the calls, which is what makes the table the members
-     * rather than the ones something happens to reach. An overload under no word is one nobody has
-     * said what it settles; one under two is a name told apart twice over and an edge naming it
-     * would be rendered with whichever word was written first.
-     */
-    private static Map<String, List<String>> overloadsNotUnderOneWord() {
-        Map<String, List<String>> found = new TreeMap<>();
-        for (String each : declaredInThatPackage()) {
-            if (!settlingMembers().contains(each.substring(0, each.indexOf('(')))) {
-                continue;
-            }
-            List<String> words = SETTLERS.stream().filter(settler -> settler.covers(each))
-                    .map(Settler::word).toList();
-            if (words.size() != 1) {
-                found.put(each, words);
-            }
-        }
-        return found;
-    }
-
-    /** What the owning package's methods are called, which is what a settlers row names. */
-    private static Set<String> theNamesOfThatPackage() {
-        Set<String> found = new TreeSet<>();
-        for (String each : declaredInThatPackage()) {
-            found.add(each.substring(0, each.indexOf('(')));
-        }
-        return found;
     }
 
     /** Every method the package that declares these forms holds, by the whole of what it is. */
