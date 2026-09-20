@@ -333,9 +333,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         for (ObligationIdentity.OfAFallbackPairCell owed : plan.pairsOwed()) {
             pairs.put(owed, new ClassDisposition.Unresolved(
                     CameToNothing.metNothing(new Generator.UnresolvedCombination(
-                            owed.classes().stream().map(ClassOfAPosition::classId).sorted()
-                                    .toList(),
-                            why))));
+                            owed.classIdsInOrder(), why))));
         }
         Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
                 new LinkedHashMap<>();

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.CameToNothing;
@@ -10,6 +11,7 @@ import souther.compiler.partition.Realization;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,8 +107,14 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
             return new ARowTellingTheLinesApart(
                     List.of(new AtOneReading(reading, null, searches)));
         }
+        Map<NumericTerm, Place> byTerm = new HashMap<>();
+        composed.fixing().forEach((target, place) -> byTerm.put(target.term(), place));
+        // A linked map answers in the order it was filled, so it is filled in the terms' own order
+        // and not in the order the fixing happened to be walked.
         Map<NumericTerm, Place> at = new LinkedHashMap<>();
-        composed.fixing().forEach((target, place) -> at.put(target.term(), place));
+        for (Map.Entry<NumericTerm, Place> each : NumericTerms.entriesInOrder(byTerm)) {
+            at.put(each.getKey(), each.getValue());
+        }
         return new ARowTellingTheLinesApart(List.of(new AtOneReading(reading, at, searches)));
     }
 

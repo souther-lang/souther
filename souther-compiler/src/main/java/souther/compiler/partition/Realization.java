@@ -1,8 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What looking for a row at one coverage item came to.
@@ -35,8 +45,27 @@ public sealed interface Realization {
      */
     record Found(Map<RealizationTarget, Place> fixing) implements Realization {
 
+        /**
+         * Held in the terms' own order, so that a reader walking it meets the demands in the same
+         * order in every run. Two demands of one term are told apart by where they write, compared
+         * by every part of the path and not by how it is spelled.
+         */
         public Found {
-            fixing = Map.copyOf(fixing);
+            Map<NumericTerm, List<RealizationTarget>> byTerm = new HashMap<>();
+            for (RealizationTarget each : fixing.keySet()) {
+                byTerm.computeIfAbsent(each.term(), _ -> new ArrayList<>()).add(each);
+            }
+            Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
+            for (NumericTerm term : NumericTerms.inOrder(byTerm.keySet())) {
+                List<RealizationTarget> ofOne = byTerm.get(term);
+                ofOne.sort(Comparator.comparing(RealizationTarget::writeRoot,
+                        TermPath.structuralOrder()));
+                for (RealizationTarget each : ofOne) {
+                    inOrder.put(each, Objects.requireNonNull(fixing.get(each),
+                            "a target the search fixed stands somewhere: " + each));
+                }
+            }
+            fixing = Collections.unmodifiableMap(inOrder);
         }
     }
 

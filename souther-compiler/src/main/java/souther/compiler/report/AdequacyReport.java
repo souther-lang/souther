@@ -2775,10 +2775,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * axis and not across two, and what a combination is of is a pair rather than an order of them.
      */
     private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
-        return combination.classes().stream()
-                .sorted(java.util.Comparator
-                        .comparing((ClassOfAPosition each) -> each.at().toString())
-                        .thenComparing(ClassOfAPosition::classId))
+        return combination.inOrder().stream()
                 .map(each -> "`" + each.classId() + "` at " + each.at())
                 .collect(java.util.stream.Collectors.joining(" with "));
     }
@@ -3995,18 +3992,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The behavior and the two classes, which is what a combination of two positions is
             // told apart by where the body's decisions meet nowhere. Each written the way a class
             // of a position is above, since that is the same thing being named.
-            case ObligationIdentity.OfAFallbackPairCell(var behavior, var classes) -> {
-                into.put("behavior", behavior);
+            case ObligationIdentity.OfAFallbackPairCell cell -> {
+                into.put("behavior", cell.behavior());
                 ArrayNode of = into.putArray("classes");
-                classes.stream()
-                        .sorted(java.util.Comparator
-                                .comparing((ClassOfAPosition each) -> each.at().toString())
-                                .thenComparing(ClassOfAPosition::classId))
-                        .forEach(each -> {
-                            ObjectNode one = of.addObject();
-                            one.put("axis", each.at().toString());
-                            one.put("class", each.classId());
-                        });
+                for (ClassOfAPosition each : cell.inOrder()) {
+                    ObjectNode one = of.addObject();
+                    one.put("axis", each.at().toString());
+                    one.put("class", each.classId());
+                }
             }
         }
     }

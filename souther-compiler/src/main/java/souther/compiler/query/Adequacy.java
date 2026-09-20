@@ -7323,10 +7323,7 @@ public final class Adequacy {
          * than the set they are read out of.
          */
         private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
-            return combination.classes().stream()
-                    .sorted(java.util.Comparator
-                            .comparing((ClassOfAPosition each) -> each.at().toString())
-                            .thenComparing(ClassOfAPosition::classId))
+            return combination.inOrder().stream()
                     .map(each -> "`" + each.classId() + "` at " + each.at())
                     .collect(java.util.stream.Collectors.joining(" with "));
         }
