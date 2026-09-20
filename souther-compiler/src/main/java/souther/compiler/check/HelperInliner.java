@@ -2364,9 +2364,8 @@ public final class HelperInliner {
         if (e == null) {
             return null;
         }
-        if (e instanceof Hir.Var.Denoting named && materialisable(named) != null) {
-            Hir.Binder binder = readAt(named.reaches());
-            return binder == null ? e : Hir.Var.local(binder, named.pos());
+        if (e instanceof Hir.Var v) {
+            return readName(v);
         }
         return switch (e) {
             case Hir.If iff -> new Hir.If(read(iff.cond()), region(iff.then()), region(iff.els()),
@@ -2409,8 +2408,25 @@ public final class HelperInliner {
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
                         ex.declaredReturn(), read(ex.body()), ex.pos(), ex.region());
             }
-            default -> Hir.mapChildren(e, this::read, v -> v);
+            default -> Hir.mapChildren(e, this::read, this::readName);
         };
+    }
+
+    /**
+     * A name slot as the region reads it: the binding where the region materialised what the name
+     * reaches, or the name where no region did.
+     *
+     * <p>Beside the expression slots rather than left alone, because a name written where a value
+     * goes is a reference wherever it is written. A construction's spread is one, and read here it
+     * is the same materialisation every other reference in the region reads — bound of its own, a
+     * value spread and named in one region would stand twice.
+     */
+    private Hir.Var readName(Hir.Var v) {
+        if (!(v instanceof Hir.Var.Denoting named) || materialisable(named) == null) {
+            return v;
+        }
+        Hir.Binder binder = readAt(named.reaches());
+        return binder == null ? v : Hir.Var.local(binder, named.pos());
     }
 
     /**
@@ -2460,7 +2476,11 @@ public final class HelperInliner {
         List<Hir.Expr> values = new ArrayList<>();
         List<Hir.Var> spreads = new ArrayList<>();
         for (Hir.Var spread : nd.spreads()) {
-            Hir.FnDef value = valueSpread(spread);
+            // A spread is a reference (ADR-0072), so where references are materialised once in the
+            // region that demands them, this is one of them and is left for that walk. Bound here
+            // as well, a value spread and named in one region would be built twice.
+            Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
+                    ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
                 continue;

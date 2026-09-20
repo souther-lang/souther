@@ -22,8 +22,10 @@ public record BoundExpr(Hir.Expr expr, BoundValues at) {
 
     public BoundExpr {
         if (expr == null || at == null) {
-            throw new IllegalArgumentException(
-                    "an expression means something somewhere: " + expr + " at " + at);
+            // What the report can say is which half is missing. The other one is in hand and says
+            // nothing about why this was built without its partner.
+            throw new IllegalArgumentException("an expression means something somewhere: "
+                    + (expr == null ? "the expression" : "the environment") + " is missing");
         }
     }
 

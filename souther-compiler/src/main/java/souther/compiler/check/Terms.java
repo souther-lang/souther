@@ -2695,6 +2695,15 @@ final class Terms {
         return built != null && namedByRule(built.container(), at);
     }
 
+    /** What a name answered, and the environment it answered under — the environment because a
+     * binding entered after the answer is a name this one could reach that it could not before. */
+    private record Named(Denotations at, boolean named) {}
+
+    /** What each name followed came to, so that a name read twice is followed once. A value a name
+     * was given may read two more names, and each of those two more again, so a walk that asks the
+     * question afresh at each occurrence asks it as many times as the names multiply out to. */
+    private final Map<BindingId, Named> named = new HashMap<>();
+
     /**
      * Whether {@code e} names something without a guard having to have spoken about it: it is read all
      * the way down. A location is; so is a value composed of ones by a shape the term grammar reads —
@@ -2710,9 +2719,15 @@ final class Terms {
             // The name is the expression it was given, so the question is asked of that expression.
             // It was a flag recorded when the binding was entered, which is a second record of what
             // the initializer already answers.
+            Named had = named.get(r.binding());
+            if (had != null && had.at() == at) {
+                return had.named();
+            }
             Core given = at.valueOf(r.binding());
-            return computesAsWhatItWasGiven(r.binding(), at) && given != null && given != e
-                    && (affineOf(given, at) != null || namedByRule(given, at));
+            boolean answer = computesAsWhatItWasGiven(r.binding(), at) && given != null
+                    && given != e && (affineOf(given, at) != null || namedByRule(given, at));
+            named.put(r.binding(), new Named(at, answer));
+            return answer;
         }
         Core read = asOperator(e);
         if (read instanceof Core.PreservedCall call

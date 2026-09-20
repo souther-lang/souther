@@ -38,12 +38,13 @@ final class CoreConstantEval {
     private final Denotations at;
 
     /**
-     * What each binding standing in the tree came to.
+     * What each binding read came to.
      *
-     * <p>Only those: a binding the tree holds has one value and one environment it was written in,
-     * so what it comes to is the same wherever it is read. One the environment answers for was
-     * written somewhere this walk cannot see, and is read again rather than assumed to be the same
-     * question.
+     * <p>Every binding, however it was answered. A binding has one value and one environment it was
+     * written in, whether the tree still holds the binding or the reading was told about it, so a
+     * second read of a name is the first read asked again and what it comes to cannot differ. Held
+     * for the length of one walk, because what is held is this walk's interpretation of a
+     * denotation and not the denotation (ADR-0111).
      */
     private final Map<BindingId, Optional<Object>> folded = new HashMap<>();
 
@@ -103,22 +104,34 @@ final class CoreConstantEval {
         };
     }
 
-    /** What the name {@code r} reads comes to — from the binding the tree holds, or from what the
-     *  reading was told where the clause's shape consumed it. */
+    /**
+     * What the name {@code r} reads comes to — from the binding the tree holds, or from what the
+     * reading was told where the clause's shape consumed it.
+     *
+     * <p>Two places a binding is answered from and one reading of the answer. Which of the two
+     * holds it is a fact about how far the tree was rewritten before this walk met it, and not
+     * about the name: a binding has one value either way, so a name read twice is folded once
+     * whichever place answered it.
+     *
+     * <p>And each is read under the environment its value was written in. A binding the tree holds
+     * carries that environment with it; one the reading was told about was written where the
+     * reading was told, and the names in it are answered by the reading again — not by whatever
+     * the tree happens to bind around the place the name is read.
+     */
     private Optional<Object> given(Core.Read r, Env env) {
-        Bound bound = env.read(r.binding());
-        if (bound == null) {
-            Core told = at.valueOf(r.binding());
-            return told == null ? Optional.empty() : eval(told, env);
-        }
         Optional<Object> already = folded.get(r.binding());
         if (already != null) {
             return already;
         }
+        Bound bound = env.read(r.binding());
+        Core value = bound == null ? at.valueOf(r.binding()) : bound.value();
+        if (value == null) {
+            return Optional.empty();
+        }
         // Put before the fold as "not a constant", so a binding that reaches itself answers rather
         // than going round.
         folded.put(r.binding(), Optional.empty());
-        Optional<Object> answer = eval(bound.value(), bound.at());
+        Optional<Object> answer = eval(value, bound == null ? Env.NONE : bound.at());
         folded.put(r.binding(), answer);
         return answer;
     }

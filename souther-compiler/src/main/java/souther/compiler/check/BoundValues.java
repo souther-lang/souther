@@ -79,20 +79,4 @@ public final class BoundValues {
     public boolean isEmpty() {
         return binding == null && outer == null;
     }
-
-    /** The bindings in force, innermost first — the names and not what they were given, a value
-     *  being a tree whose own printing would bury the list this is. */
-    @Override
-    public String toString() {
-        if (isEmpty()) {
-            return "nothing in force";
-        }
-        StringBuilder out = new StringBuilder();
-        for (BoundValues each = this; each != null; each = each.outer) {
-            if (each.binding != null) {
-                out.append(out.isEmpty() ? "" : ", ").append(each.binding);
-            }
-        }
-        return out.toString();
-    }
 }
