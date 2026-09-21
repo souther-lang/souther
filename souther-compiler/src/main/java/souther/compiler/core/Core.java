@@ -612,11 +612,15 @@ public sealed interface Core {
                         fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
                 // Which kernels may carry this one is CallElaborator's decision, not a second table
                 // held here in agreement with it — this asks only that the settlement is attached
-                // to a kernel call at all, the way every settlement here is. A rewrite that turned
-                // the call into something else (a helper, an injected behavior) while leaving the
-                // settlement behind is what this refuses; which kernel is not this constructor's to
+                // to a kernel call at all, the way every settlement here is, and preserves the
+                // exclusivity the two cases above already hold: `String.matches` carries its own
+                // settlement and no other, the same fact the `None` and `StringMatches` arms state
+                // from their own sides. A rewrite that turned the call into something else (a
+                // helper, an injected behavior) while leaving the settlement behind is what the
+                // kernel check refuses; which kernel it is otherwise is not this constructor's to
                 // re-decide.
-                case CallSettlement.OrderingSubject _ -> fn instanceof Reached.OfKernel;
+                case CallSettlement.OrderingSubject _ ->
+                        fn instanceof Reached.OfKernel k && k.kernel() != Kernel.STRING_MATCHES;
             };
             if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
