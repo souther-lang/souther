@@ -2803,6 +2803,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * arm or a decision rule with no row is. What a combination is of stays unsaid for the reason
      * the count above does: the decisions are held in the terms the account keys on, and a line
      * spelling them out would show an author comparisons they did not write.
+     *
+     * <p>So a behavior with more than one such meeting is shown that many identical lines. What
+     * tells one from another — which decisions, come out which ways — is not carried out to a
+     * reader here; an arm has {@link ArmVocabulary#label} and a decision rule has {@link
+     * #readingsOf} because both are written against places or conditions this account already has
+     * words for, and a meeting has neither yet. Naming one is a further question this leaves open
+     * rather than one it answers wrongly: what this settles is that a strict build's own count of
+     * gaps and the marks printed under it agree, which held for every other kind and had stopped
+     * holding for this one.
      */
     private void interaction(StringBuilder out, BehaviorReport behavior,
                              InteractionEvidence meetings) {
