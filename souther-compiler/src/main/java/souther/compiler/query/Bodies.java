@@ -91,7 +91,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
-import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -2085,7 +2084,7 @@ public final class Bodies {
         @Override
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<SequencedSet<ReachName.Declaration>> recursive = db.ask(new RequiredRecursiveDefs(name));
+            Answer<List<ReachName.Declaration>> recursive = db.ask(new RequiredRecursiveDefs(name));
             Answer<Set<String>> rowMethods = db.ask(new RowMethods(name));
             if (!settled.present() || !recursive.present() || !rowMethods.present()) {
                 return Answer.absent();
@@ -2240,14 +2239,14 @@ public final class Bodies {
      * this module's to check and to publish, which is not a question about use. Only what it did not
      * declare is decided by use.
      */
-    public record RequiredRecursiveDefs(String name) implements Key<SequencedSet<ReachName.Declaration>> {
+    public record RequiredRecursiveDefs(String name) implements Key<List<ReachName.Declaration>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<SequencedSet<ReachName.Declaration>> compute(Db db) {
+        public Answer<List<ReachName.Declaration>> compute(Db db) {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
@@ -2322,16 +2321,23 @@ public final class Bodies {
             // In the graph's order, which is declaration order: a check reporting one member of a
             // mutual cycle reports the first, and the order is part of the answer. The walk above
             // finds them in the order it happened to reach them, which is not that.
-            SequencedSet<ReachName.Declaration> ordered = new LinkedHashSet<>();
+            Set<ReachName.Declaration> ordered = new LinkedHashSet<>();
             for (ReachName.Declaration recursive : graph.recursive()) {
                 if (required.contains(recursive)) {
                     ordered.add(recursive);
                 }
             }
             // What is required without being on a cycle — a value emitted as a method — follows, in
-            // the order it was met.
-            ordered.addAll(required);
-            return Answer.of(Collections.unmodifiableSequencedSet(ordered));
+            // the table's declaration order too, and not in the order the walk above happened to
+            // meet it: the walk's work list is seeded from roots read off an IdentityHashMap
+            // (RowFixtures.Emitted#methods), whose iteration order is the roots' identity hashes and
+            // is not the same from one compile of the same source to the next.
+            for (ReachName.Declaration reachable : table.reachable().keySet()) {
+                if (required.contains(reachable)) {
+                    ordered.add(reachable);
+                }
+            }
+            return Answer.of(List.copyOf(ordered));
         }
 
         /** Takes {@code standing} on, and queues its body to be expanded the first time. */
@@ -2372,7 +2378,7 @@ public final class Bodies {
             // The recursions this module processes, which is what has bodies here. A signature is a
             // wider answer — it says what a call could be typed against, including a recursion
             // nothing here reaches — and a body for one of those is a body nobody wrote.
-            Answer<SequencedSet<ReachName.Declaration>> required = db.ask(new RequiredRecursiveDefs(name));
+            Answer<List<ReachName.Declaration>> required = db.ask(new RequiredRecursiveDefs(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!inliner.present() || !required.present() || !scope.present()) {
                 return Answer.absent();
